@@ -62,55 +62,51 @@
 
             <!-- ===================== Rail + grid ===================== -->
             <div class="flex gap-6 items-start">
-                <!-- LEFT RAIL -->
-                <aside class="w-52 shrink-0 sticky top-2">
-                    <nav class="flex flex-col gap-0.5 mb-2">
+                <!-- LEFT RAIL — matches the studio agent sidebar -->
+                <aside class="w-60 shrink-0 sticky top-2 self-start bg-[#FBFAF6] border border-[#E7E5DD] rounded-2xl overflow-hidden">
+                    <nav class="px-2 py-2 flex flex-col gap-px">
                         <!-- All (ungrouped, pinned top) -->
                         <button
                             v-for="c in [railLookup.All]"
                             :key="c.key"
                             type="button"
-                            class="group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition"
-                            :class="selectedCategory === c.key ? 'bg-[#ECEAE1] text-[#1f2328] font-medium' : 'text-[#6b6b6b] hover:bg-[#F4F1EA] hover:text-[#1f2328]'"
+                            class="group flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] text-left transition-colors"
+                            :class="selectedCategory === c.key ? 'bg-[#ECEAE1] text-[#1f2328] font-medium' : 'text-[#6b6b6b] hover:text-[#1f2328] hover:bg-[#faf8f3]'"
                             @click="selectedCategory = c.key"
                         >
-                            <Icon :name="categoryIcon(c.key)" class="w-4 h-4 shrink-0" :class="selectedCategory === c.key ? 'text-[#C2683F]' : 'text-[#9a958c] group-hover:text-[#6b6b6b]'" />
-                            <span class="truncate">{{ c.label }}</span>
+                            <Icon :name="categoryIcon(c.key)" class="w-3.5 h-3.5 shrink-0" :class="selectedCategory === c.key ? 'text-[#C2683F]' : 'text-[#9a958c] group-hover:text-[#6b6b6b]'" />
+                            <span class="flex-1 truncate">{{ c.label }}</span>
                             <span v-if="c.active" class="w-1.5 h-1.5 rounded-full bg-[#3f9e6a] shrink-0" title="has active packs"></span>
-                            <span class="ms-auto rounded-full px-1.5 py-0.5 text-[11px]" :class="selectedCategory === c.key ? 'bg-white text-[#6b6b6b]' : 'bg-[#ECEAE1] text-[#9a958c]'">{{ c.count }}</span>
+                            <span class="text-[11px] text-[#9a958c]">{{ c.count }}</span>
                         </button>
-                    </nav>
 
-                    <!-- Grouped categories (Finance / Analytics / Library) -->
-                    <div v-for="grp in railGroups" :key="grp.title" class="mb-3">
-                        <p class="px-2.5 mt-2 mb-1 text-[11px] font-semibold uppercase tracking-wide text-[#9a958c]">{{ grp.title }}</p>
-                        <nav class="flex flex-col gap-0.5">
+                        <!-- Grouped categories (Finance / Analytics / Library) -->
+                        <template v-for="grp in railGroups" :key="grp.title">
+                            <div class="px-3 pt-2 pb-0.5 text-[9px] font-semibold uppercase tracking-wider text-[#9a958c]">{{ grp.title }}</div>
                             <button
                                 v-for="c in grp.items"
                                 :key="c.key"
                                 type="button"
-                                class="group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition"
-                                :class="selectedCategory === c.key ? 'bg-[#ECEAE1] text-[#1f2328] font-medium' : 'text-[#6b6b6b] hover:bg-[#F4F1EA] hover:text-[#1f2328]'"
+                                class="group flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] text-left transition-colors"
+                                :class="selectedCategory === c.key ? 'bg-[#ECEAE1] text-[#1f2328] font-medium' : 'text-[#6b6b6b] hover:text-[#1f2328] hover:bg-[#faf8f3]'"
                                 @click="selectedCategory = c.key"
                             >
-                                <Icon :name="categoryIcon(c.key)" class="w-4 h-4 shrink-0" :class="selectedCategory === c.key ? 'text-[#C2683F]' : 'text-[#9a958c] group-hover:text-[#6b6b6b]'" />
-                                <span class="truncate">{{ c.label }}</span>
+                                <Icon :name="categoryIcon(c.key)" class="w-3.5 h-3.5 shrink-0" :class="selectedCategory === c.key ? 'text-[#C2683F]' : 'text-[#9a958c] group-hover:text-[#6b6b6b]'" />
+                                <span class="flex-1 truncate">{{ c.label }}</span>
                                 <span v-if="c.active" class="w-1.5 h-1.5 rounded-full bg-[#3f9e6a] shrink-0" title="has active packs"></span>
-                                <span class="ms-auto rounded-full px-1.5 py-0.5 text-[11px]" :class="selectedCategory === c.key ? 'bg-white text-[#6b6b6b]' : 'bg-[#ECEAE1] text-[#9a958c]'">{{ c.count }}</span>
+                                <span class="text-[11px] text-[#9a958c]">{{ c.count }}</span>
                             </button>
-                        </nav>
-                    </div>
+                        </template>
 
-                    <!-- TIER filter (packs only) -->
-                    <template v-if="selectedCategory !== 'Playbooks'">
-                        <p class="px-2 mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#9a958c]">Data readiness</p>
-                        <div class="flex flex-col gap-1 px-2">
-                            <label v-for="t in tierFilters" :key="t.key" class="flex items-center gap-2 text-[12px] text-[#6b6b6b] cursor-pointer select-none">
+                        <!-- TIER filter (packs only) -->
+                        <template v-if="selectedCategory !== 'Playbooks'">
+                            <div class="px-3 pt-2 pb-0.5 text-[9px] font-semibold uppercase tracking-wider text-[#9a958c]">Data readiness</div>
+                            <label v-for="t in tierFilters" :key="t.key" class="flex items-center gap-2 px-3 py-1 text-[12px] text-[#6b6b6b] cursor-pointer select-none rounded-lg hover:bg-[#faf8f3]">
                                 <input type="checkbox" v-model="t.on" class="accent-[#C2683F] w-3.5 h-3.5" />
-                                <span>{{ t.label }}</span>
+                                <span class="flex-1 truncate">{{ t.label }}</span>
                             </label>
-                        </div>
-                    </template>
+                        </template>
+                    </nav>
                 </aside>
 
                 <!-- MAIN -->
