@@ -1,0 +1,70 @@
+id: teaser-builder
+name: "Investment Teaser / Company One-Pager Builder"
+domain: finance.output
+
+# Tier C output/format skill. Does NOT compute new metrics; it STRUCTURES the
+# studio's data into a one-page anonymized investment teaser via the default
+# create_data + create_artifact tools.
+
+trigger_hints:
+  - teaser
+  - one pager
+  - company profile
+  - investment teaser
+  - company one-pager
+  - blind profile
+  - anonymized profile
+  - deal teaser
+  - cim teaser
+  - profile sheet
+
+required_inputs:
+  subject:
+    role: dimension
+    synonyms: [name, company, entity, category, product, account, item, segment, business unit, customer, sku, region]
+    desc: the primary entity the teaser is about
+  primary_measure:
+    role: measure
+    synonyms: [revenue, sales, amount, value, ebitda, profit, total, count]
+    optional: true
+  period:
+    role: date
+    synonyms: [period, date, month, quarter, year, fiscal period, as of, reporting period]
+    optional: true
+  secondary_measure:
+    role: measure
+    synonyms: [margin, growth, units, expense, cost, ebitda margin, gross margin]
+    optional: true
+
+method_text: |
+  Build a one-page anonymized investment teaser (company one-pager) from the
+  studio's data. Do NOT invent new finance metrics; present the existing figures.
+  1. With create_data, pull the subject's headline figures: the primary measure
+     (and its trend across the period when bound) plus any secondary measure.
+  2. ANONYMIZE: refer to the subject by a generic codename (e.g. "Project Alpha"
+     or "the Company"); do NOT print the real subject name or any directly
+     identifying label on the teaser.
+  3. Lay out a SINGLE page, top to bottom:
+       - Header: codename + a one-line business descriptor.
+       - Highlights: 3-5 bullets of the most compelling facts (scale of the
+         primary measure, growth across the period, best secondary metric).
+       - Financial snapshot: a compact table of the primary (and secondary)
+         measure by period when bound, else the latest values.
+       - One small chart of the primary measure trend or mix.
+       - Investment highlights / why-now: 2-3 bullets framed from the data.
+  4. Keep it to one page, scannable, most-compelling-fact-first.
+  5. With create_artifact, assemble the one-page teaser following the layout.
+  6. Keep every figure traceable to the data pulled in step 1; never fabricate a
+     value, and never reveal the real identity that step 2 anonymized.
+
+output_spec:
+  type: report
+  sections: [Header, Highlights, "Financial snapshot", "Trend chart", "Investment highlights"]
+  ordering: "most-compelling-fact-first"
+
+format:
+  anonymized: "generic codename, no identifying labels"
+  one_page: true
+  numbers: "whole numbers, thousands separators"
+
+eval_goldens: []

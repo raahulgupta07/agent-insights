@@ -229,6 +229,109 @@ async def promote_pack_to_org(
         return {"ok": False, "error": str(e)}
 
 
+@router.get("/organization/pack-analytics", response_model=dict)
+async def org_pack_analytics(
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Org-wide Domain Pack observability (any member). Aggregates:
+      - per pack: fires, wins/losses/score, # studios bound, status counts
+      - dormant backlog: which packs are dormant on which studio + missing cols
+    Fail-soft. Gated by DOMAIN_PACKS."""
+    _require_flag()
+    try:
+        from sqlalchemy import func
+        from app.models.studio import StudioBoundPack, PackFireEvent, PackWinrate, Studio
+
+        org_id = str(organization.id)
+        # studio ids in this org (scope the pack tables, which key on studio_id)
+        sids = (
+            await db.execute(
+                select(Studio.id).where(
+                    Studio.organization_id == org_id, Studio.deleted_at.is_(None)
+                )
+            )
+        ).scalars().all()
+        sids = [str(s) for s in sids]
+        if not sids:
+            return {"ok": True, "packs": [], "dormant": [], "totals": {}}
+
+        # bound-pack rows (all statuses) for these studios
+        rows = (
+            await db.execute(
+                select(StudioBoundPack).where(
+                    StudioBoundPack.studio_id.in_(sids),
+                    StudioBoundPack.deleted_at.is_(None),
+                )
+            )
+        ).scalars().all()
+
+        # fires per pack
+        fire_rows = (
+            await db.execute(
+                select(PackFireEvent.pack_id, func.count(PackFireEvent.id))
+                .where(PackFireEvent.studio_id.in_(sids), PackFireEvent.deleted_at.is_(None))
+                .group_by(PackFireEvent.pack_id)
+            )
+        ).all()
+        fires = {str(p): int(c) for p, c in fire_rows}
+
+        # win/loss per pack (sum across clusters/studios)
+        wr_rows = (
+            await db.execute(
+                select(
+                    PackWinrate.pack_id,
+                    func.coalesce(func.sum(PackWinrate.passes), 0),
+                    func.coalesce(func.sum(PackWinrate.fails), 0),
+                )
+                .where(PackWinrate.studio_id.in_(sids), PackWinrate.deleted_at.is_(None))
+                .group_by(PackWinrate.pack_id)
+            )
+        ).all()
+        wr = {str(p): (int(pa), int(fa)) for p, pa, fa in wr_rows}
+
+        agg: dict = {}
+        dormant: list = []
+        for r in rows:
+            a = agg.setdefault(r.pack_id, {
+                "pack_id": r.pack_id, "name": _pack_name(r.pack_id, r.pack_body),
+                "source": r.source, "studios": 0,
+                "active": 0, "pending": 0, "dormant": 0, "rejected": 0,
+            })
+            a["studios"] += 1
+            if r.status in a:
+                a[r.status] += 1
+            if r.status == "dormant":
+                dormant.append({
+                    "pack_id": r.pack_id, "name": _pack_name(r.pack_id, r.pack_body),
+                    "studio_id": r.studio_id, "missing": r.missing or [],
+                })
+
+        packs = []
+        for pid, a in agg.items():
+            passes, fails = wr.get(pid, (0, 0))
+            total = passes + fails
+            a["fires"] = fires.get(pid, 0)
+            a["wins"] = passes
+            a["losses"] = fails
+            a["win_rate"] = round(passes / total, 3) if total else None
+            a["samples"] = total
+            packs.append(a)
+        packs.sort(key=lambda x: (-(x["fires"] or 0), -(x["samples"] or 0)))
+
+        totals = {
+            "packs": len(packs),
+            "active": sum(a["active"] for a in packs),
+            "dormant": len(dormant),
+            "fires": sum(fires.values()),
+            "studios_with_packs": len({r.studio_id for r in rows}),
+        }
+        return {"ok": True, "packs": packs, "dormant": dormant, "totals": totals}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e), "packs": [], "dormant": [], "totals": {}}
+
+
 @router.get("/organization/packs", response_model=dict)
 async def list_org_packs(
     current_user: User = Depends(current_user),

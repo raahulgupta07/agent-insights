@@ -1,0 +1,79 @@
+id: comps-analysis
+name: "Trading Comparables (Comps) Valuation"
+domain: finance.valuation
+
+# Tier B. Needs an EXTERNAL market-data feed: peer trading multiples are NOT in
+# a normal warehouse. The non-optional market inputs (peer_ev_ebitda) are
+# declared required so the binder marks this pack DORMANT with missing=[those]
+# until a feed is wired - the honest "needs market data" signal. Method
+# INVARIANT (multiples x subject metric -> implied value). Dep-free sandbox:
+# numpy/pandas/math only, NO scipy/sklearn - it is simple arithmetic.
+
+trigger_hints:
+  - comps
+  - trading comparables
+  - comparable companies
+  - ev ebitda multiple
+  - peer valuation
+  - peer multiple
+  - implied valuation
+  - relative valuation
+  - trading multiples
+  - valuation by multiples
+
+required_inputs:
+  peer_ev_ebitda:
+    role: measure
+    synonyms: [peer ev ebitda, comparable ev ebitda, peer multiple, trading multiple, ev ebitda multiple]
+    desc: peer-group EV/EBITDA multiple from a market-data feed (external)
+  subject_ebitda:
+    role: measure
+    synonyms: [ebitda, adjusted ebitda, ebitda actual]
+    desc: the subject company EBITDA to apply the peer multiple to
+  peer_ev_revenue:
+    role: measure
+    synonyms: [peer ev revenue, comparable ev sales, ev revenue multiple, ev sales multiple]
+    optional: true
+  peer_pe:
+    role: measure
+    synonyms: [peer pe, comparable pe, price earnings, pe multiple, p e ratio]
+    optional: true
+  net_debt:
+    role: measure
+    synonyms: [net debt, total debt less cash, debt minus cash]
+    optional: true
+  revenue:
+    role: measure
+    synonyms: [revenue, sales, turnover, total revenue]
+    optional: true
+
+method_text: |
+  Value the subject company off a peer group's trading multiples. If the
+  market-data inputs (peer multiples) are not bound, state that this analysis
+  needs an external market-data feed and do not fabricate market assumptions.
+  Compute with create_data, present with create_artifact.
+  1. Implied EV from EBITDA: implied_ev_ebitda = peer_ev_ebitda * subject_ebitda.
+  2. Implied EV from Revenue (when peer_ev_revenue and revenue are bound):
+     implied_ev_revenue = peer_ev_revenue * revenue.
+  3. Implied equity from P/E (when peer_pe and a net income measure are bound):
+     implied_equity_pe = peer_pe * net_income.
+  4. Bridge EV to equity: implied_equity = implied_ev - net_debt (use 0 for
+     net_debt when not bound, and say so).
+  5. Triangulate: report the implied valuation per available multiple, then a
+     central estimate (median of the available implied EVs) and a low-high
+     range (min-max across multiples). Do NOT invent multiples that are not in
+     the bound inputs.
+  6. State the multiples used, the peer basis, and that the result is only as
+     current as the market-data feed behind the peer multiples.
+
+output_spec:
+  type: report
+  sections: [Implied valuation summary, Per-multiple table, Range and central estimate, Method notes]
+  per_multiple: [multiple_used, peer_value, implied_ev, implied_equity]
+
+format:
+  multiples: "one decimal with x, e.g. 8.5x"
+  currency: "thousands, no decimals"
+  range: "low - central - high"
+
+eval_goldens: []

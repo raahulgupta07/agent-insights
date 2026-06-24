@@ -379,11 +379,29 @@
     { name: 'smtp', label: 'settings.smtpTab', permission: 'manage_settings', icon: 'heroicons-envelope' },
     { name: 'features', label: 'Feature Flags', permission: 'manage_settings', icon: 'heroicons-flag' },
   ]
-  const settingsChildren = computed<NavItem[]>(() =>
-    settingsTabs
-      .filter(tab => useCan(tab.permission))
-      .map(tab => ({ key: `settings-${tab.name}`, label: tab.label, href: `/settings/${tab.name}`, icon: tab.icon }))
-  )
+  // "Pack Analytics" (Skills Analytics) — only surfaced when the org has the
+  // HYBRID_DOMAIN_PACKS feature effectively on. Fetched once; fail-soft (hidden
+  // on any error so it never blocks the rest of the Settings menu).
+  const domainPacksEnabled = ref(false)
+  const loadDomainPacksFlag = async () => {
+    try {
+      const { data } = await useMyFetch<any[]>('/api/organization/hybrid-flags')
+      const rows = (data.value as any[]) || []
+      const row = rows.find(r => r?.env_name === 'HYBRID_DOMAIN_PACKS')
+      domainPacksEnabled.value = !!row?.effective
+    } catch {
+      domainPacksEnabled.value = false
+    }
+  }
+
+  const settingsChildren = computed<NavItem[]>(() => {
+    const tabs = settingsTabs.filter(tab => useCan(tab.permission))
+    const children = tabs.map(tab => ({ key: `settings-${tab.name}`, label: tab.label, href: `/settings/${tab.name}`, icon: tab.icon }))
+    if (domainPacksEnabled.value && useCan('manage_settings')) {
+      children.push({ key: 'settings-pack-analytics', label: 'Pack Analytics', href: '/settings/pack-analytics', icon: 'heroicons-chart-bar-square' })
+    }
+    return children
+  })
 
   // Which nested item is currently expanded in a dropdown panel (one at a time).
   const expandedKey = ref<string | null>(null)
@@ -538,5 +556,6 @@
   // hydrated too. Cheap + idempotent if default.vue (or another mount) already ran it.
   onMounted(() => {
     initAgent().catch(() => {})
+    loadDomainPacksFlag()
   })
 </script>

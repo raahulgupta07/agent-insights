@@ -1,0 +1,81 @@
+id: dcf-valuation
+name: "Discounted Cash Flow (DCF) Valuation"
+domain: finance.valuation
+
+# Tier B. Needs an EXTERNAL market-data feed: WACC (cost of capital) is a
+# market input, not warehouse data. The non-optional market inputs (wacc) are
+# declared required so the binder marks this pack DORMANT with missing=[those]
+# until a feed is wired - the honest "needs market data" signal. Method
+# INVARIANT (project FCF, discount at WACC, terminal value via Gordon growth ->
+# EV -> equity value). Dep-free sandbox: numpy/pandas/math only, NO
+# scipy/sklearn - terminal value + discounting are simple arithmetic.
+
+trigger_hints:
+  - dcf
+  - discounted cash flow
+  - intrinsic value
+  - wacc
+  - terminal value
+  - present value of cash flows
+  - enterprise value dcf
+  - fair value dcf
+  - npv valuation
+  - gordon growth
+
+required_inputs:
+  free_cash_flow:
+    role: measure
+    synonyms: [free cash flow, fcf, unlevered fcf, cash flow]
+    desc: projected free cash flow per period to discount
+  wacc:
+    role: measure
+    synonyms: [wacc, discount rate, cost of capital, weighted average cost of capital]
+    desc: discount rate from a market-data feed (external)
+  period:
+    role: date
+    synonyms: [period, year, fiscal year, projection year, date]
+    optional: true
+  terminal_growth:
+    role: measure
+    synonyms: [terminal growth, perpetuity growth, long term growth, g]
+    optional: true
+  net_debt:
+    role: measure
+    synonyms: [net debt, total debt less cash, debt minus cash]
+    optional: true
+  shares_outstanding:
+    role: measure
+    synonyms: [shares outstanding, share count, diluted shares, total shares]
+    optional: true
+
+method_text: |
+  Value the company by discounting projected free cash flows. If the
+  market-data inputs (WACC) are not bound, state that this analysis needs an
+  external market-data feed and do not fabricate market assumptions. Compute
+  with create_data, present with create_artifact.
+  1. Order the free_cash_flow rows by period (use the bound period/year when
+     available; otherwise treat the row order as periods 1..N and say so).
+  2. Discount each period's FCF: pv_t = fcf_t / (1 + wacc) ** t, where t is the
+     period index starting at 1. Sum the pv_t into pv_of_explicit_fcf.
+  3. Terminal value via Gordon growth at the final period N:
+     tv = fcf_N * (1 + g) / (wacc - g), where g = terminal_growth (use 0 when
+     not bound, and say so); require wacc > g or report terminal value as n/a.
+     Discount it: pv_tv = tv / (1 + wacc) ** N.
+  4. Enterprise value = pv_of_explicit_fcf + pv_tv.
+  5. Equity value = enterprise_value - net_debt (use 0 for net_debt when not
+     bound, and say so). Per-share = equity_value / shares_outstanding when
+     shares_outstanding is bound.
+  6. State the WACC, terminal growth, projection horizon, and that the result is
+     only as current as the market-data feed behind the WACC.
+
+output_spec:
+  type: report
+  sections: [Valuation summary, Per-period discounting table, Terminal value, Method notes]
+  per_period: [period, fcf, discount_factor, present_value]
+
+format:
+  rates: "one decimal percent, e.g. 9.5%"
+  currency: "thousands, no decimals"
+  per_share: "two decimals"
+
+eval_goldens: []

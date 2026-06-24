@@ -1,0 +1,73 @@
+id: deck-refresh
+name: "Deck Refresh / Restructure to Board-Ready"
+domain: finance.output
+
+# Tier C output/format skill. Does NOT compute new metrics; it RESTRUCTURES an
+# existing analysis into a clean board-ready deck via the default
+# create_data + create_artifact tools.
+
+trigger_hints:
+  - refresh the deck
+  - clean up slides
+  - restructure deck
+  - update the presentation
+  - tidy up the deck
+  - board-ready deck
+  - polish the slides
+  - reorganize the deck
+  - rework the presentation
+  - make the deck board ready
+
+required_inputs:
+  subject:
+    role: dimension
+    synonyms: [name, company, entity, category, product, account, item, segment, business unit, customer, sku, region]
+    desc: the primary entity the analysis is about
+  primary_measure:
+    role: measure
+    synonyms: [revenue, sales, amount, value, ebitda, profit, total, count]
+    optional: true
+  period:
+    role: date
+    synonyms: [period, date, month, quarter, year, fiscal period, as of, reporting period]
+    optional: true
+  secondary_measure:
+    role: measure
+    synonyms: [margin, growth, units, expense, cost, budget, target, variance]
+    optional: true
+
+method_text: |
+  Refresh and restructure an existing analysis into a clean, board-ready deck.
+  Do NOT invent new finance metrics; reuse the figures already in the prior
+  analysis and re-present them clearly.
+  1. With create_data, re-pull the underlying figures behind the existing
+     analysis (the primary measure by subject, across the period when bound, and
+     any secondary measure) so the refreshed deck rests on live data.
+  2. Restructure into a disciplined board narrative, executive-summary-first:
+       - Lead slide: the single headline message + 3-4 supporting bullets.
+       - One slide per key point, in a logical decision-first order (what
+         happened -> why -> what to do), most-material-first.
+       - Strip redundancy: merge overlapping slides, drop low-signal detail,
+         keep one idea per slide.
+       - Standardize titles to assertion-style takeaways (the title states the
+         conclusion, the chart proves it).
+       - Closing slide: recommended actions / decisions requested.
+  3. Normalize formatting: consistent labels, whole-number figures, labeled
+     axes, and a one-line takeaway caption under each chart.
+  4. With create_artifact (mode slides), build the refreshed board-ready deck
+     following the restructured outline.
+  5. Keep every label and number traceable to the data pulled in step 1; never
+     fabricate a value that is not in the binding.
+
+output_spec:
+  type: slide
+  sections: ["Lead message", "Key points", "Recommended actions"]
+  ordering: "decision-first, most-material-first"
+
+format:
+  titles: "assertion-style takeaways"
+  one_idea_per_slide: true
+  numbers: "whole numbers, thousands separators"
+  caption: "one-line takeaway under each chart"
+
+eval_goldens: []

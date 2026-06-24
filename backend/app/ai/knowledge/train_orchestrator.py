@@ -290,6 +290,22 @@ async def run_training(studio_id, organization_id, user_id) -> None:
                 except Exception:
                     pass
                 detail["pack_goldens"] = f"error: {e}"
+
+            # --- Stage 3c: MINT goldens from each active pack's method (Phase C) -
+            # Run the pack method's headline computation on real data → real
+            # expected value → golden TestCase. Reuses the auto_evals machinery.
+            try:
+                from app.ai.packs.pack_goldens import mint_pack_goldens
+
+                detail["pack_goldens_minted"] = await mint_pack_goldens(
+                    db, organization, sid
+                )
+            except Exception as e:  # noqa: BLE001
+                try:
+                    await db.rollback()
+                except Exception:
+                    pass
+                detail["pack_goldens_minted"] = f"error: {e}"
             _set(sid, pct=75)
             await _persist_db(db, studio, sid)
 

@@ -45,6 +45,31 @@ class DataSourceFromFileRequest(BaseModel):
     description: Optional[str] = None
 
 
+async def _dedupe_ds_name(db: AsyncSession, org_id: str, base: str) -> str:
+    """Return a DataSource name unique within the org: ``base`` if free, else
+    ``base (2)``, ``base (3)`` … (org-scoped, case-insensitive). Fail-soft: on any
+    query error just return ``base`` and let the insert's 409 guard handle it."""
+    try:
+        rows = (
+            await db.execute(
+                select(DataSource.name).where(
+                    DataSource.organization_id == org_id,
+                    func.lower(DataSource.name).like(func.lower(base) + "%"),
+                )
+            )
+        ).scalars().all()
+        taken = {str(n).strip().lower() for n in rows if n}
+        if base.lower() not in taken:
+            return base
+        for i in range(2, 1000):
+            cand = f"{base} ({i})"
+            if cand.lower() not in taken:
+                return cand
+    except Exception:  # noqa: BLE001 - never block the upload on the dedupe probe
+        pass
+    return base
+
+
 def _resolve_upload_path(stored_path: str) -> Optional[str]:
     """Resolve the on-disk absolute path for an uploaded file, traversal-safe.
 
@@ -124,7 +149,12 @@ async def create_data_source_from_file(
     await db.flush()
 
     # ── 3. Create the DataSource + link via domain_connection ───────────
-    ds_name = (payload.data_source_name or "").strip() or (file.filename or "Spreadsheet")
+    # DataSource names are unique per organization (uq_data_sources_org_name).
+    # Rather than hard-blocking a same-named upload, auto-suffix " (2)", " (3)"…
+    # so the user can keep multiple snapshots of the same report. They can rename
+    # later. A genuine race still surfaces the 409 below.
+    base_name = (payload.data_source_name or "").strip() or (file.filename or "Spreadsheet")
+    ds_name = await _dedupe_ds_name(db, str(organization.id), base_name)
     data_source = DataSource(
         name=ds_name,
         organization_id=organization.id,

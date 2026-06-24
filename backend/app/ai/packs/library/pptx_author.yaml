@@ -1,0 +1,70 @@
+id: pptx-author
+name: "Executive Slide Deck Author (PPTX)"
+domain: finance.output
+
+# Tier C output/format skill. Does NOT compute new metrics; it STRUCTURES and
+# PRESENTS whatever data/prior results exist into an executive slide deck via
+# the default create_data + create_artifact tools.
+
+trigger_hints:
+  - build a deck
+  - slide deck
+  - powerpoint
+  - board deck
+  - executive deck
+  - presentation slides
+  - make slides
+  - deck for the board
+  - pptx
+  - turn this into slides
+
+required_inputs:
+  subject:
+    role: dimension
+    synonyms: [name, company, entity, category, product, account, item, segment, business unit, customer, sku, region]
+    desc: the primary entity each row is about
+  primary_measure:
+    role: measure
+    synonyms: [revenue, sales, amount, value, ebitda, profit, total, count]
+    optional: true
+  period:
+    role: date
+    synonyms: [period, date, month, quarter, year, fiscal period, as of, reporting period]
+    optional: true
+  secondary_measure:
+    role: measure
+    synonyms: [margin, growth, units, expense, cost, budget, target, variance]
+    optional: true
+
+method_text: |
+  Assemble an executive slide deck from the studio's data. Do NOT invent new
+  finance metrics; pull the figures that already exist and PRESENT them.
+  1. With create_data, pull the headline numbers for the primary measure across
+     subject (and across the period when bound), plus any secondary measure.
+  2. Decide a tight slide outline, executive-summary-first:
+       - Slide 1: Title slide (deck title + reporting period if bound).
+       - Slide 2: Executive summary - 3-5 bullets stating the single most
+         important takeaways (top movers, biggest contributor, key risk).
+       - Slides 3-N: one slide per theme - a ranked table or bar of the primary
+         measure by subject; a trend over the period when period is bound; the
+         secondary measure where it adds signal.
+       - Final slide: Recommended actions / next steps.
+  3. Order content most-material-first within each slide (largest contribution
+     or largest variance at the top).
+  4. With create_artifact (mode slides), build the deck following the outline:
+     clear slide titles, one idea per slide, labeled axes, whole-number figures,
+     and a short caption under each chart stating the takeaway.
+  5. Keep every label and number traceable to the data pulled in step 1; never
+     fabricate a value that is not in the binding.
+
+output_spec:
+  type: slide
+  sections: [Title, "Executive summary", "Key metrics by subject", Trend, "Recommended actions"]
+  ordering: "most-material-first within each section"
+
+format:
+  numbers: "whole numbers, thousands separators"
+  one_idea_per_slide: true
+  caption: "one-line takeaway under each chart"
+
+eval_goldens: []

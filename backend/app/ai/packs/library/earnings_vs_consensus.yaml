@@ -1,0 +1,80 @@
+id: earnings-vs-consensus
+name: "Earnings vs Consensus (Beat / Miss Surprise)"
+domain: finance.earnings
+
+# Tier B. Needs an EXTERNAL market-data feed: analyst consensus estimates are
+# NOT in a normal warehouse. The non-optional market inputs (consensus_eps) are
+# declared required so the binder marks this pack DORMANT with
+# missing=[those] until a feed is wired - the honest "needs market data"
+# signal. Method INVARIANT (actual vs consensus -> surprise %, beat/miss).
+# Dep-free sandbox: numpy/pandas/math only, NO scipy/sklearn - simple
+# arithmetic.
+
+trigger_hints:
+  - earnings vs consensus
+  - beat or miss
+  - earnings surprise
+  - vs estimates
+  - consensus estimate
+  - actual vs estimate
+  - eps surprise
+  - analyst estimate
+  - earnings beat
+  - earnings miss
+
+required_inputs:
+  actual_eps:
+    role: measure
+    synonyms: [actual eps, reported eps, eps actual, actual earnings]
+    desc: reported actual EPS for the period
+  consensus_eps:
+    role: measure
+    synonyms: [consensus eps, consensus estimate, analyst estimate, street estimate, expected eps]
+    desc: analyst consensus EPS estimate from a market-data feed (external)
+  actual_revenue:
+    role: measure
+    synonyms: [actual revenue, reported revenue, revenue actual, actual sales]
+    optional: true
+  consensus_revenue:
+    role: measure
+    synonyms: [consensus revenue, revenue estimate, expected revenue, street revenue]
+    optional: true
+  period:
+    role: date
+    synonyms: [period, quarter, fiscal quarter, fiscal period, reporting date]
+    optional: true
+  segment:
+    role: dimension
+    synonyms: [segment, business unit, division, ticker, company]
+    optional: true
+
+method_text: |
+  Compare reported actuals against analyst consensus estimates. If the
+  market-data inputs (consensus estimates) are not bound, state that this
+  analysis needs an external market-data feed and do not fabricate market
+  assumptions. Compute with create_data, present with create_artifact. Group by
+  period and segment when those inputs are bound, else treat as one line.
+  1. EPS surprise (absolute) = actual_eps - consensus_eps.
+  2. EPS surprise (percent) = (actual_eps - consensus_eps) / abs(consensus_eps)
+     * 100. Report n/a when consensus_eps is zero.
+  3. Classify: BEAT when actual_eps > consensus_eps, MISS when actual_eps <
+     consensus_eps, IN-LINE when equal (or within a stated rounding tolerance).
+  4. When actual_revenue and consensus_revenue are bound, repeat steps 1-3 for
+     revenue (absolute surprise, percent surprise, beat/miss).
+  5. A "double beat" beats on BOTH EPS and revenue; a "double miss" misses on
+     both; otherwise it is a mixed result - state which line beat and which
+     missed.
+  6. State the consensus basis and that the comparison is only as current as the
+     market-data feed behind the consensus estimates.
+
+output_spec:
+  type: report
+  sections: [Surprise summary, Per-period table, Beat/miss classification, Method notes]
+  per_period: [period, actual_eps, consensus_eps, eps_surprise_pct, beat_miss]
+
+format:
+  eps: "two decimals"
+  percentages: "one decimal, e.g. 4.2%"
+  classification: "BEAT / MISS / IN-LINE"
+
+eval_goldens: []

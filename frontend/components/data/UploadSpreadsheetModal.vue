@@ -172,6 +172,11 @@
                 placeholder="Data Agent name"
                 class="w-full rounded-xl border border-[#E7E5DD] bg-white px-3 py-2 text-sm text-[#1f2328] placeholder-[#9a958c] focus:outline-none focus:border-[#C2683F] focus:ring-1 focus:ring-[#C2683F]"
               />
+              <!-- Neutral dup-name hint (backend auto-suffixes; not a blocker) -->
+              <p v-if="nameCollides" class="flex items-start gap-1.5 text-xs text-[#9a958c]">
+                <UIcon name="i-heroicons-information-circle" class="w-4 h-4 shrink-0 mt-px text-[#A8542F]" />
+                <span>A source named “{{ name.trim() }}” exists — this will be saved as “{{ suffixedName }}”.</span>
+              </p>
             </div>
             <div class="space-y-1.5">
               <label class="block text-xs font-medium text-[#6b6b6b]">Description <span class="text-[#9a958c] font-normal">(optional)</span></label>
@@ -258,6 +263,38 @@ const createError = ref('')
 const name = ref('')
 const description = ref('')
 const selectedSheets = ref<string[]>([])
+
+// Existing data-source names (lower-cased) — used to preview the auto-suffix the
+// backend applies on a duplicate name. Fetched best-effort; empty on failure.
+const existingNames = ref<string[]>([])
+
+async function loadExistingNames() {
+  try {
+    const { data } = await useMyFetch('/data_sources', { method: 'GET' })
+    const list = (data.value as any[]) || []
+    existingNames.value = list
+      .map((d: any) => (d?.name || '').toString().trim().toLowerCase())
+      .filter(Boolean)
+  } catch {
+    existingNames.value = []
+  }
+}
+
+// Does the chosen name collide with an existing source (case-insensitive)?
+const nameCollides = computed(() => {
+  const n = name.value.trim().toLowerCase()
+  return !!n && existingNames.value.includes(n)
+})
+
+// Preview the suffix the backend will auto-apply: "X" -> "X (2)" -> "X (3)" ...
+const suffixedName = computed(() => {
+  const base = name.value.trim()
+  if (!base) return ''
+  const taken = new Set(existingNames.value)
+  let i = 2
+  while (taken.has(`${base} (${i})`.toLowerCase())) i++
+  return `${base} (${i})`
+})
 
 const busy = computed(() => uploading.value || creating.value)
 
@@ -433,7 +470,21 @@ async function createDataSource() {
     })
 
     if (err?.value || !data?.value) {
-      createError.value = detailOf(err?.value, 'Could not create the Data Agent.')
+      // The backend now auto-suffixes duplicate names, so a 409 should no longer
+      // occur — but if one ever surfaces, don't treat it as a hard blocker: the
+      // name simply collided. Surface a soft hint, not a red error wall.
+      const status = (err?.value as any)?.statusCode || (err?.value as any)?.status
+      if (status === 409) {
+        createError.value = ''
+        toast.add({
+          title: 'Name already in use',
+          description: `Saved under a different name (e.g. “${suffixedName.value}”). Try again to confirm.`,
+          icon: 'i-heroicons-information-circle',
+          color: 'orange',
+        })
+      } else {
+        createError.value = detailOf(err?.value, 'Could not create the Data Agent.')
+      }
       return
     }
 
@@ -482,6 +533,9 @@ function close() {
 
 // reset internal state whenever the modal is (re)opened fresh
 watch(() => props.open, (v) => {
-  if (v) reset()
+  if (v) {
+    reset()
+    loadExistingNames()
+  }
 })
 </script>

@@ -40,6 +40,7 @@ const allTabs = [
     { name: 'identity-provider', label: 'settings.identityProviderTab', requiredPermission: "manage_identity_providers", description: 'Configure SSO, SCIM provisioning, and LDAP.' },
     { name: 'smtp', label: 'settings.smtpTab', requiredPermission: "manage_settings", description: 'Configure outbound email delivery.' },
     { name: 'features', label: 'Feature Flags', requiredPermission: "manage_settings", description: 'Toggle hybrid feature flags and experimental capabilities.' },
+    { name: 'pack-analytics', label: 'Pack Analytics', requiredPermission: "manage_settings", description: 'Org-wide observability for Domain Packs (Skills) — binding, fires, and win-rate.' },
 ]
 
 // The tab whose route is active (drives the page title + subtitle).

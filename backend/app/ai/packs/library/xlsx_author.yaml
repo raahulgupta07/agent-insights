@@ -1,0 +1,69 @@
+id: xlsx-author
+name: "Structured Excel Workbook Author (XLSX)"
+domain: finance.output
+
+# Tier C output/format skill. Does NOT compute new metrics; it STRUCTURES the
+# studio's data into a clean multi-tab Excel workbook via the default
+# create_data + create_artifact tools.
+
+trigger_hints:
+  - excel
+  - spreadsheet
+  - workbook
+  - export to excel
+  - build a workbook
+  - xlsx
+  - excel export
+  - structured spreadsheet
+  - tabbed workbook
+  - download as excel
+
+required_inputs:
+  subject:
+    role: dimension
+    synonyms: [name, company, entity, category, product, account, item, segment, business unit, customer, sku, region]
+    desc: the primary entity each row is about
+  primary_measure:
+    role: measure
+    synonyms: [revenue, sales, amount, value, ebitda, profit, total, count]
+    optional: true
+  period:
+    role: date
+    synonyms: [period, date, month, quarter, year, fiscal period, as of, reporting period]
+    optional: true
+  secondary_measure:
+    role: measure
+    synonyms: [margin, growth, units, expense, cost, budget, target, variance]
+    optional: true
+
+method_text: |
+  Build a structured Excel workbook from the studio's data. Do NOT invent new
+  finance metrics; pull the existing figures and lay them out cleanly.
+  1. With create_data, pull the detail rows (subject with the primary and any
+     secondary measure, broken out by period when period is bound).
+  2. Plan the workbook tabs, summary-first:
+       - Tab 1 "Summary": the headline totals and the top subjects by the
+         primary measure, with a clear header row and a TOTAL row at the bottom.
+       - Tab 2 "Detail": the full row-level breakdown of subject x measures
+         (x period when bound), sorted by the primary measure descending.
+       - Tab 3 "By period" (only when period is bound): the primary measure
+         pivoted subject-by-period with row and column totals.
+  3. On every tab: a bold header row, consistent column order, right-aligned
+     numeric columns, whole-number or 2-decimal formatting as appropriate, and
+     a TOTAL/subtotal row where it aids reading.
+  4. With create_artifact, assemble the workbook following the tab plan above,
+     naming each tab and labeling each column header in plain language.
+  5. Keep every cell traceable to the data pulled in step 1; never fabricate a
+     value or a column that is not in the binding.
+
+output_spec:
+  type: report
+  sections: [Summary, Detail, "By period"]
+  ordering: "primary measure descending within Detail"
+
+format:
+  header_row: "bold, plain-language labels"
+  numbers: "right-aligned, whole numbers or 2 decimals"
+  totals: "TOTAL/subtotal rows where they aid reading"
+
+eval_goldens: []
