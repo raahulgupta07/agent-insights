@@ -64,31 +64,42 @@
             <div class="flex gap-6 items-start">
                 <!-- LEFT RAIL -->
                 <aside class="w-52 shrink-0 sticky top-2">
-                    <p class="px-2 mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#9a958c]">Categories</p>
-                    <nav class="flex flex-col gap-0.5 mb-5">
+                    <nav class="flex flex-col gap-0.5 mb-2">
+                        <!-- All (ungrouped, pinned top) -->
                         <button
-                            v-for="c in categoryRail"
+                            v-for="c in [railLookup.All]"
                             :key="c.key"
                             type="button"
                             class="group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition"
-                            :class="selectedCategory === c.key
-                                ? 'bg-[#ECEAE1] text-[#1f2328] font-medium'
-                                : 'text-[#6b6b6b] hover:bg-[#F4F1EA] hover:text-[#1f2328]'"
+                            :class="selectedCategory === c.key ? 'bg-[#ECEAE1] text-[#1f2328] font-medium' : 'text-[#6b6b6b] hover:bg-[#F4F1EA] hover:text-[#1f2328]'"
                             @click="selectedCategory = c.key"
                         >
-                            <Icon
-                                :name="categoryIcon(c.key)"
-                                class="w-4 h-4 shrink-0"
-                                :class="selectedCategory === c.key ? 'text-[#C2683F]' : 'text-[#9a958c] group-hover:text-[#6b6b6b]'"
-                            />
+                            <Icon :name="categoryIcon(c.key)" class="w-4 h-4 shrink-0" :class="selectedCategory === c.key ? 'text-[#C2683F]' : 'text-[#9a958c] group-hover:text-[#6b6b6b]'" />
                             <span class="truncate">{{ c.label }}</span>
                             <span v-if="c.active" class="w-1.5 h-1.5 rounded-full bg-[#3f9e6a] shrink-0" title="has active packs"></span>
-                            <span
-                                class="ms-auto rounded-full px-1.5 py-0.5 text-[11px]"
-                                :class="selectedCategory === c.key ? 'bg-white text-[#6b6b6b]' : 'bg-[#ECEAE1] text-[#9a958c]'"
-                            >{{ c.count }}</span>
+                            <span class="ms-auto rounded-full px-1.5 py-0.5 text-[11px]" :class="selectedCategory === c.key ? 'bg-white text-[#6b6b6b]' : 'bg-[#ECEAE1] text-[#9a958c]'">{{ c.count }}</span>
                         </button>
                     </nav>
+
+                    <!-- Grouped categories (Finance / Analytics / Library) -->
+                    <div v-for="grp in railGroups" :key="grp.title" class="mb-3">
+                        <p class="px-2.5 mt-2 mb-1 text-[11px] font-semibold uppercase tracking-wide text-[#9a958c]">{{ grp.title }}</p>
+                        <nav class="flex flex-col gap-0.5">
+                            <button
+                                v-for="c in grp.items"
+                                :key="c.key"
+                                type="button"
+                                class="group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition"
+                                :class="selectedCategory === c.key ? 'bg-[#ECEAE1] text-[#1f2328] font-medium' : 'text-[#6b6b6b] hover:bg-[#F4F1EA] hover:text-[#1f2328]'"
+                                @click="selectedCategory = c.key"
+                            >
+                                <Icon :name="categoryIcon(c.key)" class="w-4 h-4 shrink-0" :class="selectedCategory === c.key ? 'text-[#C2683F]' : 'text-[#9a958c] group-hover:text-[#6b6b6b]'" />
+                                <span class="truncate">{{ c.label }}</span>
+                                <span v-if="c.active" class="w-1.5 h-1.5 rounded-full bg-[#3f9e6a] shrink-0" title="has active packs"></span>
+                                <span class="ms-auto rounded-full px-1.5 py-0.5 text-[11px]" :class="selectedCategory === c.key ? 'bg-white text-[#6b6b6b]' : 'bg-[#ECEAE1] text-[#9a958c]'">{{ c.count }}</span>
+                            </button>
+                        </nav>
+                    </div>
 
                     <!-- TIER filter (packs only) -->
                     <template v-if="selectedCategory !== 'Playbooks'">
@@ -349,6 +360,24 @@ const categoryRail = computed(() => {
     rail.push({ key: 'Playbooks', label: 'Playbooks', count: skills.value.length, active: false })
     return rail
 })
+
+// Rail grouped into sections (mirrors the studio sidebar). 'All' is pinned
+// above the groups; empty categories drop out.
+const RAIL_GROUPS: { title: string; keys: string[] }[] = [
+    { title: 'Finance', keys: ['Performance', 'Valuation', 'Fund / PE', 'Accounting', 'Output'] },
+    { title: 'Analytics', keys: ['Analysis', 'Data Quality', 'Storytelling', 'Stakeholder', 'Documentation', 'Workflow'] },
+    { title: 'Library', keys: ['Finance', 'General', 'Org', 'Playbooks'] },
+]
+const railLookup = computed(() => {
+    const m: Record<string, any> = {}
+    for (const c of categoryRail.value) m[c.key] = c
+    return m
+})
+const railGroups = computed(() =>
+    RAIL_GROUPS
+        .map(g => ({ title: g.title, items: g.keys.map(k => railLookup.value[k]).filter(Boolean) }))
+        .filter(g => g.items.length > 0)
+)
 
 // Grouped packs for the main grid. 'All' → grouped by category; a specific
 // category → a single group.
