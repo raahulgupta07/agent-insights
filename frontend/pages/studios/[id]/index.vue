@@ -69,7 +69,7 @@
                 </aside>
 
                 <!-- MAIN CONTENT -->
-                <main class="flex-1 min-w-0 overflow-y-auto px-8 py-6 h-full bg-[#FBFAF6]">
+                <main class="flex-1 min-w-0 my-2 me-2 overflow-y-auto px-8 py-6 bg-[#FBFAF6] border border-[#E7E5DD] rounded-2xl">
                     <!-- Read-only banner -->
                     <div v-if="role === 'viewer'" class="mb-4 flex items-center gap-2 text-[11px] text-[#6b6b6b] bg-[#F4F1EA] border border-[#E7E5DD] rounded-lg px-3 py-1.5">
                         <UIcon name="i-heroicons-eye" class="w-3.5 h-3.5" />
