@@ -1,6 +1,6 @@
 <template>
     <div class="flex justify-center px-4 md:px-6 text-sm bg-[#FBFAF6] min-h-full">
-        <div class="w-full max-w-7xl py-2 text-[#1f2328]">
+        <div class="w-full max-w-[1640px] py-2 text-[#1f2328]">
             <!-- Header -->
             <div class="flex items-start justify-between gap-4 mb-5">
                 <div>
@@ -63,7 +63,7 @@
             <!-- ===================== Rail + grid ===================== -->
             <div class="flex gap-6 items-start">
                 <!-- LEFT RAIL — matches the studio agent sidebar -->
-                <aside class="w-60 shrink-0 sticky top-2 self-start bg-[#FBFAF6] border border-[#E7E5DD] rounded-2xl overflow-hidden">
+                <aside class="w-52 shrink-0 sticky top-2 self-start bg-[#FBFAF6] border border-[#E7E5DD] rounded-2xl overflow-hidden">
                     <nav class="px-2 py-2 flex flex-col gap-px">
                         <!-- All (ungrouped, pinned top) -->
                         <button
@@ -133,7 +133,7 @@
                                 It appears here as a personal draft you can review and promote.
                             </p>
                         </div>
-                        <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
                             <div
                                 v-for="skill in filteredPlaybooks"
                                 :key="skill.id"
@@ -181,7 +181,7 @@
                                     <NuxtLink v-if="grp.key === categoryRail[0].key" to="/settings/pack-analytics" class="ms-auto text-xs font-medium text-[#C2683F] hover:underline">Pack analytics →</NuxtLink>
                                     <span v-else class="ms-auto text-[11px] text-[#9a958c]">{{ grp.items.length }}</span>
                                 </div>
-                                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
                                     <div
                                         v-for="p in grp.items"
                                         :key="p.pack_id"
