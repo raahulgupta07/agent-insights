@@ -86,7 +86,7 @@ A **Domain Pack** is a declarative method (a `.yaml` in `backend/app/ai/packs/li
 - **Finance (15)** — ebitda-exec-summary + 7 **Tier A** (unit-economics, returns IRR/MOIC, 3-statement, variance, GL-recon, NAV tie-out, portfolio-monitoring), 4 **Tier C** output (pptx/xlsx/teaser/deck-refresh), 3 **Tier B** (comps/DCF/earnings-vs-consensus — *dormant until a market-data feed is connected*).
 - **General analytics (33)** — ported from the [data-analytics-skills](https://github.com/nimrodfisher/data-analytics-skills) method library (method re-authored data-blind; scripts dropped — our agent writes its own code): **Analysis** (cohort, funnel, segmentation, time-series, A/B test, root-cause, business-metrics), **Data Quality** (EDA, audit, query-validation, schema-mapper, metric-recon), **Storytelling**, **Stakeholder**, **Documentation**, **Workflow**. Data-bound ones (Analysis, Data Quality) bind to real columns; the soft ones bind via a broad `subject` input so they activate on any studio.
 
-Categorised in the **Build → Skills** rail. Tier A runs on your data, Tier C is output/soft, Tier B needs an external feed.
+Categorised in the **Build → Skills** rail — a grouped sidebar (Finance / Analytics / Library, matching the studio agent nav) with a tier filter; the card grid goes 4-wide on large screens. Tier A runs on your data, Tier C is output/soft, Tier B needs an external feed.
 
 Flags: `DOMAIN_PACKS` (master) · `PACK_ROUTER` (per-question activation) · `PACK_AUTOBIND` (bind at train) · `TEACH_BOX`. Plan: `docs/PLAN_TEACH_SKILLS_ENGINE.md`.
 
