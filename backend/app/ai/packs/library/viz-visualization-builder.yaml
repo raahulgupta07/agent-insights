@@ -1,0 +1,63 @@
+id: viz-visualization-builder
+name: "Visualization Builder (chart selection + design)"
+domain: analytics.visualization
+trigger_hints:
+  - build a chart
+  - visualize this
+  - what chart should I use
+  - pick a chart type
+  - design this visualization
+  - make this chart clearer
+  - chart for this presentation
+  - fix this cluttered chart
+  - accessible chart design
+  - annotate this chart
+required_inputs:
+  subject:
+    role: dimension
+    synonyms: [name, company, entity, category, product, account, item, segment, business unit, customer, sku, region, metric]
+    desc: the primary entity each row is about
+  primary_measure:
+    role: measure
+    synonyms: [revenue, sales, amount, value, count, total, kpi]
+    optional: true
+  period:
+    role: date
+    synonyms: [period, date, month, quarter, year, as of]
+    optional: true
+method_text: |
+  This skill turns figures that already exist into a clear, presentation-ready chart.
+  It presents existing numbers; it does not invent new metrics. Pull the values you
+  need with create_data at the right grain, then render the chart through
+  create_artifact.
+  1. Classify the message the chart must carry: comparison (bar), trend over time
+     (line), composition or part-of-whole (stacked bar; pie only for two or three
+     slices), distribution (histogram, box plot), or relationship (scatter). The
+     message type decides the chart type.
+  2. Select and shape the data so it sits at the right grain for that chart. Do any
+     aggregation (for example, grouping by month) before plotting, not inside the chart.
+  3. Build the base chart with clean professional defaults: a light grid, a sans-serif
+     face, and an accessible color palette. Set axes, ticks, and scale on purpose,
+     since out-of-the-box settings are often wrong.
+  4. Apply visual hierarchy so the most important element dominates (a bolder line,
+     darker bar, or distinct color) while secondary series recede. Strip anything that
+     does not serve the message: faint gridlines, top and right borders, chart junk.
+  5. Annotate for the reader. Give the chart a title that states the finding ("mobile
+     churn is 2x desktop") rather than the variable names, and call out key points,
+     thresholds, and reference lines directly on the plot. Add a data source and date.
+  6. Validate before shipping: view it at the intended display size and confirm the key
+     message reads in under five seconds and still works in greyscale. If it is part of
+     a larger deliverable, capture its spec (message, source, type, annotations).
+output_spec:
+  type: artifact
+  sections:
+    - message type
+    - chart type and data grain
+    - styling and hierarchy
+    - annotations
+    - title and source
+format:
+  style: single publication-ready chart
+  length: one chart
+  visuals: the chart itself, accessible palette, greyscale-safe
+eval_goldens: []

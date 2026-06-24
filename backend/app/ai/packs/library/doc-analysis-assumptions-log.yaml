@@ -1,0 +1,56 @@
+id: doc-analysis-assumptions-log
+name: "Analysis Assumptions Log (decision audit trail)"
+domain: analytics.assumptions-log
+trigger_hints:
+  - log the assumptions
+  - document assumptions
+  - assumptions log
+  - track analytical decisions
+  - record trade-offs
+  - audit trail for analysis
+  - peer review sign-off
+  - what did we assume
+  - methodology decisions
+  - data quality caveats
+required_inputs:
+  subject:
+    role: dimension
+    synonyms: [name, company, entity, category, product, account, item, segment, business unit, customer, sku, region, table, column, metric]
+    desc: the primary entity / field the documentation is about
+  primary_measure:
+    role: measure
+    synonyms: [revenue, sales, amount, value, count, total, metric]
+    desc: the measure the assumptions affect, if any
+    optional: true
+  period:
+    role: date
+    synonyms: [period, date, month, quarter, year, as of]
+    desc: the analysis time window the assumptions apply to
+    optional: true
+method_text: |
+  This is a DOCUMENTATION deliverable: it captures and explains the choices behind an
+  analysis so they can be reviewed and trusted later. It does not compute new numbers.
+  1. Open the log with a header: analysis name, date, who ran it, and the decision the
+     work is meant to inform. This frames every assumption that follows.
+  2. List the data assumptions. State what was taken on faith about representativeness,
+     completeness, missing-value handling, and known quality issues. For each, attach a
+     short rationale and a confidence rating of high, medium, or low.
+  3. List the business-logic assumptions. Record how each metric was defined, the time
+     windows, inclusion and exclusion rules, and any definitions handed down by
+     stakeholders. Note alternatives that were weighed and rejected.
+  4. List the statistical or method assumptions: distribution shape, independence,
+     stationarity, or any modeling premise the chosen technique relies on.
+  5. Score impact. For every low-confidence assumption that would change conclusions if
+     wrong, mark it critical and write a short plan to validate or pressure-test it.
+  6. Track resolution. As checks complete, update each entry with the outcome so the log
+     reflects current confidence before sign-off.
+  7. Use create_artifact to produce a clean assumptions log, grouped by category with a
+     prominent "critical / needs validation" list at the top for the reviewer.
+output_spec:
+  type: report
+  sections: [header, data assumptions, business logic assumptions, statistical assumptions, critical assumptions to validate, resolution status]
+format:
+  style: structured log grouped by assumption category
+  each_entry: assumption, rationale, confidence (high/medium/low), impact-if-wrong
+  highlight: surface low-confidence high-impact items first
+eval_goldens: []

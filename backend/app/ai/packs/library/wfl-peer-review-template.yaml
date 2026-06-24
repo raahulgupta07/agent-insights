@@ -1,0 +1,61 @@
+id: wfl-peer-review-template
+name: "Peer Review (structured review of analytical work)"
+domain: analytics.peer-review
+trigger_hints:
+  - peer review this analysis
+  - review my colleague's work
+  - check this before delivery
+  - give feedback on the analysis
+  - sanity check the conclusions
+  - review the logic
+  - validate this analysis
+  - quality check the report
+  - critique this work
+  - sign off on the analysis
+  - review the sql
+  - is this ready to ship
+required_inputs:
+  subject:
+    role: dimension
+    synonyms: [name, company, entity, category, product, account, item, segment, business unit, customer, sku, region, metric, analysis]
+    desc: the primary entity / analysis the workflow step is about
+  primary_measure:
+    role: measure
+    synonyms: [revenue, sales, amount, value, count, total, metric]
+    optional: true
+  period:
+    role: date
+    synonyms: [period, date, month, quarter, year, as of]
+    optional: true
+method_text: |
+  WORKFLOW skill: this structures a peer review of analytical work on the
+  subject before it reaches stakeholders. Capture the review as a written
+  artifact via create_artifact.
+  1. Agree the scope with the author first — whether the review targets logic,
+     statistical validity, code, presentation clarity, or all of these — so
+     expectations are explicit.
+  2. Check analytical rigour: confirm the question and method are aligned, the
+     assumptions hold, and the conclusion is genuinely supported by the data
+     and the primary_measure over the period.
+  3. If code or SQL is involved, review it for reproducibility, correctness,
+     readability, and performance.
+  4. Write feedback in three tiers — must-fix issues, should-fix suggestions,
+     and optional improvements — and make each point specific and actionable.
+  5. Have the author respond to every point with a disposition: fixed, accepted
+     as-is with rationale, or deferred.
+  6. Close the review once all must-fix items are resolved, then record the
+     sign-off and outcome.
+output_spec:
+  type: report
+  sections:
+    - review_scope
+    - must_fix
+    - should_fix
+    - optional
+    - author_responses
+    - sign_off
+format:
+  style: tiered review feedback
+  numbered_steps: true
+  include_dispositions: true
+eval_goldens: []

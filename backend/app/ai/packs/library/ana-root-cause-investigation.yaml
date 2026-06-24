@@ -1,0 +1,42 @@
+id: ana-root-cause-investigation
+name: "Root Cause Investigation (Metric Change Drill-down)"
+domain: analytics.root-cause
+trigger_hints:
+  - root cause
+  - why did metric drop
+  - metric spike
+  - anomaly investigation
+  - drill down
+  - explain the change
+  - post-mortem
+  - metric driver
+  - contribution analysis
+  - what caused the drop
+required_inputs:
+  metric:
+    role: measure
+    synonyms: [metric, value, revenue, count, amount, kpi]
+    desc: the metric whose unexpected change is being explained
+  date:
+    role: date
+    synonyms: [date, event_date, timestamp, created_at, day]
+    desc: the time axis used to locate when the change began
+  dimension:
+    role: dimension
+    synonyms: [dimension, segment, geography, platform, channel, category]
+    desc: a breakdown attribute to drill into for the primary driver
+    optional: true
+method_text: |
+  1. Validate that the change is real: compare the recent value against the rolling average using a z-score. If it sits within roughly +/-1.5 standard deviations, document it as normal variance and stop.
+  2. Use create_artifact to plot the metric over time and pinpoint when the change started. A sharp step suggests a discrete event; a gradual drift suggests a structural shift.
+  3. Decompose the metric into its components (for example revenue = volume x price x mix) with create_data, and identify which component moved before drilling into dimensions.
+  4. Drill down systematically: with create_data, compare the metric before versus after the change across each available dimension (geography, platform, channel, category, segment) and sort segments by absolute contribution to the change to find the primary driver.
+  5. State explicit hypotheses (volume drop, mix shift, per-unit change, data quality issue) and accept or reject each with evidence, correlating the change date against any known releases, campaigns, or incidents.
+  6. Quantify the primary driver as a share of the total change and confirm the contributions reconcile back to the overall movement.
+  7. Use create_artifact to write a report covering what changed, when, the quantified primary driver, supporting evidence, rejected hypotheses, and tiered recommendations (immediate, short-term, long-term).
+output_spec:
+  type: report
+  sections: [change_validation, timeline, decomposition, primary_driver, hypotheses, recommendations]
+format:
+  percentages: "one decimal place"
+eval_goldens: []

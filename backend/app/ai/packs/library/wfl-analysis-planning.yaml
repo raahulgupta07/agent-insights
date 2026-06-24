@@ -1,0 +1,59 @@
+id: wfl-analysis-planning
+name: "Analysis Planning (scope before you query)"
+domain: analytics.planning
+trigger_hints:
+  - plan the analysis
+  - how should i approach
+  - break this question down
+  - where do i start
+  - scope this work
+  - sequence the steps
+  - what do i analyze first
+  - outline the analysis
+  - structure my approach
+  - plan before querying
+  - decompose the question
+  - what's the game plan
+required_inputs:
+  subject:
+    role: dimension
+    synonyms: [name, company, entity, category, product, account, item, segment, business unit, customer, sku, region, metric, analysis]
+    desc: the primary entity / analysis the workflow step is about
+  primary_measure:
+    role: measure
+    synonyms: [revenue, sales, amount, value, count, total, metric]
+    optional: true
+  period:
+    role: date
+    synonyms: [period, date, month, quarter, year, as of]
+    optional: true
+method_text: |
+  WORKFLOW skill: this structures the analyst's planning process before any
+  data is pulled. Do not query yet; produce a plan as a written artifact via
+  create_artifact.
+  1. Decompose the business question about the subject into discrete
+     sub-questions, where each one can be settled with a single pull or a
+     single calculation involving the primary_measure over the period.
+  2. For every sub-question, name the data it depends on and rate availability
+     as confirmed, likely, or unknown; surface any blockers right away.
+  3. Order the sub-questions so each result feeds the next, and mark which ones
+     are independent enough to run in parallel.
+  4. Attach a rough effort or time estimate to each step, total them, and check
+     the sum against the stated deadline or constraint.
+  5. Record risks and dependencies — data gaps, pending approvals, or
+     methodology uncertainty — that could delay or invalidate the plan.
+  6. Assemble the sequenced steps, estimates, and risk log into a single plan
+     artifact, with an optional kickoff summary for stakeholder alignment.
+output_spec:
+  type: report
+  sections:
+    - sub_questions
+    - data_dependencies
+    - sequence_and_parallelism
+    - effort_estimates
+    - risks_and_dependencies
+format:
+  style: structured plan
+  numbered_steps: true
+  include_estimates: true
+eval_goldens: []

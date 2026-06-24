@@ -275,7 +275,7 @@ const packs = ref<Pack[]>([])
 const packTotals = ref<Record<string, number>>({})
 
 // Fixed category order for the rail (only those present are shown).
-const CATEGORY_ORDER = ['Performance', 'Valuation', 'Fund / PE', 'Accounting', 'Output', 'Finance', 'General', 'Org']
+const CATEGORY_ORDER = ['Performance', 'Valuation', 'Fund / PE', 'Accounting', 'Output', 'Analysis', 'Data Quality', 'Storytelling', 'Stakeholder', 'Documentation', 'Workflow', 'Finance', 'General', 'Org']
 const TIER_NOTE: Record<string, string> = {
     A: 'binds to your columns', C: 'output / deliverables', B: 'needs a market-data feed', Org: 'promoted from a studio',
 }

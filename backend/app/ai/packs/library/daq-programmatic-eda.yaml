@@ -1,0 +1,44 @@
+id: daq-programmatic-eda
+name: "Programmatic EDA (Structure, Nulls, Outliers, Distributions, Correlations)"
+domain: analytics.programmatic-eda
+trigger_hints:
+  - exploratory data analysis
+  - profile this dataset
+  - what's in this table
+  - eda
+  - check data before analysis
+  - distribution and outliers
+  - correlation check
+  - summary statistics
+  - data profiling
+  - is this data clean
+required_inputs:
+  table:
+    role: dimension
+    synonyms: [table, dataset, dataframe, file, source, relation, data]
+    desc: the dataset to profile
+  numeric_columns:
+    role: measure
+    synonyms: [numeric columns, measures, metrics, values, continuous fields]
+    desc: numeric columns to summarise, scan for outliers, and correlate
+    optional: true
+  skip_columns:
+    role: dimension
+    synonyms: [skip columns, exclude, ignore, pii columns, id columns, high cardinality]
+    desc: columns to exclude from profiling such as PII or high-cardinality ids
+    optional: true
+method_text: |
+  1. Use create_data to load the dataset and report an overview: row count, column count, inferred dtypes, and a sample, then state the grain — what a single row represents.
+  2. Build a null/completeness profile with create_data, computing the missing count and percentage per column and flagging any column above a sensible threshold for the context.
+  3. For numeric columns, detect outliers with create_data using both an IQR fence and a z-score rule; list the flagged values and note for each whether it looks like genuine signal or a data error.
+  4. Produce a distribution summary with create_data for each numeric column — count, mean, median, standard deviation, min, max, and key percentiles — to reveal skew and implausible extremes.
+  5. Explore pairwise correlations among numeric columns with create_data and flag any pair with absolute correlation above ~0.8 as possible redundancy or multicollinearity.
+  6. Scan categorical/dimension columns with create_data for cardinality and the most frequent values, surfacing unexpected categories, rare levels, or inconsistent encodings.
+  7. Distil the top three to five quality issues found and pair each with a recommended next step before deeper analysis proceeds.
+  8. Use create_artifact to deliver a profiling report containing the per-column statistics plus the prioritised findings summary.
+output_spec:
+  type: report
+  sections: [Overview and Grain, Null Profile, Outliers, Distributions, Correlations, Top Findings]
+format:
+  percentages: "one decimal"
+eval_goldens: []

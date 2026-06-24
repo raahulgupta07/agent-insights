@@ -1,0 +1,60 @@
+id: stk-stakeholder-requirements-gathering
+name: "Stakeholder Requirements Gathering (scope the ask)"
+domain: analytics.requirements
+trigger_hints:
+  - gather requirements
+  - scope this request
+  - clarify the ask
+  - what exactly do they want
+  - the request is vague
+  - define success criteria
+  - write the analysis brief
+  - intake a new request
+  - what does done look like
+  - align on scope
+required_inputs:
+  subject:
+    role: dimension
+    synonyms: [name, company, entity, category, product, account, item, segment, business unit, customer, sku, region, metric]
+    desc: the primary entity the communication is about
+  primary_measure:
+    role: measure
+    synonyms: [revenue, sales, amount, value, count, total, impact]
+    optional: true
+  period:
+    role: date
+    synonyms: [period, date, month, quarter, year, as of]
+    optional: true
+method_text: |
+  Turn a fuzzy analysis request into a clear, agreed scope before any work starts.
+  This is most valuable when the ask is vague ("can you look into X?"), several
+  stakeholders care about the outcome, or the result drives an important decision —
+  a short scoping pass prevents days of rework.
+  1. Run an intake interview to surface the underlying business decision being made,
+     who the real audience is, what "done" looks like, and which constraints apply.
+  2. Classify the decision as strategic, operational, or tactical, and use that to
+     calibrate how much rigor and what output format the answer needs.
+  3. Document the requirements: the precise business question, the success criteria,
+     what is in and out of scope, the data sources involved, and the timeline.
+  4. Resolve remaining ambiguities with deliberate techniques — repeated "why"
+     questioning, walking through concrete scenarios, or must / should / could / won't
+     prioritization.
+  5. Get explicit sign-off by sending the documented requirements back to the requester
+     for confirmation, and revise on their feedback before committing effort.
+  6. Convert the approved requirements into an analysis brief via create_artifact that
+     becomes the authoritative scope of record. Use create_data only if checking the
+     existence or shape of referenced data.
+output_spec:
+  type: report
+  sections:
+    - business_decision
+    - audience_and_done
+    - decision_type
+    - documented_requirements
+    - open_ambiguities
+    - approved_brief
+format:
+  tone: inquisitive, clarifying, confirmation-seeking
+  length: requirements doc plus a handoff-ready brief
+  deliverable: requirements doc / analysis brief via create_artifact
+eval_goldens: []

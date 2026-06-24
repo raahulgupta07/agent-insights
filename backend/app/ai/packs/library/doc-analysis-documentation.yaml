@@ -1,0 +1,57 @@
+id: doc-analysis-documentation
+name: "Analysis Documentation (reproducible write-up)"
+domain: analytics.documentation
+trigger_hints:
+  - document the analysis
+  - write up the analysis
+  - analysis documentation
+  - make this reproducible
+  - analysis notebook write-up
+  - hand off this analysis
+  - archive the analysis
+  - prepare for peer review
+  - turn exploration into a report
+  - explain how we got this result
+required_inputs:
+  subject:
+    role: dimension
+    synonyms: [name, company, entity, category, product, account, item, segment, business unit, customer, sku, region, table, column, metric]
+    desc: the primary entity / field the documentation is about
+  primary_measure:
+    role: measure
+    synonyms: [revenue, sales, amount, value, count, total, metric]
+    desc: the headline measure the analysis reports, if any
+    optional: true
+  period:
+    role: date
+    synonyms: [period, date, month, quarter, year, as of]
+    desc: the analysis time window
+    optional: true
+method_text: |
+  This is a DOCUMENTATION deliverable: it structures and explains a finished analysis so
+  it can be shared, trusted, and rerun. It does not produce new figures of its own.
+  1. Pin down the audience. Decide whether the main reader is technical, business, or
+     mixed, and pitch the depth accordingly; for mixed readers lead with a plain summary
+     and push detail into later sections.
+  2. Write the business context: the question being answered, who asked for it, the
+     decision it feeds, and what a successful outcome looks like.
+  3. Describe the data. For each source name the table or file, the date range covered,
+     the row count, the important columns, and any exclusions or known quality issues.
+  4. Lay out the methodology: the approach taken, the tools and versions, the key
+     assumptions, and notable choices made along with the alternatives considered. Point
+     to an assumptions log if one exists.
+  5. Present the results in order of importance, with the key metrics, supporting figures,
+     and clearly captioned visuals.
+  6. Close the loop on meaning and repeatability: tie each finding to a business
+     implication and a next action, then spell out exactly how to reproduce the work
+     (data access, environment, and the order steps were run in).
+  7. Use create_artifact to assemble the final document with the standard sections so a
+     future reader can both trust and rerun the analysis.
+output_spec:
+  type: report
+  sections: [business context, data sources, methodology, results, insights and recommendations, reproducibility steps]
+format:
+  style: tiered write-up, summary first then technical detail
+  visuals: reference captioned charts and tables
+  reproducibility: explicit data access, environment, and execution order
+eval_goldens: []

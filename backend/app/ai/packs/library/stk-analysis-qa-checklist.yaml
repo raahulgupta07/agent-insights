@@ -1,0 +1,60 @@
+id: stk-analysis-qa-checklist
+name: "Analysis QA Checklist (pre-delivery review)"
+domain: analytics.qa-checklist
+trigger_hints:
+  - qa this analysis
+  - review before sharing
+  - is this ready to deliver
+  - check for errors
+  - validate assumptions
+  - sanity check the numbers
+  - pre-delivery review
+  - sign off on this report
+  - did I miss anything
+  - quality check
+required_inputs:
+  subject:
+    role: dimension
+    synonyms: [name, company, entity, category, product, account, item, segment, business unit, customer, sku, region, metric]
+    desc: the primary entity the communication is about
+  primary_measure:
+    role: measure
+    synonyms: [revenue, sales, amount, value, count, total, impact]
+    optional: true
+  period:
+    role: date
+    synonyms: [period, date, month, quarter, year, as of]
+    optional: true
+method_text: |
+  Run a structured quality pass on an analysis before it reaches a stakeholder.
+  A late correction always costs more than an early check, so apply this to every
+  deliverable, not just large ones.
+  1. Restate the original question and confirm the analysis actually answers it;
+     flag any drift between what was asked and what was produced.
+  2. Trace the numbers back to source: where each figure came from, how it was
+     transformed, and whether any joins, filters, or aggregations could double-count,
+     drop rows, or mismatch grain. Use create_data only to re-pull existing figures
+     for spot-checks, not to invent new analysis.
+  3. Check structural and formatting integrity: totals reconcile, units and currency
+     are consistent, time periods align, and there are no null or placeholder values
+     leaking into the output.
+  4. Surface every assumption explicitly and confirm each has a stated source and,
+     where the input is uncertain, a note on how sensitive the conclusion is to it.
+  5. Test the narrative: verify the conclusion follows from the evidence, caveats are
+     stated plainly, and the recommendation is specific and actionable.
+  6. Record a sign-off via create_artifact noting reviewer, intended audience, issues
+     found, their resolution, and a clear go / no-go delivery decision.
+output_spec:
+  type: report
+  sections:
+    - question_vs_output
+    - data_lineage_checks
+    - structural_checks
+    - assumptions_and_sensitivity
+    - narrative_and_recommendation
+    - signoff_decision
+format:
+  tone: precise, reviewer-neutral
+  length: one checklist pass per section, pass/fail noted
+  deliverable: written sign-off via create_artifact
+eval_goldens: []

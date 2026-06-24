@@ -1,0 +1,43 @@
+id: daq-schema-mapper
+name: "Schema Mapper (Relationship Discovery, Join Paths, Data Dictionary)"
+domain: analytics.schema-mapper
+trigger_hints:
+  - map the schema
+  - how do i join these tables
+  - document table relationships
+  - generate a data dictionary
+  - find the join path
+  - explore unfamiliar database
+  - erd for this schema
+  - what tables relate to
+  - foreign key relationships
+  - schema overview
+required_inputs:
+  schema:
+    role: dimension
+    synonyms: [schema, database, tables, namespace, catalog, table list]
+    desc: the schema or set of tables to discover and document
+  from_table:
+    role: dimension
+    synonyms: [from table, source table, start table, table a]
+    desc: starting table when searching for a join path
+    optional: true
+  to_table:
+    role: dimension
+    synonyms: [to table, target table, end table, table b]
+    desc: destination table when searching for a join path
+    optional: true
+method_text: |
+  1. Use create_data to enumerate the in-scope tables and, for each, extract metadata: columns with types and nullability, primary keys, foreign keys, indexes, and unique constraints.
+  2. Infer relationships with create_data from two signals — explicit foreign-key constraints (high confidence) and naming conventions such as a column ending in _id matching a same-named parent table (medium confidence) — and tag each relationship with its confidence.
+  3. Assemble a data dictionary with create_data: one row per column capturing table, column, type, nullability, default, and whether it is a primary or foreign key.
+  4. Model the relationships as a graph with create_data so tables are nodes and joins are edges, ready for path-finding and traversal.
+  5. If a from-table and to-table are supplied, find the shortest join path across that graph and express it as the explicit JOIN steps, including multi-hop paths through intermediate tables when no direct link exists.
+  6. Categorise tables with create_data by naming convention (fact, dimension, staging, raw) and identify the hub tables that the most other tables reference.
+  7. Use create_artifact to deliver the schema map: an overview with table/column/relationship counts, the data dictionary, an ERD-style relationship listing, and a quick-reference of common join patterns.
+output_spec:
+  type: report
+  sections: [Schema Overview, Table Categories, Relationship Map, Join Paths, Data Dictionary]
+format:
+  percentages: "whole numbers"
+eval_goldens: []

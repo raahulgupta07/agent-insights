@@ -1,0 +1,55 @@
+id: doc-data-catalog-entry
+name: "Data Catalog Entry (dataset metadata)"
+domain: analytics.data-catalog
+trigger_hints:
+  - catalog this table
+  - data catalog entry
+  - document the dataset
+  - build a data dictionary
+  - describe these columns
+  - make this table discoverable
+  - who owns this data
+  - what does this column mean
+  - dataset metadata
+  - data governance entry
+required_inputs:
+  subject:
+    role: dimension
+    synonyms: [name, company, entity, category, product, account, item, segment, business unit, customer, sku, region, table, column, metric]
+    desc: the table, view, or dataset being cataloged
+  primary_measure:
+    role: measure
+    synonyms: [revenue, sales, amount, value, count, total, metric]
+    desc: a key measure column in the dataset, if any
+    optional: true
+  period:
+    role: date
+    synonyms: [period, date, month, quarter, year, as of]
+    desc: the date column or coverage window of the dataset
+    optional: true
+method_text: |
+  This is a DOCUMENTATION deliverable: it produces standardized metadata that makes a
+  dataset discoverable and understood. It describes existing data rather than computing on it.
+  1. Capture the technical shape: schema, column names and types, primary and foreign
+     keys, and approximate row count, read from the information schema or source system.
+  2. Add business context from the data owner: what the dataset is for, which team owns
+     it, how critical it is (critical/high/medium/low), a friendly display name, and the
+     known use cases.
+  3. Describe every column in one plain sentence each, with example values and any rules
+     that govern it such as valid ranges, formats, or constraints.
+  4. Summarize data quality: completeness, freshness (how recently it updates), and
+     duplicate rate, plus any known issues and how they affect downstream use.
+  5. Record lineage in both directions: where the data comes from upstream and which
+     dashboards, models, or reports depend on it downstream.
+  6. Add governance: access level, sensitivity (PII, financial, health), compliance tags,
+     retention policy, and how to request access.
+  7. Use create_artifact to publish a complete catalog entry covering technical, business,
+     quality, lineage, and governance sections.
+output_spec:
+  type: report
+  sections: [technical metadata, business context, column descriptions, data quality, lineage, governance]
+format:
+  style: standardized catalog entry
+  columns: one-line plain-language description plus example values and rules
+  governance: access level, sensitivity classification, retention
+eval_goldens: []

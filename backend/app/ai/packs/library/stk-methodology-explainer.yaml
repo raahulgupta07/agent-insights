@@ -1,0 +1,59 @@
+id: stk-methodology-explainer
+name: "Methodology Explainer (how we did this)"
+domain: analytics.methodology
+trigger_hints:
+  - explain the methodology
+  - how did we get this
+  - how was this calculated
+  - write the how-we-did-it section
+  - document the approach
+  - explain the method to stakeholders
+  - what are the limitations
+  - make the analysis transparent
+  - justify the approach
+  - methodology write-up
+required_inputs:
+  subject:
+    role: dimension
+    synonyms: [name, company, entity, category, product, account, item, segment, business unit, customer, sku, region, metric]
+    desc: the primary entity the communication is about
+  primary_measure:
+    role: measure
+    synonyms: [revenue, sales, amount, value, count, total, impact]
+    optional: true
+  period:
+    role: date
+    synonyms: [period, date, month, quarter, year, as of]
+    optional: true
+method_text: |
+  Write a methodology explanation that earns trust in the result — for A/B tests,
+  attribution, forecasts, or any analysis where "how did you get that?" is likely.
+  Draft it before distributing findings, not after the questions arrive.
+  1. Pick the audience tier and match depth to it: executives need why and what,
+     business analysts need what and how at a high level, technical peers need full
+     detail.
+  2. Choose an explanation structure — a short narrative, a layered summary with a
+     deeper appendix, or a question-and-answer format — that fits how the audience reads.
+  3. Draft the core explanation covering five things: the question asked, the data used,
+     the method applied, the assumptions made, and the single most important limitation.
+  4. Rewrite in plain language, swapping statistical terms for their business meaning so
+     a non-specialist follows without a glossary.
+  5. Add an honest limitations paragraph stating at least one real constraint and what it
+     means for how far the conclusion can be pushed.
+  6. Produce the write-up via create_artifact, with an optional slide-ready version when
+     the methodology will be presented live. Use create_data only to restate figures
+     already computed.
+output_spec:
+  type: report
+  sections:
+    - audience_tier
+    - question_and_data
+    - method_applied
+    - assumptions
+    - plain_language_summary
+    - limitations
+format:
+  tone: transparent, plain-language, trust-building
+  length: scaled to audience tier; appendix for technical detail
+  deliverable: methodology write-up / slide via create_artifact
+eval_goldens: []

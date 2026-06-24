@@ -1,0 +1,42 @@
+id: ana-segmentation-analysis
+name: "Segmentation Analysis (Clustering & Segment Profiling)"
+domain: analytics.segmentation
+trigger_hints:
+  - segmentation
+  - customer segments
+  - user clustering
+  - k-means
+  - high-value segments
+  - segment profiling
+  - rfm
+  - at-risk users
+  - target groups
+  - persona analysis
+required_inputs:
+  user_id:
+    role: dimension
+    synonyms: [user_id, customer_id, account_id, member id, visitor_id]
+    desc: identifies the entity being grouped into segments
+  metric:
+    role: measure
+    synonyms: [metric, revenue, sessions, value, usage, frequency, recency]
+    desc: a behavioural measure used as a clustering variable
+  attribute:
+    role: dimension
+    synonyms: [attribute, plan, tier, demographic, region, channel]
+    desc: an optional categorical attribute to enrich or constrain segments
+    optional: true
+method_text: |
+  1. Clarify the goal the segments must serve (product roadmap, marketing targeting, retention), since the goal decides which variables matter and how many segments are useful (typically three to seven).
+  2. Select three to seven attributes or behaviours that vary across entities and relate to the business outcome. Use create_data to handle missing values and scale continuous variables, removing outliers only where they would distort cluster centres.
+  3. Run the segmentation with create_data: apply k-means clustering for a data-driven approach, or apply explicit business rules for a rule-based approach, ensuring segments end up distinct and non-overlapping.
+  4. Profile each segment by computing the mean and median of every variable per segment, expressed as percent above or below the overall average, and identify the two or three defining traits of each.
+  5. Validate that segments are genuinely different (for clustering, a silhouette score above about 0.3) and make business sense; sanity-check by asking whether you would actually treat each segment differently.
+  6. Assign each segment a descriptive name and a recommended strategy (such as Retain & Expand, Monetise, Activate, Win-Back, Sunset).
+  7. Use create_artifact to visualise segment sizes and profiles (bar charts or a profile heatmap) and to produce a report with each profile, its key characteristics, and its strategic priority.
+output_spec:
+  type: report
+  sections: [goal, variables, segments, segment_profiles, strategy_map]
+format:
+  percentages: "whole numbers"
+eval_goldens: []

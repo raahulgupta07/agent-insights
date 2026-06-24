@@ -1,0 +1,67 @@
+id: viz-dashboard-specification
+name: "Dashboard Specification (purpose, metric hierarchy, layout brief)"
+domain: analytics.dashboard-spec
+trigger_hints:
+  - spec out a dashboard
+  - design a dashboard
+  - dashboard requirements
+  - plan a new dashboard
+  - dashboard brief
+  - redesign this dashboard
+  - what should this dashboard show
+  - dashboard layout
+  - metric hierarchy for a dashboard
+  - self-service analytics spec
+required_inputs:
+  subject:
+    role: dimension
+    synonyms: [name, company, entity, category, product, account, item, segment, business unit, customer, sku, region, metric]
+    desc: the primary entity each row is about
+  primary_measure:
+    role: measure
+    synonyms: [revenue, sales, amount, value, count, total, kpi]
+    optional: true
+  period:
+    role: date
+    synonyms: [period, date, month, quarter, year, as of]
+    optional: true
+method_text: |
+  This skill produces a dashboard blueprint from figures that already exist. It
+  presents and organizes numbers; it does not invent new metrics. Pull existing
+  values with create_data only when you need real figures to size the layout, and
+  deliver the spec itself via create_artifact (a slide or document brief).
+  1. State the dashboard's single purpose in one sentence: "answers <question>
+     for <audience> so they can <decision/action>." If you cannot fit it in one
+     sentence, the scope is too wide; split it before continuing.
+  2. Profile each audience (executive, manager, individual contributor). For each,
+     note how often they look, the one question they arrive with, and their comfort
+     with data. Different needs usually call for separate views rather than more
+     filters piled onto one screen.
+  3. Lay out the metric hierarchy from existing numbers: a few headline KPIs at the
+     top, a layer of supporting metrics beneath them, and detail-level breakdowns
+     below. If the count of distinct metrics climbs past roughly ten to twelve, cut.
+  4. Sketch the information architecture using the flow hero numbers -> trends ->
+     breakdowns -> detail. Put what matters most in the top-left where the eye lands
+     first, and describe each zone's contents.
+  5. Specify interactivity deliberately: which global filters (date range, region,
+     segment), which drill-down paths, which click actions, and what hover tooltips
+     reveal. Each control adds load, so justify every one against the purpose.
+  6. For every metric record where the number comes from (source table), how it is
+     derived, and how often it refreshes. Then define how you will know the
+     dashboard succeeded (adoption, fewer ad-hoc requests) and assemble all of this
+     into one handoff-ready spec artifact.
+output_spec:
+  type: artifact
+  sections:
+    - purpose statement
+    - audience profiles
+    - metric hierarchy
+    - layout wireframe
+    - interactivity
+    - data sources and refresh
+    - success criteria
+format:
+  style: structured brief, one section per heading
+  length: 1-2 pages
+  visuals: layout wireframe sketch
+eval_goldens: []

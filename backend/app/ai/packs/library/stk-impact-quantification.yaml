@@ -1,0 +1,60 @@
+id: stk-impact-quantification
+name: "Impact Quantification (size the business impact)"
+domain: analytics.impact
+trigger_hints:
+  - quantify the impact
+  - how big is this
+  - size the opportunity
+  - what is the roi
+  - estimate the dollar value
+  - how much could we gain
+  - prioritize by impact
+  - build a business case
+  - what is this worth
+  - value of this change
+required_inputs:
+  subject:
+    role: dimension
+    synonyms: [name, company, entity, category, product, account, item, segment, business unit, customer, sku, region, metric]
+    desc: the primary entity the communication is about
+  primary_measure:
+    role: measure
+    synonyms: [revenue, sales, amount, value, count, total, impact]
+    optional: true
+  period:
+    role: date
+    synonyms: [period, date, month, quarter, year, as of]
+    optional: true
+method_text: |
+  Turn an analytical finding into a defensible, numeric business-impact estimate a
+  stakeholder can act on. Use this to size a single opportunity or to rank a backlog,
+  since quantified impact is the cleanest prioritization signal.
+  1. Classify the impact type — revenue growth, cost reduction, risk reduction, or
+     efficiency gain — because each implies a different estimation formula.
+  2. Gather the drivers: the current baseline value, the affected population or volume,
+     the expected change (a lift percent, an absolute delta, or a rate change), the
+     time horizon, and your confidence in each input. Use create_data only to pull
+     existing figures for these drivers.
+  3. Build the point estimate by applying the change to the baseline across the
+     affected volume over the chosen horizon; keep the arithmetic explicit and traceable.
+  4. Add uncertainty bounds — produce a low / base / high range rather than a single
+     number, driven by plausible ranges on the most uncertain inputs.
+  5. Document every estimated (versus directly measured) input with its source and note
+     how much the final range moves when it shifts.
+  6. Package the estimate as a written deliverable via create_artifact: the range, the
+     key assumptions, the confidence level, and the recommended action; expand to a
+     fuller business case when the decision warrants it.
+output_spec:
+  type: report
+  sections:
+    - impact_type
+    - drivers_and_inputs
+    - point_estimate
+    - low_base_high_range
+    - assumption_log
+    - recommended_action
+format:
+  tone: confident but caveated, numbers-forward
+  length: estimate plus assumption log; never a bare single figure
+  deliverable: impact estimate / business case via create_artifact
+eval_goldens: []

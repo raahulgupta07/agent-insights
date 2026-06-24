@@ -1,0 +1,59 @@
+id: viz-executive-summary-generator
+name: "Executive Summary Generator (decision-ready 1-2 page brief)"
+domain: analytics.exec-summary
+trigger_hints:
+  - write an executive summary
+  - what's the bottom line
+  - summarize this for leadership
+  - board deck summary
+  - condense this analysis
+  - executive briefing
+  - one-page summary for the exec
+  - decision-ready summary
+  - bottom line up front
+  - TL;DR of this report
+required_inputs:
+  subject:
+    role: dimension
+    synonyms: [name, company, entity, category, product, account, item, segment, business unit, customer, sku, region, metric]
+    desc: the primary entity each row is about
+  primary_measure:
+    role: measure
+    synonyms: [revenue, sales, amount, value, count, total, kpi]
+    optional: true
+  period:
+    role: date
+    synonyms: [period, date, month, quarter, year, as of]
+    optional: true
+method_text: |
+  This skill condenses an existing analysis into a short brief for a senior reader.
+  It selects and frames figures that already exist; it does not produce new metrics.
+  Use create_data only to pull the real numbers you need to quantify impact, and
+  deliver the summary via create_artifact (a one-to-two page document or slide).
+  1. Pull out only the top three to five findings that change or reinforce a decision.
+     Drop anything interesting-but-not-actionable. More than five means you have not
+     finished prioritizing.
+  2. Attach a number to every insight: revenue at risk, cost saved, users affected,
+     time to payback. "Significant" is not a quantity and does not belong here.
+  3. Write a one-paragraph situation statement explaining why the analysis happened,
+     what question it answered, and why the timing matters. Plain language, no jargon.
+  4. Lead each insight with its conclusion ("mobile churn is costing $800K ARR"),
+     then the evidence, then the detail (pyramid principle). Never bury the finding at
+     the end of the paragraph.
+  5. State every recommendation as a concrete action: what to do, who owns it, the
+     expected outcome, and by when. "Improve the product" is not a recommendation.
+  6. Close with a decision block that names the explicit approval the executive must
+     give, the resource or investment required, the expected return, and the deadline.
+     Assemble the whole thing into the final brief artifact.
+output_spec:
+  type: report
+  sections:
+    - situation
+    - key insights with impact
+    - recommendations with owners
+    - decision needed
+format:
+  style: bottom-line-up-front, answer-first
+  length: 1-2 pages
+  visuals: optional impact figures inline
+eval_goldens: []

@@ -1,0 +1,62 @@
+id: viz-insight-synthesis
+name: "Insight Synthesis (findings into prioritized so-what insights)"
+domain: analytics.insight-synthesis
+trigger_hints:
+  - what does this mean
+  - turn findings into insights
+  - so what does this data say
+  - synthesize these results
+  - what should we act on
+  - prioritize these findings
+  - insight briefing
+  - connect findings to business impact
+  - which insight matters most
+  - what's the takeaway
+required_inputs:
+  subject:
+    role: dimension
+    synonyms: [name, company, entity, category, product, account, item, segment, business unit, customer, sku, region, metric]
+    desc: the primary entity each row is about
+  primary_measure:
+    role: measure
+    synonyms: [revenue, sales, amount, value, count, total, kpi]
+    optional: true
+  period:
+    role: date
+    synonyms: [period, date, month, quarter, year, as of]
+    optional: true
+method_text: |
+  This skill turns findings that already exist into a prioritized set of insights with
+  a clear "so what." It interprets and frames existing figures rather than computing
+  new ones. Use create_data only to retrieve the real numbers behind each finding, and
+  deliver the brief through create_artifact (a document or slide).
+  1. List every statistically meaningful finding already on the table: trends,
+     comparisons, correlations, anomalies, surprises. Write each as a plain fact and
+     hold off on interpreting.
+  2. Run each fact through So What -> Why -> Now What. So what: why does it matter to
+     the business? Why: what is the likeliest explanation? Now what: what specific
+     action should follow? That converts a fact into an insight.
+  3. Quantify the impact of each insight using the figures available: financial,
+     customer, or operational magnitude. An insight without a number is just an
+     observation; order-of-magnitude estimates are fine when precision is missing.
+  4. Score each insight on impact, confidence, and actionability (1-3 each). The ones
+     scoring high across all three lead the brief. Park high-impact but low-confidence
+     items until they can be validated.
+  5. Cluster related insights and check for contradictions. When two findings point
+     opposite ways, document the tension and state what additional data would settle it.
+  6. Produce the brief: the top three to five insights in priority order, each carrying
+     its finding, the So What / Why / Now What, the quantified impact, and a confidence
+     level. Assemble it into the final artifact.
+output_spec:
+  type: report
+  sections:
+    - prioritized insights
+    - so what / why / now what per insight
+    - business impact
+    - confidence levels
+    - open tensions
+format:
+  style: ranked brief, one insight per block
+  length: top 3-5 insights
+  visuals: optional supporting chart per insight
+eval_goldens: []

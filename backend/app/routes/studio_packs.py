@@ -382,12 +382,30 @@ _CATEGORY_BY_ID = {
 }
 
 
+# Ported data-analytics-skills packs carry a category prefix on their id, so
+# category + tier derive from the prefix (no per-id table for those 33).
+_PREFIX_CATEGORY = {
+    "daq-": "Data Quality",
+    "doc-": "Documentation",
+    "ana-": "Analysis",
+    "viz-": "Storytelling",
+    "stk-": "Stakeholder",
+    "wfl-": "Workflow",
+}
+# Prefixes whose packs are genuinely data-bound (Tier A); the rest are soft/
+# output skills (Tier C, broad subject binding).
+_PREFIX_TIER_A = {"daq-", "ana-"}
+
+
 def _category_for(pack: dict) -> str:
-    """Curated analytical category for the Skills rail (by pack id, then domain
-    prefix fallback). Distinct from tier (which is data-readiness)."""
+    """Curated analytical category for the Skills rail (by pack id, then prefix,
+    then domain fallback). Distinct from tier (which is data-readiness)."""
     pid = str(pack.get("id") or "")
     if pid in _CATEGORY_BY_ID:
         return _CATEGORY_BY_ID[pid]
+    for pre, cat in _PREFIX_CATEGORY.items():
+        if pid.startswith(pre):
+            return cat
     dom = str(pack.get("domain") or "")
     if dom.startswith("finance."):
         return "Finance"
@@ -405,6 +423,10 @@ def _tier_for(pack: dict) -> str:
         return "B"
     if pid in out:
         return "C"
+    # ported analytics packs: tier by id prefix
+    for pre in _PREFIX_CATEGORY:
+        if pid.startswith(pre):
+            return "A" if pre in _PREFIX_TIER_A else "C"
     return "A"
 
 

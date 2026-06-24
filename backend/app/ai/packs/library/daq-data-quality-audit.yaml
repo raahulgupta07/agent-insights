@@ -1,0 +1,49 @@
+id: daq-data-quality-audit
+name: "Data Quality Audit (Nulls, Dupes, Referential Integrity, Freshness Scorecard)"
+domain: analytics.data-quality-audit
+trigger_hints:
+  - data quality audit
+  - validate this dataset
+  - quality scorecard
+  - check for nulls and duplicates
+  - is this data reliable
+  - audit data before production
+  - referential integrity check
+  - data freshness check
+  - data governance scorecard
+  - profile a new data source
+required_inputs:
+  table:
+    role: dimension
+    synonyms: [table, dataset, source table, asset, relation, file, data source]
+    desc: the table or dataset whose quality is being audited
+  key_column:
+    role: dimension
+    synonyms: [primary key, id, key, unique id, record id, surrogate key]
+    desc: the primary key used to detect duplicate or orphan rows
+    optional: true
+  foreign_key:
+    role: dimension
+    synonyms: [foreign key, parent key, reference id, lookup key, fk]
+    desc: a foreign key column to validate against its parent table
+    optional: true
+  timestamp:
+    role: date
+    synonyms: [updated at, load date, ingest time, last modified, event time, created at]
+    desc: timestamp column used to assess freshness against the expected lag
+    optional: true
+method_text: |
+  1. Use create_data to load the target table and capture its shape: row count, column list, inferred types, and one sample row so you can state what a single row represents (the grain).
+  2. Build a per-column completeness profile with create_data — for every column compute the null/blank count and percentage. Flag any column whose null rate exceeds what the business context tolerates.
+  3. Detect duplicates with create_data: count exact full-row duplicates, and if a key column is supplied, count rows that repeat on that key. Note whether repetition looks intentional (versioning, slowly-changing history) or accidental (pipeline fan-out).
+  4. If a foreign key is supplied, run a referential-integrity pass with create_data: count child rows whose key value has no match in the parent table, and report the orphan rate per relationship.
+  5. Validate value ranges and allowed sets with create_data — check numeric columns against plausible min/max bounds and categorical columns against expected value lists, surfacing rows that fall outside.
+  6. If a timestamp column is supplied, assess freshness with create_data by comparing the most recent record time to the expected update cadence, and report how stale the data is.
+  7. Classify each finding by quality dimension (completeness, uniqueness, validity, consistency, timeliness) and assign a severity of CRITICAL, HIGH, MEDIUM, or LOW based on business impact.
+  8. Use create_artifact to produce a quality scorecard: a per-dimension score plus a ranked table of findings with severity, affected column, and a one-line remediation suggestion for each.
+output_spec:
+  type: report
+  sections: [Dataset Overview, Findings by Dimension, Severity Scorecard, Recommended Fixes]
+format:
+  percentages: "one decimal"
+eval_goldens: []

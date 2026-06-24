@@ -1,0 +1,55 @@
+id: doc-sql-to-business-logic
+name: "SQL to Business Logic (plain-language query explainer)"
+domain: analytics.sql-to-business
+trigger_hints:
+  - explain this query
+  - what does this sql do
+  - sql to plain english
+  - translate the query
+  - document the query
+  - business logic of this query
+  - explain the joins
+  - review this query
+  - what does this dbt model calculate
+  - describe the filters
+required_inputs:
+  subject:
+    role: dimension
+    synonyms: [name, company, entity, category, product, account, item, segment, business unit, customer, sku, region, table, column, metric]
+    desc: the query, model, or table the explanation centers on
+  primary_measure:
+    role: measure
+    synonyms: [revenue, sales, amount, value, count, total, metric]
+    desc: the measure the query computes, if any
+    optional: true
+  period:
+    role: date
+    synonyms: [period, date, month, quarter, year, as of]
+    desc: the date filter or window the query applies, if any
+    optional: true
+method_text: |
+  This is a DOCUMENTATION deliverable: it turns a SQL query into a plain-language account
+  of what it does for non-technical readers and reviewers. It explains the query, it does
+  not re-run or optimize it.
+  1. Take in the query and the business question it is meant to answer, plus any notes on
+     what the key tables and columns mean in business terms.
+  2. Describe the FROM and JOIN structure in plain words: which sources are combined and
+     what each join keeps, and flag any join type that looks at odds with the stated goal.
+  3. Restate each WHERE filter as a business rule, for example reading a status filter as
+     "only orders that were paid and fulfilled."
+  4. Explain the GROUP BY and aggregations: what each one computes and at what grain.
+  5. Walk the output columns one by one, giving each a business meaning and calling out
+     edge cases like nulls, rounding, or currency units.
+  6. Surface risks and open questions: implicit null propagation, unexpected fan-out from
+     joins, or hardcoded dates, then write three to five questions for the author to
+     confirm.
+  7. Use create_artifact to record the full translation: purpose, step-by-step logic,
+     output columns, business rules, and the validation questions.
+output_spec:
+  type: report
+  sections: [purpose, from/join logic, filters as business rules, aggregations and grain, output columns, issues and validation questions]
+format:
+  style: plain-language step-by-step walkthrough
+  validation: 3-5 questions for the query author
+  flags: call out nulls, fan-out, and hardcoded values
+eval_goldens: []

@@ -1,0 +1,48 @@
+id: daq-query-validation
+name: "Query Validation (SQL Correctness, Performance, Anti-Pattern Review)"
+domain: analytics.query-validation
+trigger_hints:
+  - review this query
+  - validate sql
+  - why is this query slow
+  - query returns wrong results
+  - sql anti-patterns
+  - optimize this query
+  - check query before production
+  - explain plan review
+  - query correctness check
+  - sql performance review
+required_inputs:
+  query:
+    role: dimension
+    synonyms: [query, sql, statement, query text, sql code, select]
+    desc: the SQL query text to be reviewed
+  engine:
+    role: dimension
+    synonyms: [engine, database, dialect, warehouse, snowflake, bigquery, postgres, redshift]
+    desc: the target database engine whose semantics govern the review
+    optional: true
+  schemas:
+    role: dimension
+    synonyms: [schema, table schema, columns, types, row counts, table stats]
+    desc: relevant table schemas and approximate row counts for cardinality checks
+    optional: true
+  explain_plan:
+    role: dimension
+    synonyms: [explain plan, query profile, execution plan, plan output]
+    desc: EXPLAIN or query-profile output for performance review
+    optional: true
+method_text: |
+  1. Parse the supplied query and surface hard problems first with create_data-driven inspection: syntax errors, references that cannot resolve against the given schema, and functions unsupported by the named engine. These must be resolved before deeper review.
+  2. Review the query structure against a checklist of known anti-patterns — SELECT *, implicit type conversions in join or filter predicates, unbounded or repeatedly materialised CTEs, missing join conditions, and non-sargable filters — and record each occurrence with a severity rating.
+  3. Verify correctness against the intended business logic: confirm grain is preserved, joins do not unintentionally fan out, filters and NULL handling match intent, and aggregations group on the right keys.
+  4. If an explain plan or profile is provided, parse it to extract the costly steps — full table scans, missing index usage, large intermediate row estimates, and spills.
+  5. If schema statistics are available, estimate join cardinality to flag joins likely to multiply rows beyond expectation, which often explains both wrong totals and slow runtime.
+  6. Apply engine-specific checks for the named target — date/timestamp function behaviour, window-function semantics, clustering or partition assumptions — since identical SQL can behave differently across engines.
+  7. Use create_artifact to deliver a categorised review (correctness, performance, style) listing each finding with severity, and, where performance issues exist, ranked rewrite recommendations with their expected impact.
+output_spec:
+  type: report
+  sections: [Correctness, Performance, Style and Anti-Patterns, Rewrite Recommendations]
+format:
+  percentages: "whole numbers"
+eval_goldens: []

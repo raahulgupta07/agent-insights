@@ -1,0 +1,42 @@
+id: ana-time-series-analysis
+name: "Time Series Analysis (Decomposition, Anomalies, Forecast)"
+domain: analytics.time-series
+trigger_hints:
+  - time series
+  - trend analysis
+  - seasonality
+  - forecast
+  - anomaly detection
+  - decomposition
+  - moving average
+  - year over year
+  - arima
+  - seasonal adjustment
+required_inputs:
+  date:
+    role: date
+    synonyms: [date, event_date, timestamp, period, day, month]
+    desc: the time axis of the series, ideally at regular intervals
+  metric:
+    role: measure
+    synonyms: [metric, value, count, revenue, amount, volume]
+    desc: the numeric quantity measured at each point in time
+  segment:
+    role: dimension
+    synonyms: [segment, category, region, channel, product, platform]
+    desc: optional dimension to analyse separate series per group
+    optional: true
+method_text: |
+  1. Load and inspect the series: confirm regular intervals and fill gaps if needed, check for data quality issues (negatives or zeros in a non-zero series), and identify the natural granularity. Use create_data for this preparation.
+  2. Test for stationarity (for example an ADF test). If a trend or seasonality is present the series is non-stationary; note this to guide decomposition and model choice rather than treating it as a blocker.
+  3. Decompose the series into trend, seasonal, and residual components using additive or multiplicative decomposition with create_data, and measure the strength (0 to 1) of each. Strong seasonality above ~0.6 means raw values mislead without seasonal adjustment.
+  4. Detect anomalies by flagging points more than three standard deviations from the rolling median, then review the top few against any event log (releases, campaigns, incidents) to explain them.
+  5. Fit a forecast: an ARIMA model when enough history exists, or a simpler moving average for short series. Hold out the last ~20% as a test set, report MAPE, and produce point estimates with 95% confidence intervals over the requested horizon.
+  6. If a segment dimension is provided, repeat the decomposition and forecast per series so group-level patterns are visible.
+  7. Use create_artifact to chart the decomposition, mark anomalies, and plot the forecast with its uncertainty band, then write a report covering trend direction and strength, seasonal patterns and their business implications, anomalies, and the forecast.
+output_spec:
+  type: report
+  sections: [series_characteristics, decomposition, anomalies, forecast, insights]
+format:
+  percentages: "one decimal place"
+eval_goldens: []

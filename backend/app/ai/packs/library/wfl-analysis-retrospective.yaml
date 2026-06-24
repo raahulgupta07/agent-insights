@@ -1,0 +1,58 @@
+id: wfl-analysis-retrospective
+name: "Analysis Retrospective (capture lessons after delivery)"
+domain: analytics.retrospective
+trigger_hints:
+  - run a retrospective
+  - what went well
+  - lessons learned
+  - post-mortem the analysis
+  - what could we improve
+  - debrief this project
+  - retro on this work
+  - capture learnings
+  - why did this go wrong
+  - review the finished analysis
+  - root cause this issue
+  - improve our process
+required_inputs:
+  subject:
+    role: dimension
+    synonyms: [name, company, entity, category, product, account, item, segment, business unit, customer, sku, region, metric, analysis]
+    desc: the primary entity / analysis the workflow step is about
+  primary_measure:
+    role: measure
+    synonyms: [revenue, sales, amount, value, count, total, metric]
+    optional: true
+  period:
+    role: date
+    synonyms: [period, date, month, quarter, year, as of]
+    optional: true
+method_text: |
+  WORKFLOW skill: this structures a post-analysis review so the team learns
+  from finished work on the subject. Produce the retrospective as a written
+  artifact via create_artifact; run it while details are fresh.
+  1. Time-box the session and pick a framing — Start/Stop/Continue or
+     Liked/Lacked/Learned/Longed-for — so discussion stays focused.
+  2. Compare what actually happened against the original plan: timeline, scope,
+     and effort versus what was estimated, and note where they diverged.
+  3. Name at least two things that clearly worked and should be repeated; treat
+     wins as seriously as problems.
+  4. For each problem, apply repeated "why" questioning to reach the real root
+     cause rather than stopping at the visible symptom.
+  5. Decide where each durable lesson should live — a template, a reference
+     doc, a checklist, or a team norm — so it is reused, not forgotten.
+  6. Record action items with an owner and a due date, and log the reusable
+     learnings in a separate, lasting entry.
+output_spec:
+  type: report
+  sections:
+    - what_went_well
+    - issues
+    - root_causes
+    - action_items
+    - reusable_learnings
+format:
+  style: structured retrospective
+  numbered_steps: true
+  include_owners: true
+eval_goldens: []

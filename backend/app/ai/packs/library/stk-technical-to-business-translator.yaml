@@ -1,0 +1,59 @@
+id: stk-technical-to-business-translator
+name: "Technical-to-Business Translator (drop the jargon)"
+domain: analytics.tech-to-business
+trigger_hints:
+  - translate this for business
+  - remove the jargon
+  - explain in plain english
+  - make this exec-friendly
+  - simplify the findings
+  - what does this mean for the business
+  - rewrite for non-technical readers
+  - de-jargon this
+  - business-friendly version
+  - explain to non-analysts
+required_inputs:
+  subject:
+    role: dimension
+    synonyms: [name, company, entity, category, product, account, item, segment, business unit, customer, sku, region, metric]
+    desc: the primary entity the communication is about
+  primary_measure:
+    role: measure
+    synonyms: [revenue, sales, amount, value, count, total, impact]
+    optional: true
+  period:
+    role: date
+    synonyms: [period, date, month, quarter, year, as of]
+    optional: true
+method_text: |
+  Rewrite technical output — model results, statistical tests, query findings — so a
+  business audience understands it. Also use it to review your own draft before sending,
+  since jargon creeps in unnoticed.
+  1. Scan the draft for technical terms, statistical notation, and insider vocabulary
+     that a non-analyst would not parse, and list each one for treatment.
+  2. Judge readability: aim for short sentences and an accessible reading level, tighter
+     still for executive readers, and flag any passage that is too dense.
+  3. Identify the reader's persona — VP, product, operations, finance — since each cares
+     about different outcomes and asks different questions.
+  4. Apply translation patterns that swap technical language for business meaning, for
+     example turning "statistically significant at p < 0.05" into "we're about 95 percent
+     confident this isn't just random noise."
+  5. For genuinely hard statistical concepts, reach for a plain analogy or metaphor that
+     conveys the intuition without requiring the math.
+  6. Produce a parallel business version via create_artifact, keeping the original
+     technical wording in an appendix for technical reviewers. Use create_data only to
+     restate figures already computed, not to redo analysis.
+output_spec:
+  type: report
+  sections:
+    - jargon_inventory
+    - readability_assessment
+    - audience_persona
+    - translated_findings
+    - analogies_used
+    - technical_appendix
+format:
+  tone: clear, concrete, non-condescending
+  length: business version up front, technical original appended
+  deliverable: translated write-up via create_artifact
+eval_goldens: []

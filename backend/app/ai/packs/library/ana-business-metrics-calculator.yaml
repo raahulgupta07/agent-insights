@@ -1,0 +1,50 @@
+id: ana-business-metrics-calculator
+name: "Business Metrics Calculator (SaaS / E-commerce KPIs with Benchmarks)"
+domain: analytics.business-metrics
+trigger_hints:
+  - mrr
+  - arr
+  - churn rate
+  - ltv cac
+  - saas metrics
+  - unit economics
+  - conversion rate
+  - aov
+  - gmv
+  - benchmark comparison
+  - investor metrics
+required_inputs:
+  value:
+    role: measure
+    synonyms: [value, amount, revenue, mrr, price, transaction_value]
+    desc: the monetary value per customer or transaction that metrics are built from
+  customer_id:
+    role: dimension
+    synonyms: [customer_id, account_id, user_id, subscription_id, member id]
+    desc: identifies the customer so per-account and churn metrics can be computed
+    optional: true
+  period_date:
+    role: date
+    synonyms: [period_date, date, month, created_at, billing_date]
+    desc: the date used to bucket activity into months, quarters, or trailing periods
+    optional: true
+  status:
+    role: dimension
+    synonyms: [status, state, active, churned, subscription_status]
+    desc: subscription or account state used to identify churn and active customers
+    optional: true
+method_text: |
+  1. Establish the business model (SaaS subscription, e-commerce, marketplace, or product) and the reporting period (month, quarter, or trailing twelve months). The model decides which metrics apply, so confirm it before calculating.
+  2. Use create_data to validate the underlying data: check row counts, missing values, and that the date range is plausible. Note any gaps that would undermine a metric before reporting it.
+  3. Compute the primary metrics for the model with create_data. For SaaS that means MRR, ARR, new / churned / expansion MRR, and both customer and revenue churn rates. For e-commerce that means GMV, AOV, conversion rate, and ROAS.
+  4. Compute unit economics: LTV (both a simple average and, where possible, a cohort-based version), CAC, the LTV:CAC ratio, payback period, and quick ratio. State the assumptions used for customer lifetime explicitly.
+  5. Grade each metric against standard industry benchmarks (good / average / poor) and flag any value falling outside the healthy range. Use create_artifact for a benchmark comparison chart.
+  6. Build trend charts for the headline metrics over the available periods using create_artifact, so direction and momentum are visible, not just point values.
+  7. Assemble a report via create_artifact covering revenue metrics, customer metrics, unit economics, the benchmark comparison, and three to five key insights. Document any metric definition that departs from the industry standard.
+output_spec:
+  type: report
+  sections: [revenue_metrics, customer_metrics, unit_economics, benchmark_comparison, insights]
+format:
+  percentages: "one decimal place"
+  currency: "thousands with symbol"
+eval_goldens: []

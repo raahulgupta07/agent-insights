@@ -82,7 +82,11 @@ A **Domain Pack** is a declarative method (a `.yaml` in `backend/app/ai/packs/li
 - **Review UI** — Studio → **Skills** tab (approve/reject/promote, see binding + win-rate + dormant hints); org-wide **Settings → Pack Analytics** (fires / win-rate / dormant backlog).
 - **Library page** — **Build → Skills** is the catalog of every pack + your SKILL.md playbooks, with a category rail (Performance · Valuation · Fund/PE · Accounting · Output · Org · Playbooks), search, and a data-readiness (tier) filter. Each card shows its domain, required-input chips, trigger preview, and an *active-studios* count (or **dormant** until a studio Auto-train binds it). `GET /api/packs/library` backs it (gated `DOMAIN_PACKS`).
 
-**Library (15 packs):** ebitda-exec-summary + 7 **Tier A** (runs on our data: unit-economics, returns IRR/MOIC, 3-statement, variance, GL-recon, NAV tie-out, portfolio-monitoring), 4 **Tier C** (output: pptx/xlsx/teaser/deck-refresh), 3 **Tier B** (comps/DCF/earnings-vs-consensus — *dormant until a market-data feed is connected*).
+**Library (48 packs):**
+- **Finance (15)** — ebitda-exec-summary + 7 **Tier A** (unit-economics, returns IRR/MOIC, 3-statement, variance, GL-recon, NAV tie-out, portfolio-monitoring), 4 **Tier C** output (pptx/xlsx/teaser/deck-refresh), 3 **Tier B** (comps/DCF/earnings-vs-consensus — *dormant until a market-data feed is connected*).
+- **General analytics (33)** — ported from the [data-analytics-skills](https://github.com/nimrodfisher/data-analytics-skills) method library (method re-authored data-blind; scripts dropped — our agent writes its own code): **Analysis** (cohort, funnel, segmentation, time-series, A/B test, root-cause, business-metrics), **Data Quality** (EDA, audit, query-validation, schema-mapper, metric-recon), **Storytelling**, **Stakeholder**, **Documentation**, **Workflow**. Data-bound ones (Analysis, Data Quality) bind to real columns; the soft ones bind via a broad `subject` input so they activate on any studio.
+
+Categorised in the **Build → Skills** rail. Tier A runs on your data, Tier C is output/soft, Tier B needs an external feed.
 
 Flags: `DOMAIN_PACKS` (master) · `PACK_ROUTER` (per-question activation) · `PACK_AUTOBIND` (bind at train) · `TEACH_BOX`. Plan: `docs/PLAN_TEACH_SKILLS_ENGINE.md`.
 

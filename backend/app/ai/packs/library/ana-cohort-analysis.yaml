@@ -1,0 +1,46 @@
+id: ana-cohort-analysis
+name: "Cohort Analysis (Retention Matrix & Curves)"
+domain: analytics.cohort
+trigger_hints:
+  - cohort analysis
+  - retention rate
+  - retention matrix
+  - n-day retention
+  - monthly retention
+  - churn by cohort
+  - signup cohort
+  - revenue by cohort
+  - retention curve
+  - feature adoption over time
+required_inputs:
+  cohort_date:
+    role: date
+    synonyms: [cohort_date, signup_date, first_purchase_date, created_at, join_date]
+    desc: the date that places each entity into a cohort (when they first appeared)
+  activity_date:
+    role: date
+    synonyms: [activity_date, event_date, timestamp, date, last_active]
+    desc: the date of the retention event used to measure ongoing activity
+  user_id:
+    role: dimension
+    synonyms: [user_id, customer_id, account_id, member id, visitor_id]
+    desc: identifies the entity whose retention is tracked across periods
+  segment:
+    role: dimension
+    synonyms: [segment, channel, plan, tier, geography, acquisition_source]
+    desc: optional attribute to split cohorts by (channel, plan, region)
+    optional: true
+method_text: |
+  1. Define the cohort grouping (signup month, first-purchase week, etc.) and the retention event (login, purchase, feature use) along with the granularity: daily, weekly, or monthly. Record these in the report header so the matrix is interpretable.
+  2. Use create_data to assign each entity to a cohort by its cohort_date and to flag, for every activity_date, which period offset (period 0, 1, 2, …) that activity falls in relative to the cohort start.
+  3. With create_data, build a cohort-by-period membership table and then collapse it into a retention matrix: for each cohort row and each period column, the share of the cohort still active. Period 0 is the cohort base.
+  4. Optionally drop or annotate small cohorts (under roughly 100 entities) since their rates are noisy, and cap the number of tracked periods to a sensible horizon.
+  5. Use create_artifact to render the retention matrix as a colour-coded heatmap, plus a line chart of retention curves so cohorts can be compared over their lifetime.
+  6. If a segment attribute is provided, repeat the matrix per segment and compare curves to see which acquisition source, plan, or region retains best.
+  7. Interpret the result: identify the period where the biggest drop occurs, whether retention is improving across newer cohorts, and write a short narrative report with create_artifact.
+output_spec:
+  type: report
+  sections: [definitions, retention_matrix, retention_curves, segment_comparison, findings]
+format:
+  percentages: "whole numbers"
+eval_goldens: []

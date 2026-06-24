@@ -1,0 +1,55 @@
+id: doc-metric-reconciliation
+name: "Metric Reconciliation (explain the discrepancy)"
+domain: analytics.metric-reconciliation-doc
+trigger_hints:
+  - reconcile the metric
+  - why do the numbers differ
+  - two dashboards disagree
+  - metric discrepancy
+  - explain the gap
+  - which number is right
+  - trace the difference
+  - numbers don't match
+  - reconcile sources
+  - validate against legacy report
+required_inputs:
+  subject:
+    role: dimension
+    synonyms: [name, company, entity, category, product, account, item, segment, business unit, customer, sku, region, table, column, metric]
+    desc: the metric or entity whose values are being reconciled
+  primary_measure:
+    role: measure
+    synonyms: [revenue, sales, amount, value, count, total, metric]
+    desc: the disputed measure compared across sources
+    optional: true
+  period:
+    role: date
+    synonyms: [period, date, month, quarter, year, as of]
+    desc: the period showing the discrepancy
+    optional: true
+method_text: |
+  This is a DOCUMENTATION deliverable: it explains why the same metric shows different
+  values across sources and records the resolution. It traces and narrates, it does not
+  invent a new number.
+  1. Nail down the definition. State the exact numerator, denominator, filters, and time
+     zone, plus the period in question; mismatched definitions are the most common cause.
+  2. Pull the value from each source for the identical period, noting the figure, the row
+     count behind it, and the query or calculation path used.
+  3. Quantify the gap as both an absolute difference and a percentage. If it falls inside
+     an agreed tolerance, document it as accepted and stop there.
+  4. Walk each source's logic step by step and look at the usual divergence points: join
+     type, filter order, null handling, date truncation, and deduplication.
+  5. Name the root cause, classifying it as definition mismatch, data freshness,
+     aggregation grain, or a calculation bug, and pin it to the exact divergence point.
+  6. Land a resolution: either correct the faulty calculation or declare one source
+     canonical, and capture which.
+  7. Use create_artifact to write a reconciliation report showing source A versus source
+     B, the gap, the root cause, and the resolution status.
+output_spec:
+  type: report
+  sections: [metric definition and scope, value per source, gap calculation, computation path trace, root cause, resolution]
+format:
+  style: side-by-side comparison report
+  gap: absolute and percentage difference against tolerance
+  root_cause: classified and tied to the exact divergence point
+eval_goldens: []

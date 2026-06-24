@@ -1,0 +1,53 @@
+id: doc-semantic-model-builder
+name: "Semantic Model Builder (metric & dimension definitions)"
+domain: analytics.semantic-model
+trigger_hints:
+  - define the metric
+  - semantic model
+  - canonical metric definition
+  - document the dimension
+  - build the semantic layer
+  - how is this metric calculated
+  - one true definition
+  - metric and dimension yaml
+  - codify the metric
+  - entity definition
+required_inputs:
+  subject:
+    role: dimension
+    synonyms: [name, company, entity, category, product, account, item, segment, business unit, customer, sku, region, table, column, metric]
+    desc: the metric, dimension, or entity being defined
+  primary_measure:
+    role: measure
+    synonyms: [revenue, sales, amount, value, count, total, metric]
+    desc: the measure being formally defined, if applicable
+    optional: true
+  period:
+    role: date
+    synonyms: [period, date, month, quarter, year, as of]
+    desc: the grain or time dimension the metric is computed over
+    optional: true
+method_text: |
+  This is a DOCUMENTATION deliverable: it produces a structured, canonical definition of a
+  metric, dimension, or entity for a semantic layer. It codifies meaning, it does not query.
+  1. Decide what kind of object you are defining: a metric, a dimension, or an entity, since
+     each has a different shape and set of required fields.
+  2. Gather the definition inputs: the calculation logic (SQL or formula), the business
+     context, the source tables, the grain, and the edge cases and gotchas. Confirm
+     anything ambiguous with the data owner.
+  3. Draft the structured definition with the standard fields for that object type: name,
+     description, calculation, source, grain, and any filters or labels.
+  4. Validate it for completeness and integrity: required fields present, types sensible,
+     and any referenced dimensions actually defined alongside it.
+  5. Note the target framework if there is one (for example dbt Semantic Layer, Cube, or
+     LookML) and align field names and constraints to that framework's conventions.
+  6. Use create_artifact to emit the finished definition(s) in a clean structured form,
+     keeping metrics, dimensions, and entities clearly separated.
+output_spec:
+  type: report
+  sections: [object type, definition inputs, structured definition, validation notes, framework alignment]
+format:
+  style: structured semantic definition (yaml-like)
+  fields: name, description, calculation, source, grain, edge cases
+  validation: required-field and reference-integrity check
+eval_goldens: []

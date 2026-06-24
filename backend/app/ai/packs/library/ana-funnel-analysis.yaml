@@ -1,0 +1,46 @@
+id: ana-funnel-analysis
+name: "Funnel Analysis (Conversion & Drop-off Investigation)"
+domain: analytics.funnel
+trigger_hints:
+  - funnel analysis
+  - conversion funnel
+  - drop-off
+  - step conversion
+  - where users drop
+  - conversion bottleneck
+  - user journey
+  - multi-step conversion
+  - funnel by segment
+  - time to convert
+required_inputs:
+  user_id:
+    role: dimension
+    synonyms: [user_id, customer_id, session_id, visitor_id, device_id]
+    desc: identifies the entity moving through the funnel
+  event:
+    role: dimension
+    synonyms: [event, event_name, action, step, page, stage]
+    desc: the funnel step or event name used to order the sequence
+  timestamp:
+    role: date
+    synonyms: [timestamp, event_date, created_at, date, occurred_at]
+    desc: when each step occurred, for ordering and time-to-convert
+  segment:
+    role: dimension
+    synonyms: [segment, channel, device, plan, source, platform]
+    desc: optional dimension to compare conversion across groups
+    optional: true
+method_text: |
+  1. Define the ordered sequence of steps that make up the funnel and agree on the completion window (single session, 24 hours, 7 days). Vague step or window definitions invalidate the result, so pin them down first.
+  2. Use create_data to build a user-level funnel table: for every entity that reached step 1, record which later steps they reached and when, but only count steps completed within the time window.
+  3. Compute step-to-step conversion (entities reaching step N divided by those reaching step N-1) and overall conversion (step 1 to the final step), along with the absolute number of entities lost at each step.
+  4. For entities that completed each transition, compute median, P75, and P95 time between consecutive steps. Long gaps can reveal friction even where drop-off is modest.
+  5. If a segment dimension is provided, recompute the funnel per segment, rank segments by overall conversion, and pinpoint where the worst segment diverges from the best.
+  6. Rank drop-off points by entities lost multiplied by the estimated value of a conversion, so the biggest opportunity rather than the biggest percentage is prioritised.
+  7. Use create_artifact to produce a funnel bar chart, a segment comparison, and a report with the funnel table, drop-off analysis, time-to-convert, and ranked recommendations.
+output_spec:
+  type: report
+  sections: [funnel_overview, drop_off_analysis, time_to_convert, segment_comparison, recommendations]
+format:
+  percentages: "one decimal place"
+eval_goldens: []

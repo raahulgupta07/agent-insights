@@ -1,0 +1,47 @@
+id: daq-metric-reconciliation
+name: "Metric Reconciliation (Cross-Source Discrepancy Investigation)"
+domain: analytics.metric-reconciliation
+trigger_hints:
+  - reconcile metrics
+  - numbers don't match
+  - cross-source comparison
+  - why is revenue different
+  - validate data migration
+  - dashboard vs report mismatch
+  - reconciliation report
+  - compare two systems
+  - source discrepancy investigation
+  - metric variance between sources
+required_inputs:
+  metric:
+    role: measure
+    synonyms: [metric, revenue, amount, value, total, kpi, measure]
+    desc: the numeric measure being compared across sources
+  source:
+    role: dimension
+    synonyms: [source, system, dataset, origin, source name, pipeline]
+    desc: identifier distinguishing each system or dataset being reconciled
+  join_key:
+    role: dimension
+    synonyms: [join key, transaction id, order id, entity id, match key, grain]
+    desc: the key used to align records between sources for detailed comparison
+    optional: true
+  period:
+    role: date
+    synonyms: [date, period, day, month, reporting date, as of]
+    desc: the date grain to reconcile and trend variance over
+    optional: true
+method_text: |
+  1. Use create_data to pull the metric from each source over the same time window, normalising types (numeric metric, parsed dates) and recording the row count loaded per source so gross mismatches are visible immediately.
+  2. Aggregate each source to the agreed comparison grain with create_data — typically by period, or by the supplied join key — so the two sides line up on a common axis.
+  3. Full-outer-join the aggregated sides with create_data and compute, per slice, the absolute difference and percent difference, treating missing slices as zero so records present in only one source are not hidden.
+  4. Classify each slice with create_data as a match, a minor variance, or a significant variance using a threshold (default ~2%, tighter for financial metrics), and total up matched vs minor vs significant counts plus the overall variance percentage.
+  5. Rank the largest absolute discrepancies with create_data and, where a join key exists, drill into the worst slices to list records present in one source but missing in the other along with their value impact.
+  6. Look for systematic patterns with create_data: is one source consistently higher (bias), is variance trending up or down over time, or does it cluster on particular days or periods — these point to timing lag vs calculation-logic differences.
+  7. Use create_artifact to produce a reconciliation report stating each source total, the net difference and variance percentage, a pass/fail against threshold, the top discrepancies, a likely-cause summary, and prioritised fixes.
+output_spec:
+  type: report
+  sections: [Reconciliation Summary, Slice Breakdown, Top Discrepancies, Root Cause, Recommendations]
+format:
+  percentages: "two decimals"
+eval_goldens: []

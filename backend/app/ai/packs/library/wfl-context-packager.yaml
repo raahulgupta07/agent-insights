@@ -1,0 +1,58 @@
+id: wfl-context-packager
+name: "Context Packager (assemble context for assisted analysis)"
+domain: analytics.context-packager
+trigger_hints:
+  - package the context
+  - prepare context for the agent
+  - bundle the background
+  - assemble a context pack
+  - what context should i provide
+  - organize the inputs
+  - build a prompt header
+  - gather supporting docs
+  - trim the context
+  - set up the analysis brief
+  - structure the background info
+  - prep for a complex investigation
+required_inputs:
+  subject:
+    role: dimension
+    synonyms: [name, company, entity, category, product, account, item, segment, business unit, customer, sku, region, metric, analysis]
+    desc: the primary entity / analysis the workflow step is about
+  primary_measure:
+    role: measure
+    synonyms: [revenue, sales, amount, value, count, total, metric]
+    optional: true
+  period:
+    role: date
+    synonyms: [period, date, month, quarter, year, as of]
+    optional: true
+method_text: |
+  WORKFLOW skill: this structures how an analyst assembles background before a
+  multi-step, assisted investigation of the subject. Deliver the finished pack
+  as a written artifact via create_artifact.
+  1. Decide which context layers the task needs: the task definition, business
+     context, data schema, prior findings, constraints, and the expected
+     output format.
+  2. Collect the relevant source snippets for each layer, remove duplicates,
+     and arrange them in a stable layering order.
+  3. Estimate the size of the assembled bundle against your budget; if it is
+     too large, trim the lowest-priority layers first.
+  4. Score the bundle for completeness, clarity, and relevance, and shore up
+     any layer that is thin or vague before proceeding.
+  5. Prepend a clear header stating exactly what is needed, the output format
+     expected, and any hard constraints.
+  6. Save the finished package so it can be reused or extended for follow-up
+     sessions on the same subject.
+output_spec:
+  type: document
+  sections:
+    - task_header
+    - context_layers
+    - constraints
+    - quality_score
+format:
+  style: layered context bundle
+  numbered_steps: true
+  include_header: true
+eval_goldens: []

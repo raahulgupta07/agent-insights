@@ -1,0 +1,63 @@
+id: viz-data-narrative-builder
+name: "Data Narrative Builder (turn findings into a persuasive story)"
+domain: analytics.narrative
+trigger_hints:
+  - tell a story with this data
+  - build a data narrative
+  - turn this analysis into a story
+  - make this presentation compelling
+  - structure these findings as a story
+  - narrative for stakeholders
+  - story arc for this report
+  - how do I present these results
+  - hook and call to action
+  - restructure this report as a story
+required_inputs:
+  subject:
+    role: dimension
+    synonyms: [name, company, entity, category, product, account, item, segment, business unit, customer, sku, region, metric]
+    desc: the primary entity each row is about
+  primary_measure:
+    role: measure
+    synonyms: [revenue, sales, amount, value, count, total, kpi]
+    optional: true
+  period:
+    role: date
+    synonyms: [period, date, month, quarter, year, as of]
+    optional: true
+method_text: |
+  This skill shapes figures that already exist into a story that drives a decision.
+  It presents and frames numbers; it does not compute new ones. Use create_data only
+  to retrieve existing values you want to weave in, and deliver the narrative through
+  create_artifact (slides or a written brief).
+  1. Name the single central message: the one thing the audience should know and do
+     after this. Treat everything else as support. If there is more than one message,
+     you have more than one presentation.
+  2. Pick a narrative framework that fits the situation. Situation-Complication-
+     Resolution suits most problem-and-solution stories; Before-After-Bridge is strong
+     for showing impact. Choose one and outline its beats.
+  3. Map an emotional arc onto those beats: settle the audience in the setup, raise
+     tension at the complication, and offer confidence at the resolution. Let tone and
+     which numbers you spotlight match the feeling of each stage.
+  4. Draft each section with the existing data folded in, leading with the conclusion
+     and then the supporting evidence (pyramid principle). Numbers should carry the
+     story, not interrupt it; round large figures so they stick and translate impact
+     into terms the audience cares about.
+  5. Plan the visual sequence by assigning one existing chart or visual to each beat.
+     The visual should reinforce the message of that beat rather than restate the words.
+  6. Write an opening hook that earns attention in under ten seconds (a surprising
+     figure, a sharp question, or a contrast) and a closing call to action that names a
+     specific decision, owner, and deadline. Assemble it into the final artifact.
+output_spec:
+  type: slide
+  sections:
+    - hook
+    - situation
+    - complication
+    - resolution
+    - call to action
+format:
+  style: narrative slides or brief, one message per beat
+  length: 5 slides or fewer for senior audiences
+  visuals: one key chart per beat
+eval_goldens: []

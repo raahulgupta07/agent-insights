@@ -1,0 +1,48 @@
+id: ana-ab-test-analysis
+name: "A/B Test Analysis (Significance, SRM, Guardrails)"
+domain: analytics.ab-test
+trigger_hints:
+  - ab test
+  - experiment results
+  - statistical significance
+  - ship or no ship
+  - sample ratio mismatch
+  - control vs treatment
+  - p-value
+  - confidence interval
+  - guardrail metric
+  - lift analysis
+required_inputs:
+  variant:
+    role: dimension
+    synonyms: [variant, group, arm, treatment, bucket, test_group]
+    desc: the experiment arm each unit was assigned to (control vs treatment)
+  metric:
+    role: measure
+    synonyms: [metric, conversion, outcome, value, kpi, converted]
+    desc: the primary outcome being compared across variants
+  unit_id:
+    role: dimension
+    synonyms: [user_id, customer_id, session_id, device_id, visitor_id]
+    desc: the randomisation unit so counts and rates are computed per assigned entity
+    optional: true
+  event_date:
+    role: date
+    synonyms: [event_date, date, timestamp, created_at, day]
+    desc: when the observation occurred, for temporal validity checks
+    optional: true
+method_text: |
+  1. Restate the test design: name the control and treatment arms, the randomisation unit, the primary metric, any guardrail metrics, and the intended split (e.g. 50/50). Confirm these against the data before interpreting anything.
+  2. Use create_data to count assigned units per variant and run a chi-square test of the observed split against the expected split. If the split is meaningfully off (sample ratio mismatch), flag it as a blocker and stop interpreting results until the assignment pipeline is investigated.
+  3. With create_data, compute the rate (for binary outcomes) or mean (for continuous outcomes) of the primary metric in each arm, plus its 95% confidence interval. Record both absolute and relative differences between arms.
+  4. Run the appropriate significance test: a two-proportion z-test for rates or a Welch t-test for means. Capture the test statistic, p-value, and the confidence interval on the effect size.
+  5. Repeat the same significance test for each guardrail metric. Treat any statistically significant degradation of a guardrail as a blocker, regardless of how strong the primary result looks.
+  6. If an event date is available, use create_artifact to plot the cumulative effect over time and confirm the result is stable rather than driven by a single day or early noise.
+  7. Synthesise SRM status, significance, and guardrail checks into a single ship / no-ship / extend recommendation, and quantify the expected business impact of shipping. Use create_artifact for a per-variant comparison chart and a summary report.
+output_spec:
+  type: report
+  sections: [design_summary, srm_check, per_variant_results, significance, guardrails, recommendation]
+format:
+  percentages: "one decimal place"
+  p_values: "three decimal places"
+eval_goldens: []

@@ -1,0 +1,54 @@
+id: doc-schema-mapper
+name: "Schema Mapping (source-to-target column lineage)"
+domain: analytics.schema-doc
+trigger_hints:
+  - map the schema
+  - source to target mapping
+  - column mapping
+  - document the etl
+  - field lineage
+  - where does this column come from
+  - integrate this data source
+  - transformation rules
+  - schema migration mapping
+  - map fields to the model
+required_inputs:
+  subject:
+    role: dimension
+    synonyms: [name, company, entity, category, product, account, item, segment, business unit, customer, sku, region, table, column, metric]
+    desc: the source or target table/column being mapped
+  primary_measure:
+    role: measure
+    synonyms: [revenue, sales, amount, value, count, total, metric]
+    desc: a measure column whose transformation is mapped, if any
+    optional: true
+  period:
+    role: date
+    synonyms: [period, date, month, quarter, year, as of]
+    desc: a date field being mapped or migrated, if any
+    optional: true
+method_text: |
+  This is a DOCUMENTATION deliverable: it records how raw fields become analytical columns
+  so lineage and transformations are auditable. It documents the mapping, it does not run it.
+  1. Inventory the source schema: every column with its data type, nullability, and a short
+     description, taken from the information schema, a dictionary, or API docs.
+  2. Inventory the target schema the same way. If the target does not exist yet, draft it
+     from the analytical requirements it must satisfy.
+  3. Map each target column back to its source column or columns. Separate straight
+     renames from derived columns that need a calculation, cast, or lookup join.
+  4. For every derived column, write the exact transformation in plain terms, for example
+     dividing a cents amount by 100, or falling back to a secondary field when the primary
+     is null.
+  5. Flag the gaps in both directions: target columns with no source (must be created or
+     defaulted) and source columns with no target (dropped or deferred), with a decision
+     recorded for each.
+  6. Use create_artifact to produce the mapping document: a column-by-column inventory with
+     transformation rules, the gap list, and the decisions, ready for review before build.
+output_spec:
+  type: report
+  sections: [source schema, target schema, column mappings, transformation rules, gaps and decisions]
+format:
+  style: column-by-column mapping table
+  mappings: distinguish direct renames from derived transformations
+  gaps: list unmatched columns on both sides with a decision each
+eval_goldens: []
