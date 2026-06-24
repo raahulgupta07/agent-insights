@@ -1,0 +1,1106 @@
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
+
+from app.models.llm_provider import LLMProvider
+from app.models.llm_model import LLMModel
+from app.models.organization import Organization
+from app.models.user import User
+from app.settings.config import settings
+from app.models.llm_provider import LLM_PROVIDER_DETAILS
+from app.models.llm_model import LLM_MODEL_DETAILS
+from app.schemas.llm_schema import AnthropicCredentials, OpenAICredentials, GoogleCredentials, LLMModelSchema, LLMProviderCreate, LLMProviderTestConnection
+from app.ai.llm.llm import LLM
+from app.dependencies import async_session_maker
+from datetime import datetime
+from app.core.telemetry import telemetry
+from app.ee.audit.service import audit_service
+from app.settings.logging_config import get_logger
+
+logger = get_logger(__name__)
+
+class LLMService:
+    def __init__(self):
+        pass
+
+    async def get_providers(
+        self, 
+        db: AsyncSession, 
+        organization: Organization,
+        current_user: User
+    ):
+        """Get all LLM providers for an organization"""
+        result = await db.execute(
+            select(LLMProvider)
+            .filter(LLMProvider.organization_id == organization.id)
+            .filter(LLMProvider.deleted_at == None)
+            .filter(LLMProvider.is_enabled == True)
+        )
+        return result.unique().scalars().all()
+
+    async def get_available_providers(
+        self, 
+        db: AsyncSession, 
+        organization: Organization,
+        current_user: User
+    ):
+        return LLM_PROVIDER_DETAILS
+    
+    async def get_available_models(
+        self, 
+        db: AsyncSession, 
+        organization: Organization,
+        current_user: User
+    ):
+        return LLM_MODEL_DETAILS
+
+    async def create_provider(
+        self,
+        db: AsyncSession,
+        organization: Organization,
+        current_user: User,
+        provider_data
+    ):
+        """Create a new custom LLM provider"""
+        logger.info("Creating LLM provider: name=%s, type=%s, org_id=%s, user_id=%s", provider_data.name, provider_data.provider_type, organization.id, current_user.id)
+
+        models = provider_data.models
+        del provider_data.models
+        del provider_data.config
+        credentials = provider_data.credentials
+        del provider_data.credentials
+
+        provider = LLMProvider(**provider_data.dict())
+        self._set_provider_credentials(provider, credentials)
+
+        provider.organization_id = organization.id
+
+        # Persist the provider first so duplicate name errors are caught cleanly here
+        db.add(provider)
+        try:
+            await db.commit()
+            await db.refresh(provider)
+        except IntegrityError:
+            await db.rollback()
+            logger.warning("Duplicate LLM provider name: name=%s, org_id=%s", provider.name, organization.id)
+            raise HTTPException(
+                status_code=409,
+                detail=f"A provider named '{provider.name}' already exists in this organization. Please choose a different name."
+            )
+
+        logger.info("LLM provider created: id=%s, name=%s, type=%s, org_id=%s", provider.id, provider.name, provider.provider_type, organization.id)
+
+        # Now create/update models for this provider (commits internally)
+        await self._create_models(db, organization, provider, current_user, models)
+
+        # Telemetry: LLM provider created
+        try:
+            await telemetry.capture(
+                "llm_provider_created",
+                {
+                    "provider_type": provider.provider_type,
+                    "is_preset": bool(getattr(provider, "is_preset", False)),
+                    "num_models": len(models or []),
+                },
+                user_id=current_user.id,
+                org_id=organization.id,
+            )
+        except Exception:
+            pass
+
+        # Audit log
+        try:
+            await audit_service.log(
+                db=db,
+                organization_id=str(organization.id),
+                action="llm_provider.created",
+                user_id=str(current_user.id),
+                resource_type="llm_provider",
+                resource_id=str(provider.id),
+                details={"name": provider.name, "provider_type": provider.provider_type},
+            )
+        except Exception:
+            pass
+
+        return provider
+
+    async def update_provider(
+        self,
+        db: AsyncSession,
+        organization: Organization,
+        current_user: User,
+        provider_id: str,
+        provider_data
+    ):
+        """Update provider settings"""
+        logger.info("Updating LLM provider: provider_id=%s, org_id=%s, user_id=%s", provider_id, organization.id, current_user.id)
+        provider = await db.execute(
+            select(LLMProvider).filter(
+                LLMProvider.id == provider_id,
+                LLMProvider.organization_id == organization.id
+            )
+        )
+        provider = provider.unique().scalar_one_or_none()
+        
+        if not provider:
+            raise HTTPException(status_code=404, detail="Provider not found")
+        
+        if provider.is_preset:
+            raise HTTPException(status_code=400, detail="Cannot update preset providers")
+
+        update_data = provider_data.dict(exclude_unset=True)
+        models = provider_data.models
+        del provider_data.models
+
+        credentials = update_data.pop('credentials', None)
+
+        await self._update_models(db, organization, provider, current_user, models)
+
+        # Allow updating provider additional_config (e.g., base_url) without requiring api_key
+        if credentials is not None:
+            self._set_provider_credentials(provider, credentials)
+
+        db.add(provider)
+        try:
+            await db.commit()
+            await db.refresh(provider)
+        except IntegrityError:
+            await db.rollback()
+            logger.warning("Duplicate LLM provider name on update: name=%s, org_id=%s", update_data.get('name', provider.name), organization.id)
+            raise HTTPException(
+                status_code=409,
+                detail=f"A provider with the name '{update_data.get('name', provider.name)}' already exists in this organization."
+            )
+
+        logger.info("LLM provider updated: id=%s, name=%s, type=%s, org_id=%s", provider.id, provider.name, provider.provider_type, organization.id)
+
+        # Audit log
+        try:
+            await audit_service.log(
+                db=db,
+                organization_id=str(organization.id),
+                action="llm_provider.updated",
+                user_id=str(current_user.id),
+                resource_type="llm_provider",
+                resource_id=str(provider.id),
+                details={"name": provider.name, "provider_type": provider.provider_type},
+            )
+        except Exception:
+            pass
+
+        return provider
+    
+    async def get_model_by_id(
+        self, 
+        db: AsyncSession,
+        organization: Organization,
+        current_user: User,
+        model_id: str
+    ):
+        """Get a model by id"""
+        model = await db.execute(
+            select(LLMModel).filter(LLMModel.id == model_id).filter(LLMModel.organization_id == organization.id)
+        )
+        model = model.scalar_one_or_none()
+        return model
+
+    async def delete_provider(
+        self,
+        db: AsyncSession,
+        organization: Organization,
+        current_user: User,
+        provider_id: str
+    ):
+        """Delete a custom provider"""
+        logger.info("Deleting LLM provider: provider_id=%s, org_id=%s, user_id=%s", provider_id, organization.id, current_user.id)
+        provider = await db.execute(
+            select(LLMProvider).filter(
+                LLMProvider.id == provider_id,
+                LLMProvider.organization_id == organization.id
+            )
+        )
+        provider = provider.unique().scalar_one_or_none()
+        
+        if not provider:
+            raise HTTPException(status_code=404, detail="Provider not found")
+            
+        if provider.is_preset:
+            raise HTTPException(status_code=400, detail="Cannot delete preset providers")
+        
+        models = provider.models
+        for model in models:
+            if model.is_default or model.is_small_default:
+                raise HTTPException(status_code=400, detail="Cannot delete models that are set as default or small default")
+
+        provider.deleted_at = datetime.now()
+        provider.is_enabled = False
+
+        await self._disable_models(db, organization, provider)
+
+        db.add(provider)
+        await db.commit()
+
+        logger.info("LLM provider deleted: id=%s, name=%s, type=%s, org_id=%s", provider.id, provider.name, provider.provider_type, organization.id)
+
+        # Audit log
+        try:
+            await audit_service.log(
+                db=db,
+                organization_id=str(organization.id),
+                action="llm_provider.deleted",
+                user_id=str(current_user.id),
+                resource_type="llm_provider",
+                resource_id=str(provider.id),
+                details={"name": provider.name, "provider_type": provider.provider_type},
+            )
+        except Exception:
+            pass
+
+        return {"message": "Provider deleted successfully"}
+
+    async def get_models(
+        self, 
+        db: AsyncSession,
+        organization: Organization,
+        current_user: User,
+        is_enabled: bool = None
+    ):
+        """Get all LLM models for an organization, optionally filtered by status"""
+        # First, get all active providers
+        providers = await db.execute(
+            select(LLMProvider)
+            .filter(LLMProvider.organization_id == organization.id)
+            .filter(LLMProvider.deleted_at == None)
+        )
+        providers = providers.unique().scalars().all()
+
+        # Sync new models for each provider
+        for provider in providers:
+            # Only auto-sync preset providers with our curated catalog.
+            # Custom (non-preset) providers should respect the user's explicit selections.
+            if provider.is_preset:
+                await self._sync_provider_with_latest_models(db, provider, organization)
+
+        await db.commit()
+
+        # Get all models with filters
+        query = select(LLMModel).join(LLMModel.provider).filter(
+            LLMProvider.organization_id == organization.id
+        ).filter(
+            LLMProvider.deleted_at == None
+        ).filter(
+            LLMModel.deleted_at == None
+        ).filter(
+            LLMProvider.is_enabled == True
+        )
+        
+        if is_enabled is not None:
+            query = query.filter(LLMModel.is_enabled == is_enabled)
+        
+        result = await db.execute(query)
+        models = result.unique().scalars().all()
+        # Prefer small default models first, then regular default, then by provider/name
+        def _sort_key(m):
+            try:
+                provider_name = getattr(getattr(m, "provider", None), "name", "") or ""
+            except Exception:
+                provider_name = ""
+            model_name = getattr(m, "name", None) or getattr(m, "model_id", "")
+            # False > True when cast to int, so invert using not
+            return (
+                0 if getattr(m, "is_small_default", False) else 1,
+                0 if getattr(m, "is_default", False) else 1,
+                provider_name.lower(),
+                str(model_name).lower(),
+            )
+        return sorted(models, key=_sort_key)
+
+    async def setup_default_providers(
+        self,
+        db: AsyncSession,
+        organization: Organization,
+        current_user: User
+    ):
+        """Setup default LLM providers from config for a new organization"""
+        for llm_config in settings.default_llm:
+            provider = LLMProvider(
+                name=llm_config["provider"],
+                provider_type=llm_config["provider"],
+                api_key=llm_config["key"],
+                api_secret=llm_config.get("secret"),
+                organization_id=organization.id,
+                is_preset=True,
+                use_preset_credentials=True
+            )
+            db.add(provider)
+            
+            for model_name in llm_config.get("available_models", []):
+                model = LLMModel(
+                    name=model_name,
+                    model_id=model_name,
+                    provider=provider,
+                    is_preset=True
+                )
+                db.add(model)
+        
+        await db.commit()
+
+    async def toggle_provider(
+        self,
+        db: AsyncSession,
+        organization: Organization,
+        current_user: User,
+        provider_id: str,
+        enabled: bool
+    ):
+        """Enable/disable a provider"""
+        provider = await db.execute(
+            select(LLMProvider).filter(
+                LLMProvider.id == provider_id,
+                LLMProvider.organization_id == organization.id
+            )
+        )
+        provider = provider.scalar_one_or_none()
+
+        if not provider:
+            raise HTTPException(status_code=404, detail="Provider not found")
+
+        provider.is_enabled = enabled
+        await db.commit()
+
+        logger.info("LLM provider toggled: id=%s, name=%s, enabled=%s, org_id=%s", provider.id, provider.name, enabled, organization.id)
+
+        # Audit log
+        try:
+            await audit_service.log(
+                db=db,
+                organization_id=str(organization.id),
+                action="llm_provider.toggled",
+                user_id=str(current_user.id),
+                resource_type="llm_provider",
+                resource_id=str(provider.id),
+                details={"name": provider.name, "enabled": enabled},
+            )
+        except Exception:
+            pass
+
+        return {"success": True}
+
+    async def toggle_model(
+        self,
+        db: AsyncSession,
+        organization: Organization,
+        current_user: User,
+        model_id: str,
+        enabled: bool
+    ):
+        """Enable/disable a model"""
+        model = await db.execute(
+            select(LLMModel).join(LLMProvider).filter(
+                LLMModel.id == model_id,
+                LLMProvider.organization_id == organization.id
+            )
+        )
+        model = model.scalar_one_or_none()
+
+        if not model:
+            raise HTTPException(status_code=404, detail="Model not found")
+
+        if model.is_default or model.is_small_default:
+            raise HTTPException(status_code=400, detail="Cannot disable models that are set as default or small default")
+
+        model.is_enabled = enabled
+        await db.commit()
+
+        logger.info("LLM model toggled: id=%s, name=%s, model_id=%s, enabled=%s, org_id=%s", model.id, model.name, model.model_id, enabled, organization.id)
+
+        # Audit log
+        try:
+            await audit_service.log(
+                db=db,
+                organization_id=str(organization.id),
+                action="llm_model.toggled",
+                user_id=str(current_user.id),
+                resource_type="llm_model",
+                resource_id=str(model.id),
+                details={"name": model.name, "model_id": model.model_id, "enabled": enabled},
+            )
+        except Exception:
+            pass
+
+        return {"success": True}
+    
+    async def _create_models(
+        self, 
+        db: AsyncSession,
+        organization: Organization,
+        provider: LLMProvider,
+        current_user: User,
+        models: list[dict]
+    ):
+        # First check if org already has a default model
+        existing_default = await db.execute(
+            select(LLMModel)
+            .filter(LLMModel.organization_id == organization.id)
+            .filter(LLMModel.is_default == True)
+        )
+        has_default_model = existing_default.scalar_one_or_none() is not None
+        # And whether org already has a small default model
+        existing_small_default = await db.execute(
+            select(LLMModel)
+            .filter(LLMModel.organization_id == organization.id)
+            .filter(getattr(LLMModel, "is_small_default") == True)
+        )
+        has_small_default_model = existing_small_default.scalar_one_or_none() is not None
+
+        for model in models:
+            # For preset models: remove context_window_tokens and pricing from model dict (we only use preset values)
+            # For custom models: allow these fields to be set by clients
+            is_preset_model = model.get("is_preset", False) or not model.get("is_custom", False)
+            if is_preset_model:
+                model_dict = {
+                    k: v for k, v in model.items() 
+                    if k not in ["context_window_tokens", "input_cost_per_million_tokens_usd", "output_cost_per_million_tokens_usd"]
+                }
+            else:
+                model_dict = model
+            db_model = LLMModel(**model_dict)
+            db_model.organization_id = organization.id
+            db_model.provider = provider
+            db_model.is_enabled = True
+            db_model.is_custom = model.get("is_custom", False)
+            
+            # Check if this model would be default according to config
+            model_details = next(
+                (m for m in LLM_MODEL_DETAILS if m["model_id"] == model["model_id"] and m["provider_type"] == provider.provider_type),
+                None
+            )
+            
+            # Only set as default if there's no existing default and this model should be default
+            if model_details and model_details.get("is_default", False) and not has_default_model:
+                db_model.is_default = True
+                # Only allow one default model
+                has_default_model = True
+            # Fallback: if org still has no default and this is an enabled model, make it the default
+            # This ensures custom/Azure providers (not in LLM_MODEL_DETAILS) get a default model
+            elif not has_default_model and db_model.is_enabled:
+                db_model.is_default = True
+                has_default_model = True
+            else:
+                db_model.is_default = False
+            
+            # Only set as small default if there's no existing small default and this model should be small default
+            if model_details and model_details.get("is_small_default", False) and not has_small_default_model:
+                setattr(db_model, "is_small_default", True)
+                has_small_default_model = True
+            # Fallback: if org still has no small default and this is an enabled model, make it the small default
+            elif not has_small_default_model and db_model.is_enabled:
+                setattr(db_model, "is_small_default", True)
+                has_small_default_model = True
+            else:
+                setattr(db_model, "is_small_default", False)
+            
+            # Set context_window_tokens, pricing, and supports_vision
+            # For preset models: use values from LLM_MODEL_DETAILS
+            # For custom models: use values from model dict if provided (already set via LLMModel(**model_dict))
+            if model_details and not db_model.is_custom:
+                if model_details.get("context_window_tokens") is not None:
+                    db_model.context_window_tokens = model_details["context_window_tokens"]
+                if model_details.get("input_cost_per_million_tokens_usd") is not None:
+                    db_model.input_cost_per_million_tokens_usd = model_details["input_cost_per_million_tokens_usd"]
+                if model_details.get("output_cost_per_million_tokens_usd") is not None:
+                    db_model.output_cost_per_million_tokens_usd = model_details["output_cost_per_million_tokens_usd"]
+                db_model.supports_vision = model_details.get("supports_vision", False)
+            elif db_model.is_custom:
+                # Inherit catalog fields when model_id+provider_type match; user values take precedence.
+                if model_details:
+                    if not model.get("name"):
+                        db_model.name = model_details["name"]
+                    if db_model.context_window_tokens is None and model_details.get("context_window_tokens") is not None:
+                        db_model.context_window_tokens = model_details["context_window_tokens"]
+                    if db_model.input_cost_per_million_tokens_usd is None and model_details.get("input_cost_per_million_tokens_usd") is not None:
+                        db_model.input_cost_per_million_tokens_usd = model_details["input_cost_per_million_tokens_usd"]
+                    if db_model.output_cost_per_million_tokens_usd is None and model_details.get("output_cost_per_million_tokens_usd") is not None:
+                        db_model.output_cost_per_million_tokens_usd = model_details["output_cost_per_million_tokens_usd"]
+                    if not model.get("supports_vision"):
+                        db_model.supports_vision = model_details.get("supports_vision", False)
+                    else:
+                        db_model.supports_vision = True
+                else:
+                    db_model.supports_vision = model.get("supports_vision", False)
+
+            db.add(db_model)
+
+        await db.commit()
+
+    def _set_provider_credentials(
+        self, 
+        provider: LLMProvider,
+        credentials: dict
+    ):
+        api_key = credentials.get("api_key") or None
+        api_secret = credentials.get("api_secret") or None
+
+        # Merge/maintain provider-specific additional_config
+        # Always work on a COPY so SQLAlchemy sees a new object assignment for JSON column
+        existing_additional_config = dict(provider.additional_config or {})
+
+        # Azure: endpoint_url
+        if provider.provider_type == "azure":
+            # Only act on endpoint_url if the key is present in the payload
+            if "endpoint_url" in credentials:
+                endpoint_url = credentials.get("endpoint_url")
+                if endpoint_url:
+                    existing_additional_config = { **existing_additional_config, "endpoint_url": endpoint_url }
+                elif credentials.get("endpoint_url") is None or credentials.get("endpoint_url") == "":
+                    # Explicitly clear endpoint_url when set to empty/null
+                    existing_additional_config.pop("endpoint_url", None)
+
+        # OpenAI: base_url (optional)
+        if provider.provider_type == "openai":
+            base_url = credentials.get("base_url")
+            if base_url:
+                existing_additional_config = { **existing_additional_config, "base_url": base_url }
+            elif "base_url" in credentials and (credentials.get("base_url") is None or credentials.get("base_url") == ""):
+                # Explicitly clear base_url
+                existing_additional_config.pop("base_url", None)
+
+        # OpenAI / Azure: native web search opt-in (non-secret flag → additional_config)
+        if provider.provider_type in ("openai", "azure"):
+            if "enable_web_search" in credentials:
+                existing_additional_config = {
+                    **existing_additional_config,
+                    "enable_web_search": bool(credentials.get("enable_web_search")),
+                }
+
+        # Azure: opt-in to the Responses API (off → Chat Completions, works in
+        # every region). Gates web search.
+        if provider.provider_type == "azure":
+            if "use_responses_api" in credentials:
+                existing_additional_config = {
+                    **existing_additional_config,
+                    "use_responses_api": bool(credentials.get("use_responses_api")),
+                }
+
+        # Custom (OpenAI-compatible): base_url (required), verify_ssl (optional)
+        if provider.provider_type == "custom":
+            base_url = credentials.get("base_url")
+            if base_url:
+                existing_additional_config = { **existing_additional_config, "base_url": base_url }
+            # For custom providers, base_url is required - don't clear it
+            if "verify_ssl" in credentials:
+                raw_verify_ssl = credentials.get("verify_ssl", True)
+                # Coerce string values to boolean (frontend may send "true"/"false" strings)
+                if isinstance(raw_verify_ssl, str):
+                    verify_ssl = raw_verify_ssl.lower() not in ("false", "0", "no", "")
+                else:
+                    verify_ssl = bool(raw_verify_ssl)
+                existing_additional_config = { **existing_additional_config, "verify_ssl": verify_ssl }
+
+        # Bedrock: region (required), auth_mode
+        if provider.provider_type == "bedrock":
+            region = credentials.get("region")
+            if region:
+                existing_additional_config = { **existing_additional_config, "region": region }
+            # Only update auth_mode when explicitly present in the payload
+            if "auth_mode" in credentials:
+                raw_auth_mode = credentials.get("auth_mode")
+                # Normalize to lowercase string if provided as a string
+                if isinstance(raw_auth_mode, str):
+                    auth_mode = raw_auth_mode.lower()
+                else:
+                    auth_mode = raw_auth_mode
+
+                allowed_auth_modes = {"iam", "api_key", "access_keys"}
+                if auth_mode not in allowed_auth_modes:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Invalid auth_mode for Bedrock provider: {raw_auth_mode!r}. "
+                               f"Allowed values are: {', '.join(sorted(allowed_auth_modes))}."
+                    )
+
+                existing_additional_config = { **existing_additional_config, "auth_mode": auth_mode }
+
+            # Map AWS access keys to api_key/api_secret for encrypted storage
+            if credentials.get("aws_access_key_id"):
+                api_key = credentials["aws_access_key_id"]
+            if credentials.get("aws_secret_access_key"):
+                api_secret = credentials["aws_secret_access_key"]
+        provider.additional_config = existing_additional_config if existing_additional_config else None
+
+        # Only (re-)encrypt credentials when a new key/secret is provided
+        if api_key is not None or api_secret is not None:
+            # If only one of them provided, keep the other as existing if present
+            try:
+                existing_api_key, existing_api_secret = provider.decrypt_credentials()
+            except Exception:
+                existing_api_key, existing_api_secret = None, None
+
+            effective_api_key = api_key if api_key is not None else existing_api_key
+            effective_api_secret = api_secret if api_secret is not None else existing_api_secret
+            provider.encrypt_credentials(effective_api_key, effective_api_secret)
+
+    async def _disable_models(
+        self, 
+        db: AsyncSession,
+        organization: Organization,
+        provider: LLMProvider
+    ):
+        for model in provider.models:
+            model.is_enabled = False
+            db.add(model)
+        await db.commit()
+
+    async def _update_models(
+        self, 
+        db: AsyncSession,
+        organization: Organization,
+        provider: LLMProvider,
+        current_user: User,
+        models: list[LLMModelSchema]
+    ):
+        # Check if org already has default models (needed for new model creation)
+        existing_default = await db.execute(
+            select(LLMModel)
+            .filter(LLMModel.organization_id == organization.id)
+            .filter(LLMModel.is_default == True)
+        )
+        has_default_model = existing_default.scalar_one_or_none() is not None
+        existing_small_default = await db.execute(
+            select(LLMModel)
+            .filter(LLMModel.organization_id == organization.id)
+            .filter(getattr(LLMModel, "is_small_default") == True)
+        )
+        has_small_default_model = existing_small_default.scalar_one_or_none() is not None
+
+        for model in models:
+            # If model has an ID, update existing model
+            if model.id:
+                db_model = await db.execute(
+                    select(LLMModel).filter(LLMModel.id == model.id)
+                )
+                db_model = db_model.scalar_one_or_none()
+
+                if not db_model:
+                    raise HTTPException(status_code=404, detail="Model not found")
+
+                # Update fields that can be changed
+                if db_model.is_enabled != model.is_enabled:
+                    db_model.is_enabled = model.is_enabled
+                    db.add(db_model)
+                
+                # Optional token/pricing/vision fields
+                # For preset models: sync from LLM_MODEL_DETAILS (not updatable by clients)
+                # For custom models: allow clients to optionally set these values
+                catalog = next(
+                    (m for m in LLM_MODEL_DETAILS if m["model_id"] == db_model.model_id and m["provider_type"] == provider.provider_type),
+                    None
+                )
+                if db_model.is_preset:
+                    if catalog:
+                        if catalog.get("context_window_tokens") is not None:
+                            db_model.context_window_tokens = catalog["context_window_tokens"]
+                        if catalog.get("input_cost_per_million_tokens_usd") is not None:
+                            db_model.input_cost_per_million_tokens_usd = catalog["input_cost_per_million_tokens_usd"]
+                        if catalog.get("output_cost_per_million_tokens_usd") is not None:
+                            db_model.output_cost_per_million_tokens_usd = catalog["output_cost_per_million_tokens_usd"]
+                        db_model.supports_vision = catalog.get("supports_vision", False)
+                else:
+                    # Custom models: user values take precedence; fall back to catalog when model_id+provider_type match.
+                    if getattr(model, "context_window_tokens", None) is not None:
+                        db_model.context_window_tokens = model.context_window_tokens
+                    elif catalog and catalog.get("context_window_tokens") is not None:
+                        db_model.context_window_tokens = catalog["context_window_tokens"]
+                    if getattr(model, "input_cost_per_million_tokens_usd", None) is not None:
+                        db_model.input_cost_per_million_tokens_usd = model.input_cost_per_million_tokens_usd
+                    elif catalog and catalog.get("input_cost_per_million_tokens_usd") is not None:
+                        db_model.input_cost_per_million_tokens_usd = catalog["input_cost_per_million_tokens_usd"]
+                    if getattr(model, "output_cost_per_million_tokens_usd", None) is not None:
+                        db_model.output_cost_per_million_tokens_usd = model.output_cost_per_million_tokens_usd
+                    elif catalog and catalog.get("output_cost_per_million_tokens_usd") is not None:
+                        db_model.output_cost_per_million_tokens_usd = catalog["output_cost_per_million_tokens_usd"]
+                    if getattr(model, "supports_vision", False):
+                        db_model.supports_vision = True
+                    elif catalog:
+                        db_model.supports_vision = catalog.get("supports_vision", False)
+                    else:
+                        db_model.supports_vision = False
+                
+                if getattr(model, "max_output_tokens", None) is not None:
+                    db_model.max_output_tokens = model.max_output_tokens
+                db.add(db_model)
+            else:
+                # If model doesn't have an ID, create new model
+                # For preset models: get context_window_tokens, pricing, and vision from LLM_MODEL_DETAILS
+                # For custom models: allow clients to optionally set these values
+                context_window_tokens = None
+                input_cost = None
+                output_cost = None
+                supports_vision = False
+
+                catalog = next(
+                    (m for m in LLM_MODEL_DETAILS if m["model_id"] == model.model_id and m["provider_type"] == provider.provider_type),
+                    None
+                )
+                if model.is_preset:
+                    if catalog:
+                        if catalog.get("context_window_tokens") is not None:
+                            context_window_tokens = catalog["context_window_tokens"]
+                        if catalog.get("input_cost_per_million_tokens_usd") is not None:
+                            input_cost = catalog["input_cost_per_million_tokens_usd"]
+                        if catalog.get("output_cost_per_million_tokens_usd") is not None:
+                            output_cost = catalog["output_cost_per_million_tokens_usd"]
+                        supports_vision = catalog.get("supports_vision", False)
+                else:
+                    # User values take precedence; fall back to catalog when model_id+provider_type match.
+                    context_window_tokens = getattr(model, "context_window_tokens", None) or (catalog.get("context_window_tokens") if catalog else None)
+                    input_cost = getattr(model, "input_cost_per_million_tokens_usd", None) or (catalog.get("input_cost_per_million_tokens_usd") if catalog else None)
+                    output_cost = getattr(model, "output_cost_per_million_tokens_usd", None) or (catalog.get("output_cost_per_million_tokens_usd") if catalog else None)
+                    supports_vision = getattr(model, "supports_vision", False) or (catalog.get("supports_vision", False) if catalog else False)
+
+                # Set as default if org has no default and this model is enabled
+                should_be_default = not has_default_model and model.is_enabled
+                should_be_small_default = not has_small_default_model and model.is_enabled
+
+                db_model = LLMModel(
+                    name=model.name or (catalog["name"] if catalog else None) or model.model_id,
+                    model_id=model.model_id,
+                    provider=provider,
+                    organization_id=organization.id,
+                    is_enabled=model.is_enabled,
+                    is_custom=model.is_custom,
+                    is_preset=model.is_preset,
+                    is_default=should_be_default,
+                    is_small_default=should_be_small_default,
+                    supports_vision=supports_vision,
+                    context_window_tokens=context_window_tokens,
+                    max_output_tokens=getattr(model, "max_output_tokens", None),
+                    input_cost_per_million_tokens_usd=input_cost,
+                    output_cost_per_million_tokens_usd=output_cost,
+                )
+                db.add(db_model)
+                
+                # Update flags so subsequent models don't also become default
+                if should_be_default:
+                    has_default_model = True
+                if should_be_small_default:
+                    has_small_default_model = True
+
+        await db.commit()
+    
+    async def set_default_model(
+        self, 
+        db: AsyncSession,
+        current_user: User,
+        organization: Organization,
+        model_id: str,
+        small: bool = False
+    ):
+        default_model = await db.execute(
+            select(LLMModel).filter(LLMModel.id == model_id)
+        )
+        default_model = default_model.scalar_one_or_none()
+
+        if not default_model:
+            raise HTTPException(status_code=404, detail="Model not found")
+        
+        if not default_model.is_enabled:
+            raise HTTPException(status_code=400, detail="Model is not enabled")
+        
+        org_models = await db.execute(
+            select(LLMModel).filter(LLMModel.organization_id == organization.id)
+        )
+        org_models = org_models.unique().scalars().all()
+
+        if small:
+            for model in org_models:
+                model.is_small_default = False
+                db.add(model)
+            default_model.is_small_default = True
+        else:
+            for model in org_models:
+                model.is_default = False
+                db.add(model)
+            default_model.is_default = True
+
+        db.add(default_model)
+        await db.commit()
+
+        logger.info("LLM default model set: id=%s, name=%s, model_id=%s, small=%s, org_id=%s", default_model.id, default_model.name, default_model.model_id, small, organization.id)
+
+        # Audit log
+        try:
+            await audit_service.log(
+                db=db,
+                organization_id=str(organization.id),
+                action="llm_model.set_default",
+                user_id=str(current_user.id),
+                resource_type="llm_model",
+                resource_id=str(default_model.id),
+                details={"name": default_model.name, "model_id": default_model.model_id, "small": small},
+            )
+        except Exception:
+            pass
+
+        return {"success": True}
+    
+    async def get_default_model(
+        self,
+        db: AsyncSession,
+        organization: Organization,
+        current_user: User,
+        is_small: bool = False
+    ):
+        """Get the default model for an organization. If is_small=True, prefer small default, fallback to regular, then first enabled."""
+        if is_small:
+            small_default = await db.execute(
+                select(LLMModel)
+                .filter(LLMModel.organization_id == organization.id)
+                .filter(getattr(LLMModel, "is_small_default") == True)
+                .filter(LLMModel.is_enabled == True)
+            )
+            small_default = small_default.scalar_one_or_none()
+            if small_default:
+                return small_default
+        # Regular default
+        default = await db.execute(
+            select(LLMModel)
+            .filter(LLMModel.organization_id == organization.id)
+            .filter(LLMModel.is_default == True)
+            .filter(LLMModel.is_enabled == True)
+        )
+        default_model = default.scalar_one_or_none()
+        if default_model:
+            return default_model
+        
+        # Fallback: return first enabled model (for custom providers without is_default set)
+        first_enabled = await db.execute(
+            select(LLMModel)
+            .filter(LLMModel.organization_id == organization.id)
+            .filter(LLMModel.is_enabled == True)
+            .limit(1)
+        )
+        return first_enabled.scalar_one_or_none()
+    
+    async def set_default_models_from_config(
+        self,
+        db: AsyncSession,
+        organization: Organization,
+        current_user: User
+    ):
+        if not settings.dash_config.default_llm:
+            return
+        
+        for llm_config in settings.dash_config.default_llm:
+            api_key = llm_config.api_key
+            api_secret = ""
+
+            provider = LLMProvider(
+                name=llm_config.provider_name,
+                provider_type=llm_config.provider_type,
+                organization_id=organization.id,
+                is_preset=True,
+                use_preset_credentials=True
+            )
+            provider.encrypt_credentials(api_key, api_secret)
+
+            db.add(provider)
+            
+            # Create models for this provider
+            for model_config in llm_config.models:
+                # Extract model_id and name from the config
+                model_id = model_config.model_id
+                model_name = model_config.model_name
+                is_default = model_config.is_default
+                is_enabled = model_config.is_enabled
+                is_small_default = model_config.is_small_default
+
+                # Get context_window_tokens, pricing, and vision from LLM_MODEL_DETAILS if available
+                model_details = next(
+                    (m for m in LLM_MODEL_DETAILS if m["model_id"] == model_id),
+                    None
+                )
+                context_window_tokens = model_details.get("context_window_tokens") if model_details else None
+                input_cost = model_details.get("input_cost_per_million_tokens_usd") if model_details else None
+                output_cost = model_details.get("output_cost_per_million_tokens_usd") if model_details else None
+                supports_vision = model_details.get("supports_vision", False) if model_details else False
+
+                model = LLMModel(
+                    name=model_name,
+                    model_id=model_id,
+                    provider=provider,
+                    organization_id=organization.id,
+                    is_preset=True,
+                    is_enabled=is_enabled,
+                    is_default=is_default,
+                    is_small_default=is_small_default,
+                    supports_vision=supports_vision,
+                    context_window_tokens=context_window_tokens,
+                    input_cost_per_million_tokens_usd=input_cost,
+                    output_cost_per_million_tokens_usd=output_cost
+                )
+                db.add(model)
+
+        await db.commit()
+        
+    async def _sync_provider_with_latest_models(
+        self,
+        db: AsyncSession,
+        provider: LLMProvider,
+        organization: Organization
+    ):
+        """Sync a provider with the latest models from LLM_MODEL_DETAILS"""
+        # Get available models for this provider type
+        available_models = [
+            model for model in LLM_MODEL_DETAILS 
+            if model["provider_type"] == provider.provider_type
+        ]
+
+        # Get existing model IDs for this provider
+        existing_models = await db.execute(
+            select(LLMModel.model_id)
+            .filter(LLMModel.provider_id == provider.id)
+        )
+        existing_model_ids = {model[0] for model in existing_models}
+        # Determine if org already has a small default model
+        existing_small_default = await db.execute(
+            select(LLMModel)
+            .filter(LLMModel.organization_id == organization.id)
+            .filter(LLMModel.is_small_default == True)
+        )
+        has_small_default_model = existing_small_default.scalar_one_or_none() is not None
+
+        # Add any missing models
+        for model_data in available_models:
+            if model_data["model_id"] not in existing_model_ids:
+                model = LLMModel(
+                    name=model_data["name"],
+                    model_id=model_data["model_id"],
+                    is_preset=model_data["is_preset"],
+                    is_enabled=model_data["is_enabled"],
+                    provider=provider,
+                    organization_id=organization.id,
+                    is_small_default=(model_data.get("is_small_default", False) and not has_small_default_model),
+                    supports_vision=model_data.get("supports_vision", False),
+                    context_window_tokens=model_data.get("context_window_tokens"),
+                    input_cost_per_million_tokens_usd=model_data.get("input_cost_per_million_tokens_usd"),
+                    output_cost_per_million_tokens_usd=model_data.get("output_cost_per_million_tokens_usd")
+                )
+                if model.is_small_default:
+                    has_small_default_model = True
+                db.add(model)
+        
+    async def test_connection(
+        self,
+        db: AsyncSession,
+        organization: Organization,
+        current_user: User,
+        provider: LLMProviderTestConnection
+    ):
+        logger.info("Testing LLM connection: provider_type=%s, name=%s, provider_id=%s, org_id=%s, user_id=%s", provider.provider_type, provider.name, getattr(provider, 'provider_id', None), organization.id, current_user.id)
+
+        # When testing an already-saved provider, load it so blank credential
+        # fields fall back to the stored (encrypted) values.
+        stored_provider = None
+        if getattr(provider, 'provider_id', None):
+            result = await db.execute(
+                select(LLMProvider)
+                .filter(LLMProvider.id == provider.provider_id)
+                .filter(LLMProvider.organization_id == organization.id)
+                .filter(LLMProvider.deleted_at == None)
+            )
+            stored_provider = result.unique().scalar_one_or_none()
+            if stored_provider is None:
+                raise HTTPException(status_code=404, detail="Provider not found")
+
+        # Build an in-memory provider based on the payload (no DB writes)
+        provider_obj = LLMProvider(
+            name=provider.name,
+            provider_type=provider.provider_type,
+            organization_id=organization.id,
+            is_preset=False,
+            is_enabled=True,
+            use_preset_credentials=False,
+            additional_config=None
+        )
+
+        # Seed encrypted credentials + config from the saved provider; any
+        # credentials supplied in the payload override these below.
+        if stored_provider is not None:
+            provider_obj.api_key = stored_provider.api_key
+            provider_obj.api_secret = stored_provider.api_secret
+            provider_obj.additional_config = dict(stored_provider.additional_config or {})
+
+        # Set credentials and merge provider-specific additional_config
+        self._set_provider_credentials(provider_obj, provider.credentials or {})
+
+        # Choose a model to test from user-provided list, preferring default or custom
+        selected_model = None
+        if provider.models:
+            # Try catalog default first among provided models
+            catalog_default = next(
+                (m for m in LLM_MODEL_DETAILS if m["provider_type"] == provider.provider_type and m.get("is_default")),
+                None
+            )
+            preferred = None
+            if catalog_default is not None:
+                preferred = next((m for m in provider.models if m.get("model_id") == catalog_default["model_id"] and m.get("is_enabled", True)), None)
+
+            # Prefer an explicitly default and enabled model from payload if still not found
+            if not preferred:
+                preferred = next((m for m in provider.models if m.get("is_default") and m.get("is_enabled", True)), None)
+            # Otherwise prefer any enabled custom model
+            if not preferred:
+                preferred = next((m for m in provider.models if m.get("is_custom", False) and m.get("is_enabled", True)), None)
+            # Otherwise prefer any enabled model
+            if not preferred:
+                preferred = next((m for m in provider.models if m.get("is_enabled", True)), None)
+
+            if preferred:
+                selected_model = LLMModel(
+                    name=preferred.get("name") or preferred.get("model_id"),
+                    model_id=preferred["model_id"],
+                    provider=provider_obj,
+                    organization_id=organization.id,
+                    is_enabled=True,
+                    is_custom=preferred.get("is_custom", False),
+                    is_preset=preferred.get("is_preset", False),
+                    is_default=False
+                )
+
+        # Fallback to default/first enabled model for the provider type
+        if selected_model is None:
+            default_model_data = next(
+                (m for m in LLM_MODEL_DETAILS if m["provider_type"] == provider.provider_type and m.get("is_default")),
+                None
+            )
+            if default_model_data is None:
+                default_model_data = next(
+                    (m for m in LLM_MODEL_DETAILS if m["provider_type"] == provider.provider_type and m.get("is_enabled")),
+                    None
+                )
+            if default_model_data is None:
+                raise HTTPException(status_code=400, detail="No available models for the specified provider type")
+
+            selected_model = LLMModel(
+                name=default_model_data["name"],
+                model_id=default_model_data["model_id"],
+                provider=provider_obj,
+                organization_id=organization.id,
+                is_enabled=True,
+                is_custom=False,
+                is_preset=bool(default_model_data.get("is_preset", False)),
+                is_default=False
+            )
+
+        # Run a lightweight connection test against the LLM client
+        logger.info("Testing LLM connection with model: model_id=%s, provider_type=%s", selected_model.model_id, provider.provider_type)
+        llm = LLM(selected_model, usage_session_maker=async_session_maker)
+        result = await llm.test_connection()
+        if result.get("success"):
+            logger.info("LLM connection test passed: provider_type=%s, model_id=%s, org_id=%s", provider.provider_type, selected_model.model_id, organization.id)
+        else:
+            logger.error("LLM connection test failed: provider_type=%s, model_id=%s, org_id=%s, message=%s", provider.provider_type, selected_model.model_id, organization.id, result.get("message"))
+        return result
+

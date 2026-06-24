@@ -1,0 +1,8 @@
+# backup 20260619_080109 label=build-pre
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       Dockerfile
+OK       docker-compose.yaml
+OK       docker-compose.build.yaml
+OK       docker-compose.dev.yaml
+OK       scripts/download-vendor-libs.sh
+OK       CLAUDE.md

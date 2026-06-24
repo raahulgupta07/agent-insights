@@ -1,0 +1,4 @@
+# backup 20260619_101910 label=studio-frontend
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       frontend/layouts/default.vue
+OK       locales/en.json

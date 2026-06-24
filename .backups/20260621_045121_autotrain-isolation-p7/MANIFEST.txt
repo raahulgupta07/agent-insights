@@ -1,0 +1,10 @@
+# backup 20260621_045121 label=autotrain-isolation-p7
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       backend/app/services/ingest/tenant_schema.py
+OK       backend/app/services/autotrain/connector.py
+OK       backend/app/routes/autotrain_connector.py
+OK       backend/app/ai/code_execution/analytics_engine.py
+OK       backend/app/services/ingest/loader.py
+OK       backend/app/services/ingest/register.py
+OK       backend/app/routes/autotrain.py
+OK       backend/main.py

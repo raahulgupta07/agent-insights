@@ -1,0 +1,11 @@
+# backup 20260619_205500 label=phase1-governance
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       backend/app/settings/hybrid_flags.py
+OK       backend/app/models/semantic_table.py
+OK       backend/app/schemas/semantic_schema.py
+OK       backend/app/routes/knowledge.py
+OK       backend/app/ai/context/sections/semantic.py
+OK       backend/app/ai/context/builders/semantic_context_builder.py
+OK       backend/alembic/versions/kepler1gov1_governance_fields.py
+OK       frontend/pages/knowledge/index.vue
+OK       .env

@@ -1,0 +1,60 @@
+# Node.js (Frontend)
+
+backend/uploads/
+backend/*.db
+backend/db/
+backend/*.db
+backend/venv/
+backend/backend_venv/
+backend/.venv/
+backend/tests/integrations/integrations.json
+test_data_sources/
+excel-add-in/hi/node_modules/
+backend/tests/evals/spider_results.jsonl
+
+frontend/.nuxt/cache/
+# Nuxt dev/build outputs
+frontend/.output
+frontend/.data
+frontend/.nuxt
+frontend/.nitro
+frontend/.cache
+frontend/dist
+frontend/node_modules/
+frontend/.output/
+frontend/test-results/
+frontend/tests/config/*.json
+# Logs
+backend/logs
+*.log
+
+# Misc
+.DS_Store
+
+# Local env files
+.env
+.env.*
+!.env.example
+
+
+*.pyc
+backend/alembic.ini
+backend/app.db
+
+# Sandbox session state (credentials, tokens, IDs)
+backend/sandbox_state.json
+
+# Claude Code local settings overrides
+.claude/settings.local.json
+.claude/worktrees/*
+
+backend/sandbox_main.py
+configs/dash-config.dev.entra.yaml
+
+
+# load-test sandbox secrets / generated output
+backend/.sandbox_env
+backend/loadtest/*.json
+backend/loadtest/*.csv
+backend/loadtest/smoke.json
+backend/loadtest/smoke*.json

@@ -1,0 +1,57 @@
+# =============================================================================
+# CityAgent Analytics - SCALE OVERLAY (Tier-2)
+# =============================================================================
+# Additive override. Use WITH the build file:
+#   docker compose -f docker-compose.build.yaml -f docker-compose.scale.yaml up -d
+#
+# Adds pgbouncer in front of Postgres (connection pooling for many concurrent
+# sessions) and repoints the app's DB URL through it. Session pool mode keeps
+# asyncpg prepared statements working (transaction mode would need
+# statement_cache_size=0). The plain build file is UNCHANGED and still works on
+# its own (direct-to-Postgres).
+# =============================================================================
+
+services:
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: ca-pgbouncer
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${POSTGRES_USER:-dash}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-dashpassword}
+      DB_NAME: ${POSTGRES_DB:-dash}
+      AUTH_TYPE: scram-sha-256
+      POOL_MODE: session
+      # asyncpg/the app set these per-connection startup params; pgbouncer must
+      # pass them through instead of rejecting ("unsupported startup parameter").
+      IGNORE_STARTUP_PARAMETERS: extra_float_digits,lock_timeout,statement_timeout,idle_in_transaction_session_timeout,search_path
+      MAX_CLIENT_CONN: "1000"
+      # session pool_mode pins a server connection to each client connection for
+      # its whole lifetime. SQLAlchemy keeps pool_size(20)+max_overflow(20)=40
+      # persistent client conns per worker, so DEFAULT_POOL_SIZE must exceed that
+      # or the surplus conns block on query_wait_timeout and die (the 120s
+      # ConnectionDoesNotExistError + "Thinking…" hang). 60 covers 40 + headroom
+      # and stays under postgres max_connections=100.
+      DEFAULT_POOL_SIZE: "60"
+      MIN_POOL_SIZE: "10"
+      # Fail fast (not the 120s default) if the pool ever does saturate, so the
+      # UI surfaces an error instead of hanging forever. Paired with a frontend
+      # SSE watchdog + terminal completion.error.
+      QUERY_WAIT_TIMEOUT: "30"
+    ports:
+      - "${PGBOUNCER_PORT:-6432}:5432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ca-network
+
+  app:
+    # Route the app through pgbouncer instead of straight to Postgres.
+    environment:
+      - DASH_DATABASE_URL=postgresql://${POSTGRES_USER:-dash}:${POSTGRES_PASSWORD:-dashpassword}@pgbouncer:5432/${POSTGRES_DB:-dash}
+    depends_on:
+      pgbouncer:
+        condition: service_started

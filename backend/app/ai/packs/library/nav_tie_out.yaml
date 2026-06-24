@@ -1,0 +1,71 @@
+id: nav-tie-out
+name: "Fund NAV Tie-Out"
+domain: finance.fund-admin
+
+# Tier A. Builds net asset value from holdings and ties it to a reported NAV.
+
+trigger_hints:
+  - nav
+  - net asset value
+  - nav tie out
+  - nav calculation
+  - fund nav
+  - gross asset value
+  - nav per unit
+  - nav per share
+  - fund administration
+
+required_inputs:
+  holding:
+    role: dimension
+    synonyms: [holding, position, security, asset, instrument, investment, ticker]
+    desc: the position / holding line
+  quantity:
+    role: measure
+    synonyms: [quantity, units, shares, par, nominal, position size, holdings]
+    desc: number of units held
+  price:
+    role: measure
+    synonyms: [price, market price, unit price, mark, fair value price, nav price, close]
+    desc: per-unit valuation price
+  liabilities:
+    role: measure
+    synonyms: [liabilities, payables, accrued expenses, fees payable, redemptions payable]
+    optional: true
+  fees:
+    role: measure
+    synonyms: [fees, management fee, performance fee, expenses, accrued fees]
+    optional: true
+  fund_units:
+    role: measure
+    synonyms: [fund units, units outstanding, shares outstanding, partnership units]
+    optional: true
+  reported_nav:
+    role: measure
+    synonyms: [reported nav, official nav, admin nav, statement nav, prior nav]
+    optional: true
+
+method_text: |
+  Build the NAV bottom-up and tie it out:
+  1. Position value = quantity * price for each holding. Gross Asset Value (GAV) =
+     sum of position values.
+  2. NAV = GAV - liabilities - fees (subtract each only when bound; state which
+     deductions were applied).
+  3. NAV per unit = NAV / fund_units (only when fund_units is bound).
+  4. Tie-out: when reported_nav is bound, compute difference = NAV - reported_nav
+     and pct of NAV; PASS when within tolerance (state it, e.g. <= 0.1%), else
+     FAIL and list the largest position contributions as candidate causes.
+  5. Show the top holdings by value and their share of GAV (concentration).
+  6. Note any holding with a missing or zero price (cannot value) and exclude it
+     from GAV with an explicit caveat rather than guessing a mark.
+
+output_spec:
+  type: report
+  sections: [NAV build-up, Tie-out result, Top holdings, Exceptions]
+  per_holding: [quantity, price, position_value, pct_of_gav]
+
+format:
+  amounts: "two decimals"
+  nav_per_unit: "four decimals"
+
+eval_goldens: []

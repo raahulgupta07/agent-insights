@@ -1,0 +1,8 @@
+# backup 20260619_125456 label=studio_global_selector
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       frontend/composables/useAgent.ts
+OK       frontend/components/AgentSelector.vue
+OK       frontend/layouts/default.vue
+OK       frontend/pages/index.vue
+OK       frontend/components/prompt/DataSourceSelector.vue
+OK       frontend/components/prompt/PromptBoxV2.vue

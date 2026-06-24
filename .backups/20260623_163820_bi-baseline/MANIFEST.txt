@@ -1,0 +1,6 @@
+# backup 20260623_163820 label=bi-baseline
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       frontend/components/DashboardComponent.vue
+OK       frontend/components/dashboard/charts/EChartsVisual.vue
+OK       frontend/components/RenderVisual.vue
+OK       frontend/components/dashboard/WidgetFrame.vue

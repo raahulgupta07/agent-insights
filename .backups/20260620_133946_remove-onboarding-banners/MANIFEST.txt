@@ -1,0 +1,4 @@
+# backup 20260620_133946 label=remove-onboarding-banners
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       frontend/layouts/default.vue
+OK       frontend/pages/index.vue

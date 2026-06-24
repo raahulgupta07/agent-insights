@@ -1,0 +1,56 @@
+from typing import Optional, Callable
+
+import asyncio
+
+from partialjson.json_parser import JSONParser
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.ai.llm import LLM
+from app.ai.prompt_language import build_language_directive
+from app.models.llm_model import LLMModel
+from app.schemas.organization_settings_schema import OrganizationSettingsConfig
+from app.services.usage_policy_service import UsageLimitContext
+
+class Reporter:
+
+    def __init__(
+        self,
+        model: LLMModel,
+        organization_settings: Optional[OrganizationSettingsConfig] = None,
+        usage_session_maker: Optional[Callable[[], AsyncSession]] = None,
+        usage_context: Optional[UsageLimitContext] = None,
+    ) -> None:
+        self.llm = LLM(model, usage_session_maker=usage_session_maker, usage_context=usage_context)
+        self.organization_settings = organization_settings
+
+    async def generate_report_title(self, messages, plan):
+
+        text = f"""
+        You are a reporter tasked with generating a title for a report.
+
+        Given the following messages
+        {messages}
+
+        And this plan:
+        {plan}
+
+        Generate a title for the report. Should be concise and descriptive of the report. Not more than 5 words.
+        {build_language_directive(self.organization_settings)}
+        Your response should be just the title, nothing else. No quotes / markdown / etc.
+
+        For example:
+        "Generate a report with a bar chart of the top 5 countries by population" -> Top 5 Countries by Population
+        "Generate a report with a line chart of the stock price of Tesla" -> Tesla Stock Price
+        "Generate a report with a scatter plot of the relationship between age and income" -> Age vs Income
+        "Generate a report with a heatmap of the correlation between different stocks" -> Stock Correlation
+        "Generate a list of customers who have bought the most from us" -> Top Customers
+        "Reconcile inventory between our system and our warehouse" -> Inventory Reconciliation
+        """
+
+        # `LLM.inference` is sync and runs the pre-call quota check via
+        # `run_blocking`. Called from a running event loop with no `loop`
+        # wired on the usage context, that check raises immediately. Offload
+        # to a worker thread so the sync check has no loop to collide with.
+        return await asyncio.to_thread(
+            self.llm.inference, text, usage_scope="report.title"
+        )

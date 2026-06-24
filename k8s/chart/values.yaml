@@ -1,0 +1,187 @@
+image:
+  tag: latest
+  registry: docker.io
+  repository: cityagent-analytics
+host: app.bagofwords.com
+postgresql:
+  auth:
+    username: ""
+    password: ""
+    database: ""
+    existingSecret: ""
+  primary:
+    persistence:
+      size: 20Gi
+    nodeSelector: {}
+
+# Managed database with IAM auth (alternative to the bundled postgresql subchart).
+# When database.auth.provider is not "password", the postgresql subchart values
+# above are ignored and the app connects to the external managed database instead.
+database:
+  auth:
+    provider: password   # password | aws_iam
+    region: ""           # AWS only — e.g. "us-east-1"
+    sslMode: ""          # e.g. "verify-full" (required for IAM auth)
+    sslRootCert:
+      secretName: ""     # K8s Secret with a custom CA cert (optional — image ships with public AWS RDS bundle)
+      key: ""            # Key inside the Secret (e.g. "ca-bundle.pem")
+  host: ""               # e.g. my-cluster.cluster-xxx.us-east-1.rds.amazonaws.com
+  port: 5432
+  username: ""           # DB user — must have GRANT rds_iam (AWS) or equivalent
+  name: ""               # Database name
+ingress:
+  enabled: true
+  className: nginx
+  tls:
+    enabled: false
+    secretName: dashapp-cert
+  # Example custom annotations:
+  # annotations:
+  #   nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+  #   nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  annotations: {}
+serviceAccount:
+  name: dashapp
+  imagePullSecret: ""
+  annotations: {}
+
+# Application configuration.
+#
+# Sensitive fields (encryptionKey, googleClientSecret, smtp.password, licenseKey,
+# oidcProviders[].clientSecret, ldap.bindPassword) should be provided via a
+# Kubernetes Secret referenced by `config.secretRef`. Use the ${VAR} placeholder
+# pattern (e.g. clientSecret: "${DASH_OIDC_OKTA_CLIENT_SECRET}") and put the real
+# value in the Secret with the matching key. See README.md for details.
+#
+# Plaintext values are still accepted for backward compatibility, but they will
+# land in a ConfigMap (not a Secret) and trigger a warning in helm NOTES.
+config:
+  secretRef: ""
+  googleOauthEnabled: false
+  googleClientId: ""
+  googleClientSecret: ""
+  encryptionKey: ""
+  intercomEnabled: false
+  telemetryEnabled: true
+  baseUrl: ""
+  authMode: "hybrid"   # hybrid | local_only | sso_only
+  allowUninvitedSignups: false
+  allowMultipleOrganizations: false
+  verifyEmails: false
+  uvicornWorkers: ""
+  otel:
+    enabled: false
+    serviceName: "dash-backend"
+    tracesEndpoint: "http://localhost:4317"
+    protocol: "grpc" # grpc or http/protobuf
+    headers: "" # format: key1=value1,key2=value2
+
+  # OpenID Connect providers (Okta, Microsoft Entra, Auth0, etc.).
+  # `clientSecret` should always use the ${DASH_OIDC_<NAME>_CLIENT_SECRET}
+  # placeholder pattern — the real secret is provided via config.secretRef.
+  #
+  # Example — Okta:
+  # oidcProviders:
+  #   - name: okta
+  #     enabled: true
+  #     issuer: https://YOUR_OKTA_DOMAIN.okta.com/oauth2/default
+  #     clientId: "<okta-client-id>"
+  #     clientSecret: "${DASH_OIDC_OKTA_CLIENT_SECRET}"
+  #     scopes: ["openid", "profile", "email"]
+  #     pkce: true
+  #     clientAuthMethod: basic   # basic | post
+  #     discovery: true
+  #     uidClaim: sub
+  #
+  # Example — Microsoft Entra (Azure AD) with group sync:
+  # oidcProviders:
+  #   - name: entra
+  #     enabled: true
+  #     label: "Sign in with Microsoft"
+  #     icon: microsoft
+  #     issuer: https://login.microsoftonline.com/<tenant-id>/v2.0
+  #     clientId: "<entra-client-id>"
+  #     clientSecret: "${DASH_OIDC_ENTRA_CLIENT_SECRET}"
+  #     scopes: ["openid", "profile", "email"]
+  #     pkce: true
+  #     clientAuthMethod: post
+  #     discovery: true
+  #     uidClaim: sub
+  #     # Sync groups from id_token's `groups` claim into DASH Groups on login.
+  #     syncGroups: true
+  #     groupClaim: groups
+  #     # Entra returns group UUIDs; resolve display names via Microsoft Graph.
+  #     resolveGroupNames: true
+  oidcProviders: []
+
+  # LDAP / Active Directory.
+  # bindPassword is NOT set here — provide it as DASH_LDAP_BIND_PASSWORD in
+  # the Secret referenced by config.secretRef.
+  ldap:
+    enabled: false
+    url: ""                                  # e.g. ldaps://ad.corp.com:636
+    bindDn: ""                               # service account DN (optional)
+    useSsl: true
+    startTls: false
+    baseDn: ""                               # e.g. dc=corp,dc=com
+    userSearchBase: ""                       # defaults to baseDn when empty
+    userSearchFilter: "(objectClass=person)"
+    userEmailAttribute: "mail"
+    userNameAttribute: "displayName"
+    groupSearchBase: ""                      # defaults to baseDn when empty
+    groupSearchFilter: "(objectClass=group)"
+    groupNameAttribute: "cn"
+    groupMemberAttribute: "member"            # "member" (AD/DN) or "memberUid" (OpenLDAP)
+    groupMemberFormat: "dn"                  # "dn" or "uid"
+    syncIntervalMinutes: 60
+    autoProvisionUsers: false
+    connectionTimeout: 10
+    pageSize: 500
+
+  # Enterprise license key. Prefer config.secretRef with key DASH_LICENSE_KEY.
+  licenseKey: ""
+
+  # SMTP — `enabled` is a Helm-only render gate (SMTPSettings has no `enabled`
+  # field). Setting `host` also implicitly enables the block. `password` should
+  # be provided via config.secretRef as DASH_SMTP_PASSWORD.
+  smtp:
+    enabled: false
+    host: ""
+    port: 587
+    username: ""
+    password: ""
+    from_name: ""
+    from_email: ""
+    use_tls: true
+    use_ssl: false
+    use_credentials: true
+    validate_certs: true
+
+
+
+# Number of pods when autoscaling is disabled. When autoscaling.enabled=true
+# this is ignored and the HorizontalPodAutoscaler owns the replica count.
+replicaCount: 1
+
+# Horizontal Pod Autoscaler. Default OFF — replicas stays fixed (replicaCount)
+# unless turned on. See k8s/SCALING.md.
+# NOTE: CPU-utilization scaling REQUIRES both a cpu request AND a cpu limit on
+# the container (both are set under resources below).
+autoscaling:
+  enabled: false        # default OFF — replicas stays fixed unless turned on
+  minReplicas: 2
+  maxReplicas: 8
+  targetCPUUtilizationPercentage: 70
+  # targetMemoryUtilizationPercentage: 80   # optional, commented
+
+resources:
+  requests:
+    cpu: 2
+    memory: 900Mi
+  limits:
+    # CPU limit — required for HPA CPU-utilization scaling to be meaningful.
+    # Override with --set resources.limits.cpu="2"|"8", etc.
+    cpu: "4"
+    # by default there is no memory limit
+    # to set the memory limit, set --set resources.limits.memory=1Gi|2Gi|4Gi, etc...
+    memory: ""

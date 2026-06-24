@@ -1,0 +1,8 @@
+# backup 20260620_231243 label=autotrain-p3-p6
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       backend/app/services/autotrain/orchestrator.py
+OK       backend/app/services/autotrain/profiler.py
+OK       backend/app/services/autotrain/metrics_gen.py
+OK       backend/app/services/ingest/drift.py
+OK       backend/app/services/ingest/excel_reader.py
+OK       backend/app/routes/autotrain.py

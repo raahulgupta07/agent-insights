@@ -1,0 +1,91 @@
+# =============================================================================
+# CityAgent Analytics - BUILD FROM SOURCE (own image, never pull upstream)
+# =============================================================================
+# Builds the app from THIS repo's Dockerfile instead of pulling
+# bagofwords/bagofwords:latest. Use this for all hybrid-brain work so our
+# branch's code actually ships.
+#
+#   docker compose -f docker-compose.build.yaml build
+#   docker compose -f docker-compose.build.yaml up -d
+#
+# Reads the same .env (POSTGRES_*, APP_PORT, BOW_ENCRYPTION_KEY).
+# =============================================================================
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg18   # PG18 + pgvector preinstalled (Phase 8 embeddings/graph)
+    container_name: ca-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-bow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bowpassword}
+      POSTGRES_DB: ${POSTGRES_DB:-bagofwords}
+    volumes:
+      - ca_postgres_data:/var/lib/postgresql   # PG18+: mount the parent (data lands in a major-version subdir), NOT /data
+    ports:
+      - "${POSTGRES_PORT:-5439}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bow} -d ${POSTGRES_DB:-bagofwords}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - ca-network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cityagent-analytics:dev
+    container_name: ca-app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-3007}:3000"
+    environment:
+      - ENVIRONMENT=production
+      - BOW_DATABASE_URL=postgresql://${POSTGRES_USER:-bow}:${POSTGRES_PASSWORD:-bowpassword}@postgres:5432/${POSTGRES_DB:-bagofwords}
+      - BOW_ENCRYPTION_KEY=${BOW_ENCRYPTION_KEY:-}
+      - BOW_LICENSE_KEY=${BOW_LICENSE_KEY:-}
+      - BOW_CONFIG_PATH=/app/bow-config.yaml
+      # Hybrid feature flags — default OFF (:-0) so a fresh deploy == upstream bow.
+      # Toggle any via .env (e.g. HYBRID_QUERY_CACHE=1) then `up -d --force-recreate`.
+      - HYBRID_DUAL_SCHEMA=${HYBRID_DUAL_SCHEMA:-0}
+      - HYBRID_ENGINEER_ASSETS=${HYBRID_ENGINEER_ASSETS:-0}
+      - HYBRID_ANSWER_CACHE=${HYBRID_ANSWER_CACHE:-0}
+      - HYBRID_BRAIN_READ=${HYBRID_BRAIN_READ:-0}
+      - HYBRID_DISTILLER=${HYBRID_DISTILLER:-0}
+      - HYBRID_QUERY_CACHE=${HYBRID_QUERY_CACHE:-0}
+      - HYBRID_SKILLS=${HYBRID_SKILLS:-0}
+      - HYBRID_FEDERATION=${HYBRID_FEDERATION:-0}
+      - HYBRID_BRAIN_GRAPH=${HYBRID_BRAIN_GRAPH:-0}
+      - HYBRID_INSIGHT_DAEMON=${HYBRID_INSIGHT_DAEMON:-0}
+      - HYBRID_QUOTAS=${HYBRID_QUOTAS:-0}
+      - HYBRID_SEMANTIC_LAYER=${HYBRID_SEMANTIC_LAYER:-0}
+      - HYBRID_METRICS_CATALOG=${HYBRID_METRICS_CATALOG:-0}
+    volumes:
+      - ./bow-config.yaml:/app/bow-config.yaml:ro
+      - ca_uploads:/app/backend/uploads
+      - ca_branding:/app/backend/branding_uploads
+      - ca_logs:/app/backend/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+    networks:
+      - ca-network
+
+volumes:
+  ca_postgres_data:
+  ca_uploads:
+  ca_branding:
+  ca_logs:
+
+networks:
+  ca-network:
+    driver: bridge

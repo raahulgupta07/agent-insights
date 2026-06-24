@@ -1,0 +1,27 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dashapp
+  namespace: {{.Release.Namespace}}
+  annotations: {{.Values.ingress.annotations | toJson}}
+spec:
+  ingressClassName: {{.Values.ingress.className}}
+  rules:
+    - host: {{.Values.host}}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: dashapp
+                port:
+                  number: 3000
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{.Values.host}}
+      secretName: {{ .Values.ingress.tls.secretName }}
+  {{- end }}
+{{- end }}

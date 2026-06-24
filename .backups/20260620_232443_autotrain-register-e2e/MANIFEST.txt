@@ -1,0 +1,4 @@
+# backup 20260620_232443 label=autotrain-register-e2e
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       backend/app/services/ingest/register.py
+OK       backend/app/routes/autotrain.py

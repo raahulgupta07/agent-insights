@@ -1,0 +1,74 @@
+id: unit-economics
+name: "Unit Economics (ARPU / CAC payback / LTV:CAC)"
+domain: finance.unit-economics
+
+# Tier A (PLAN_SMART_FIN_PACK): ports clean, runs on our warehouse data, no
+# external feed. Method INVARIANT is data-blind; the binder maps each logical
+# input to one of the agent's real columns.
+
+trigger_hints:
+  - unit economics
+  - arpu
+  - cac payback
+  - ltv
+  - ltv cac
+  - customer lifetime value
+  - contribution margin
+  - cost per acquisition
+  - per customer economics
+  - per order economics
+
+required_inputs:
+  revenue:
+    role: measure
+    synonyms: [revenue, sales, net revenue, gross revenue, turnover, mrr, arr]
+    desc: revenue for the period / cohort
+  variable_cost:
+    role: measure
+    synonyms: [cogs, cost of goods sold, variable cost, cost of sales, cost of revenue, delivery cost]
+    desc: variable cost that scales with each unit / customer
+  units:
+    role: measure
+    synonyms: [customers, active customers, orders, subscribers, accounts, users, transactions]
+    desc: count of customers / orders the period's revenue is spread over
+  acquisition_spend:
+    role: measure
+    synonyms: [marketing spend, sales and marketing, cac spend, acquisition cost, ad spend]
+    optional: true
+  new_units:
+    role: measure
+    synonyms: [new customers, new subscribers, acquisitions, new accounts, signups]
+    optional: true
+  churn_rate:
+    role: measure
+    synonyms: [churn, churn rate, attrition, monthly churn, logo churn]
+    optional: true
+  segment:
+    role: dimension
+    synonyms: [segment, plan, tier, cohort, channel, product, region]
+    optional: true
+
+method_text: |
+  Compute the per-unit economics. For the whole set (and per segment when bound):
+  1. ARPU = revenue / units (average revenue per customer/order).
+  2. Contribution margin per unit = (revenue - variable_cost) / units; and
+     contribution margin % = (revenue - variable_cost) / revenue * 100.
+  3. CAC = acquisition_spend / new_units (only when both are bound).
+  4. CAC payback (periods) = CAC / (ARPU * contribution_margin_pct); flag any
+     payback that exceeds 12 of the period unit.
+  5. Lifetime = 1 / churn_rate when churn_rate is bound (else state the assumption).
+     LTV = ARPU * contribution_margin_pct * lifetime.
+  6. LTV:CAC ratio = LTV / CAC; healthy >= 3, caution 1-3, unprofitable < 1.
+  7. Call out which inputs were unavailable and which figures are therefore
+     assumptions rather than computed. Never invent a CAC if spend is unbound.
+
+output_spec:
+  type: report
+  sections: [Headline unit metrics, Per-segment table, "LTV:CAC verdict", Caveats]
+  per_segment: [arpu, contribution_margin_pct, cac, cac_payback, ltv, ltv_cac_ratio]
+
+format:
+  percentages: "whole numbers, no decimals"
+  ratios: "one decimal, e.g. 3.2x"
+
+eval_goldens: []

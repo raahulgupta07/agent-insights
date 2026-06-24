@@ -1,0 +1,5 @@
+# backup 20260619_135048 label=studio_card_concept1
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       frontend/components/studio/StudioCard.vue
+OK       frontend/pages/studios/index.vue
+OK       locales/en.json

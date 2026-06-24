@@ -1,0 +1,121 @@
+# =============================================================================
+# Dash - Production Docker Compose with Caddy (SSL/HTTPS)
+# =============================================================================
+#
+# Quick Start:
+#   1. Create a .env file with your configuration (see below)
+#   2. Update Caddyfile with your domain
+#   3. Run: docker compose up -d
+#
+# Environment Variables (create .env file):
+#   DOMAIN=yourdomain.com                 # Your domain name (required for SSL)
+#   POSTGRES_USER=dash                    # PostgreSQL username
+#   POSTGRES_PASSWORD=your_secure_pw      # PostgreSQL password (CHANGE THIS!)
+#   POSTGRES_DB=dash                      # Database name
+#   DASH_ENCRYPTION_KEY=                  # Fernet encryption key (44 chars, ends with =)
+#   DASH_LICENSE_KEY=                     # Enterprise license key (optional)
+#
+# Generate encryption key:
+#   python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+#
+# For development without SSL, use: docker compose -f docker-compose.dev.yaml up -d
+#
+# =============================================================================
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg18   # PG18 + pgvector preinstalled (Phase 8 embeddings/graph)
+    container_name: dash-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-dash}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dashpassword}
+      POSTGRES_DB: ${POSTGRES_DB:-dash}
+    volumes:
+      - postgres_data:/var/lib/postgresql   # PG18+: mount parent, not /data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dash} -d ${POSTGRES_DB:-dash}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - dash-network
+
+  app:
+    # Build OUR own image from this repo. NEVER pull bagofwords/bagofwords:latest.
+    # Requires cityagent-base:dev (build via scripts/build.sh). App image = cityagent-analytics:dev.
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cityagent-analytics:dev
+    container_name: dash-app
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      - ENVIRONMENT=production
+      # Database configuration
+      - DASH_DATABASE_URL=postgresql://${POSTGRES_USER:-dash}:${POSTGRES_PASSWORD:-dashpassword}@postgres:5432/${POSTGRES_DB:-dash}
+      # Encryption key
+      - DASH_ENCRYPTION_KEY=${DASH_ENCRYPTION_KEY:-}
+      # Enterprise license key (optional)
+      - DASH_LICENSE_KEY=${DASH_LICENSE_KEY:-}
+      # SMTP credentials (optional — only needed if smtp_settings in dash-config.yaml uses these)
+      # - DASH_SMTP_USERNAME=${DASH_SMTP_USERNAME:-}
+      # - DASH_SMTP_PASSWORD=${DASH_SMTP_PASSWORD:-}
+      # Config path
+      - DASH_CONFIG_PATH=/app/dash-config.yaml
+    volumes:
+      - ./dash-config.yaml:/app/dash-config.yaml:ro
+      - uploads_data:/app/backend/uploads
+      - branding_data:/app/backend/branding_uploads
+      - logs_data:/app/backend/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    networks:
+      - dash-network
+
+  caddy:
+    image: caddy:2.10-alpine
+    container_name: dash-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"  # HTTP/3
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+    networks:
+      - dash-network
+
+volumes:
+  postgres_data:
+    driver: local
+  uploads_data:
+    driver: local
+  branding_data:
+    driver: local
+  logs_data:
+    driver: local
+  caddy_data:
+    driver: local
+  caddy_config:
+    driver: local
+
+networks:
+  dash-network:
+    driver: bridge

@@ -1,0 +1,16 @@
+# backup 20260621_082529 label=autotrain-review-fixes
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       backend/app/ai/code_execution/analytics_engine.py
+OK       backend/app/services/ingest/tenant_schema.py
+OK       backend/app/services/ingest/loader.py
+OK       backend/app/services/ingest/csv_reader.py
+OK       backend/app/services/ingest/excel_reader.py
+OK       backend/app/services/autotrain/orchestrator.py
+OK       backend/app/services/autotrain/qa_gen.py
+OK       backend/app/services/autotrain/codex.py
+OK       backend/app/services/autotrain/connector.py
+OK       backend/app/routes/autotrain.py
+OK       frontend/components/knowledge/KnowledgePanel.vue
+OK       .env
+OK       docker-compose.build.yaml
+OK       docs/AUTOTRAIN_FIX_PLAN.md

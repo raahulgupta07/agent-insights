@@ -1,0 +1,7 @@
+# backup 20260621_103751 label=context-compact
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       backend/app/ai/context/compaction.py
+OK       backend/app/ai/agent_v2.py
+OK       backend/app/settings/hybrid_flags.py
+OK       .env
+OK       docker-compose.build.yaml

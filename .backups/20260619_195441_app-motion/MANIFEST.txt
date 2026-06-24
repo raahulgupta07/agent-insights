@@ -1,0 +1,8 @@
+# backup 20260619_195441 label=app-motion
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       frontend/assets/css/transitions.css
+OK       frontend/nuxt.config.ts
+OK       frontend/pages/dashboards/index.vue
+OK       frontend/pages/knowledge/index.vue
+OK       frontend/components/home/RecentReportCard.vue
+OK       frontend/pages/reports/[id]/index.vue

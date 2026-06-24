@@ -1,0 +1,14 @@
+# backup 20260619_232315 label=phase5-docs-rag
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       backend/app/models/knowledge_doc.py
+OK       backend/alembic/versions/docknow1_knowledge_docs.py
+OK       backend/app/ai/knowledge/docs_index.py
+OK       backend/app/ai/context/sections/docs.py
+OK       backend/app/ai/context/builders/docs_context_builder.py
+OK       backend/app/settings/hybrid_flags.py
+OK       backend/app/ai/context/context_hub.py
+OK       backend/app/ai/agent_v2.py
+OK       backend/app/routes/knowledge.py
+OK       frontend/pages/knowledge/index.vue
+OK       docker-compose.build.yaml
+OK       .env

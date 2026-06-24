@@ -1,0 +1,4 @@
+# backup 20260619_131500 label=studio_data_agent_parity
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       frontend/components/prompt/PromptBoxV2.vue
+OK       frontend/pages/studios/[id]/index.vue

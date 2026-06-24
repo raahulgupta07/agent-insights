@@ -1,0 +1,65 @@
+id: variance-commentary
+name: "Variance Commentary (Actual vs Budget vs Prior)"
+domain: finance.variance
+
+# Tier A. Budget/forecast variance analysis with narrative driver attribution.
+
+trigger_hints:
+  - variance
+  - variance commentary
+  - actual vs budget
+  - budget variance
+  - vs plan
+  - vs forecast
+  - favourable unfavourable
+  - variance analysis
+  - budget to actual
+  - explain the variance
+
+required_inputs:
+  account:
+    role: dimension
+    synonyms: [account, line item, metric, cost centre, department, category, gl account]
+    desc: the account / line each variance is computed for
+  actual:
+    role: measure
+    synonyms: [actual, actuals, actual amount, ytd actual, mtd actual, reported]
+    desc: the actual value for the period
+  budget:
+    role: measure
+    synonyms: [budget, plan, forecast, target, budgeted, planned]
+    desc: the budget / plan value for the same period
+  prior:
+    role: measure
+    synonyms: [prior year, last year, ly, py, prior period, prior]
+    optional: true
+  period:
+    role: dimension
+    synonyms: [period, month, quarter, year, fiscal period, date]
+    optional: true
+
+method_text: |
+  Produce variance commentary per account (and per period when bound):
+  1. Budget variance = actual - budget; pct = variance / abs(budget) * 100.
+  2. Prior variance = actual - prior; pct = variance / abs(prior) * 100 (only
+     when prior is bound).
+  3. Label each: for revenue/income accounts a positive variance is FAVOURABLE,
+     for cost/expense accounts a positive variance is UNFAVOURABLE (infer the
+     account's sign from its name; state the assumption when ambiguous).
+  4. Rank accounts by absolute budget variance; the largest few drive the story.
+  5. Materiality filter: only narrate variances whose magnitude exceeds 5% AND a
+     meaningful absolute amount; net the immaterial ones into "other".
+  6. Write 3-6 sentences of plain commentary: what beat/missed, by how much,
+     the likely driver (volume vs rate vs mix where derivable), and the net effect
+     on the total. Tie the parts back to the consolidated variance.
+
+output_spec:
+  type: report
+  sections: [Variance bridge table, Narrative commentary, Watch items]
+  per_account: [actual, budget, variance, variance_pct, prior_variance_pct, flag]
+
+format:
+  percentages: "whole numbers, no decimals"
+  labels: "FAVOURABLE / UNFAVOURABLE"
+
+eval_goldens: []

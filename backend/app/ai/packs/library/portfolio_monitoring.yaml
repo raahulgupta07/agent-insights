@@ -1,0 +1,73 @@
+id: portfolio-monitoring
+name: "Portfolio Monitoring (PE/VC company KPIs)"
+domain: finance.portfolio
+
+# Tier A. Tracks portfolio-company performance vs plan and prior, with a RAG call.
+
+trigger_hints:
+  - portfolio monitoring
+  - portfolio company
+  - portco
+  - portfolio review
+  - company performance vs plan
+  - covenant compliance
+  - portfolio kpis
+  - value creation tracking
+  - quarterly portfolio review
+
+required_inputs:
+  company:
+    role: dimension
+    synonyms: [company, portfolio company, portco, entity, investment, business, name]
+    desc: the portfolio company each row is about
+  revenue:
+    role: measure
+    synonyms: [revenue, sales, net revenue, turnover, total revenue]
+    desc: company revenue for the period
+  period:
+    role: dimension
+    synonyms: [period, quarter, month, year, fiscal period, date, as of]
+    desc: the reporting period
+  ebitda:
+    role: measure
+    synonyms: [ebitda, adjusted ebitda, operating profit, ebit]
+    optional: true
+  revenue_plan:
+    role: measure
+    synonyms: [revenue budget, revenue plan, revenue target, budgeted revenue, planned revenue]
+    optional: true
+  net_debt:
+    role: measure
+    synonyms: [net debt, total debt, debt, leverage, borrowings]
+    optional: true
+  covenant_threshold:
+    role: measure
+    synonyms: [covenant, covenant threshold, max leverage, leverage covenant]
+    optional: true
+
+method_text: |
+  Build a portfolio monitoring view, one line per company for the latest period
+  (with trend vs the prior period in the data):
+  1. Revenue growth: pct change vs the prior period; and vs revenue_plan when
+     bound (actual / plan - 1).
+  2. EBITDA + EBITDA margin = ebitda / revenue * 100 (when ebitda bound), with the
+     margin trend vs prior period (expanding / compressing).
+  3. Leverage = net_debt / ebitda (when both bound); compare to covenant_threshold
+     and flag BREACH when leverage exceeds it, WATCH when within 10% of it.
+  4. Assign a RAG status per company: GREEN = ahead of plan and no covenant
+     concern; AMBER = modest miss or margin compression or covenant watch; RED =
+     material miss to plan, declining margin, or covenant breach.
+  5. Sort RED first; summarise portfolio-level revenue and weighted EBITDA margin.
+  6. For each AMBER/RED company give a one-line reason. Only use metrics whose
+     inputs are bound; never invent a plan or covenant that isn't in the data.
+
+output_spec:
+  type: dashboard
+  sections: [Portfolio summary, Company scorecard, Watchlist (Amber/Red)]
+  per_company: [revenue, revenue_growth, vs_plan, ebitda_margin, leverage, rag]
+
+format:
+  percentages: "whole numbers, no decimals"
+  rag: "GREEN / AMBER / RED"
+
+eval_goldens: []

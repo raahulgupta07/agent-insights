@@ -1,0 +1,24 @@
+# backup 20260619_080109 label=skills-S1-S5
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       backend/app/models/skill.py
+OK       backend/app/models/skill_file.py
+OK       backend/alembic/env.py
+OK       backend/alembic/versions/sk2frontmttr1_skill_frontmatter_cols.py
+OK       backend/alembic/versions/sk3skillfiles1_skill_files.py
+OK       backend/app/ai/skills/frontmatter.py
+OK       backend/app/ai/skills/loader.py
+OK       backend/app/ai/skills/tool_scope.py
+OK       backend/app/ai/skills/files.py
+OK       backend/app/ai/skills/invocation.py
+OK       backend/app/services/skill_authoring.py
+OK       backend/app/ai/tools/implementations/load_skill.py
+OK       backend/app/ai/tools/implementations/read_skill_file.py
+OK       backend/app/ai/tools/schemas/read_skill_file.py
+OK       backend/app/ai/context/builders/skill_context_builder.py
+OK       backend/app/ai/context/sections/skills.py
+OK       backend/app/routes/skill.py
+OK       backend/tests/unit/test_skill_frontmatter.py
+OK       backend/tests/unit/test_tool_scope.py
+OK       backend/tests/unit/test_skill_files.py
+OK       backend/tests/unit/test_skill_invocation.py
+OK       backend/tests/unit/test_skill_authoring.py

@@ -1,0 +1,12 @@
+# backup 20260619_222921 label=phase6-joingraph
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       backend/app/settings/hybrid_flags.py
+OK       backend/app/ai/context/context_hub.py
+OK       backend/app/ai/agent_v2.py
+OK       backend/app/core/scheduler.py
+OK       backend/main.py
+OK       backend/app/routes/knowledge.py
+OK       frontend/pages/knowledge/index.vue
+OK       .env
+OK       docker-compose.build.yaml
+OK       docs/PLAN_KEPLER.md

@@ -1,0 +1,8 @@
+# backup 20260621_084022 label=autotrain-autofire-fe
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       backend/app/settings/hybrid_flags.py
+OK       backend/app/services/autotrain/connector.py
+OK       backend/app/services/connection_indexing_service.py
+OK       frontend/components/knowledge/KnowledgePanel.vue
+OK       .env
+OK       docker-compose.build.yaml

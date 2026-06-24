@@ -1,0 +1,92 @@
+id: ebitda-good-bad-ugly
+name: "Financial Performance — Exec Summary (Good/Bad/Ugly)"
+domain: finance.exec-summary
+
+# phrases that hint this skill is relevant (router trigger score)
+trigger_hints:
+  - monthly performance
+  - performance summary
+  - exec summary
+  - executive summary
+  - ceo summary
+  - cfo summary
+  - ebitda vs budget
+  - ebitda vs ly
+  - good bad ugly
+  - sector performance
+
+# logical inputs the method needs. The binder maps each to a real column of
+# the agent's pinned source (by name / synonym / role). Non-optional inputs
+# must all bind for the skill to activate on an agent.
+required_inputs:
+  sector:
+    role: dimension
+    synonyms: [business unit, bu, segment, division, sector name]
+    desc: the grouping dimension each summary line is about
+  ebitda_actual:
+    role: measure
+    synonyms: [ebitda mtd, ebitda act, ebitda this year, ebitda current]
+    desc: actual EBITDA for the period
+  ebitda_ly:
+    role: measure
+    synonyms: [ebitda py, ebitda last year, ebitda prior year, ebitda ly]
+    desc: prior-year EBITDA for the same period
+  ebitda_budget:
+    role: measure
+    synonyms: [ebitda bud, ebitda budget, ebitda plan, ebitda target]
+    desc: budgeted EBITDA for the period
+  revenue_actual:
+    role: measure
+    synonyms: [revenue, sales, turnover, revenue mtd]
+    optional: true
+  revenue_ly:
+    role: measure
+    synonyms: [revenue py, revenue last year, sales ly]
+    optional: true
+  revenue_budget:
+    role: measure
+    synonyms: [revenue bud, revenue budget, sales plan]
+    optional: true
+  gm_pct_actual:
+    role: measure
+    synonyms: [gross margin, gm pct, gross margin pct, gm percent]
+    optional: true
+  expense_actual:
+    role: measure
+    synonyms: [total expense, opex, expenses, total cost]
+    optional: true
+
+method_text: |
+  Produce a one-slide executive EBITDA summary by sector. For EACH sector:
+  1. EBITDA vs LY: pct change = (ebitda_actual - ebitda_ly) / abs(ebitda_ly) * 100.
+     Attribute the move to its drivers (Revenue / Gross Margin / Total Expense
+     variances vs LY) where those inputs are bound.
+  2. EBITDA vs Budget: pct = (ebitda_actual - ebitda_budget) / abs(ebitda_budget) * 100.
+     Attribute drivers vs Budget the same way.
+  3. Flag any driver variance whose magnitude exceeds 10% (both comparisons).
+  4. Categorise each sector:
+       GOOD = EBITDA beat BOTH LY AND Budget (both pct >= 0).
+       BAD  = EBITDA beat EITHER LY OR Budget but not both.
+       UGLY = EBITDA missed BOTH LY AND Budget (both pct < 0).
+  5. Consolidated insights: group-level trend, top risks, recommended actions.
+
+output_spec:
+  type: slide
+  sections: [GOOD, BAD, UGLY, "Consolidated Insights"]
+  per_sector:
+    - ebitda_pct_vs_ly
+    - ebitda_pct_vs_budget
+    - budget_key_drivers
+    - ly_key_drivers
+    - key_risk
+  ordering: "within each bucket, worst-to-best by combined variance"
+
+format:
+  font: "Calibri (Body), size 10"
+  percentages: "whole numbers, no decimals"
+  bold_terms: "Sector"
+  variance_flag: ">10% magnitude highlighted"
+
+# Filled at bind time by snapshotting the method on the agent's real data
+# (Phase 1 / auto_evals). Empty here = no golden yet.
+eval_goldens: []

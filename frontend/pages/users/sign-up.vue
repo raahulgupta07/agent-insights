@@ -1,0 +1,286 @@
+<template>
+  <div class="flex h-screen justify-center py-20 px-5 sm:px-0" v-if="pageLoaded">
+    <div class="w-full text-center sm:w-[400px]">
+      <div>
+        <img src="/assets/logo-128.png" alt="Dash" class="h-10 w-10 mx-auto" />
+      </div>
+      <h1 class="font-medium text-3xl mt-4 mb-5">{{ $t('auth.signUp') }}</h1>
+      <div class="px-10 py-6  border border-gray-200 rounded-xl shadow-sm bg-white">
+        <form @submit.prevent='submit' v-if="authMode !== 'sso_only'">
+          <div class="field block mt-3">
+            <input :placeholder="$t('auth.name')" id='name' v-model='name' class="border border-gray-300 rounded-lg px-4 py-2 w-full h-10 text-sm focus:outline-none focus:border-[#C2683F]"/>
+          </div>
+          <div class="field mt-3">
+            <input :placeholder="$t('auth.email')" id='email' v-model='email' class="border border-gray-300 rounded-lg px-4 py-2 w-full h-10 text-sm focus:outline-none focus:border-[#C2683F]"/>
+          </div>
+          <div class="field mt-3">
+            <input type='password' :placeholder="$t('auth.password')" id='password' v-model='password' class="border border-gray-300 rounded-lg px-4 py-2 w-full h-10 text-sm focus:outline-none focus:border-[#C2683F]"/>
+          </div>
+          <p v-if="error_message" v-html="error_message" class="mt-1 text-red-500 text-sm whitespace-pre-line"></p>
+          <div class="field mt-3">
+            <button type='submit' :disabled="isSubmitting" class="px-3 py-2.5 mb-4 text-sm font-medium text-white rounded-lg text-center w-full flex items-center justify-center disabled:bg-gray-400 disabled:cursor-not-allowed bg-[#C2683F] hover:bg-[#A8542F] focus:ring-4 focus:outline-none focus:ring-[#E8C9B5] dark:bg-[#C2683F] dark:hover:bg-[#A8542F] dark:focus:ring-[#E8C9B5]">
+              <template v-if="isSubmitting">
+                <Spinner class="h-5 w-5 me-2" />
+                {{ $t('auth.signingUp') }}
+              </template>
+              <template v-else>{{ $t('auth.signUp') }}</template>
+            </button>
+          </div>
+        </form>
+
+        <div class="mt-3" v-if="authMode !== 'local_only' && (googleSignIn || oidcProviders.length)">
+          <div class="relative" v-if="authMode === 'hybrid'">
+            <div class="absolute inset-0 flex items-center">
+              <div class="w-full border-t border-gray-300"></div>
+            </div>
+            <div class="relative flex justify-center text-sm">
+              <span class="px-2 bg-gray-50 text-gray-500">{{ $t('auth.orContinueWith') }}</span>
+            </div>
+          </div>
+          <div class="mt-3" v-if="googleSignIn">
+            <button @click="signInWithGoogle" :disabled="loadingProvider !== null" class="w-full flex items-center justify-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+              <template v-if="loadingProvider === 'google'">
+                <Spinner class="h-5 w-5 me-2" />
+                {{ $t('auth.redirecting') }}
+              </template>
+              <template v-else>
+                <img src="/llm_providers_icons/google-icon.png" alt="Google logo" class="h-5 w-5 me-2" />
+                {{ $t('auth.signUpWithGoogle') }}
+              </template>
+            </button>
+          </div>
+          <div class="mt-3 space-y-2" v-if="oidcProviders.length">
+            <button
+              v-for="p in oidcProviders"
+              :key="p.name"
+              @click="() => signInWithProvider(p.name)"
+              type="button"
+              :disabled="loadingProvider !== null"
+              class="w-full flex items-center justify-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <template v-if="loadingProvider === p.name">
+                <Spinner class="h-5 w-5 me-2" />
+                {{ $t('auth.redirecting') }}
+              </template>
+              <template v-else>
+                {{ $t('auth.continueWithProvider', { provider: p.name }) }}
+              </template>
+            </button>
+          </div>
+        </div>
+      <div class="mt-3 block text-sm" v-if="authMode !== 'sso_only'">
+        {{ $t('auth.alreadyHaveAccount') }}
+        <NuxtLink to="/users/sign-in" class="text-[#C2683F] hover:text-[#A8542F]">
+          {{ $t('auth.signIn') }}
+        </NuxtLink>
+      </div>
+      </div>
+
+
+      <div class="mt-3 block text-xs border-t border-gray-100 pt-3">
+        {{ $t('auth.termsPrefix') }}
+        <a href="https://bagofwords.com/terms" target="_blank" class="text-[#C2683F]">{{ $t('auth.termsOfService') }}</a> {{ $t('common.and') }}
+        <a href="https://bagofwords.com/privacy" target="_blank" class="text-[#C2683F]">{{ $t('auth.privacyPolicy') }}</a>
+      </div>
+    </div>
+  </div>
+  <div v-else class="flex h-screen items-center justify-center"><Spinner class="h-6 w-6" /></div>
+</template>
+
+<script setup lang="ts">
+import qs from 'qs'
+import { ref, onMounted } from 'vue'
+import Spinner from '~/components/Spinner.vue'
+import { definePageMeta, useAuth, useRuntimeConfig, useRoute } from '#imports'
+const { t } = useI18n()
+const { rawToken } = useAuthState()
+const toast = useToast()
+const route = useRoute()
+
+definePageMeta({
+auth: {
+  unauthenticatedOnly: true,
+  navigateAuthenticatedTo: '/'
+},
+layout: 'users'
+})
+
+const name = ref('');
+const email = ref('');
+const password = ref('');
+const inviteToken = ref('');
+const error_message = ref('')
+
+// Access runtime configuration
+const config = useRuntimeConfig();
+const googleSignIn = ref(config.public.googleSignIn);
+const oidcProviders = ref<{ name: string; enabled: boolean }[]>([])
+const loadingProvider = ref<string | null>(null)
+const pageLoaded = ref(false)
+const isSubmitting = ref(false)
+const authMode = ref<'hybrid'|'local_only'|'sso_only'>('hybrid')
+
+const { signIn, getSession } = useAuth();
+const { ensureOrganization, fetchOrganization } = useOrganization()
+
+// Helper to extract error message from server response
+function extractErrorMessage(error: any, fallback: string): string {
+  const data = error?.data
+  if (!data) return fallback
+
+  // Handle FastAPI validation errors (detail array)
+  if (Array.isArray(data.detail)) {
+    return data.detail.map((d: any) => d.msg || d.message || JSON.stringify(d)).join('\n')
+  }
+  // Handle simple detail string
+  if (typeof data.detail === 'string') {
+    return data.detail
+  }
+  // Handle message field
+  if (data.message) {
+    return data.message
+  }
+  return fallback
+}
+
+// Pre-fill email from URL query parameter
+onMounted(async () => {
+  try {
+    const settings = await $fetch('/api/settings')
+    if (settings?.oidc_providers?.length) {
+      oidcProviders.value = settings.oidc_providers.filter((p: any) => p.enabled)
+    }
+    if (settings?.auth?.mode) {
+      authMode.value = settings.auth.mode
+    }
+  } catch (_) {}
+  const inviteError = route.query.error as string
+  if (inviteError) {
+    error_message.value = inviteError
+  }
+  const emailFromQuery = route.query.email as string
+  if (emailFromQuery) {
+    email.value = emailFromQuery
+  }
+  const tokenFromQuery = route.query.token as string
+  if (tokenFromQuery) {
+    inviteToken.value = tokenFromQuery
+  }
+  // show spinner frame until mounted work finishes
+  await nextTick()
+  pageLoaded.value = true
+})
+
+async function signInWithCredentials(email: string, password: string) {
+  const credentials = {
+    username: email,
+    password: password,
+  };
+
+  try {
+    const response = await $fetch('/api/auth/jwt/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: qs.stringify(credentials),
+    });
+
+    if (!response) {
+      throw new Error('Authentication failed');
+    }
+    rawToken.value = response.access_token
+    await getSession({ force: true })
+
+    // Check if the user has an organization (same as sign-in flow)
+    const org = await fetchOrganization();
+    if (!org || !org.id) {
+      navigateTo('/organizations/new');
+    } else {
+      navigateTo('/');
+    }
+
+  } catch (error) {
+    console.error('Error during authentication:', error);
+  }
+}
+
+async function submit() {
+isSubmitting.value = true
+error_message.value = ''
+const payload: Record<string, string> = {
+  name: name.value,
+  email: email.value,
+  password: password.value
+}
+if (inviteToken.value) {
+  payload.invite_token = inviteToken.value
+}
+
+try {
+  const response = await $fetch('/api/auth/register', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response) {
+    error_message.value = t('auth.registrationError')
+    isSubmitting.value = false
+    return
+  }
+
+  // Add automatic login after successful registration
+  await signInWithCredentials(email.value, password.value)
+
+} catch (error: any) {
+  console.error('Error fetching data:', error);
+  error_message.value = extractErrorMessage(error, t('auth.registrationError'))
+  isSubmitting.value = false
+}
+}
+
+async function signInWithGoogle() {
+try {
+  loadingProvider.value = 'google'
+  const response = await $fetch('/api/auth/google/authorize', {
+    method: 'GET',
+  });
+
+  if (response.authorization_url) {
+    window.location.href = response.authorization_url;
+  }
+} catch (error) {
+  error_message.value = t('auth.googleInitError')
+  loadingProvider.value = null
+}
+}
+
+async function signInWithProvider(name: string) {
+  try {
+    loadingProvider.value = name
+    const response = await $fetch(`/api/auth/${name}/authorize`, { method: 'GET' })
+    if ((response as any)?.authorization_url) {
+      window.location.href = (response as any).authorization_url
+    }
+  } catch (error) {
+    error_message.value = t('auth.providerInitError', { provider: name })
+    loadingProvider.value = null
+  }
+}
+
+async function verifyEmail(email: string) {
+const response = await $fetch('/api/auth/request-verify-token', {
+  method: 'POST',
+  body: {
+    email: email
+  }
+});
+
+if (response) {
+  navigateTo('/users/verify');
+}
+}
+</script>

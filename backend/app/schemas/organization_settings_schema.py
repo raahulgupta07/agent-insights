@@ -1,0 +1,336 @@
+from pydantic import BaseModel, validator, Field
+from typing import Dict, Any, Optional, Union, List
+import json
+from datetime import datetime
+from enum import Enum
+
+class FeatureState(str, Enum):
+    """Explicit states for features"""
+    ENABLED = "enabled"
+    DISABLED = "disabled"
+    LOCKED = "locked"
+
+class FeatureConfig(BaseModel):
+    # enabled: bool = True  # Keep for backward compatibility - REMOVED
+    value: Optional[Any] = None
+    name: str
+    description: str
+    is_lab: bool = False
+    editable: bool = True
+    state: FeatureState = FeatureState.ENABLED # Default state
+
+    @validator('value', pre=True, always=True)
+    def set_default_value_if_none(cls, v, values):
+        """Set default value based on state if value is None"""
+        if v is None:
+            # Default value to True if state is ENABLED, False otherwise
+            return values.get('state', FeatureState.ENABLED) == FeatureState.ENABLED
+        return v
+
+    @validator('state', pre=True, always=True)
+    def set_state_from_value(cls, v, values):
+        """Set state based on value field if state is not provided or applicable"""
+        # If state is already set (e.g., to LOCKED), respect it.
+        if v is not None and v != FeatureState.ENABLED and v != FeatureState.DISABLED:
+            return v
+
+        # Determine state from value if value is boolean
+        value = values.get('value')
+        if isinstance(value, bool):
+            return FeatureState.ENABLED if value else FeatureState.DISABLED
+        # Fallback to ENABLED if value isn't boolean and state isn't set
+        return v or FeatureState.ENABLED
+
+
+    def dict(self, *args, **kwargs) -> Dict[str, Any]:
+        """Ensure state reflects value unless explicitly different (e.g., LOCKED)"""
+        d = super().dict(*args, **kwargs)
+        # Ensure state is consistent with boolean value if not LOCKED
+        if isinstance(self.value, bool) and self.state != FeatureState.LOCKED:
+             d['state'] = FeatureState.ENABLED if self.value else FeatureState.DISABLED
+        # Ensure value is consistent with state if value is boolean
+        if isinstance(self.value, bool):
+             d['value'] = (self.state == FeatureState.ENABLED)
+        return d
+
+    class Config:
+        validate_assignment = True
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "FeatureConfig":
+        """Create a FeatureConfig from a dictionary, with proper defaults."""
+        return cls(**data)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return self.model_dump()
+
+    def merge(self, other: Union[Dict[str, Any], "FeatureConfig"]) -> "FeatureConfig":
+        """Merge with another FeatureConfig or dict, preserving existing values."""
+        if isinstance(other, dict):
+            other_dict = other
+        else:
+            other_dict = other.to_dict()
+
+        current = self.to_dict()
+        current.update(other_dict)
+        return FeatureConfig(**current)
+
+    # @validator('value') # Keep this if specific validation rules are needed later
+    # def validate_value(cls, v, values):
+    #     """Validate that value is appropriate for the feature."""
+    #     # Add any specific validation rules here
+    #     return v
+
+class OrganizationSettingsConfig(BaseModel):
+    # General (workspace) settings
+    class GeneralConfig(BaseModel):
+        ai_analyst_name: str = "City Agent DASH"
+        dash_credit: bool = True
+        # Icon storage fields (disk/object storage)
+        icon_key: Optional[str] = None
+        icon_url: Optional[str] = None
+
+        @validator('ai_analyst_name')
+        def validate_ai_name(cls, v: str) -> str:
+            name = (v or "").strip()
+            if len(name) == 0:
+                raise ValueError("AI analyst name cannot be empty")
+            if len(name) > 50:
+                raise ValueError("AI analyst name must be 50 characters or less")
+            return name
+
+    general: GeneralConfig = GeneralConfig()
+
+    # Locale override for this org. When None, the system default from
+    # dash_config.i18n.default_locale applies. Validated against
+    # dash_config.i18n.enabled_locales at the service layer (not here, to
+    # avoid coupling the schema to runtime config).
+    locale: Optional[str] = None
+
+    # Signup policy (domain allowlist). Gate: full_admin_access.
+    class SignupPolicy(BaseModel):
+        enabled: bool = False
+        allowed_domains: List[str] = []
+        auto_invite_role: str = "member"
+
+    signup_policy: SignupPolicy = SignupPolicy()
+
+    # Update defaults to use 'value' instead of 'enabled'
+    allow_llm_see_data: FeatureConfig = FeatureConfig(value=True, name="Allow LLM to see data", description="Enable LLM to see data as part of the analysis and user queries", is_lab=False, editable=True)
+    enable_training_mode: FeatureConfig = FeatureConfig(value=True, name="Training Mode", description="Enable training mode for admins to work with the agent to build documentation, instructions, semantics and guidlines ", is_lab=False, editable=True)
+    enable_file_upload: FeatureConfig = FeatureConfig(value=True, name="Allow file upload", description="Allow users to upload spreadsheets and documents (xls/pdf) and push their content to the LLM", is_lab=False, editable=True)
+    enable_code_editing: FeatureConfig = FeatureConfig(value=True, name="Allow users to edit and execute the LLM generated code", description="Allow users to edit and execute the LLM generated code", is_lab=False, editable=True)
+    enable_llm_judgement: FeatureConfig = FeatureConfig(value=True, name="Enable LLM Judge", description="Enable LLM to judge the quality of the analysis and user queries", is_lab=False, editable=True)
+    suggest_instructions: FeatureConfig = FeatureConfig(value=True, name="Autogenerate instructions", description="Automatically generate instructions following clarifications provided by the user", is_lab=False, editable=True)
+    auto_suggest_evals: FeatureConfig = FeatureConfig(value=True, name="Auto-suggest evals", description="When a manage-evals user upvotes a response that produced data, the knowledge harness drafts an eval test case (judge + tool calls) into the org's drafts suite for review.", is_lab=False, editable=True)
+    # validate_code: FeatureConfig = FeatureConfig(value=True, name="Validate code", description="Validate the code generated by the LLM", is_lab=False, editable=True)
+    limit_row_count: FeatureConfig = FeatureConfig(value=1000, name="Limit row count", description="Limit the number of rows that can be displayed in tables and data previews. Set to 0 for no limit.", is_lab=False, editable=True)
+
+    @validator('limit_row_count', pre=False, always=True)
+    def validate_limit_row_count(cls, v):
+        """Set state to DISABLED when value is 0 or less (no limit)."""
+        if v.value is not None and isinstance(v.value, (int, float)) and v.value <= 0:
+            v.state = FeatureState.DISABLED
+        return v
+    limit_analysis_steps: FeatureConfig = FeatureConfig(value=6, name="Limit analysis steps", description="Limit the number of analysis steps that can be used in the analysis", is_lab=False, editable=False) # Assuming value is int here
+    limit_code_retries: FeatureConfig = FeatureConfig(value=3, name="Limit code retries", description="Limit the number of times the LLM can retry code generation", is_lab=False, editable=False) # Assuming value is int here
+    query_timeout_seconds: FeatureConfig = FeatureConfig(value=180, name="Query timeout (seconds)", description="Default per-query wall-clock timeout when the agent runs SQL via create_data / inspect_data. A connection's config can override this with its own 'query_timeout_seconds' value.", is_lab=False, editable=True)
+    top_k_schema: FeatureConfig = FeatureConfig(value=10, name="Top K schema", description="The number of schema to sample from the data source in the Agent", is_lab=False, editable=True) # Assuming value is int here
+    top_k_metadata_resources: FeatureConfig = FeatureConfig(value=10, name="Top K metadata resources", description="The number of metadata resources to sample from the data source in the Agent", is_lab=False, editable=True) # Assuming value is int here
+    allow_forks: FeatureConfig = FeatureConfig(value=True, name="Allow Forks", description="Allow users to fork published reports into their own workspace", is_lab=False, editable=True)
+    mcp_enabled: FeatureConfig = FeatureConfig(value=True, name="MCP", description="Enable Model Context Protocol (MCP) endpoint for integration with AI assistants like Cursor, Claude, or others", is_lab=False, editable=True)
+    enable_mcp_tools: FeatureConfig = FeatureConfig(value=True, name="MCP & Custom API Tools", description="Allow connecting external MCP servers and custom API endpoints to data sources as tool providers", is_lab=True, editable=True)
+    enable_web_fetch: FeatureConfig = FeatureConfig(value=False, name="Web Fetch", description="Allow the agent to fetch the contents of public HTTP and HTTPS URLs. Only text-like responses are returned and large bodies are truncated.", is_lab=False, editable=True)
+    max_instructions_in_context: FeatureConfig = FeatureConfig(value=50, name="Max instructions in context", description="Maximum number of instructions to include in AI context. 'Always' instructions are loaded first, then 'intelligent' instructions fill remaining slots.", is_lab=False, editable=True)
+    allow_report_webhooks: FeatureConfig = FeatureConfig(value=True, name="Report Webhooks", description="Allow external systems (GitHub, Jira, generic services) to send events to reports via inbound webhooks. Master switch for the whole feature.", is_lab=False, editable=True)
+    max_webhooks: FeatureConfig = FeatureConfig(value=20, name="Max webhooks", description="Maximum number of active inbound webhooks per organization.", is_lab=False, editable=True)
+    webhook_rate_limit_per_min: FeatureConfig = FeatureConfig(value=60, name="Webhook rate limit (per minute)", description="Maximum inbound webhook deliveries accepted per minute per organization. Excess deliveries are rejected with 429.", is_lab=False, editable=True)
+    step_retention_days: FeatureConfig = FeatureConfig(value=14, name="Widget Data Retention Days", description="Number of days to retain widgets data before purging.", is_lab=False, editable=True)
+    enable_excel_addin: FeatureConfig = FeatureConfig(value=True, name="Excel Add-in", description="Enable the built-in Excel Add-in so users can sideload the manifest directly from this instance", is_lab=False, editable=True)
+
+    ai_features: Dict[str, FeatureConfig] = {
+        # Update defaults to use 'value' instead of 'enabled'
+        "planner": FeatureConfig(value=True, name="Planner", description="Orchestrates analysis by breaking down user requests into actionable steps", is_lab=False, editable=False),
+        "coder": FeatureConfig(value=True, name="Coder", description="Translates data models into executable Python code for data processing", is_lab=False, editable=False),
+        "validator": FeatureConfig(value=True, name="Validator", description="Validates code safety and integrity and its data model compatibility", is_lab=False, editable=True),
+        "dashboard_designer": FeatureConfig(value=True, name="Dashboard Designer", description="Creates layout and organization of dashboard elements", is_lab=False),
+        "analyze_data": FeatureConfig(value=False, name="Analyze Data", description="Provides natural language responses to user questions about their data", is_lab=False, editable=False),
+        "code_reviewer": FeatureConfig(value=False, name="Code Reviewer", description="Allow users to get feedback on their code", is_lab=False), # Changed enabled=True to value=False based on previous value
+        "search_context": FeatureConfig(value=True, name="Search Context", description="Allow users to search through metadata, context, and data models", is_lab=False),
+    }
+
+
+class OrganizationSettingsBase(BaseModel):
+    organization_id: str
+    config: OrganizationSettingsConfig
+
+class OrganizationSettingsCreate(OrganizationSettingsBase):
+    pass
+
+class OrganizationSettingsUpdate(BaseModel):
+    config: Optional[Dict[str, Any]] = None
+
+class OrganizationSettingsSchema(OrganizationSettingsBase):
+    id: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class SignupPolicySchema(BaseModel):
+    """Read/write shape for the per-org signup policy."""
+    enabled: bool = False
+    allowed_domains: List[str] = []
+    auto_invite_role: str = "member"
+
+
+class OrgSmtpSchema(BaseModel):
+    """Read shape for the org's SMTP server (the password is never returned)."""
+    enabled: bool = False
+    host: Optional[str] = None
+    port: int = 587
+    security: str = "starttls"  # "starttls" | "ssl" | "none"
+    username: Optional[str] = None
+    password_set: bool = False
+    from_address: Optional[str] = None
+    from_name: Optional[str] = None
+    # Advanced TLS: when False, skip certificate verification (self-signed /
+    # internal CA relays). Mirrors dash-config's global SMTP ``validate_certs``.
+    validate_certs: bool = True
+
+
+class OrgSmtpUpdate(BaseModel):
+    """Write shape; ``password`` is only sent when (re)setting it.
+
+    Username/password are optional — relays that accept unauthenticated mail
+    from trusted hosts (mirroring dash-config's ``use_credentials=False``) just
+    leave them blank and DASH skips SMTP AUTH.
+    """
+    enabled: bool = False
+    host: Optional[str] = None
+    port: int = 587
+    security: str = "starttls"
+    username: Optional[str] = None
+    password: Optional[str] = None
+    from_address: Optional[str] = None
+    from_name: Optional[str] = None
+    validate_certs: bool = True
+
+
+# ---------------------------------------------------------------------------
+# LDAP schemas (org-scoped, managed from the UI)
+# ---------------------------------------------------------------------------
+
+class OrgLdapSchema(BaseModel):
+    """Read shape for the org's LDAP config (bind_password is never returned)."""
+    enabled: bool = False
+    url: Optional[str] = None
+    bind_dn: Optional[str] = None
+    bind_password_set: bool = False
+    use_ssl: bool = True
+    start_tls: bool = False
+    base_dn: Optional[str] = None
+    user_search_base: Optional[str] = None
+    user_search_filter: str = "(objectClass=person)"
+    user_email_attribute: str = "mail"
+    user_name_attribute: str = "displayName"
+    group_search_base: Optional[str] = None
+    group_search_filter: str = "(objectClass=group)"
+    group_name_attribute: str = "cn"
+    group_member_attribute: str = "member"
+    group_member_format: str = "dn"
+    sync_interval_minutes: int = 60
+    auto_provision_users: bool = False
+    connection_timeout: int = 10
+    page_size: int = 500
+
+
+class OrgLdapUpdate(BaseModel):
+    """Write shape; ``bind_password`` is only sent when (re)setting it."""
+    enabled: bool = False
+    url: Optional[str] = None
+    bind_dn: Optional[str] = None
+    bind_password: Optional[str] = None
+    use_ssl: bool = True
+    start_tls: bool = False
+    base_dn: Optional[str] = None
+    user_search_base: Optional[str] = None
+    user_search_filter: str = "(objectClass=person)"
+    user_email_attribute: str = "mail"
+    user_name_attribute: str = "displayName"
+    group_search_base: Optional[str] = None
+    group_search_filter: str = "(objectClass=group)"
+    group_name_attribute: str = "cn"
+    group_member_attribute: str = "member"
+    group_member_format: str = "dn"
+    sync_interval_minutes: int = 60
+    auto_provision_users: bool = False
+    connection_timeout: int = 10
+    page_size: int = 500
+
+
+# ---------------------------------------------------------------------------
+# SSO schemas (instance-level, stored under the first org)
+# ---------------------------------------------------------------------------
+
+class OrgSsoGoogleSchema(BaseModel):
+    enabled: bool = False
+    client_id: Optional[str] = None
+    client_secret_set: bool = False
+
+
+class OrgSsoOidcProviderSchema(BaseModel):
+    name: str
+    label: Optional[str] = None
+    enabled: bool = False
+    issuer: Optional[str] = None
+    client_id: Optional[str] = None
+    client_secret_set: bool = False
+    scopes: List[str] = ["openid", "profile", "email"]
+    sync_groups: bool = False
+    group_claim: str = "groups"
+
+
+class OrgSsoSchema(BaseModel):
+    """Read shape for the org's SSO config."""
+    auth_mode: str = "hybrid"
+    google: OrgSsoGoogleSchema = OrgSsoGoogleSchema()
+    oidc: List[OrgSsoOidcProviderSchema] = []
+
+
+class OrgSsoGoogleUpdate(BaseModel):
+    """Write shape for Google OAuth settings."""
+    enabled: bool = False
+    client_id: Optional[str] = None
+    client_secret: Optional[str] = None
+
+
+class OrgSsoOidcProviderUpdate(BaseModel):
+    """Write shape for a single OIDC provider."""
+    name: str
+    label: Optional[str] = None
+    enabled: bool = False
+    issuer: Optional[str] = None
+    client_id: Optional[str] = None
+    client_secret: Optional[str] = None
+    scopes: List[str] = ["openid", "profile", "email"]
+    sync_groups: bool = False
+    group_claim: str = "groups"
+
+
+class OrgSsoOidcUpdate(BaseModel):
+    """Write shape for the full list of OIDC providers."""
+    providers: List[OrgSsoOidcProviderUpdate] = []
+
+
+class OrgSsoAuthModeUpdate(BaseModel):
+    """Write shape for the auth mode setting."""
+    mode: str  # local_only | sso_only | hybrid
+
+
+class OrgSignupEnabledSchema(BaseModel):
+    """Read/write shape for the public signup enabled toggle."""
+    enabled: bool = False

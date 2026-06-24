@@ -1,0 +1,1480 @@
+from __future__ import annotations
+
+from typing import Optional, List
+
+from pydantic import BaseModel, Field, model_validator
+
+
+# PostgreSQL
+class PostgreSQLCredentials(BaseModel):
+    user: str = Field(..., title="User", description="", json_schema_extra={"ui:type": "string"})
+    # Password can be empty for some deployments; treat as optional/blank-allowed
+    password: str = Field("", title="Password", description="", json_schema_extra={"ui:type": "password"})
+
+#
+# OracleDB
+#
+class OracleCredentials(BaseModel):
+    user: str = Field(..., title="User", description="", json_schema_extra={"ui:type": "string"})
+    password: str = Field(..., title="Password", description="", json_schema_extra={"ui:type": "password"})
+
+
+class OracleConfig(BaseModel):
+    host: str = Field(..., title="Host", description="", json_schema_extra={"ui:type": "string"})
+    port: int = Field(1521, ge=1, le=65535, title="Port", description="", json_schema_extra={"ui:type": "number"})
+    service_name: str = Field(..., title="Service Name", description="Oracle service name (not SID)", json_schema_extra={"ui:type": "string"})
+    schema: Optional[str] = Field(
+        None,
+        title="Schema",
+        description="Optional schema or comma-separated list of schemas",
+        json_schema_extra={"ui:type": "string"}
+    )
+
+
+class PostgreSQLConfig(BaseModel):
+    host: str = Field(..., title="Host", description="", json_schema_extra={"ui:type": "string"})
+    port: int = Field(5432, ge=1, le=65535, title="Port", description="", json_schema_extra={"ui:type": "number"})
+    database: str = Field(..., title="Database", description="", json_schema_extra={"ui:type": "string"})
+    schema: Optional[str] = Field(
+        None,
+        title="Schema",
+        description="Optional schema or comma-separated list of schemas",
+        json_schema_extra={"ui:type": "string"}
+    )
+
+
+# SQLite (local file database)
+class SQLiteCredentials(BaseModel):
+    class Config:
+        extra = "allow"
+
+
+class SQLiteConfig(BaseModel):
+    database: str = Field(
+        ...,
+        title="Database Path",
+        description="Absolute path to SQLite .db/.sqlite file. Example: /data/mydb.sqlite",
+        json_schema_extra={"ui:type": "string"}
+    )
+
+
+# MySQL/MariaDB/MSSQL - Combined since they share the same structure
+class SQLCredentials(BaseModel):
+    user: Optional[str] = Field(
+        None,
+        title="User",
+        description="Leave blank to use anonymous database access.",
+        json_schema_extra={"ui:type": "string"},
+    )
+    password: Optional[str] = Field(
+        None,
+        title="Password",
+        description="Leave blank to use anonymous database access or empty password.",
+        json_schema_extra={"ui:type": "password"},
+    )
+
+    @model_validator(mode="after")
+    def validate_user_password(cls, model: "SQLCredentials") -> "SQLCredentials":
+        if model.password not in (None, "") and model.user in (None, ""):
+            raise ValueError("A user must be provided when supplying a password.")
+        return model
+
+
+class SQLConfig(BaseModel):
+    host: str = Field(..., title="Host", description="", json_schema_extra={"ui:type": "string"})
+    port: int = Field(..., ge=1, le=65535, title="Port", description="", json_schema_extra={"ui:type": "number"})
+    database: str = Field(..., title="Database", description="", json_schema_extra={"ui:type": "string"})
+
+
+# Snowflake
+class SnowflakeCredentials(BaseModel):
+    user: str = Field(..., title="User", description="", json_schema_extra={"ui:type": "string"})
+    password: str = Field(..., title="Password", description="", json_schema_extra={"ui:type": "password"})
+
+
+class SnowflakeKeypairCredentials(BaseModel):
+    user: str = Field(..., title="User", description="", json_schema_extra={"ui:type": "string"})
+    private_key_pem: str = Field(
+        ...,
+        title="Private Key (PEM)",
+        description="PEM-encoded RSA private key used for Snowflake key pair authentication",
+        json_schema_extra={"ui:type": "textarea"},
+    )
+    private_key_passphrase: Optional[str] = Field(
+        None,
+        title="Private Key Passphrase",
+        description="Passphrase for the encrypted private key, if applicable",
+        json_schema_extra={"ui:type": "password"},
+    )
+
+
+class SnowflakeConfig(BaseModel):
+    account: str = Field(..., title="Account", description="The unique account identifier. For example: ABCDEF-GHIJKL", json_schema_extra={"ui:type": "string"})
+    warehouse: str = Field(..., title="Warehouse", description="", json_schema_extra={"ui:type": "string"})
+    database: str = Field(..., title="Database", description="", json_schema_extra={"ui:type": "string"})
+    schema: str = Field(..., title="Schema", description="Can be a comma-separated list of schemas", json_schema_extra={"ui:type": "string"})
+    role: Optional[str] = Field(
+        None,
+        title="Role",
+        description="Optional Snowflake role to use for this connection",
+        json_schema_extra={"ui:type": "string"},
+    )
+
+
+# BigQuery - credentials_json already contains all auth info
+class BigQueryCredentials(BaseModel):
+    credentials_json: str = Field(..., title="Service Account JSON", description="", json_schema_extra={"ui:type": "textarea"})
+    oauth_client_id: Optional[str] = Field(
+        None,
+        title="OAuth Client ID",
+        description="Google OAuth 2.0 Client ID for user sign-in (from Google Cloud Console > Credentials > OAuth 2.0 Client IDs)",
+        json_schema_extra={"ui:type": "string"}
+    )
+    oauth_client_secret: Optional[str] = Field(
+        None,
+        title="OAuth Client Secret",
+        description="Google OAuth 2.0 Client Secret for user sign-in",
+        json_schema_extra={"ui:type": "password"}
+    )
+
+
+class BigQueryConfig(BaseModel):
+    project_id: str = Field(..., title="Project ID", description="", json_schema_extra={"ui:type": "string"})
+    dataset: str = Field(..., title="Dataset", description="", json_schema_extra={"ui:type": "string"})
+    maximum_bytes_billed: Optional[int] = Field(
+        None,
+        title="Max Bytes Billed",
+        description="Limit the number of bytes billed for the query. Keep blank to disable",
+        json_schema_extra={"ui:type": "number"}
+    )
+    use_query_cache: bool = Field(
+        False,
+        title="Use Query Cache",
+        description="Allow returning cached results if available",
+        json_schema_extra={"ui:type": "boolean"}
+    )
+
+
+# NetSuite - all auth related fields should be in credentials
+class NetSuiteCredentials(BaseModel):
+    account_id: str = Field(..., title="Account ID", description="", json_schema_extra={"ui:type": "string"})
+    consumer_key: str = Field(..., title="Consumer Key", description="", json_schema_extra={"ui:type": "string"})
+    consumer_secret: str = Field(..., title="Consumer Secret", description="", json_schema_extra={"ui:type": "password"})
+    token_id: str = Field(..., title="Token ID", description="", json_schema_extra={"ui:type": "string"})
+    token_secret: str = Field(..., title="Token Secret", description="", json_schema_extra={"ui:type": "password"})
+
+
+class NetSuiteConfig(BaseModel):
+    table_filter: Optional[str] = Field(
+        None,
+        title="Table Filter",
+        description="Optional comma-separated list of table names to include in schema discovery. If empty, discovers all tables.",
+        json_schema_extra={"ui:type": "textarea"}
+    )
+
+
+# Clickhouse
+class ClickhouseCredentials(BaseModel):
+    user: str = Field(..., title="User", description="", json_schema_extra={"ui:type": "string"})
+    password: str = Field(..., title="Password", description="", json_schema_extra={"ui:type": "password"})
+
+
+class ClickhouseConfig(BaseModel):
+    host: str = Field(..., title="Host", description="", json_schema_extra={"ui:type": "string"})
+    port: int = Field(8123, ge=1, le=65535, title="Port", description="", json_schema_extra={"ui:type": "number"})
+    database: Optional[str] = Field(
+        None,
+        title="Database",
+        description="Can be a comma-separated list of databases. If not provided, will use all databases.",
+        json_schema_extra={"ui:type": "string"}
+    )
+
+    secure: bool = Field(True, title="Secure", description="", json_schema_extra={"ui:type": "boolean"})
+
+
+# ADP - all fields are sensitive
+class ADPCredentials(BaseModel):
+    client_id: str = Field(..., title="Client ID", description="", json_schema_extra={"ui:type": "string"})
+    client_secret: str = Field(..., title="Client Secret", description="", json_schema_extra={"ui:type": "password"})
+    username: str = Field(..., title="Username", description="", json_schema_extra={"ui:type": "string"})
+    password: str = Field(..., title="Password", description="", json_schema_extra={"ui:type": "password"})
+
+
+class ADPConfig(BaseModel):
+    pass
+
+
+# Salesforce
+class SalesforceCredentials(BaseModel):
+    username: str = Field(..., title="Username", description="", json_schema_extra={"ui:type": "string"})
+    password: str = Field(..., title="Password", description="", json_schema_extra={"ui:type": "password"})
+    security_token: str = Field(..., title="Security Token", description="", json_schema_extra={"ui:type": "string"})
+
+
+class SalesforceConfig(BaseModel):
+    sandbox: bool = Field(False, title="Sandbox", description="", json_schema_extra={"ui:type": "boolean"})
+    domain: str = Field("login", title="Domain", description="", json_schema_extra={"ui:type": "string"})
+
+
+# Service Demo
+class ServiceDemoCredentials(BaseModel):
+    access_key: str = Field(..., title="Access Key", description="", json_schema_extra={"ui:type": "string"})
+    secret_key: str = Field(..., title="Secret Key", description="", json_schema_extra={"ui:type": "password"})
+
+
+class ServiceDemoConfig(BaseModel):
+    region: str = Field(..., title="Region", description="", json_schema_extra={"ui:type": "string"})
+
+
+# Update the specific config classes to use the new base
+class MySQLConfig(SQLConfig):
+    port: int = Field(3306, ge=1, le=65535, title="Port", description="", json_schema_extra={"ui:type": "number"})
+
+
+class MariadbConfig(SQLConfig):
+    port: int = Field(3306, ge=1, le=65535, title="Port", description="", json_schema_extra={"ui:type": "number"})
+
+
+class MssqlConfig(SQLConfig):
+    port: int = Field(1433, ge=1, le=65535, title="Port", description="", json_schema_extra={"ui:type": "number"})
+    schema: Optional[str] = Field(
+        None,
+        title="Schema",
+        description="Optional schema or comma-separated list of schemas",
+        json_schema_extra={"ui:type": "string"}
+    )
+    odbc_driver: int = Field(
+        18,
+        title="ODBC Driver Version",
+        description="ODBC driver version (17 or 18). Use 17 for SQL Server 2008 compatibility",
+        json_schema_extra={"ui:type": "select", "ui:options": [17, 18]}
+    )
+    encrypt: bool = Field(
+        True,
+        title="Encrypt Connection",
+        description="Encrypt the connection. Disable for SQL Server 2008 without TLS support",
+        json_schema_extra={"ui:type": "boolean"}
+    )
+    additional_params: Optional[dict] = Field(
+        default_factory=dict,
+        title="Additional Connection Parameters",
+        description="Extra ODBC keywords sent as-is, e.g. ApplicationIntent=ReadOnly. Security keys (Encrypt, credentials, driver) cannot be overridden.",
+        json_schema_extra={"ui:type": "keyvalue"}
+    )
+
+
+class SybaseConfig(SQLConfig):
+    port: int = Field(2638, ge=1, le=65535, title="Port", description="", json_schema_extra={"ui:type": "number"})
+
+
+# Presto
+class PrestoCredentials(BaseModel):
+    user: str = Field(..., title="User", description="", json_schema_extra={"ui:type": "string"})
+    password: str = Field(..., title="Password", description="", json_schema_extra={"ui:type": "password"})
+
+
+class PrestoConfig(BaseModel):
+    host: str = Field(..., title="Host", description="", json_schema_extra={"ui:type": "string"})
+    port: int = Field(8080, ge=1, le=65535, title="Port", description="", json_schema_extra={"ui:type": "number"})
+    catalog: str = Field(..., title="Catalog", description="", json_schema_extra={"ui:type": "string"})
+    schema: str = Field(..., title="Schema", description="", json_schema_extra={"ui:type": "string"})
+    protocol: str = Field("http", title="Protocol", description="", json_schema_extra={"ui:type": "string"})
+
+
+# Trino
+class TrinoCredentials(BaseModel):
+    user: str = Field(..., title="User", description="", json_schema_extra={"ui:type": "string"})
+    password: str = Field("", title="Password", description="Required for HTTPS only", json_schema_extra={"ui:type": "password"})
+
+
+class TrinoConfig(BaseModel):
+    host: str = Field(..., title="Host", description="", json_schema_extra={"ui:type": "string"})
+    port: int = Field(8080, ge=1, le=65535, title="Port", description="", json_schema_extra={"ui:type": "number"})
+    catalog: str = Field(..., title="Catalog", description="", json_schema_extra={"ui:type": "string"})
+    schema: str = Field(..., title="Schema", description="", json_schema_extra={"ui:type": "string"})
+    protocol: str = Field("http", title="Protocol", description="http or https", json_schema_extra={"ui:type": "string"})
+
+
+# Google Analytics
+class GoogleAnalyticsCredentials(BaseModel):
+    service_account_file: str = Field(..., title="Service Account JSON", description="", json_schema_extra={"ui:type": "textarea"})
+    property_id: str = Field(..., title="Property ID", description="", json_schema_extra={"ui:type": "string"})
+
+
+class GoogleAnalyticsConfig(BaseModel):
+    pass
+
+
+# GCP
+class GCPCredentials(BaseModel):
+    credentials_json: str = Field(..., title="Credentials JSON", description="", json_schema_extra={"ui:type": "textarea"})
+    project_id: str = Field(..., title="Project ID", description="", json_schema_extra={"ui:type": "string"})
+
+
+class GCPConfig(BaseModel):
+    pass
+
+
+# AWS Cost
+class AWSCredentials(BaseModel):
+    access_key: str = Field(..., title="Access Key", description="", json_schema_extra={"ui:type": "string"})
+    secret_key: str = Field(..., title="Secret Key", description="", json_schema_extra={"ui:type": "password"})
+
+
+class AWSCostCredentials(AWSCredentials):
+    pass
+
+
+class AWSCostConfig(BaseModel):
+    region_name: str = Field(..., title="Region", description="", json_schema_extra={"ui:type": "string"})
+
+
+# AWS Athena
+class AWSAthenaCredentials(BaseModel):
+    access_key: str = Field(..., title="Access Key", description="", json_schema_extra={"ui:type": "string"})
+    secret_key: str = Field(..., title="Secret Key", description="", json_schema_extra={"ui:type": "password"})
+    role_arn: str = Field(..., title="Role ARN", description="", json_schema_extra={"ui:type": "string"})
+
+
+class AWSAthenaDefaultCredentials(BaseModel):
+    """No credentials required — boto3 resolves via its default chain (env vars, instance profile, IRSA, etc.)."""
+    class Config:
+        extra = 'allow'
+
+
+class AWSAthenaConfig(BaseModel):
+    region: str = Field(..., title="Region", description="", json_schema_extra={"ui:type": "string"})
+    database: str = Field(..., title="Database", description="", json_schema_extra={"ui:type": "string"})
+    workgroup: str = Field("primary", title="Workgroup", description="", json_schema_extra={"ui:type": "string"})
+    s3_output_location: Optional[str] = Field(None, title="S3 Output Location", description="Leave blank if your workgroup has a default output location", json_schema_extra={"ui:type": "string"})
+    data_source: str = Field("AwsDataCatalog", title="Data Source", description="", json_schema_extra={"ui:type": "string"})
+
+
+# Vertica
+class VerticaCredentials(BaseModel):
+    user: str = Field(..., title="User", description="", json_schema_extra={"ui:type": "string"})
+    password: str = Field(..., title="Password", description="", json_schema_extra={"ui:type": "password"})
+
+
+class VerticaConfig(BaseModel):
+    host: str = Field(..., title="Host", description="", json_schema_extra={"ui:type": "string"})
+    port: int = Field(5433, ge=1, le=65535, title="Port", description="", json_schema_extra={"ui:type": "number"})
+    database: str = Field(..., title="Database", description="", json_schema_extra={"ui:type": "string"})
+    schema: str = Field("public", title="Schema", description="", json_schema_extra={"ui:type": "string"})
+
+
+# Teradata
+class TeradataCredentials(BaseModel):
+    user: str = Field(..., title="User", description="", json_schema_extra={"ui:type": "string"})
+    password: str = Field(..., title="Password", description="", json_schema_extra={"ui:type": "password"})
+
+
+class TeradataConfig(BaseModel):
+    host: str = Field(..., title="Host", description="Teradata system hostname or IP (e.g. the TPA/COP name)", json_schema_extra={"ui:type": "string"})
+    port: int = Field(1025, ge=1, le=65535, title="Port", description="Teradata listener port (default 1025)", json_schema_extra={"ui:type": "number"})
+    database: str = Field(
+        ...,
+        title="Database",
+        description="Database to query. In Teradata a database is the namespace (≈ schema). Can be a comma-separated list.",
+        json_schema_extra={"ui:type": "string"},
+    )
+    logmech: str = Field(
+        "TD2",
+        title="Logon Mechanism",
+        description="Authentication mechanism. TD2 (default) for native users; LDAP/KRB5/TDNEGO for directory-based logon (common on-prem).",
+        json_schema_extra={"ui:type": "select", "ui:options": ["TD2", "LDAP", "KRB5", "TDNEGO"]},
+    )
+
+
+# AWS Redshift
+class AwsRedshiftUserPassCredentials(BaseModel):
+    user: str = Field(..., title="User", description="", json_schema_extra={"ui:type": "string"})
+    password: str = Field(..., title="Password", description="", json_schema_extra={"ui:type": "password"})
+
+
+class AwsRedshiftIAMCredentials(BaseModel):
+    user: str = Field(..., title="User", description="", json_schema_extra={"ui:type": "string"})
+    access_key: str = Field(..., title="Access Key", description="", json_schema_extra={"ui:type": "string"})
+    secret_key: str = Field(..., title="Secret Key", description="", json_schema_extra={"ui:type": "password"})
+
+class AwsRedshiftAssumeRoleCredentials(BaseModel):
+    user: str = Field(..., title="User", description="", json_schema_extra={"ui:type": "string"})
+    role_arn: str = Field(..., title="Role ARN", description="", json_schema_extra={"ui:type": "string"})
+
+
+
+class AwsRedshiftConfig(BaseModel):
+    host: str = Field(..., title="Host", description="", json_schema_extra={"ui:type": "string"})
+    port: int = Field(5439, ge=1, le=65535, title="Port", description="", json_schema_extra={"ui:type": "number"})
+    database: str = Field(..., title="Database", description="", json_schema_extra={"ui:type": "string"})
+    schema: str = Field("public", title="Schema", description="", json_schema_extra={"ui:type": "string"})
+    region: Optional[str] = Field(None, title="Region", description="", json_schema_extra={"ui:type": "string"})
+    cluster_identifier: Optional[str] = Field(None, title="Cluster Identifier", description="", json_schema_extra={"ui:type": "string"})
+    ssl_mode: str = Field("require", title="SSL Mode", description="", json_schema_extra={"ui:type": "string"})
+    timeout: int = Field(30, ge=1, le=300, title="Timeout", description="", json_schema_extra={"ui:type": "number"})
+
+
+# Tableau
+class TableauPATCredentials(BaseModel):
+    pat_name: str | None = Field(None, title="PAT Name", description="", json_schema_extra={"ui:type": "string"})
+    pat_token: str | None = Field(None, title="PAT Token", description="", json_schema_extra={"ui:type": "password"})
+
+
+
+class TableauConfig(BaseModel):
+    server_url: str = Field(..., title="Server URL", description="", json_schema_extra={"ui:type": "string"})
+    site_name: Optional[str] = Field(None, title="Site Name", description="", json_schema_extra={"ui:type": "string"})
+    verify_ssl: bool = Field(True, title="Verify SSL", description="", json_schema_extra={"ui:type": "boolean"})
+    timeout_sec: int = Field(30, ge=1, le=300, title="Timeout (sec)", description="", json_schema_extra={"ui:type": "number"})
+    default_project_id: Optional[str] = Field(None, title="Default Project ID", description="", json_schema_extra={"ui:type": "string"})
+    api_version: str = Field("3.21", title="API Version", description="Tableau REST API version. Change only for older on-prem Tableau Server.", json_schema_extra={"ui:type": "string"})
+    #include_datasource_ids: Optional[List[str]] = None
+
+
+# DuckDB (files via object stores or local)
+class DuckDBNoAuthCredentials(BaseModel):
+    # Allow extra so creds provided without auth_type (e.g., aws keys) are preserved during validation
+    class Config:
+        extra = 'allow'
+
+
+class DuckDBAwsCredentials(BaseModel):
+    access_key: str = Field(..., title="AWS Access Key", description="", json_schema_extra={"ui:type": "string"})
+    secret_key: str = Field(..., title="AWS Secret Key", description="", json_schema_extra={"ui:type": "password"})
+    region: Optional[str] = Field(None, title="Region", description="", json_schema_extra={"ui:type": "string"})
+    session_token: Optional[str] = Field(None, title="Session Token (optional)", description="For temporary credentials", json_schema_extra={"ui:type": "password"})
+
+
+class DuckDBGcpCredentials(BaseModel):
+    service_account_json: str = Field(..., title="GCP Service Account JSON", description="", json_schema_extra={"ui:type": "textarea"})
+
+
+class DuckDBAzureCredentials(BaseModel):
+    connection_string: str = Field(..., title="Azure Connection String", description="SAS or account key connection string", json_schema_extra={"ui:type": "string"})
+
+
+class DuckDBConfig(BaseModel):
+    uris: str = Field(
+        ...,
+        title="URI/Path",
+        description="Path to local .duckdb file, or URI pattern per line for parquet/csv files. Supports wildcards. Examples: /data/my.duckdb, s3://, az://",
+        json_schema_extra={"ui:type": "textarea"}
+    )
+
+
+# Spreadsheet (uploaded Excel/CSV → queryable Data Agent via in-memory DuckDB)
+class SpreadsheetNoAuthCredentials(BaseModel):
+    # Credential-less: the file lives on the server; nothing to authenticate.
+    class Config:
+        extra = 'allow'
+
+
+class SpreadsheetConfig(BaseModel):
+    file_id: str = Field(
+        ...,
+        title="File",
+        description="ID of the uploaded File (from POST /api/files) backing this spreadsheet data source.",
+        json_schema_extra={"ui:type": "string"},
+    )
+    sheet_names: Optional[List[str]] = Field(
+        None,
+        title="Sheets",
+        description="Optional subset of Excel sheet names to load. When omitted, all sheets (or the CSV) are loaded.",
+        json_schema_extra={"ui:type": "string"},
+    )
+    # Resolved server-side path of the uploaded file. Set by the create flow so
+    # the client can read the file without a DB lookup; not user-supplied.
+    path: Optional[str] = Field(
+        None,
+        title="Path",
+        description="Server-side path of the uploaded file (set automatically).",
+        json_schema_extra={"ui:type": "string"},
+    )
+
+# Apache Pinot
+class PinotConfig(BaseModel):
+    host: str = Field(..., title="Host", description="", json_schema_extra={"ui:type": "string"})
+    port: int = Field(8099, ge=1, le=65535, title="Port", description="", json_schema_extra={"ui:type": "number"})
+    secure: bool = Field(True, title="Secure", description="Use HTTPS when true", json_schema_extra={"ui:type": "boolean"})
+    path: str = Field("/query/sql", title="Path", description="Broker SQL endpoint path", json_schema_extra={"ui:type": "string"})
+    controller: Optional[str] = Field(
+        None,
+        title="Controller URL",
+        description="Optional controller base URL, e.g. http://controller-host:9000",
+        json_schema_extra={"ui:type": "string"}
+    )
+    query_options: Optional[str] = Field(
+        None,
+        title="Query Options",
+        description="Optional queryOptions string, e.g. useMultistageEngine=true",
+        json_schema_extra={"ui:type": "string"}
+    )
+
+
+# Apache Druid
+class DruidConfig(BaseModel):
+    host: str = Field(..., title="Host", description="Broker or Router host", json_schema_extra={"ui:type": "string"})
+    port: int = Field(8082, ge=1, le=65535, title="Port", description="Broker SQL port (8082) or Router port (8888)", json_schema_extra={"ui:type": "number"})
+    secure: bool = Field(False, title="Secure", description="Use HTTPS when true", json_schema_extra={"ui:type": "boolean"})
+    path: str = Field("/druid/v2/sql/", title="Path", description="Druid SQL endpoint path", json_schema_extra={"ui:type": "string"})
+    schema: Optional[str] = Field(
+        None,
+        title="Schema",
+        description="Optional schema or comma-separated list of schemas (default: druid). System schemas are always excluded.",
+        json_schema_extra={"ui:type": "string"}
+    )
+
+
+# MongoDB
+class MongoDBCredentials(BaseModel):
+    user: Optional[str] = Field(
+        None,
+        title="User",
+        description="Username for authentication. Leave blank for unauthenticated connections.",
+        json_schema_extra={"ui:type": "string"}
+    )
+    password: Optional[str] = Field(
+        None,
+        title="Password",
+        description="Password for authentication.",
+        json_schema_extra={"ui:type": "password"}
+    )
+
+
+class MongoDBConfig(BaseModel):
+    host: str = Field(
+        ...,
+        title="Host",
+        description="MongoDB host (e.g., localhost) or Atlas cluster (e.g., cls.abc.mongodb.net)",
+        json_schema_extra={"ui:type": "string"}
+    )
+    port: int = Field(
+        27017,
+        ge=1,
+        le=65535,
+        title="Port",
+        description="MongoDB port (default: 27017). Ignored for Atlas/SRV connections.",
+        json_schema_extra={"ui:type": "number"}
+    )
+    database: str = Field(
+        ...,
+        title="Database",
+        description="Database name to connect to",
+        json_schema_extra={"ui:type": "string"}
+    )
+    auth_source: Optional[str] = Field(
+        "admin",
+        title="Auth Database",
+        description="Database to authenticate against (default: admin). Ignored for Atlas.",
+        json_schema_extra={"ui:type": "string"}
+    )
+    tls: bool = Field(
+        False,
+        title="Enable TLS/SSL",
+        json_schema_extra={"ui:type": "boolean"}
+    )
+    use_srv: bool = Field(
+        False,
+        title="Use Atlas/SRV",
+        json_schema_extra={"ui:type": "boolean"}
+    )
+
+
+# Azure Data Explorer (Kusto)
+class AzureDataExplorerCredentials(BaseModel):
+    client_id: str = Field(..., title="Client ID", description="Azure AD Application (Client) ID", json_schema_extra={"ui:type": "string"})
+    client_secret: str = Field(..., title="Client Secret", description="Azure AD Application Secret", json_schema_extra={"ui:type": "password"})
+    tenant_id: str = Field(..., title="Tenant ID", description="Azure AD Tenant ID", json_schema_extra={"ui:type": "string"})
+
+
+class AzureDataExplorerConfig(BaseModel):
+    cluster_url: str = Field(
+        ...,
+        title="Cluster URL",
+        description="Azure Data Explorer cluster URL (e.g., https://mycluster.region.kusto.windows.net)",
+        json_schema_extra={"ui:type": "string"}
+    )
+    database: str = Field(..., title="Database", description="Database name", json_schema_extra={"ui:type": "string"})
+
+
+# PostHog
+class PostHogCredentials(BaseModel):
+    api_key: str = Field(
+        ...,
+        title="Personal API Key",
+        description="PostHog Personal API Key with query:read and project:read scopes",
+        json_schema_extra={"ui:type": "password"}
+    )
+
+
+class PostHogConfig(BaseModel):
+    host: str = Field(
+        "https://us.posthog.com",
+        title="Host",
+        description="PostHog instance URL (us.posthog.com, eu.posthog.com, or self-hosted)",
+        json_schema_extra={"ui:type": "string"}
+    )
+    project_id: str = Field(
+        ...,
+        title="Project ID",
+        description="PostHog Project ID (found in project settings)",
+        json_schema_extra={"ui:type": "string"}
+    )
+
+
+# Databricks SQL
+class DatabricksSqlCredentials(BaseModel):
+    access_token: str = Field(
+        ...,
+        title="Personal Access Token",
+        description="Databricks personal access token for authentication",
+        json_schema_extra={"ui:type": "password"}
+    )
+
+
+class DatabricksSqlConfig(BaseModel):
+    server_hostname: str = Field(
+        ...,
+        title="Server Hostname",
+        description="Databricks workspace hostname (e.g., abc123.cloud.databricks.com)",
+        json_schema_extra={"ui:type": "string"}
+    )
+    http_path: str = Field(
+        ...,
+        title="HTTP Path",
+        description="SQL warehouse HTTP path (e.g., /sql/1.0/warehouses/abc123)",
+        json_schema_extra={"ui:type": "string"}
+    )
+    catalog: str = Field(
+        ...,
+        title="Catalog",
+        description="Unity Catalog name to use",
+        json_schema_extra={"ui:type": "string"}
+    )
+    schema: Optional[str] = Field(
+        None,
+        title="Schema",
+        description="Optional schema or comma-separated list of schemas. If empty, all schemas in the catalog will be discovered.",
+        json_schema_extra={"ui:type": "string"}
+    )
+
+
+# Spark Connect
+class SparkConnectNoAuthCredentials(BaseModel):
+    """No auth — open/dev Spark Connect clusters that don't require a token."""
+    # Allow extra so creds provided without auth_type are preserved during validation
+    class Config:
+        extra = 'allow'
+
+
+class SparkConnectCredentials(BaseModel):
+    token: str = Field(
+        ...,
+        title="Bearer Token",
+        description="Bearer token for the Spark Connect server (sent over the sc:// connection).",
+        json_schema_extra={"ui:type": "password"}
+    )
+
+
+class SparkConnectConfig(BaseModel):
+    host: str = Field(
+        ...,
+        title="Host",
+        description="Spark Connect server host (e.g., my-spark-host or localhost).",
+        json_schema_extra={"ui:type": "string"}
+    )
+    port: int = Field(
+        15002,
+        ge=1,
+        le=65535,
+        title="Port",
+        description="Spark Connect server port (default 15002).",
+        json_schema_extra={"ui:type": "number"}
+    )
+    use_ssl: bool = Field(
+        False,
+        title="Use SSL",
+        description="Connect to the Spark Connect server over TLS (sc://...;use_ssl=true).",
+        json_schema_extra={"ui:type": "boolean"}
+    )
+    catalog: Optional[str] = Field(
+        None,
+        title="Catalog",
+        description="Optional catalog to scope schema discovery to. If empty, the session default catalog is used.",
+        json_schema_extra={"ui:type": "string"}
+    )
+    database: Optional[str] = Field(
+        None,
+        title="Database / Schema",
+        description="Optional database (schema) or comma-separated list. If empty, all databases are discovered.",
+        json_schema_extra={"ui:type": "string"}
+    )
+    require_partition_filter: bool = Field(
+        False,
+        title="Require Partition Filter",
+        description="Reject queries that scan a partitioned table without filtering on a partition column (checked via EXPLAIN before the query runs).",
+        json_schema_extra={"ui:type": "boolean"}
+    )
+
+
+# OAuth Delegated Credentials (empty — user provides nothing, OAuth flow populates tokens)
+class OAuthDelegatedCredentials(BaseModel):
+    """No user input needed. The OAuth authorization code flow populates tokens automatically."""
+    pass
+
+
+# Power BI
+class PowerBICredentials(BaseModel):
+    tenant_id: str = Field(
+        ...,
+        title="Tenant ID",
+        description="Azure AD Tenant ID (Directory ID)",
+        json_schema_extra={"ui:type": "string"}
+    )
+    client_id: str = Field(
+        ...,
+        title="Client ID",
+        description="Azure AD App Registration Client ID",
+        json_schema_extra={"ui:type": "string"}
+    )
+    client_secret: str = Field(
+        ...,
+        title="Client Secret",
+        description="Azure AD App Registration Secret",
+        json_schema_extra={"ui:type": "password"}
+    )
+    oauth_client_id: Optional[str] = Field(
+        None,
+        title="OAuth Client ID",
+        description="App Registration Client ID for user sign-in (authorization code flow). If blank, falls back to Client ID above.",
+        json_schema_extra={"ui:type": "string"}
+    )
+    oauth_client_secret: Optional[str] = Field(
+        None,
+        title="OAuth Client Secret",
+        description="App Registration Secret for user sign-in. If blank, falls back to Client Secret above.",
+        json_schema_extra={"ui:type": "password"}
+    )
+
+
+class PowerBIConfig(BaseModel):
+    """Auto-discovers all workspaces and datasets the service principal has access to."""
+    pass
+
+
+# Power BI Report Server (on-prem)
+class PowerBIReportServerCredentials(BaseModel):
+    username: str = Field(
+        ...,
+        title="Username",
+        description="Windows username. May include domain prefix (e.g. DOMAIN\\user) or be a local machine user.",
+        json_schema_extra={"ui:type": "string"}
+    )
+    password: str = Field(
+        ...,
+        title="Password",
+        description="Windows password",
+        json_schema_extra={"ui:type": "password"}
+    )
+    domain: Optional[str] = Field(
+        None,
+        title="Domain",
+        description="Optional Windows domain (workgroup or AD). If omitted and username doesn't contain a domain, NTLM uses the local machine.",
+        json_schema_extra={"ui:type": "string"}
+    )
+
+
+class PowerBIReportServerConfig(BaseModel):
+    server_url: str = Field(
+        ...,
+        title="Server URL",
+        description="Base URL of the Power BI Report Server, e.g. http://pbi.example.com or http://pbi.example.com/Reports",
+        json_schema_extra={"ui:type": "string"}
+    )
+    verify_ssl: bool = Field(
+        True,
+        title="Verify SSL",
+        description="Verify TLS certificate (disable only for self-signed test servers).",
+        json_schema_extra={"ui:type": "boolean"}
+    )
+    ca_bundle_path: Optional[str] = Field(
+        None,
+        title="CA Bundle Path",
+        description="Optional path to a custom CA bundle for internal certificates.",
+        json_schema_extra={"ui:type": "string"}
+    )
+
+
+# Microsoft Fabric
+class MSFabricCredentials(BaseModel):
+    tenant_id: str = Field(
+        ...,
+        title="Tenant ID",
+        description="Azure AD Tenant ID (Directory ID)",
+        json_schema_extra={"ui:type": "string"}
+    )
+    client_id: str = Field(
+        ...,
+        title="Client ID",
+        description="Azure AD App Registration Client ID",
+        json_schema_extra={"ui:type": "string"}
+    )
+    client_secret: str = Field(
+        ...,
+        title="Client Secret",
+        description="Azure AD App Registration Secret",
+        json_schema_extra={"ui:type": "password"}
+    )
+    oauth_client_id: Optional[str] = Field(
+        None,
+        title="OAuth Client ID",
+        description="App Registration Client ID for user sign-in (authorization code flow). If blank, falls back to Client ID above.",
+        json_schema_extra={"ui:type": "string"}
+    )
+    oauth_client_secret: Optional[str] = Field(
+        None,
+        title="OAuth Client Secret",
+        description="App Registration Secret for user sign-in. If blank, falls back to Client Secret above.",
+        json_schema_extra={"ui:type": "password"}
+    )
+
+
+class MSFabricConfig(BaseModel):
+    server_hostname: str = Field(
+        ...,
+        title="Server Hostname",
+        description="Fabric SQL endpoint (e.g., abc123.datawarehouse.fabric.microsoft.com)",
+        json_schema_extra={"ui:type": "string"}
+    )
+    database: str = Field(
+        ...,
+        title="Database",
+        description="Warehouse or Lakehouse name",
+        json_schema_extra={"ui:type": "string"}
+    )
+    schema: Optional[str] = Field(
+        None,
+        title="Schema",
+        description="Optional schema or comma-separated list of schemas. If empty, all schemas will be discovered.",
+        json_schema_extra={"ui:type": "string"}
+    )
+
+
+# Microsoft Fabric — user login (email + password, ActiveDirectoryPassword)
+class MSFabricUserCredentials(BaseModel):
+    username: str = Field(
+        ...,
+        title="Email",
+        description="Your Microsoft Entra (Azure AD) email, e.g. you@company.com",
+        json_schema_extra={"ui:type": "string"}
+    )
+    password: str = Field(
+        ...,
+        title="Password",
+        description="Your Microsoft account password. NOTE: fails if your account has MFA or Conditional Access enabled (most orgs) — use the Service Principal connector then.",
+        json_schema_extra={"ui:type": "password"}
+    )
+    tenant_id: Optional[str] = Field(
+        None,
+        title="Tenant ID (optional)",
+        description="Azure AD Tenant ID. Usually not required for password login.",
+        json_schema_extra={"ui:type": "string"}
+    )
+
+
+class MSFabricUserConfig(BaseModel):
+    server_hostname: str = Field(
+        ...,
+        title="Server Hostname",
+        description="Fabric SQL endpoint (e.g., abc123.datawarehouse.fabric.microsoft.com)",
+        json_schema_extra={"ui:type": "string"}
+    )
+    database: str = Field(
+        ...,
+        title="Database",
+        description="Warehouse or Lakehouse name",
+        json_schema_extra={"ui:type": "string"}
+    )
+    schema: Optional[str] = Field(
+        None,
+        title="Schema",
+        description="Optional schema or comma-separated list. If empty, all schemas are discovered.",
+        json_schema_extra={"ui:type": "string"}
+    )
+
+
+# SharePoint (Microsoft Graph)
+class SharePointCredentials(BaseModel):
+    tenant_id: str = Field(
+        ...,
+        title="Tenant ID",
+        description="Azure AD Tenant ID (Directory ID)",
+        json_schema_extra={"ui:type": "string"}
+    )
+    client_id: str = Field(
+        ...,
+        title="Client ID",
+        description="Azure AD App Registration Client ID (used for OAuth authorization code flow with users)",
+        json_schema_extra={"ui:type": "string"}
+    )
+    client_secret: str = Field(
+        ...,
+        title="Client Secret",
+        description="Azure AD App Registration Secret",
+        json_schema_extra={"ui:type": "password"}
+    )
+    oauth_client_id: Optional[str] = Field(
+        None,
+        title="OAuth Client ID (override)",
+        description="Optional separate App Registration Client ID for user sign-in. Falls back to Client ID above.",
+        json_schema_extra={"ui:type": "string"}
+    )
+    oauth_client_secret: Optional[str] = Field(
+        None,
+        title="OAuth Client Secret (override)",
+        description="Optional separate App Registration Secret for user sign-in. Falls back to Client Secret above.",
+        json_schema_extra={"ui:type": "password"}
+    )
+
+
+class SharePointConfig(BaseModel):
+    site_url: str = Field(
+        ...,
+        title="Site URL",
+        description="Full SharePoint site URL, e.g. https://contoso.sharepoint.com/sites/Finance",
+        json_schema_extra={"ui:type": "string"}
+    )
+    drive_name: Optional[str] = Field(
+        None,
+        title="Document Library",
+        description="Name of the document library (drive) on the site. Leave blank to use the site's default Documents library.",
+        json_schema_extra={"ui:type": "string"}
+    )
+    folder_path: Optional[str] = Field(
+        None,
+        title="Folder Path",
+        description="Optional folder path within the drive to scope the connection (e.g. 'Reports/2025'). Leave blank for the root.",
+        json_schema_extra={"ui:type": "string"}
+    )
+    allowed_extensions: Optional[str] = Field(
+        None,
+        title="Allowed Extensions",
+        description="Comma-separated list of file extensions to include (e.g. 'xlsx,csv,pdf'). Leave blank for all files.",
+        json_schema_extra={"ui:type": "string"}
+    )
+    recursive: bool = Field(
+        False,
+        title="Include Subfolders",
+        description="Recursively enumerate subfolders. Leave off for flatter, faster catalogs.",
+        json_schema_extra={"ui:type": "boolean"}
+    )
+
+
+# OneDrive (Microsoft Graph — same auth as SharePoint, but exposed as an
+# MCP-style tool-provider connection rather than a data source. No folder
+# scope — each user accesses their entire OneDrive via per-user OAuth.)
+class OneDriveCredentials(SharePointCredentials):
+    """OneDrive uses the same Microsoft Graph auth as SharePoint."""
+    pass
+
+
+class OneDriveConfig(BaseModel):
+    """OneDrive needs no admin-side configuration — each user's OAuth token
+    determines what files are visible."""
+    pass
+
+
+# Google Drive
+class GoogleDriveCredentials(BaseModel):
+    oauth_client_id: str = Field(
+        ...,
+        title="OAuth Client ID",
+        description="Google Cloud OAuth 2.0 Client ID (Web application type)",
+        json_schema_extra={"ui:type": "string"}
+    )
+    oauth_client_secret: str = Field(
+        ...,
+        title="OAuth Client Secret",
+        description="Google Cloud OAuth 2.0 Client Secret",
+        json_schema_extra={"ui:type": "password"}
+    )
+    workspace_domain: Optional[str] = Field(
+        None,
+        title="Workspace Domain",
+        description="Optional Google Workspace domain to restrict sign-in to (e.g. 'company.com'). Sets the `hd` hint on the authorize URL.",
+        json_schema_extra={"ui:type": "string"}
+    )
+
+
+class GoogleDriveConfig(BaseModel):
+    """Google Drive needs no admin-side configuration — each user's OAuth
+    token determines what files are visible."""
+    pass
+
+
+# QVD Files (QlikView Data)
+class QVDCredentials(BaseModel):
+    """No credentials needed - file system access only."""
+    class Config:
+        extra = "allow"
+
+
+class QVDConfig(BaseModel):
+    file_paths: str = Field(
+        ...,
+        title="File Paths",
+        description="QVD file paths or glob patterns (one per line). e.g., /data/*.qvd",
+        json_schema_extra={"ui:type": "textarea"}
+    )
+
+
+# Qlik Sense (live connector — Qlik Cloud)
+class QlikSenseApiKeyCredentials(BaseModel):
+    api_key: str = Field(
+        ...,
+        title="API Key",
+        description="Qlik Cloud API key (bearer token). Generate at 'Settings > API keys' on the tenant.",
+        json_schema_extra={"ui:type": "password"},
+    )
+
+
+class QlikSenseOAuthM2MCredentials(BaseModel):
+    """OAuth 2.0 Client Credentials (machine-to-machine) for Qlik Cloud.
+
+    Register an OAuth client in the tenant ('Management Console > Integrations >
+    OAuth') with grant type 'client_credentials' and copy the client id/secret
+    here. Short-lived access tokens are fetched and refreshed automatically.
+    """
+    client_id: str = Field(
+        ...,
+        title="OAuth Client ID",
+        description="OAuth client ID from the Qlik Cloud Management Console.",
+        json_schema_extra={"ui:type": "string"},
+    )
+    client_secret: str = Field(
+        ...,
+        title="OAuth Client Secret",
+        description="OAuth client secret that pairs with the client ID.",
+        json_schema_extra={"ui:type": "password"},
+    )
+    scope: Optional[str] = Field(
+        "user_default",
+        title="Scope",
+        description="OAuth scope requested at token exchange. Default 'user_default' covers standard Qlik Cloud APIs.",
+        json_schema_extra={"ui:type": "string"},
+    )
+
+
+class QlikSenseConfig(BaseModel):
+    base_url: str = Field(
+        ...,
+        title="Base URL",
+        description=(
+            "Qlik Cloud tenant base URL. "
+            "Example: https://tenant.us.qlikcloud.com. "
+            "(On-prem Qlik Sense Enterprise on Windows is not supported in v1.)"
+        ),
+        json_schema_extra={"ui:type": "string"},
+    )
+    verify_ssl: bool = Field(
+        True,
+        title="Verify SSL",
+        description="Verify TLS certificate when calling Qlik REST and WebSocket endpoints.",
+        json_schema_extra={"ui:type": "boolean"},
+    )
+    space_filter: Optional[str] = Field(
+        None,
+        title="Space Filter",
+        description="Optional comma-separated list of space IDs or names. If empty, all visible spaces are crawled.",
+        json_schema_extra={"ui:type": "string"},
+    )
+
+
+# Timbr Semantic Layer
+class TimbrTokenCredentials(BaseModel):
+    api_key: str = Field(
+        ...,
+        title="API Key",
+        description="Timbr API key for authentication",
+        json_schema_extra={"ui:type": "password"},
+    )
+
+
+class TimbrConfig(BaseModel):
+    host: str = Field(
+        ...,
+        title="Host",
+        description="Timbr server URL (e.g., https://mytimbr.example.com)",
+        json_schema_extra={"ui:type": "string"},
+    )
+    ontology: str = Field(
+        ...,
+        title="Ontology",
+        description="Name of the Timbr knowledge graph / ontology to connect to",
+        json_schema_extra={"ui:type": "string"},
+    )
+    verify_ssl: bool = Field(
+        True,
+        title="Verify SSL",
+        description="Verify SSL certificate when connecting",
+        json_schema_extra={"ui:type": "boolean"},
+    )
+
+
+# Timbr A2A (Agent-to-Agent)
+class TimbrA2ATokenCredentials(BaseModel):
+    api_key: str = Field(
+        ...,
+        title="API Key",
+        description="Timbr API key for authentication",
+        json_schema_extra={"ui:type": "password"},
+    )
+
+
+class TimbrA2AConfig(BaseModel):
+    host: str = Field(
+        ...,
+        title="Host",
+        description="Timbr server URL (e.g., https://mytimbr.example.com)",
+        json_schema_extra={"ui:type": "string"},
+    )
+    ontology: str = Field(
+        ...,
+        title="Ontology",
+        description="Name of the Timbr knowledge graph / ontology to connect to",
+        json_schema_extra={"ui:type": "string"},
+    )
+    verify_ssl: bool = Field(
+        True,
+        title="Verify SSL",
+        description="Verify SSL certificate when connecting",
+        json_schema_extra={"ui:type": "boolean"},
+    )
+    results_limit: int = Field(
+        500,
+        title="Results Limit",
+        description="Maximum number of rows returned per query",
+        json_schema_extra={"ui:type": "number"},
+    )
+    graph_depth: int = Field(
+        1,
+        title="Graph Depth",
+        description="Depth of ontology graph traversal",
+        json_schema_extra={"ui:type": "number"},
+    )
+    retries: int = Field(
+        3,
+        title="Retries",
+        description="Number of retries on query failure",
+        json_schema_extra={"ui:type": "number"},
+    )
+
+
+# Oracle BI (OBIEE / Oracle Analytics Server / Oracle Analytics Cloud)
+class OracleBICredentials(BaseModel):
+    username: str = Field(
+        ...,
+        title="Username",
+        description="Oracle BI / OAC username (email for OAC, domain user for OBIEE/OAS).",
+        json_schema_extra={"ui:type": "string"},
+    )
+    password: str = Field(
+        ...,
+        title="Password",
+        description="Password for the Oracle BI / OAC user.",
+        json_schema_extra={"ui:type": "password"},
+    )
+
+
+class OracleBIConfig(BaseModel):
+    host: str = Field(
+        ...,
+        title="Host URL",
+        description="Base URL of the Oracle BI instance (e.g., https://analytics.example.com or the OAC instance URL).",
+        json_schema_extra={"ui:type": "string"},
+    )
+    verify_ssl: bool = Field(
+        True,
+        title="Verify SSL",
+        description="Verify TLS certificate when calling the SOAP endpoint.",
+        json_schema_extra={"ui:type": "boolean"},
+    )
+    timeout_sec: int = Field(
+        60,
+        ge=1,
+        le=600,
+        title="Timeout (sec)",
+        description="HTTP timeout for SOAP calls.",
+        json_schema_extra={"ui:type": "number"},
+    )
+
+
+# Sisense
+class SisenseCredentials(BaseModel):
+    username: str = Field(
+        "",
+        title="Username",
+        description="Sisense username (email). Leave blank if using API token.",
+        json_schema_extra={"ui:type": "string"}
+    )
+    password: str = Field(
+        "",
+        title="Password",
+        description="Sisense password. Leave blank if using API token.",
+        json_schema_extra={"ui:type": "password"}
+    )
+    api_token: str = Field(
+        "",
+        title="API Token",
+        description="Pre-existing Sisense API bearer token. If provided, username/password are ignored.",
+        json_schema_extra={"ui:type": "password"}
+    )
+
+    @model_validator(mode="after")
+    def validate_auth(cls, model: "SisenseCredentials") -> "SisenseCredentials":
+        has_userpass = model.username and model.password
+        has_token = bool(model.api_token)
+        if not has_userpass and not has_token:
+            raise ValueError("Either username/password or api_token must be provided.")
+        return model
+
+
+class SisenseConfig(BaseModel):
+    host: str = Field(
+        ...,
+        title="Host",
+        description="Sisense server URL (e.g., https://sisense.company.com)",
+        json_schema_extra={"ui:type": "string"}
+    )
+
+
+# MCP Server
+class MCPConfig(BaseModel):
+    server_url: str = Field(
+        ...,
+        title="Server URL",
+        description="URL of the MCP server (e.g., http://localhost:3000/mcp)",
+        json_schema_extra={"ui:type": "string"}
+    )
+    transport: str = Field(
+        "sse",
+        title="Transport",
+        description="MCP transport protocol",
+        json_schema_extra={"ui:type": "select", "options": ["sse", "streamable_http"]}
+    )
+
+
+class MCPNoAuthCredentials(BaseModel):
+    class Config:
+        extra = "allow"
+
+
+class MCPBearerCredentials(BaseModel):
+    token: str = Field(
+        ...,
+        title="Bearer Token",
+        description="Bearer token for authenticating with the MCP server",
+        json_schema_extra={"ui:type": "password"}
+    )
+
+
+class MCPOAuthAppCredentials(BaseModel):
+    """Pre-configured OAuth client for an MCP server.
+
+    The admin registers an OAuth client at the identity provider that fronts
+    the MCP server (or at the MCP server itself if it's also the authorization
+    server). Each user then completes the authorization-code + PKCE dance and
+    their per-user access_token is sent to the MCP server on every tool call.
+    """
+    authorize_url: str = Field(
+        ...,
+        title="Authorize URL",
+        description="OAuth authorization endpoint (e.g. https://idp.example.com/oauth/authorize)",
+        json_schema_extra={"ui:type": "string"}
+    )
+    token_url: str = Field(
+        ...,
+        title="Token URL",
+        description="OAuth token endpoint (e.g. https://idp.example.com/oauth/token)",
+        json_schema_extra={"ui:type": "string"}
+    )
+    client_id: str = Field(
+        ...,
+        title="Client ID",
+        description="OAuth client ID registered at the identity provider",
+        json_schema_extra={"ui:type": "string"}
+    )
+    client_secret: str = Field(
+        ...,
+        title="Client Secret",
+        description="OAuth client secret",
+        json_schema_extra={"ui:type": "password"}
+    )
+    scopes: Optional[str] = Field(
+        None,
+        title="Scopes",
+        description="Space-separated OAuth scopes (e.g. 'openid profile offline_access read:files')",
+        json_schema_extra={"ui:type": "string"}
+    )
+    audience: Optional[str] = Field(
+        None,
+        title="Resource (Audience)",
+        description="Optional RFC 8707 resource indicator — usually the MCP server's URL — to audience-bind the issued token.",
+        json_schema_extra={"ui:type": "string"}
+    )
+
+
+# Custom API
+class CustomAPIConfig(BaseModel):
+    base_url: str = Field(
+        ...,
+        title="Base URL",
+        description="Base URL for the API (e.g., https://api.example.com/v1)",
+        json_schema_extra={"ui:type": "string"}
+    )
+    headers: dict = Field(
+        default={},
+        title="Custom Headers",
+        description="Additional headers to send with every request (e.g., ontology, results-limit)",
+    )
+    endpoints: list = Field(
+        default=[],
+        title="Endpoints",
+        description="List of API endpoint definitions",
+        json_schema_extra={"ui:type": "json"}
+    )
+
+
+class CustomAPINoAuthCredentials(BaseModel):
+    class Config:
+        extra = "allow"
+
+
+class CustomAPIBearerCredentials(BaseModel):
+    token: str = Field(
+        ...,
+        title="Bearer Token",
+        description="Bearer token for API authentication",
+        json_schema_extra={"ui:type": "password"}
+    )
+
+
+class CustomAPIKeyCredentials(BaseModel):
+    api_key: str = Field(
+        ...,
+        title="API Key",
+        description="API key for authentication",
+        json_schema_extra={"ui:type": "password"}
+    )
+    api_key_header: str = Field(
+        "X-API-Key",
+        title="API Key Header",
+        description="Header name for the API key",
+        json_schema_extra={"ui:type": "string"}
+    )
+
+
+__all__ = [
+    # Configs
+    "PostgreSQLConfig",
+    "SQLiteConfig",
+    "OracleConfig",
+    "SnowflakeConfig",
+    "BigQueryConfig",
+    "NetSuiteConfig",
+    "SQLConfig",
+    "PrestoConfig",
+    "TrinoConfig",
+    "GoogleAnalyticsConfig",
+    "GCPConfig",
+    "AWSCostConfig",
+    "AWSAthenaConfig",
+    "VerticaConfig",
+    "AwsRedshiftConfig",
+    "TableauConfig",
+    "DuckDBConfig",
+    "PinotConfig",
+    "MongoDBConfig",
+    "PostHogConfig",
+    "DuckDBNoAuthCredentials",
+    "DuckDBAwsCredentials",
+    "DuckDBGcpCredentials",
+    "DuckDBAzureCredentials",
+    # Credentials
+    "PostgreSQLCredentials",
+    "SQLiteCredentials",
+    "OracleCredentials",
+    "SnowflakeCredentials",
+    "SnowflakeKeypairCredentials",
+    "BigQueryCredentials",
+    "NetSuiteCredentials",
+    "SQLCredentials",
+    "PrestoCredentials",
+    "TrinoCredentials",
+    "GoogleAnalyticsCredentials",
+    "GCPCredentials",
+    "AWSCostCredentials",
+    "AWSAthenaCredentials",
+    "AWSAthenaDefaultCredentials",
+    "VerticaCredentials",
+    "AwsRedshiftCredentials",
+    "TableauCredentials",
+    "DuckDBNoAuthCredentials",
+    "DuckDBAwsCredentials",
+    "DuckDBGcpCredentials",
+    "DuckDBAzureCredentials",
+    "AzureDataExplorerCredentials",
+    "AzureDataExplorerConfig",
+    "MongoDBCredentials",
+    "PostHogCredentials",
+    # Databricks SQL
+    "DatabricksSqlCredentials",
+    "DatabricksSqlConfig",
+    # Spark Connect
+    "SparkConnectNoAuthCredentials",
+    "SparkConnectCredentials",
+    "SparkConnectConfig",
+    # Power BI
+    "PowerBICredentials",
+    "PowerBIConfig",
+    # QVD Files
+    "QVDCredentials",
+    "QVDConfig",
+    # Qlik Sense (live connector)
+    "QlikSenseApiKeyCredentials",
+    "QlikSenseOAuthM2MCredentials",
+    "QlikSenseConfig",
+    # Microsoft Fabric
+    "MSFabricCredentials",
+    "MSFabricConfig",
+    "MSFabricUserCredentials",
+    "MSFabricUserConfig",
+    # SharePoint / OneDrive / Google Drive (file connectors)
+    "SharePointCredentials",
+    "SharePointConfig",
+    "OneDriveCredentials",
+    "OneDriveConfig",
+    "GoogleDriveCredentials",
+    "GoogleDriveConfig",
+    # Sybase SQL Anywhere
+    "SybaseConfig",
+    # Teradata
+    "TeradataCredentials",
+    "TeradataConfig",
+    # Timbr
+    "TimbrTokenCredentials",
+    "TimbrConfig",
+    # Sisense
+    "SisenseCredentials",
+    "SisenseConfig",
+    # MCP
+    "MCPConfig",
+    "MCPNoAuthCredentials",
+    "MCPBearerCredentials",
+    "MCPOAuthAppCredentials",
+    # Custom API
+    "CustomAPIConfig",
+    "CustomAPINoAuthCredentials",
+    "CustomAPIBearerCredentials",
+    "CustomAPIKeyCredentials",
+]

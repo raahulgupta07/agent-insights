@@ -1,0 +1,8 @@
+# backup 20260620_083557 label=mockup-redesign-7fixes
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       frontend/components/nav/TopNav.vue
+OK       frontend/components/prompt/PromptBoxV2.vue
+OK       frontend/pages/reports/[id]/index.vue
+OK       frontend/components/report/ReportHeader.vue
+OK       frontend/components/nav/ChatHistoryRail.vue
+OK       backend/app/services/completion_service.py

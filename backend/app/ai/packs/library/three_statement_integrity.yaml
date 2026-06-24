@@ -1,0 +1,61 @@
+id: three-statement-integrity
+name: "Three-Statement Integrity Check"
+domain: finance.three-statement
+
+# Tier A. Verifies the income statement / balance sheet / cash-flow tie out.
+# Works on a long-format financials table (line_item, statement, amount, period).
+
+trigger_hints:
+  - three statement
+  - 3 statement
+  - balance sheet balances
+  - does the balance sheet tie
+  - financial statement integrity
+  - statement reconciliation
+  - retained earnings roll
+  - cash flow ties to balance sheet
+
+required_inputs:
+  line_item:
+    role: dimension
+    synonyms: [line item, account, account name, gl account, caption, item]
+    desc: the financial statement line (e.g. Total Assets, Net Income, Cash)
+  amount:
+    role: measure
+    synonyms: [amount, value, balance, ending balance, total]
+    desc: the monetary value of the line item
+  period:
+    role: dimension
+    synonyms: [period, month, quarter, year, fiscal period, date, as of]
+    desc: the reporting period each value belongs to
+  statement:
+    role: dimension
+    synonyms: [statement, statement type, financial statement, report type]
+    optional: true
+
+method_text: |
+  Check the core accounting identities for EACH period. Resolve the needed line
+  items from line_item by name (case-insensitive, allow common synonyms):
+  1. Balance-sheet balances: Total Assets = Total Liabilities + Total Equity.
+     Report the difference; flag if abs(diff) > 0.5% of Total Assets.
+  2. Retained-earnings roll-forward: RE_end = RE_begin + Net Income - Dividends.
+     Flag breaks (use prior period's RE_end as RE_begin).
+  3. Cash tie-out: ending Cash on the balance sheet = beginning Cash + net change
+     in cash from the cash-flow statement (when cash-flow lines are present).
+  4. Net income tie: Net Income on the income statement = the Net Income line
+     feeding equity / cash-flow top line.
+  5. Produce a per-period PASS/FAIL grid for each identity with the numeric gap,
+     and a short root-cause note for any FAIL (which line looks off).
+  6. Only check identities whose line items are actually present; list which
+     checks were skipped for lack of data. Never fabricate a missing line.
+
+output_spec:
+  type: report
+  sections: [Integrity grid (period x check), Failures explained, Skipped checks]
+  per_period: [assets_vs_liab_equity_gap, re_rollforward_gap, cash_tie_gap, verdict]
+
+format:
+  amounts: "thousands, no decimals"
+  verdict: "PASS / FAIL per identity"
+
+eval_goldens: []

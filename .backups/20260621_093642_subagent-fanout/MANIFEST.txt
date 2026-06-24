@@ -1,0 +1,10 @@
+# backup 20260621_093642 label=subagent-fanout
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       backend/app/settings/hybrid_flags.py
+OK       backend/app/ai/runner/__init__.py
+OK       backend/app/ai/runner/orchestrator.py
+OK       backend/app/ai/tools/implementations/delegate_subtask.py
+OK       backend/app/ai/tools/schemas/delegate_subtask.py
+OK       .env
+OK       docker-compose.build.yaml
+OK       docs/AGENT_UPGRADES_PLAN.md

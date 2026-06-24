@@ -1,0 +1,66 @@
+id: gl-reconciliation
+name: "GL Reconciliation (ledger vs subledger)"
+domain: finance.reconciliation
+
+# Tier A. Reconciles a control/GL balance against a subledger or second source,
+# per account, flags and ages the unreconciled differences.
+
+trigger_hints:
+  - reconciliation
+  - gl reconciliation
+  - reconcile
+  - ledger vs subledger
+  - control account
+  - unreconciled
+  - tie out balances
+  - reconciling items
+  - account reconciliation
+
+required_inputs:
+  account:
+    role: dimension
+    synonyms: [account, gl account, control account, account number, account name, ledger]
+    desc: the account being reconciled
+  gl_balance:
+    role: measure
+    synonyms: [gl balance, ledger balance, general ledger, control balance, book balance]
+    desc: the balance per the general ledger / control account
+  subledger_balance:
+    role: measure
+    synonyms: [subledger balance, sub ledger, subledger, source balance, statement balance, detail balance]
+    desc: the balance per the subledger / second source to reconcile against
+  period:
+    role: dimension
+    synonyms: [period, month, quarter, date, as of, fiscal period]
+    optional: true
+  item_age:
+    role: measure
+    synonyms: [age, days outstanding, aging, days, item age]
+    optional: true
+
+method_text: |
+  Reconcile gl_balance against subledger_balance for each account (and period
+  when bound):
+  1. Difference = gl_balance - subledger_balance. Status RECONCILED when abs(diff)
+     is within a small tolerance (state it, e.g. <= 1 currency unit or 0.1%),
+     else UNRECONCILED.
+  2. Roll up: total GL, total subledger, total absolute difference, count and % of
+     accounts unreconciled.
+  3. Rank unreconciled accounts by absolute difference (largest exposure first).
+  4. If item_age is bound, age the unreconciled items into buckets (0-30 / 31-60 /
+     61-90 / 90+) and flag anything 90+ as a stale reconciling item.
+  5. For each material break, note direction (GL higher vs subledger higher) as a
+     hint at the likely cause (timing, unposted entry, duplicate, cutoff).
+  6. Output a clean reconciliation summary plus the exception list; never net a
+     difference away without showing it.
+
+output_spec:
+  type: report
+  sections: [Reconciliation summary, Unreconciled exceptions, Aging (if available)]
+  per_account: [gl_balance, subledger_balance, difference, status, age_bucket]
+
+format:
+  amounts: "two decimals"
+  status: "RECONCILED / UNRECONCILED"
+
+eval_goldens: []

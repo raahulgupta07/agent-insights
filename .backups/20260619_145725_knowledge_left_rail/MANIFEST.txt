@@ -1,0 +1,4 @@
+# backup 20260619_145725 label=knowledge_left_rail
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       frontend/components/knowledge/KnowledgePanel.vue
+OK       frontend/pages/knowledge/index.vue

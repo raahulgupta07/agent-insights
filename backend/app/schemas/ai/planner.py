@@ -1,0 +1,160 @@
+from typing import Any, Dict, List, Optional, Literal, TYPE_CHECKING
+from pydantic import BaseModel
+
+if TYPE_CHECKING:
+    from app.ai.llm.types import ImageInput
+
+
+class ToolDescriptor(BaseModel):
+    name: str
+    description: Optional[str] = None
+    research_accessible: bool = False
+    schema: Optional[Dict[str, Any]] = None
+    category: Optional[str] = None
+    version: Optional[str] = None
+    max_retries: Optional[int] = None
+    timeout_seconds: Optional[int] = None
+    tags: Optional[List[str]] = None
+    is_active: Optional[bool] = True
+    observation_policy: Optional[Literal["never", "on_trigger", "always"]] = None
+    allowed_modes: Optional[List[str]] = None
+
+
+class TokenUsage(BaseModel):
+    prompt_tokens: Optional[int] = None
+    completion_tokens: Optional[int] = None
+    total_tokens: Optional[int] = None
+    cache_read_tokens: Optional[int] = None
+    cache_creation_tokens: Optional[int] = None
+
+
+class PlannerMetrics(BaseModel):
+    first_token_ms: Optional[float] = None
+    thinking_ms: Optional[float] = None  # Duration of reasoning only
+    total_duration_ms: Optional[float] = None  # Full completion duration
+    token_usage: Optional[TokenUsage] = None
+
+
+class PlannerError(BaseModel):
+    code: str
+    message: str
+    details: Optional[Dict[str, Any]] = None
+
+
+class Action(BaseModel):
+    type: Literal["tool_call"]
+    name: str
+    arguments: Dict[str, Any]
+
+
+class PlannerDecision(BaseModel):
+    analysis_complete: bool
+    plan_type: Optional[Literal["research", "action"]] = None
+    reasoning_message: Optional[str] = None
+    assistant_message: Optional[str] = None
+    action: Optional[Action] = None  # legacy: first action; kept for SSE/UI streaming compatibility
+    actions: List[Action] = []       # all actions when the model emits parallel tool_uses
+    final_answer: Optional[str] = None
+    streaming_complete: bool = False
+    metrics: Optional[PlannerMetrics] = None
+    error: Optional[PlannerError] = None
+    # Sources cited by native web search this turn (turn-level; the provider
+    # surfaces citations on the answer, not per search call). [{title, url}]
+    web_search_citations: List[Dict[str, str]] = []
+
+
+class PlannerInput(BaseModel):
+    external_platform: Optional[str] = None
+    mode: Optional[str] = "chat" # "chat" | "deep" | "training" | "knowledge"
+    user_message: str
+    instructions: Optional[str] = None
+    schemas_excerpt: Optional[str] = None
+    # Combined schema context (per data source: sample Top-K + names index)
+    schemas_combined: Optional[str] = None
+    # Optional: legacy split fields (unused by default)
+    schemas_names_index: Optional[str] = None
+    # Files context rendered from uploaded report files (schemas/metadata)
+    files_context: Optional[str] = None
+    history_summary: Optional[str] = None
+    # Detailed conversation messages context for better planning
+    messages_context: Optional[str] = None
+    # Resources context from metadata resources (git repos, documentation, etc.)
+    resources_context: Optional[str] = None
+    # Combined resources context (per data source: sample Top-K + names index)
+    resources_combined: Optional[str] = None
+    # Mentions context rendered from the current user turn mentions
+    mentions_context: Optional[str] = None
+    # Entities context rendered from catalog search
+    entities_context: Optional[str] = None
+    # Loadable prior steps in this report (rendered <available_steps> block).
+    # Signals to the planner that create_data can reuse these via load_step
+    # instead of re-deriving from scratch.
+    available_steps_context: Optional[str] = None
+    # Active recurring scheduled tasks for this report (rendered <scheduled_tasks> block)
+    scheduled_tasks_context: Optional[str] = None
+    # A compact dictionary describing the most recent tool observation (if any)
+    last_observation: Optional[Dict[str, Any]] = None
+    # Full list of recorded tool observations in execution order
+    past_observations: Optional[List[Dict[str, Any]]] = None
+    tool_catalog: Optional[List[ToolDescriptor]] = None
+    # User-uploaded images for vision-capable models
+    images: Optional[List[Any]] = None  # List[ImageInput] - using Any to avoid circular import
+
+    # MCP/API tools context (compact index of available external tools)
+    tools_context: Optional[str] = None
+
+    # Active artifact context (most recent artifact in the current report)
+    active_artifact: Optional[Dict[str, Any]] = None
+
+    # Identity
+    organization_name: Optional[str] = None
+    organization_ai_analyst_name: Optional[str] = None
+    # End-user (asker) identity — surfaced to the model as <user_profile>.
+    # ``user_note`` is admin-managed per-org context about the asker (e.g.
+    # "CFO, focuses on monthly close metrics"). Both are optional.
+    user_name: Optional[str] = None
+    user_note: Optional[str] = None
+
+    # Org-wide limits
+    limit_row_count: Optional[int] = None
+
+    # Feature flags
+    mcp_tools_enabled: bool = False
+    web_fetch_enabled: bool = False
+    # Native, provider-executed web search (OpenAI/Azure-OpenAI Responses tool).
+    # Gated by the org `enable_web_fetch` master switch AND a per-provider
+    # `enable_web_search` opt-in. Distinct from `web_fetch_enabled` (which is the
+    # registry tool that fetches a specific URL we hand it).
+    web_search_enabled: bool = False
+    # Domains parsed from URLs in the current user turn. Passed to web search as
+    # filters.allowed_domains so the tool opens/reads those pages directly
+    # instead of relying on snippet search.
+    web_search_domains: List[str] = []
+
+    # Scheduled execution context
+    scheduled_context: Optional[Dict[str, Any]] = None
+
+    # Knowledge harness trigger conditions (formatted block injected into knowledge-mode prompt)
+    trigger_conditions: Optional[str] = None
+
+    # Platform-specific context (e.g. Excel selection data) — injected into prompt, not part of user message
+    platform_context: Optional[Dict[str, Any]] = None
+
+
+class PlannerInputV3(BaseModel):
+    """Structured planner input for planner_v3 (native tool_use path).
+
+    Built by PromptBuilderV3 from a PlannerInput. Same context content, but
+    split into the shape providers' tool_use APIs expect: a system string,
+    a list of structured messages, and a list of tool specs.
+    """
+    system: str
+    messages: List[Dict[str, Any]] = []   # serialized Message objects (role + content)
+    tools: List[Dict[str, Any]] = []      # serialized ToolSpec objects
+
+    # Carry-through fields used by the planner (NOT sent to the LLM as JSON)
+    images: Optional[List[Any]] = None
+    tool_catalog: Optional[List[ToolDescriptor]] = None  # for plan_type derivation
+    mode: Optional[str] = "chat"
+
+

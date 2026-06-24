@@ -1,0 +1,15 @@
+# backup 20260619_221251 label=phase4-evalcanary
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       backend/app/schemas/test_expectations.py
+OK       backend/app/services/test_evaluation_service.py
+OK       backend/app/settings/hybrid_flags.py
+OK       backend/app/services/eval_harness.py
+OK       backend/app/core/scheduler.py
+OK       backend/app/routes/knowledge.py
+OK       backend/app/services/completion_feedback_service.py
+OK       backend/app/routes/test.py
+OK       backend/main.py
+OK       frontend/pages/agents/[id]/evals.vue
+OK       .env
+OK       docker-compose.build.yaml
+OK       docs/PLAN_KEPLER.md

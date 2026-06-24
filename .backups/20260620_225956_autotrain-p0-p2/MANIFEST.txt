@@ -1,0 +1,21 @@
+# backup 20260620_225956 label=autotrain-p0-p2
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       backend/app/settings/hybrid_flags.py
+OK       backend/app/models/ingest_batch.py
+OK       backend/app/models/schema_contract.py
+OK       backend/app/models/upload_cache.py
+OK       backend/alembic/env.py
+OK       backend/alembic/versions/at1autotrain_autotrain_foundation.py
+OK       backend/app/services/ingest/stage.py
+OK       backend/app/services/ingest/csv_reader.py
+OK       backend/app/services/ingest/loader.py
+OK       backend/app/services/ingest/gate.py
+OK       backend/app/services/ingest/contract.py
+OK       backend/app/services/ingest/register.py
+OK       backend/app/services/autotrain/orchestrator.py
+OK       backend/app/services/autotrain/codex.py
+OK       backend/app/services/autotrain/writeback.py
+OK       backend/app/services/autotrain/profiler.py
+OK       backend/app/services/autotrain/qa_gen.py
+OK       backend/app/routes/autotrain.py
+OK       backend/main.py

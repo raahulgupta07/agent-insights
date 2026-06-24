@@ -1,0 +1,6 @@
+# backup 20260619_122207 label=studio_composer
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       backend/app/schemas/report_schema.py
+OK       backend/app/services/report_service.py
+OK       frontend/components/prompt/DataSourceSelector.vue
+OK       frontend/components/prompt/PromptBoxV2.vue

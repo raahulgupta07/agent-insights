@@ -1,0 +1,16 @@
+# backup 20260621_091516 label=agent-memory-tool
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       backend/app/settings/hybrid_flags.py
+OK       backend/app/models/agent_memory.py
+OK       backend/alembic/env.py
+OK       backend/alembic/versions/agentmem1_agent_memory.py
+OK       backend/app/ai/brain/agent_memory.py
+OK       backend/app/ai/tools/implementations/memory_tool.py
+OK       backend/app/ai/tools/schemas/agent_memory.py
+OK       backend/app/ai/context/sections/agent_memory.py
+OK       backend/app/ai/context/builders/agent_memory_context_builder.py
+OK       backend/app/ai/context/context_hub.py
+OK       backend/app/ai/agent_v2.py
+OK       .env
+OK       docker-compose.build.yaml
+OK       docs/AGENT_UPGRADES_PLAN.md

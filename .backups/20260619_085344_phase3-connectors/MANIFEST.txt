@@ -1,0 +1,3 @@
+# backup 20260619_085344 label=phase3-connectors
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       backend/app/schemas/data_source_registry.py

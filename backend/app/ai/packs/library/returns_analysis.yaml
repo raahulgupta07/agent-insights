@@ -1,0 +1,63 @@
+id: returns-analysis
+name: "Returns Analysis (IRR / MOIC / TVPI)"
+domain: finance.returns
+
+# Tier A. Fund / deal cash-flow returns. Method INVARIANT; binder maps the
+# cash-flow amount + date + grouping to real columns. Dep-free sandbox: IRR is
+# solved iteratively with numpy/pandas/math (NO scipy).
+
+trigger_hints:
+  - irr
+  - internal rate of return
+  - moic
+  - multiple on invested capital
+  - tvpi
+  - dpi
+  - rvpi
+  - returns analysis
+  - cash on cash
+  - fund performance
+
+required_inputs:
+  cashflow_amount:
+    role: measure
+    synonyms: [cash flow, cashflow, amount, contribution, distribution, net cash flow, capital call]
+    desc: signed cash flow (investments negative, distributions positive)
+  cashflow_date:
+    role: date
+    synonyms: [date, transaction date, cash flow date, period, as of date, value date]
+    desc: the date of each cash flow (drives IRR time-weighting)
+  investment:
+    role: dimension
+    synonyms: [deal, fund, investment, portfolio company, entity, asset, vintage]
+    optional: true
+  current_value:
+    role: measure
+    synonyms: [nav, residual value, fair value, unrealized value, current value, ending balance]
+    optional: true
+
+method_text: |
+  Compute money-weighted returns. Group by investment when that input is bound,
+  else treat all cash flows as one pool. For each group:
+  1. Split signed cash flows: invested = -sum(negative flows); distributions =
+     sum(positive realised flows); residual = current_value when bound (else 0).
+  2. MOIC = (distributions + residual) / invested. Also DPI = distributions /
+     invested, RVPI = residual / invested, TVPI = DPI + RVPI.
+  3. IRR = the rate r that makes sum(cf_i / (1+r)^(years_i)) = 0, where years_i is
+     (cashflow_date_i - first_date) in years. Solve iteratively (bisection or
+     Newton) over r in [-0.99, 10]; include the residual as a final inflow dated
+     at the latest cash-flow date. Report "n/a" if no sign change exists.
+  4. Flag groups with MOIC < 1.0 (capital not returned) and negative IRR.
+  5. Rank groups best-to-worst by IRR; give a portfolio-level pooled IRR/MOIC.
+  6. State that IRR uses the bound dates; if dates are coarse (annual) say so.
+
+output_spec:
+  type: report
+  sections: [Portfolio summary, Per-investment table, Underperformers, Method notes]
+  per_investment: [invested, distributions, residual, moic, dpi, rvpi, tvpi, irr]
+
+format:
+  percentages: "IRR to one decimal, e.g. 18.4%"
+  ratios: "MOIC/TVPI one decimal with x, e.g. 2.3x"
+
+eval_goldens: []

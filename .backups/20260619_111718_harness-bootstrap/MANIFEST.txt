@@ -1,0 +1,4 @@
+# backup 20260619_111718 label=harness-bootstrap
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       backend/app/routes/studio.py
+OK       backend/app/routes/studio_sources.py

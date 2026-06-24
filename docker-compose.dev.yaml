@@ -1,0 +1,95 @@
+# =============================================================================
+# Dash - Development Docker Compose (no SSL)
+# =============================================================================
+#
+# Quick Start:
+#   1. Create a .env file with your configuration (see below)
+#   2. Run: docker compose -f docker-compose.dev.yaml up -d
+#
+# Environment Variables (create .env file):
+#   POSTGRES_USER=dash                   # PostgreSQL username
+#   POSTGRES_PASSWORD=your_secure_pw     # PostgreSQL password (CHANGE THIS!)
+#   POSTGRES_DB=dash                     # Database name
+#   POSTGRES_PORT=5432                   # PostgreSQL port (optional)
+#   APP_PORT=3000                        # Application port (optional)
+#   DASH_ENCRYPTION_KEY=                 # Fernet encryption key (44 chars, ends with =)
+#   DASH_LICENSE_KEY=                    # Enterprise license key (optional)
+#
+# Generate encryption key:
+#   python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+#
+# =============================================================================
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg18   # PG18 + pgvector preinstalled (Phase 8 embeddings/graph)
+    container_name: dash-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-dash}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dashpassword}
+      POSTGRES_DB: ${POSTGRES_DB:-dash}
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql   # PG18+: mount parent, not /data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dash} -d ${POSTGRES_DB:-dash}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - dash-network-dev
+
+  app:
+    # Build OUR own image from this repo. NEVER pull bagofwords/bagofwords:latest.
+    # Requires cityagent-base:dev (build via scripts/build.sh). App image = cityagent-analytics:dev.
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cityagent-analytics:dev
+    container_name: dash-app-dev
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      - ENVIRONMENT=production
+      # Database configuration
+      - DASH_DATABASE_URL=postgresql://${POSTGRES_USER:-dash}:${POSTGRES_PASSWORD:-dashpassword}@postgres:5432/${POSTGRES_DB:-dash}
+      # Encryption key
+      - DASH_ENCRYPTION_KEY=${DASH_ENCRYPTION_KEY:-}
+      # Enterprise license key (optional)
+      - DASH_LICENSE_KEY=${DASH_LICENSE_KEY:-}
+      # Config path
+      - DASH_CONFIG_PATH=/app/dash-config.yaml
+    volumes:
+      - ./dash-config.yaml:/app/dash-config.yaml:ro
+      - uploads_data_dev:/app/backend/uploads
+      - branding_data_dev:/app/backend/branding_uploads
+      - logs_data_dev:/app/backend/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    networks:
+      - dash-network-dev
+
+volumes:
+  postgres_data_dev:
+    driver: local
+  uploads_data_dev:
+    driver: local
+  branding_data_dev:
+    driver: local
+  logs_data_dev:
+    driver: local
+
+networks:
+  dash-network-dev:
+    driver: bridge

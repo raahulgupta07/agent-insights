@@ -1,0 +1,11 @@
+# backup 20260620_143022 label=instructions-monitoring-deblue
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       frontend/layouts/monitoring.vue
+OK       frontend/components/ConsoleOverview.vue
+OK       frontend/components/instructions/InstructionsTable.vue
+OK       frontend/components/instructions/InstructionsBulkBar.vue
+OK       frontend/components/instructions/InstructionEditor.vue
+OK       frontend/components/instructions/PrimaryInstructionPicker.vue
+OK       frontend/components/instructions/PrimaryInstructionMenu.vue
+OK       frontend/components/instructions/BuildExplorerModal.vue
+OK       frontend/components/instructions/InstructionText.vue

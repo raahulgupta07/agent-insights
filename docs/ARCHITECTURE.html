@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>CityAgent Analytics — Full Architecture Design (v0.2)</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2430; --ink:#e6edf3; --mut:#8b949e;
+    --line:#2b3340; --acc:#4cc4ff; --acc2:#7ee787; --warn:#f0883e; --pink:#ff7b9c;
+    --pur:#bc8cff; --gold:#e3b341; --radius:14px;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;font-size:15px}
+  .wrap{max-width:1140px;margin:0 auto;padding:48px 28px 120px}
+  header.hero{padding:34px 0 26px;border-bottom:1px solid var(--line);margin-bottom:30px}
+  .tag{display:inline-block;font-family:var(--mono);font-size:12px;color:var(--acc);
+    border:1px solid var(--line);border-radius:999px;padding:4px 12px;margin:0 6px 12px 0}
+  .tag.ok{color:var(--acc2)} .tag.new{color:var(--gold)}
+  h1{font-size:40px;line-height:1.1;margin:0 0 10px;letter-spacing:-.5px}
+  h1 small{display:block;font-size:17px;color:var(--mut);font-weight:400;margin-top:10px}
+  h2{font-size:25px;margin:50px 0 14px;padding-top:10px;letter-spacing:-.3px;border-top:1px solid var(--line)}
+  h2:first-of-type{border-top:none}
+  h2 .n{font-family:var(--mono);color:var(--acc);font-size:18px;margin-right:10px}
+  h3{font-size:18px;margin:26px 0 8px;color:var(--acc2)}
+  p{color:#c9d1d9} a{color:var(--acc)} .lead{font-size:17px;color:var(--mut)}
+  .grid{display:grid;gap:16px}
+  .layer{border:1px solid var(--line);border-radius:var(--radius);padding:16px 20px;background:var(--panel);
+    position:relative;overflow:hidden}
+  .layer:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px}
+  .l-if:before{background:var(--acc)} .l-llm:before{background:#5ad}
+  .l-ctl:before{background:var(--pur)} .l-core:before{background:var(--acc2)}
+  .l-skill:before{background:var(--pink)} .l-brain:before{background:var(--gold)}
+  .l-data:before{background:var(--warn)}
+  .layer h4{margin:0 0 4px;font-size:16px}
+  .layer .role{font-family:var(--mono);font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.08em}
+  .layer ul{margin:9px 0 0;padding-left:18px;color:#c9d1d9;font-size:14px}
+  pre{background:#0a0e14;border:1px solid var(--line);border-radius:var(--radius);
+    padding:18px 20px;overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:1.5;color:#cdd9e5}
+  pre .c-acc{color:var(--acc)} pre .c-grn{color:var(--acc2)} pre .c-gold{color:var(--gold)}
+  pre .c-warn{color:var(--warn)} pre .c-pur{color:var(--pur)} pre .c-pink{color:var(--pink)} pre .c-mut{color:var(--mut)}
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:14px}
+  th,td{border:1px solid var(--line);padding:9px 12px;text-align:left;vertical-align:top}
+  th{background:var(--panel2);font-weight:600;color:var(--ink)}
+  td:first-child{font-family:var(--mono);font-size:12.5px;color:var(--acc)}
+  .pill{display:inline-block;font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:6px;
+    border:1px solid var(--line);margin:2px 4px 2px 0}
+  .pill.live{color:var(--acc2)} .pill.cache{color:var(--gold)} .pill.mat{color:var(--warn)}
+  .pill.gate{color:var(--pink)} .pill.ok{color:var(--acc2);border-color:#234}
+  .flow{counter-reset:step;list-style:none;padding:0;margin:14px 0}
+  .flow li{position:relative;padding:9px 0 9px 46px;border-bottom:1px dashed var(--line)}
+  .flow li:before{counter-increment:step;content:counter(step);position:absolute;left:0;top:8px;
+    width:30px;height:30px;border-radius:8px;background:var(--panel2);border:1px solid var(--line);
+    color:var(--acc);font-family:var(--mono);font-size:13px;display:flex;align-items:center;justify-content:center}
+  .flow b{color:var(--acc2)}
+  .note{background:var(--panel);border-left:3px solid var(--acc);border-radius:8px;padding:12px 16px;margin:16px 0;color:#c9d1d9}
+  .note.warn{border-left-color:var(--warn)} .note.gate{border-left-color:var(--pink)} .note.ok{border-left-color:var(--acc2)}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  @media(max-width:820px){.two{grid-template-columns:1fr}}
+  .funnel{font-family:var(--mono);font-size:13px}
+  .funnel div{border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin:8px 0;background:var(--panel)}
+  .funnel .t0{border-color:#2c4a2c} .funnel .t1{border-color:#4a4020}
+  .funnel .t2{border-color:#3a2c4a} .funnel .t3{border-color:#4a3020}
+  .funnel .tag2{float:right;color:var(--mut);font-size:11px}
+  footer{margin-top:60px;padding-top:20px;border-top:1px solid var(--line);color:var(--mut);font-size:13px}
+  .kbd{font-family:var(--mono);background:#0a0e14;border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:12px}
+  .toc{columns:3;gap:24px;font-size:14px;margin:18px 0 0}
+  @media(max-width:820px){.toc{columns:2}}
+  .toc a{display:block;padding:3px 0;color:var(--mut);text-decoration:none}
+  .toc a:hover{color:var(--acc)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <span class="tag new">FULL DESIGN · v0.2</span>
+  <span class="tag">single project · no sidecar</span>
+  <span class="tag ok">✓ OpenRouter tool_use loop verified in code</span>
+  <h1>CityAgent Analytics
+    <small>One project: bagofwords platform + dash analytics patterns + Karpathy 2nd-Brain + self-service skills, with OpenRouter LLM, live↔stored federated query, and cross-source correlation. Built for 1000 users.</small>
+  </h1>
+  <nav class="toc">
+    <a href="#goal">0 · Goals & principles</a>
+    <a href="#master">1 · Master architecture</a>
+    <a href="#llm">2 · LLM gateway (OpenRouter)</a>
+    <a href="#funnel">3 · Serving funnel (scale)</a>
+    <a href="#flowq">4 · Flow A — a question</a>
+    <a href="#flowd">5 · Flow B — data in</a>
+    <a href="#skills">6 · Skills — self-service</a>
+    <a href="#brain">7 · Karpathy 2nd-Brain</a>
+    <a href="#fed">8 · Federation & correlation</a>
+    <a href="#scale">9 · Scaling to 1000 users</a>
+    <a href="#build">10 · Delivery slices</a>
+  </nav>
+</header>
+
+<section id="goal">
+  <h2><span class="n">0</span>Goals &amp; principles</h2>
+  <p class="lead">One codebase, one process, one deploy. dash's patterns and the brain are ported natively into bagofwords (bow). Agno is reference-only; OpenRouter is the single LLM gateway — so there is no SDK/dependency clash.</p>
+  <ul>
+    <li><b>bow is the chassis</b> — Nuxt UI, multi-tenant/RBAC, 46 connectors, observability, MCP, Instructions + approval gate, scheduler. Kept whole.</li>
+    <li><b>dash is a pattern, not a service</b> — dual-schema, Engineer view-builder, DB-level read-only, learning loop reimplemented in bow idioms.</li>
+    <li><b>Everything learned is gated</b> — memories, shared skills, correlations land in <em>pending</em>, go live only after approval (reuse bow's Instruction build/approval).</li>
+    <li><b>The loop is the exception</b> — most traffic served from cache + precomputed views; the LLM agent loop serves only the novel tail.</li>
+    <li><b>Every user authors skills</b> — personal = instant & safe-by-construction; sharing = gated. Authoring is "do it once, save it."</li>
+    <li><b>Correlate anything</b> — DuckDB federates live + cached + files; the brain holds the learned cross-source key map.</li>
+  </ul>
+  <div class="note ok"><b>De-risked:</b> the one thing that could kill the merge — does bow's native tool_use planner run through OpenRouter? — is <b>verified</b>. <span class="kbd">openai_client.py:235</span> implements <span class="kbd">inference_stream_v2</span> over standard Chat Completions streaming tool_calls. The <span class="kbd">custom</span> provider points it at <span class="kbd">openrouter.ai/api/v1</span>. The core loop works.</div>
+</section>
+
+<section id="master">
+  <h2><span class="n">1</span>Master architecture</h2>
+  <p>Seven bands top-to-bottom + two cross-cuts (observability, infra). A question and incoming data both traverse the stack.</p>
+
+  <div class="grid" style="margin:18px 0 24px">
+    <div class="layer l-if"><span class="role">Band 1 · Interfaces</span>
+      <h4>How 1000 users reach it</h4>
+      <ul><li>Nuxt UI · MCP clients (Cursor/Claude) · Slack/Teams · REST/SDK · scheduled tasks</li></ul></div>
+    <div class="layer l-llm"><span class="role">Band 2 · LLM gateway</span>
+      <h4>OpenRouter — one key, any model</h4>
+      <ul><li>bow <span class="kbd">custom</span> provider → <span class="kbd">base_url=openrouter.ai/api/v1</span>. Strong model for analysis, cheap model for routing/classify. Native tool_use over Chat Completions.</li></ul></div>
+    <div class="layer l-ctl"><span class="role">Band 3 · Control plane (bow)</span>
+      <h4>The platform</h4>
+      <ul><li>orgs · RBAC · Connections · Reports/Dashboards · per-org quota · auth (JWT / API-key / OAuth2-PKCE)</li></ul></div>
+    <div class="layer l-core"><span class="role">Band 4 · Agent core — AgentV2 plan→execute→reflect</span>
+      <h4>The brain's hands</h4>
+      <ul><li><b>Tools</b> registry (+ Analyst, + Engineer <span class="kbd">build_data_asset</span>)</li>
+        <li><b>Context</b> Hub builders — schema · instructions · query-patterns · observations · <b>brain</b> · <b>skills</b></li>
+        <li><b>Code-exec</b> — SQL + python, AST guard + <b>DB-level read-only engine</b></li></ul></div>
+    <div class="layer l-skill"><span class="role">Band 5 · Skills (self-service)</span>
+      <h4>Every user authors capabilities</h4>
+      <ul><li>SKILL.md packs · 3 levels (catalog → load_skill → bundled files) · scope: <b>personal / org / global</b> · promote-from-chat · top-K retrieval per user</li></ul></div>
+    <div class="layer l-brain"><span class="role">Band 6 · Karpathy 2nd-Brain</span>
+      <h4>Long-term memory + self-improvement</h4>
+      <ul><li>Instructions (approval gate) · learned memories · reasoning-cache · insights · <b>entity/correlation graph</b></li>
+        <li>writes: 👎 self-distill · harness mining · proven-SQL · insight daemon — <span class="pill gate">all → pending → active</span>; daemons <b>leader-gated</b></li></ul></div>
+    <div class="layer l-data"><span class="role">Band 7 · Data</span>
+      <h4>Storage + federation</h4>
+      <ul><li><b>OLTP</b> Postgres (app) — psycopg_pool · <b>OLAP</b> Postgres+pgvector(+AGE): public(RO) · analytics · staging</li>
+        <li><b>DuckDB</b> federation · <b>MinIO/S3</b> Parquet+files · <b>Redis</b> answer-cache+qbank · 46 connectors</li></ul></div>
+  </div>
+
+  <h3>Wiring diagram — all connections</h3>
+<pre>
+                                  <span class="c-mut">USERS (1000)</span>
+ Nuxt UI ─┬─ MCP (Cursor/Claude) ─┬─ Slack/Teams ─┬─ REST/SDK ─┬─ scheduled
+          ▼                       ▼               ▼            ▼
+<span class="c-pur">┌── EDGE / GATEWAY ── Caddy(TLS) → uvicorn workers (stateless) ──────────────────┐
+│   auth JWT/API-key/OAuth2-PKCE · org-scoping · per-org + per-user quota         │
+└───────────────────────────────┬─────────────────────────────────────────────────┘</span>
+                                 ▼ question + org_id + user_id
+<span class="c-gold">╔═══════════ SERVING FUNNEL (push left: cheap → costly) ════════════════════════╗
+║ ① Redis answer-cache ──hit──▶ return (0 LLM, ~1-2s)   ◀ most traffic            ║
+║ ② reasoning-cache (param-swap) ──hit──▶ re-run SQL live ▶ fresh numbers          ║
+║ ③ materialized analytics.* view ──hit──▶ plain fast SQL                          ║
+║ ④ ─────────────────────────────▶ AGENT LOOP (the ~30% novel tail)               ║
+╚═══════════════════════════════════════╪══════════════════════════════════════════╝</span>
+                                         ▼
+                          <span class="c-acc">OpenRouter (custom provider, any model, tool_use)</span>
+                                         ▲ inference_stream_v2 (Chat Completions)
+<span class="c-grn">┌── AGENT CORE  (AgentV2: plan → execute → reflect) ─────────────────────────────┐
+│  PLANNER ◀ BoundedSemaphore(15)+queue+retry                                     │
+│     │ each loop picks: tool | load_skill | done                                  │
+│  ┌──┴──────┬──────────────┬───────────────┬─────────────────────────────────┐   │
+│  │ TOOLS   │ CONTEXT(Hub)  │ CODE-EXEC      │ → calls SKILLS / BRAIN / DATA   │   │
+│  │ Analyst │ schema·instr  │ SQL+python     │                                 │   │
+│  │ Engineer│ qpatterns·obs │ AST + <span class="c-warn">DB RO eng</span> │                                 │   │
+│  │ build_  │ <span class="c-gold">brain</span>·<span class="c-pink">skills</span>   │ write→analytics│                                 │   │
+│  │ data_   │ catalogs      │ DDL-block list.│                                 │   │
+│  └────┬────┴───────┬───────┴───────┬────────┴─────────────────┬───────────────┘   │
+└───────┼────────────┼───────────────┼──────────────────────────┼──────────────────┘
+   load │       reads │          executes│                  write│
+        ▼            ▼                  ▼                       ▼</span>
+<span class="c-pink">┌─ BAND 5 · SKILLS (self-service) ──────┐</span> <span class="c-warn">┌─ QUERY / FEDERATION ──────────────┐</span>
+<span class="c-pink">│ L1 catalog (name+desc, top-K/user)    │</span> <span class="c-warn">│ live passthrough ─┐               │</span>
+<span class="c-pink">│ L2 load_skill → SKILL.md body+tools   │</span> <span class="c-warn">│ DuckDB (pooled, capped):          │</span>
+<span class="c-pink">│ L3 bundled queries.sql/helpers.py     │</span> <span class="c-warn">│  ATTACH postgres · read_parquet   │</span>
+<span class="c-pink">│ scope: personal│org-shared│global     │</span> <span class="c-warn">│  scan df · ONE SQL joins sources  │</span>
+<span class="c-pink">│ author: promote-from-chat (gated↑)    │</span> <span class="c-warn">└──────────────┬────────────────────┘</span>
+<span class="c-pink">└──────────────┬─────────────────────────┘</span>                │
+               │ distilled drafts / seed queries              │
+               ▼                                               ▼
+<span class="c-gold">┌─ BAND 6 · KARPATHY BRAIN ──────────────────────────┐</span>          │
+<span class="c-gold">│ Instructions(GATE) · memories · reasoning-cache    │</span>          │
+<span class="c-gold">│ insights · ENTITY GRAPH = correlation key-map      │</span>          │
+<span class="c-gold">│ writes 👎distill·harness·proven-SQL → pending      │</span>          │
+<span class="c-gold">│ daemons LEADER-GATED (advisory lock)               │</span>          │
+<span class="c-gold">└──────────────────┬──────────────────────────────────┘</span>          │
+                   │ keys / facts / cached SQL                          │
+                   ▼                                                    ▼
+<span class="c-acc">┌────────────────────────────── BAND 7 · DATA ────────────────────────────────────┐
+│ ┌─ OLTP(app) ─┐   ┌──────── OLAP(heavy) ────────┐   ┌─ object ─┐  ┌─ cache ─┐      │
+│ │ Postgres    │   │ Postgres + pgvector (+AGE)  │   │ MinIO/S3 │  │ Redis   │      │
+│ │ orgs/users/ │   │  public (company, READ-ONLY)│   │ Parquet  │  │ answer  │      │
+│ │ reports/    │   │  analytics (agent views)    │   │ snapshots│  │ + qbank │      │
+│ │ sessions·   │   │  staging (ingested)         │   │ + files  │  │ + sess  │      │
+│ │ skills/mem  │   │  pgvector(skill+qbank embed)│   └────┬─────┘  └─────────┘      │
+│ │ (pool)      │   │  AGE = entity/key graph     │        │                          │
+│ └──────┬──────┘   └────────────┬────────────────┘        │                          │
+└────────┼──────────────────────┼─────────────────────────┼──────────────────────────┘
+         │             ▲ materialize (scheduled, drift-guard)
+         │  ┌──────────┴────────────┐  ▲ snapshot/ingest
+         │  │ 46 CONNECTORS (bow)    │──┘
+         │  │ Snowflake·BigQuery·    │  live passthrough ───────────▶ DuckDB
+         │  │ Mongo·Trino·files·     │
+         │  │ Salesforce·APIs·docs   │
+         │  └────────────────────────┘
+         ▼</span>
+ <span class="c-mut">CROSS-CUT observability: AgentExecution→ToolExecution→ContextSnapshot · LLM cost ·
+           cache-hit-rate · evals · audit  →  Nuxt monitoring UI
+ CROSS-CUT infra: K8s+HPA · leader.py(advisory lock) · scheduler · per-org+per-user
+           UsagePolicy quota · Fernet cred encryption</span>
+</pre>
+</section>
+
+<section id="llm">
+  <h2><span class="n">2</span>LLM gateway — OpenRouter</h2>
+  <p>One provider, any model, one key. Removes all per-SDK dependency conflict (no Agno, no openai 2.x).</p>
+  <table>
+    <tr><th>Item</th><th>Setting</th></tr>
+    <tr><td>provider type</td><td><span class="kbd">custom</span> (openai-compatible) in bow's LLM layer</td></tr>
+    <tr><td>base_url</td><td><span class="kbd">https://openrouter.ai/api/v1</span></td></tr>
+    <tr><td>key</td><td><span class="kbd">OPENROUTER_API_KEY</span> → Bearer header</td></tr>
+    <tr><td>client path</td><td><span class="kbd">openai_client.py</span> → <span class="kbd">inference_stream_v2</span> (Chat Completions streaming tool_calls) ✓ verified</td></tr>
+    <tr><td>default model</td><td>tool-capable (e.g. <span class="kbd">anthropic/claude-*</span> or <span class="kbd">openai/gpt-*</span>) — planner emits native tool_use</td></tr>
+    <tr><td>router model</td><td>cheap model for classify/route/title (cost control)</td></tr>
+    <tr><td>not available via OpenRouter</td><td>Anthropic extended-thinking, OpenAI-Responses web_search (provider-native) — optional, not the loop</td></tr>
+  </table>
+  <div class="note warn">Pin tool-capable models. Not every OpenRouter model supports tool calling; a wrong default silently breaks the planner loop.</div>
+</section>
+
+<section id="funnel">
+  <h2><span class="n">3</span>Serving funnel — the scale lever</h2>
+  <p>At 1000 users the design wins by serving most traffic where there is no LLM call.</p>
+  <div class="funnel">
+    <div class="t0"><span class="tag2">~70% · 0 LLM · ~1-2s</span><b>① Redis answer-cache</b> — known question, org-scoped → return directly</div>
+    <div class="t1"><span class="tag2">0 LLM · live numbers</span><b>② Reasoning-cache (param-swap)</b> — nearest proven SQL → swap literals → re-run live</div>
+    <div class="t2"><span class="tag2">0 LLM · fast SQL</span><b>③ Materialized analytics.* view</b> — Engineer precomputed it on schedule</div>
+    <div class="t3"><span class="tag2">~30% · LLM-bound · semaphore</span><b>④ Agent loop</b> — novel question only → plan/execute/reflect via OpenRouter</div>
+  </div>
+  <div class="note warn"><b>Biggest unproven assumption:</b> the ~70% hit-rate. New product = cold caches. Measure hit-rate on real traffic before trusting the 1000-user economics. The funnel is also the cost funnel.</div>
+</section>
+
+<div class="two">
+<section id="flowq">
+  <h2 style="margin-top:50px"><span class="n">4</span>Flow A — a question</h2>
+  <ol class="flow">
+    <li>User asks → gateway authenticates, resolves <b>org_id+user_id</b>, checks org+user quota.</li>
+    <li><b>① Redis</b> answer-cache. HIT → return + SOURCES. <em>Most users stop here.</em></li>
+    <li>MISS → <b>② reasoning-cache</b>: embed → nearest proven SQL → param-swap → re-run live, 0 LLM.</li>
+    <li>MISS → <b>③ materialized view</b>? → plain fast SQL.</li>
+    <li>Novel → <b>④ agent loop</b>. ContextHub primes: schema + instructions + <b>skill catalog (top-K, user-scoped)</b> + query-patterns + <b>brain memories</b> + correlation-map.</li>
+    <li>Planner (OpenRouter, via semaphore) decides. Domain match → <b>load_skill</b> injects SKILL.md + scopes its tools.</li>
+    <li>Tool exec: read via read-only engine (public live) or <b>DuckDB</b> cross-source; Engineer <b>build_data_asset</b> writes <span class="kbd">analytics.*</span>.</li>
+    <li>Observation → refresh_warm → loop until done / circuit-break. Harness mines proven SQL → <b>brain pending</b>.</li>
+    <li>Stream answer (SSE) → Nuxt renders. Full trace written.</li>
+    <li>Write-back: cache ①, store proven SQL ②. 👎 → self-distill → pending memory. "Save as skill?" offered.</li>
+  </ol>
+</section>
+
+<section id="flowd">
+  <h2 style="margin-top:50px"><span class="n">5</span>Flow B — data in</h2>
+  <ol class="flow">
+    <li>Admin connects a source (bow Connection): creds → <b>Fernet-encrypted</b> → app DB.</li>
+    <li>Schema introspect → DataSourceTable catalog + stats (centrality/richness).</li>
+    <li>Freshness per asset: <span class="pill live">live</span> <span class="pill cache">cached(TTL)</span> <span class="pill mat">materialized</span>.</li>
+    <li>Unstructured (docs/images): extract → embed → <b>pgvector</b>; entities → <b>AGE graph</b>.</li>
+    <li>Correlation: agent discovers candidate join keys → proposes → <span class="pill gate">admin approves</span> → brain entity graph.</li>
+    <li>Engineer materializes correlated <span class="kbd">analytics.*</span> view from approved key-map.</li>
+    <li>Scheduled refresh (leader-gated): re-snapshot, <b>drift-guard + backup-before-replace</b>, notify on drift.</li>
+    <li>Analyst &amp; Tier-3 prefer correlated view; common questions precompute into Tier 0/1 cache.</li>
+  </ol>
+</section>
+</div>
+
+<section id="skills">
+  <h2><span class="n">6</span>Skills — self-service, every user authors</h2>
+  <p>A <b>Skill</b> = packaged capability (procedural <span class="kbd">SKILL.md</span> + bundled assets), loaded on demand. "Like Claude" = a convention + progressive disclosure + a load tool + a code sandbox — all of which bow already has.</p>
+
+  <h3>Progressive disclosure — 3 levels</h3>
+<pre>L1  always in context (~30 tok/skill)   → SkillContextBuilder injects "name: description"
+                                          (top-K relevant, scoped to THIS user's visible set)
+L2  on demand                           → load_skill(name) → full SKILL.md body injected
+                                          + skill's required_tools added to the run
+L3  deep, read/run only if needed       → bundled queries.sql / helpers.py / build.sql
+                                          via read_file · AST sandbox · Engineer</pre>
+
+  <h3>Scope model — who sees a skill</h3>
+  <table>
+    <tr><th>Scope</th><th>Visible to</th><th>Gate</th><th>Why safe</th></tr>
+    <tr><td>personal</td><td>owner only (<span class="kbd">owner_user_id</span>)</td><td><b>none — instant</b></td><td>runs in that user's own read-only + sandbox scope; can't harm others</td></tr>
+    <tr><td>org-shared</td><td>whole org (<span class="kbd">organization_id</span>)</td><td><span class="pill gate">approval + SQL lint</span></td><td>reviewed before shared</td></tr>
+    <tr><td>global</td><td>everyone</td><td>admin/vendored only</td><td>platform-curated</td></tr>
+  </table>
+
+  <h3>Authoring paths — how a non-coder makes one</h3>
+  <ul>
+    <li><b>A · Promote-from-chat (primary).</b> After a good analysis, click <b>"Save as skill."</b> The agent distills the conversation trace — proven SQL, steps, question pattern — into a SKILL.md draft (description auto-written, procedure from trace, queries.sql from executed SQL, required views detected). → personal skill in seconds, no code.</li>
+    <li><b>B · Plain-language wizard.</b> name · "use when…" · steps in English · pick tables. Agent fills the SQL.</li>
+    <li><b>C · Raw editor.</b> Monaco SKILL.md (power users; bow ships Monaco).</li>
+  </ul>
+
+  <h3>Promotion ladder</h3>
+<pre>analysis → "Save as skill" → <span class="c-grn">PERSONAL</span> (instant, private)
+  → proves useful → "Share to org" → <span class="c-pink">REVIEW GATE</span> (approval + lint) → <span class="c-gold">ORG-SHARED</span>
+     → broadly valuable → admin promotes → GLOBAL</pre>
+
+  <div class="note">Scale gotcha: dump-all descriptions into L1 only works for &lt;~50 skills. With hundreds, embed descriptions (pgvector) and inject only <b>top-K relevant, user-scoped</b>. Same engine as reasoning-cache.</div>
+  <div class="note gate">Safety: personal skills are safe-by-construction (DB read-only engine + AST sandbox + own org scope). Only <b>sharing</b> is gated — personal creation stays open so all 1000 users can author freely.</div>
+</section>
+
+<section id="brain">
+  <h2><span class="n">7</span>Karpathy 2nd-Brain</h2>
+  <p>Shared long-term memory + self-improvement feeding both the loop and the skills. Reuses bow's approval gate — memories are Instructions (<span class="kbd">source_type='ai'</span>); no new gate.</p>
+  <table>
+    <tr><th>Feature</th><th>How in bow</th><th>Default</th></tr>
+    <tr><td>pending-gated memory</td><td>Instruction source_type='ai' + existing approval gate</td><td>on (gated)</td></tr>
+    <tr><td>self-distill</td><td>completion_feedback 👎 → distill → pending Instruction</td><td>on</td></tr>
+    <tr><td>reasoning-cache</td><td>query_cache table; proven SQL w/ swapped literals, re-run live</td><td>on</td></tr>
+    <tr><td>insight daemon (per-user + org)</td><td>services/brain_service.py, leader-gated, scheduler</td><td>OFF</td></tr>
+    <tr><td>entity/correlation graph</td><td>Apache AGE — cross-source key map + multi-hop</td><td>OFF</td></tr>
+    <tr><td>brain context read</td><td>BrainContextBuilder injects top-K active memories + cached queries</td><td>on</td></tr>
+  </table>
+<pre><span class="c-mut"># the loop closes — skills ↔ brain ↔ Engineer, one gated store</span>
+skill.queries.sql   ──seed──▶ reasoning-cache
+brain learns        ──distill──▶ draft skill <span class="c-gold">(gated)</span> ──enable──▶ Engineer builds views
+brain notices repeat ──▶ "save this as a skill?" (per-user auto-author)</pre>
+</section>
+
+<section id="fed">
+  <h2><span class="n">8</span>Federation &amp; correlation</h2>
+  <p>You cannot SQL-join Snowflake ⨝ Mongo ⨝ uploaded-CSV remotely. <b>DuckDB</b> reads them all in one place; Postgres stays system-of-record.</p>
+  <h3>Two-way query = per-asset freshness policy</h3>
+  <table>
+    <tr><th>Mode</th><th>When</th><th>How</th></tr>
+    <tr><td>live</td><td>small, needs-fresh, fast source</td><td>passthrough each time</td></tr>
+    <tr><td>cached(TTL)</td><td>repeat reads, tolerate lag</td><td>Parquet snapshot in MinIO, refresh on TTL</td></tr>
+    <tr><td>materialized</td><td>correlation, heavy joins, offline</td><td>ingest → staging; Engineer view; scheduled refresh</td></tr>
+  </table>
+  <h3>Correlation is learned + gated, never hardcoded</h3>
+  <ul>
+    <li>Brain stores entity definitions + cross-source key maps (<span class="kbd">salesforce.account_id ⇄ pg.customer_id ⇄ mongo.org</span>).</li>
+    <li>Agent <b>discovers</b> candidate keys → proposes → <span class="pill gate">admin approves</span> → Engineer materializes correlated view.</li>
+    <li>Unstructured: embed (pgvector) + entity-extract into same graph → email entities correlate with structured rows.</li>
+  </ul>
+  <div class="note warn">Governance: caching external data locally crosses tenant/PII lines. Gate ingestion, encrypt (Fernet), per-org isolation, log every materialize.</div>
+</section>
+
+<section id="scale">
+  <h2><span class="n">9</span>Scaling to 1000 users</h2>
+  <p>1000 users ≈ <b>50-100 concurrent sessions</b>; ~70% cache → <b>~15-30 concurrent agent loops</b>. The LLM (OpenRouter rate/cost) is the ceiling, not the boxes.</p>
+  <table>
+    <tr><th>Layer</th><th>Risk</th><th>Fix</th></tr>
+    <tr><td>LLM (OpenRouter)</td><td>the ceiling</td><td>BoundedSemaphore(15)+queue+retry on 5xx/429; bounded by provider rate/cost</td></tr>
+    <tr><td>Agent loop</td><td>long, holds resources</td><td>novel-only; cap concurrent; SSE; hard-timeout 300s</td></tr>
+    <tr><td>DuckDB</td><td>RAM/CPU, can OOM</td><td>bounded pool + memory_limit + spill; heavy corr = precomputed</td></tr>
+    <tr><td>Postgres</td><td>OLTP+OLAP contention</td><td>psycopg_pool; <b>split app vs analytics</b> DB/replica</td></tr>
+    <tr><td>Brain daemons</td><td>dup runs per worker</td><td>leader-gate via PG advisory lock</td></tr>
+    <tr><td>Skills catalog</td><td>L1 bloat w/ many skills</td><td>top-K pgvector retrieval, user-scoped</td></tr>
+    <tr><td>Web tier</td><td>single process</td><td>stateless uvicorn workers + K8s HPA (helm ships)</td></tr>
+    <tr><td>Multi-tenant</td><td>one org/user starves others</td><td>per-org + per-user UsagePolicy quota + fair queue</td></tr>
+  </table>
+  <div class="note">Reuse your proven playbook (DocSensei/CityPharma): psycopg_pool · leader-gated daemons · LLM semaphore (6→15 cut cold p95 63s→30s) · cache-hit observability · 100-conc load test.</div>
+</section>
+
+<section id="build">
+  <h2><span class="n">10</span>Delivery — ship in slices, validate before expanding</h2>
+  <p>Don't build all 10 phases blind. Prove the two unproven assumptions (OpenRouter loop + cache economics) on real traffic first.</p>
+<pre><span class="c-grn">SLICE 1 — prove it works + measure</span>  Ph0 base · Ph1 OpenRouter · Ph2 dual-schema ·
+          Ph3 Engineer · Tier-0/1 cache · cache-hit metric · LOAD TEST
+          └▶ GATE: is cache-hit + cost acceptable?
+<span class="c-gold">SLICE 2 — brain + skills value</span>      Ph4 brain-read · Ph5 brain-write · Ph6 skills(self-service)
+<span class="c-warn">SLICE 3 — heavy, only if needed</span>     Ph7 DuckDB federation · Ph8 AGE correlation
+SLICE 4 — harden + clean              Ph9 scale · Ph10 clean project</pre>
+  <table>
+    <tr><th>Ph</th><th>Deliverable</th><th>Key new modules (single project)</th><th>Flag</th></tr>
+    <tr><td>0</td><td>clean base + branch</td><td>hybrid-brain branch; dash→/reference</td><td>—</td></tr>
+    <tr><td>1</td><td>OpenRouter LLM</td><td>custom provider config; tool-capable default model</td><td>—</td></tr>
+    <tr><td>2</td><td>dual-schema + DB read-only</td><td>engine factory + DDL-block listener; alembic analytics/staging</td><td>DUAL_SCHEMA</td></tr>
+    <tr><td>3</td><td>Engineer capability</td><td>ai/tools/implementations/build_data_asset.py; registry</td><td>ENGINEER_ASSETS</td></tr>
+    <tr><td>4</td><td>brain reads</td><td>ai/context/builders/brain_builder.py; alembic query_cache</td><td>BRAIN_READ</td></tr>
+    <tr><td>5</td><td>brain writes (gated)</td><td>services/brain_service.py; feedback hook; param-swap serve</td><td>DISTILLER, QUERY_CACHE</td></tr>
+    <tr><td>6</td><td>skills (self-service)</td><td>ai/skills/ (registry, loader, load_skill); SkillContextBuilder; skills/; alembic skill (owner/org/scope); "Save as skill" distill; Nuxt pages/skills/</td><td>SKILLS</td></tr>
+    <tr><td>7</td><td>federation (DuckDB)</td><td>DuckDB engine in code-exec; freshness policies; MinIO snapshots; refresh+drift-guard</td><td>FEDERATION</td></tr>
+    <tr><td>8</td><td>correlation graph + unstructured</td><td>Apache AGE; entity/key-map service; pgvector embed; insight daemon</td><td>BRAIN_GRAPH(off), INSIGHT_DAEMON(off)</td></tr>
+    <tr><td>9</td><td>scale hardening</td><td>psycopg_pool; OLTP/OLAP split; semaphore; quotas; HPA; load test</td><td>—</td></tr>
+    <tr><td>10</td><td>clean project</td><td>strip dead refs; brand bow→CityAgent Analytics; OPENROUTER_API_KEY env; delete /reference/dash</td><td>—</td></tr>
+  </table>
+</section>
+
+<footer>
+  CityAgent Analytics · full hybrid design v0.2 · bagofwords + dash patterns + Karpathy 2nd-Brain + self-service skills ·
+  single-project, no sidecar · OpenRouter LLM (tool_use loop verified) · target 1000 users.<br/>
+  Diagrams are ASCII for portability; render in any browser. Source of truth: <span class="kbd">docs/ARCHITECTURE.html</span>.
+</footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,4 @@
+# backup 20260621_041517 label=autotrain-baked-4b
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       .env
+OK       docker-compose.build.yaml

@@ -1,0 +1,566 @@
+from typing import ClassVar, List, Optional, Literal
+from pydantic import BaseModel
+from app.ai.context.sections.base import ContextSection, xml_tag, xml_escape
+from app.schemas.data_source_schema import DataSourceSummarySchema
+from app.ai.prompt_formatters import Table as PromptTable
+
+
+# Schema usage tracking models for context snapshots
+class TableUsageItem(BaseModel):
+    """Lightweight tracking of a single table's usage in context."""
+    name: str
+    score: Optional[float] = None
+    usage_count: Optional[int] = None
+    columns_count: int = 0
+    selection_reason: str = "top_k_score"  # 'top_k_score' | 'mentioned' | 'all'
+
+
+class DataSourceUsage(BaseModel):
+    """Tracking of tables used from a single data source."""
+    ds_id: str
+    ds_name: str
+    ds_type: str
+    tables_used: List[TableUsageItem] = []
+    tables_total: int = 0
+    top_k_applied: int = 0
+
+
+class SchemaUsageSnapshot(BaseModel):
+    """Lightweight snapshot of which schemas/tables were used in context."""
+    data_sources: List[DataSourceUsage] = []
+
+
+class MCPToolItem(BaseModel):
+    """Lightweight representation of an MCP tool for context injection."""
+    name: str
+    description: Optional[str] = None
+    connection_id: Optional[str] = None
+    connection_name: Optional[str] = None
+
+
+class TablesSchemaContext(ContextSection):
+    tag_name: ClassVar[str] = "data_sources"
+
+    class DataSource(ContextSection):
+        tag_name: ClassVar[str] = "data_source"
+        info: DataSourceSummarySchema
+        tables: List[PromptTable] = []
+        mcp_tools: List[MCPToolItem] = []
+
+        def _group_tables_by_connection(self) -> dict:
+            """Group tables by connection_id. Tables without connection_id go under 'default'."""
+            from collections import defaultdict
+            groups = defaultdict(list)
+            for t in (self.tables or []):
+                conn_id = getattr(t, 'connection_id', None) or 'default'
+                groups[conn_id].append(t)
+            return groups
+
+        def _render_table_xml(self, t: PromptTable) -> str:
+            """Render a single table to XML."""
+            col_parts = []
+            for c in (t.columns or []):
+                attrs = f'name="{xml_escape(c.name)}" dtype="{xml_escape(c.dtype or "")}"'
+                if getattr(c, 'description', None):
+                    attrs += f' description="{xml_escape(c.description)}"'
+                # Column role/kind from metadata (semantic views, PowerBI, Tableau)
+                col_meta = getattr(c, 'metadata', None)
+                if isinstance(col_meta, dict):
+                    role = col_meta.get("kind") or col_meta.get("role")
+                    if role:
+                        attrs += f' role="{xml_escape(str(role).lower())}"'
+                    # Allowed VALUES list (so the agent knows real values up front)
+                    values = col_meta.get("values")
+                    if isinstance(values, list) and values:
+                        shown = [str(v) for v in values if v is not None][:20]
+                        joined = ", ".join(shown)
+                        distinct = col_meta.get("distinct")
+                        if isinstance(distinct, int) and distinct > len(shown):
+                            joined += f" …+{distinct - len(shown)} more"
+                        elif len(values) > len(shown):
+                            joined += f" …+{len(values) - len(shown)} more"
+                        attrs += f' values="{xml_escape(joined)}"'
+                    distinct = col_meta.get("distinct")
+                    if isinstance(distinct, int) and distinct > 0:
+                        attrs += f' distinct="{distinct}"'
+                    null_pct = col_meta.get("null_pct")
+                    if isinstance(null_pct, (int, float)) and null_pct > 0:
+                        attrs += f' nulls="{round(null_pct, 1)}%"'
+                col_parts.append(f'<column {attrs}/>')
+            cols = "\n".join(col_parts)
+
+            # ignored for now
+            pks = "\n".join(
+                f'<pk name="{xml_escape(pk.name)}" dtype="{xml_escape(pk.dtype or "")}"/>'
+                for pk in (t.pks or [])
+            )
+            fks = "\n".join(
+                f'<fk column="{xml_escape(fk.column.name)}" '
+                f'ref_table="{xml_escape(fk.references_name)}" '
+                f'ref_column="{xml_escape(fk.references_column.name)}"/>'
+                for fk in (t.fks or [])
+            )
+            metrics_lines: List[str] = []
+            if any(v is not None for v in [t.score, t.usage_count, t.success_count, t.failure_count, t.success_rate, t.pos_feedback_count, t.neg_feedback_count, t.last_used_at, t.last_feedback_at]):
+                if t.score is not None:
+                    metrics_lines.append(f'<score value="{xml_escape(str(round(t.score, 6)))}"/>')
+                if any(v is not None for v in [t.usage_count, t.success_count, t.failure_count]):
+                    metrics_lines.append(
+                        f'<usage count="{t.usage_count or 0}" success="{t.success_count or 0}" failure="{t.failure_count or 0}"/>'
+                    )
+                if t.success_rate is not None:
+                    metrics_lines.append(f'<success_rate value="{xml_escape(str(round(t.success_rate, 6)))}"/>')
+                if any(v is not None for v in [t.pos_feedback_count, t.neg_feedback_count]):
+                    metrics_lines.append(
+                        f'<feedback pos="{t.pos_feedback_count or 0}" neg="{t.neg_feedback_count or 0}"/>'
+                    )
+                if t.last_used_at:
+                    metrics_lines.append(f'<last_used_at value="{xml_escape(t.last_used_at)}"/>')
+                if t.last_feedback_at:
+                    metrics_lines.append(f'<last_feedback_at value="{xml_escape(t.last_feedback_at)}"/>')
+            metrics_xml = xml_tag("metrics", "\n".join(metrics_lines)) if metrics_lines else ""
+            # Optional metadata (compact attributes)
+            metadata_xml = ""
+            try:
+                tj = (t.metadata_json or {}).get("tableau", {}) if isinstance(t.metadata_json, dict) else {}
+                attrs = {}
+                for k in ("datasourceLuid", "projectName", "name"):
+                    v = tj.get(k)
+                    if v is not None:
+                        attrs[k] = v
+                if attrs:
+                    metadata_xml = xml_tag("metadata", "", attrs)
+            except Exception:
+                metadata_xml = ""
+            # PowerBI Report Server metadata — surface queryability so the planner
+            # knows pbix model tables, RDL reports, and shared datasets can be queried.
+            pbi_xml = ""
+            try:
+                pbi = (t.metadata_json or {}).get("powerbi_report_server") if isinstance(t.metadata_json, dict) else None
+                if isinstance(pbi, dict):
+                    pbi_attrs = {}
+                    for k in ("queryable", "report_type", "upstream_source"):
+                        v = pbi.get(k)
+                        if v is not None and v != "":
+                            pbi_attrs[k] = str(v).lower() if isinstance(v, bool) else str(v)
+                    pbi_note = pbi.get("query_note")
+                    pbi_inner = xml_escape(pbi_note) if pbi_note else ""
+                    if pbi_attrs or pbi_inner:
+                        pbi_xml = xml_tag("powerbi_report_server", pbi_inner, pbi_attrs)
+            except Exception:
+                pbi_xml = ""
+            # Add query instructions for semantic views
+            is_semantic_view = isinstance(t.metadata_json, dict) and t.metadata_json.get("type") == "semantic_view"
+            note_xml = ""
+            if is_semantic_view:
+                note_xml = xml_tag("note", "Snowflake Semantic View: query with SELECT * FROM SEMANTIC_VIEW(view_name DIMENSIONS dim1, dim2 METRICS metric1, metric2 WHERE condition). Use DIMENSIONS for role=dimension columns, METRICS for role=measure/metric columns.")
+            inner = "\n".join(filter(None, [note_xml, xml_tag("columns", cols), metadata_xml, pbi_xml, metrics_xml]))
+            table_attrs = {"name": t.name}
+            # Mark semantic views
+            if is_semantic_view:
+                table_attrs["type"] = "semantic_view"
+            if getattr(t, 'description', None):
+                table_attrs["description"] = t.description
+            return xml_tag("table", inner, table_attrs)
+
+        def _render_mcp_tools_xml(self) -> str:
+            """Render MCP tools grouped by connection."""
+            from collections import defaultdict
+            groups = defaultdict(list)
+            for tool in (self.mcp_tools or []):
+                key = tool.connection_id or 'default'
+                groups[key].append(tool)
+
+            conn_parts = []
+            for conn_id, tools in groups.items():
+                tool_xmls = []
+                for t in tools:
+                    desc = xml_escape(t.description or "")
+                    tool_xmls.append(f'<tool name="{xml_escape(t.name)}">{desc}</tool>')
+                conn_name = tools[0].connection_name or 'unknown'
+                conn_attrs = {"name": conn_name, "type": "mcp"}
+                if conn_id != 'default':
+                    conn_attrs["id"] = conn_id
+                conn_parts.append(xml_tag("connection", "\n".join(tool_xmls), conn_attrs))
+            # Only tool names + descriptions are listed above — not argument
+            # schemas. Tell the agent to fetch the exact schema before calling,
+            # so it doesn't guess argument names and burn turns on failed calls.
+            conn_parts.append(
+                "<note>Only tool names and descriptions are shown above, not their argument schemas. "
+                "Call search_mcps to get a tool's full input schema (exact argument names and types) "
+                "before calling execute_mcp — do not guess arguments.</note>"
+            )
+            return xml_tag("mcp_tools", "\n".join(conn_parts))
+
+        def render(self) -> str:
+            # Group tables by connection
+            conn_groups = self._group_tables_by_connection()
+
+            content_parts = []
+            if self.info.context:
+                content_parts.append(xml_tag("context", xml_escape(self.info.context)))
+
+            # Check if we have multi-connection (more than one group, or the group isn't 'default')
+            has_multi_connection = len(conn_groups) > 1 or (len(conn_groups) == 1 and 'default' not in conn_groups)
+
+            if has_multi_connection:
+                # Render with nested <connection> tags
+                for conn_id, tables in conn_groups.items():
+                    if not tables:
+                        continue
+                    # Get connection info from first table
+                    first_table = tables[0]
+                    conn_name = getattr(first_table, 'connection_name', None) or 'unknown'
+                    conn_type = getattr(first_table, 'connection_type', None) or 'unknown'
+
+                    tables_xml = [self._render_table_xml(t) for t in tables]
+                    conn_attrs = {"name": conn_name, "type": conn_type}
+                    if conn_id != 'default':
+                        conn_attrs["id"] = conn_id
+                    content_parts.append(xml_tag("connection", "\n\n".join(tables_xml), conn_attrs))
+            else:
+                # Single connection or legacy mode - render tables directly (backward compatible)
+                tables_xml = [self._render_table_xml(t) for t in (self.tables or [])]
+                content_parts.append("\n\n".join(tables_xml))
+
+            # Render MCP tools if present
+            if self.mcp_tools:
+                mcp_parts = self._render_mcp_tools_xml()
+                if mcp_parts:
+                    content_parts.append(mcp_parts)
+
+            # Build data_source attributes
+            ds_attrs = {"name": self.info.name, "id": self.info.id}
+            # Only include type if single connection (for backward compatibility)
+            if not has_multi_connection and self.info.type:
+                ds_attrs["type"] = self.info.type
+
+            return xml_tag(self.tag_name, "\n".join(content_parts), ds_attrs)
+
+        # Compact renderers for gist/index/digest
+        def _render_gist(self, columns_per_table: int = 2) -> str:
+            table_tags: List[str] = []
+            for t in (self.tables or []):
+                # Per-table metrics: score, usage, columns count
+                try:
+                    score_val = getattr(t, 'score', None)
+                    if score_val is not None:
+                        try:
+                            score_str = str(round(float(score_val), 2))
+                        except Exception:
+                            score_str = str(score_val)
+                    else:
+                        score_str = None
+                except Exception:
+                    score_str = None
+                try:
+                    usage_val = getattr(t, 'usage_count', None)
+                    usage_str = str(int(usage_val)) if usage_val is not None else None
+                except Exception:
+                    usage_str = None
+                try:
+                    cols_count = len(t.columns or [])
+                except Exception:
+                    cols_count = 0
+
+                meta_parts: List[str] = []
+                if score_str is not None:
+                    meta_parts.append(f"score: {score_str}")
+                if usage_str is not None:
+                    meta_parts.append(f"usage: {usage_str}")
+                meta_parts.append(f"{cols_count} columns")
+                meta_text = f"({', '.join(meta_parts)})" if meta_parts else None
+
+                attrs = {"n": t.name}
+                if meta_text:
+                    attrs["meta"] = meta_text
+                table_tags.append(xml_tag("t", "", attrs))
+            # Skip empty data sources in gist
+            if not table_tags:
+                return ""
+            label = xml_tag("label", "Sample top 10 tables for reference")
+            inner = label + xml_tag("tables", "".join(table_tags))
+            attrs = {"name": self.info.name, "type": self.info.type, "id": self.info.id, "sample": str(len(table_tags))}
+            if self.info.context:
+                attrs["desc"] = xml_escape(self.info.context)
+            return xml_tag("data_source", inner, attrs)
+
+        def _render_names(self) -> str:
+            names = [getattr(t, 'name', '') for t in (self.tables or [])]
+            # Skip empty data sources
+            if not names:
+                return ""
+            # Ultra-compact: count + comma-separated list on one line
+            label = xml_tag("label", "Index of all tables in database")
+            payload = label + xml_tag("count", str(len(names))) + xml_tag("list", ", ".join(names))
+            return xml_tag("data_source", payload, {"name": self.info.name, "type": self.info.type, "id": self.info.id})
+
+        def _render_digest(self) -> str:
+            first_five = [t.name for t in (self.tables or [])][:5]
+            payload = xml_tag("count", str(len(self.tables or []))) + xml_tag("top", ", ".join(first_five))
+            return xml_tag(self.tag_name, payload, {"name": self.info.name, "type": self.info.type, "id": self.info.id})
+
+        def _render_topk_tables_full(self, top_k: int) -> str:
+            """Render top K tables with full schema, grouped by connection if multi-connection."""
+            top_tables = (self.tables or [])[: max(0, top_k)]
+            if not top_tables:
+                return ""
+
+            # Group top tables by connection
+            from collections import defaultdict
+            conn_groups = defaultdict(list)
+            for t in top_tables:
+                conn_id = getattr(t, 'connection_id', None) or 'default'
+                conn_groups[conn_id].append(t)
+
+            has_multi_connection = len(conn_groups) > 1 or (len(conn_groups) == 1 and 'default' not in conn_groups)
+
+            def render_table(t):
+                col_parts = []
+                for c in (t.columns or []):
+                    col_attrs = f'name="{xml_escape(c.name)}" dtype="{xml_escape(c.dtype or "")}"'
+                    if getattr(c, 'description', None):
+                        col_attrs += f' description="{xml_escape(c.description)}"'
+                    col_meta = getattr(c, 'metadata', None)
+                    if isinstance(col_meta, dict):
+                        role = col_meta.get("kind") or col_meta.get("role")
+                        if role:
+                            col_attrs += f' role="{xml_escape(str(role).lower())}"'
+                        # Allowed VALUES list (so the agent knows real values up front)
+                        values = col_meta.get("values")
+                        if isinstance(values, list) and values:
+                            shown = [str(v) for v in values if v is not None][:20]
+                            joined = ", ".join(shown)
+                            distinct = col_meta.get("distinct")
+                            if isinstance(distinct, int) and distinct > len(shown):
+                                joined += f" …+{distinct - len(shown)} more"
+                            elif len(values) > len(shown):
+                                joined += f" …+{len(values) - len(shown)} more"
+                            col_attrs += f' values="{xml_escape(joined)}"'
+                        distinct = col_meta.get("distinct")
+                        if isinstance(distinct, int) and distinct > 0:
+                            col_attrs += f' distinct="{distinct}"'
+                        null_pct = col_meta.get("null_pct")
+                        if isinstance(null_pct, (int, float)) and null_pct > 0:
+                            col_attrs += f' nulls="{round(null_pct, 1)}%"'
+                    col_parts.append(f'<column {col_attrs}/>')
+                cols = "\n".join(col_parts)
+                pks = "\n".join(
+                    f'<pk name="{xml_escape(pk.name)}" dtype="{xml_escape(pk.dtype or "")}"/>'
+                    for pk in (t.pks or [])
+                )
+                fks = "\n".join(
+                    f'<fk column="{xml_escape(fk.column.name)}" '
+                    f'ref_table="{xml_escape(fk.references_name)}" '
+                    f'ref_column="{xml_escape(fk.references_column.name)}"/>'
+                    for fk in (t.fks or [])
+                )
+                attrs = {"name": t.name, "cols": str(len(t.columns or []))}
+                is_sv = isinstance(getattr(t, 'metadata_json', None), dict) and t.metadata_json.get("type") == "semantic_view"
+                if is_sv:
+                    attrs["type"] = "semantic_view"
+                if getattr(t, 'description', None):
+                    attrs["description"] = t.description
+                try:
+                    if getattr(t, 'score', None) is not None:
+                        attrs["score"] = str(round(float(getattr(t, 'score')), 2))
+                except Exception:
+                    pass
+                try:
+                    if getattr(t, 'usage_count', None) is not None:
+                        attrs["usage"] = str(int(getattr(t, 'usage_count') or 0))
+                except Exception:
+                    pass
+                try:
+                    if getattr(t, 'referenced_instructions_count', None) is not None:
+                        attrs["instructions"] = str(int(getattr(t, 'referenced_instructions_count')))
+                except Exception:
+                    pass
+                note_xml = ""
+                if is_sv:
+                    note_xml = xml_tag("note", "Snowflake Semantic View: query with SELECT * FROM SEMANTIC_VIEW(view_name DIMENSIONS dim1, dim2 METRICS metric1, metric2 WHERE condition). Use DIMENSIONS for role=dimension columns, METRICS for role=measure/metric columns.")
+                # PowerBI Report Server metadata — surface queryability so the planner
+                # knows pbix model tables / RDL reports / datasets are queryable here.
+                pbi_xml = ""
+                try:
+                    pbi = (t.metadata_json or {}).get("powerbi_report_server") if isinstance(getattr(t, 'metadata_json', None), dict) else None
+                    if isinstance(pbi, dict):
+                        pbi_attrs = {}
+                        for k in ("queryable", "report_type", "upstream_source"):
+                            v = pbi.get(k)
+                            if v is not None and v != "":
+                                pbi_attrs[k] = str(v).lower() if isinstance(v, bool) else str(v)
+                        pbi_note = pbi.get("query_note")
+                        pbi_inner = xml_escape(pbi_note) if pbi_note else ""
+                        if pbi_attrs or pbi_inner:
+                            pbi_xml = xml_tag("powerbi_report_server", pbi_inner, pbi_attrs)
+                except Exception:
+                    pbi_xml = ""
+                inner = "\n".join(filter(None, [note_xml, xml_tag("columns", cols), xml_tag("pks", pks) if pks else "", xml_tag("fks", fks) if fks else "", pbi_xml]))
+                return xml_tag("table", inner, attrs)
+
+            if has_multi_connection:
+                # Render with nested <connection> tags
+                conn_xml_parts = []
+                for conn_id, tables in conn_groups.items():
+                    if not tables:
+                        continue
+                    first_table = tables[0]
+                    conn_name = getattr(first_table, 'connection_name', None) or 'unknown'
+                    conn_type = getattr(first_table, 'connection_type', None) or 'unknown'
+
+                    tables_xml = [render_table(t) for t in tables]
+                    conn_attrs = {"name": conn_name, "type": conn_type}
+                    if conn_id != 'default':
+                        conn_attrs["id"] = conn_id
+                    conn_xml_parts.append(xml_tag("connection", "\n".join(tables_xml), conn_attrs))
+                return "\n".join(conn_xml_parts)
+            else:
+                # Single connection - render tables directly
+                tables_xml = [render_table(t) for t in top_tables]
+                return xml_tag("tables", "\n".join(tables_xml))
+
+        def _render_names_index(self, index_limit: int = 200) -> str:
+            tables = list(self.tables or [])
+            if not tables:
+                return ""
+            # Build nested <item> elements with minimal metrics
+            items_xml: List[str] = []
+            cap = max(0, index_limit)
+            for t in tables[:cap if cap > 0 else len(tables)]:
+                attrs = {
+                    "name": t.name,
+                    "cols": str(len(getattr(t, 'columns', []) or [])),
+                }
+                try:
+                    if getattr(t, 'score', None) is not None:
+                        attrs["score"] = str(round(float(getattr(t, 'score')), 2))
+                except Exception:
+                    pass
+                try:
+                    if getattr(t, 'referenced_instructions_count', None) is not None:
+                        attrs["instructions"] = str(int(getattr(t, 'referenced_instructions_count')))
+                except Exception:
+                    pass
+                # Emit self-closing <item .../> to avoid empty inner newlines
+                attrs_str = "".join(f' {k}="{xml_escape(str(v))}"' for k, v in attrs.items())
+                items_xml.append(f"<item{attrs_str}/>")
+            idx_attrs = {"count": str(len(tables))}
+            if cap > 0 and len(tables) > cap:
+                idx_attrs["truncated"] = "true"
+            # Place each item on its own line for better readability
+            return xml_tag("index", "\n".join(items_xml), idx_attrs)
+
+    data_sources: List[DataSource] = []
+
+    def render(self, format: Literal["full","gist","names","digest"] = "full", columns_per_table: int = 2) -> str:
+        if format == "full":
+            return xml_tag(self.tag_name, "\n\n".join(ds.render() for ds in self.data_sources or []))
+        if format == "gist":
+            # Compact gist with per-table metrics (score, usage, columns)
+            return xml_tag(self.tag_name, "".join(ds._render_gist(columns_per_table) for ds in self.data_sources or []))
+        if format == "names":
+            return xml_tag(self.tag_name, "".join(ds._render_names() for ds in self.data_sources or []))
+        if format == "digest":
+            return xml_tag(self.tag_name, "".join(ds._render_digest() for ds in self.data_sources or []))
+        return xml_tag(self.tag_name, "\n\n".join(ds.render() for ds in self.data_sources or []))
+
+    def render_combined(self, top_k_per_ds: int = 10, index_limit: int = 200, include_index: bool = True) -> str:
+        ds_chunks: List[str] = []
+        for ds in (self.data_sources or []):
+            sample_xml = ds._render_topk_tables_full(top_k_per_ds)
+            index_xml = ds._render_names_index(index_limit) if include_index else ""
+            # Render MCP tools for this data source
+            mcp_xml = ds._render_mcp_tools_xml() if ds.mcp_tools else ""
+            if not (sample_xml or index_xml or mcp_xml):
+                continue
+
+            # Check if multi-connection (sample_xml will contain <connection> tags if so)
+            has_multi_connection = '<connection ' in sample_xml if sample_xml else False
+
+            inner_parts: List[str] = []
+            if getattr(ds.info, 'context', None):
+                inner_parts.append(xml_tag("description", xml_escape(ds.info.context)))
+            if sample_xml:
+                inner_parts.append(xml_tag("sample", sample_xml, {"k": str(top_k_per_ds)}))
+            if index_xml:
+                inner_parts.append(index_xml)
+            if mcp_xml:
+                inner_parts.append(mcp_xml)
+
+            attrs = {
+                "name": ds.info.name,
+                "id": ds.info.id,
+                "total_tables": str(len(getattr(ds, 'tables', []) or [])),
+            }
+            # Only include type for single-connection (backward compatibility)
+            if not has_multi_connection and ds.info.type:
+                attrs["type"] = ds.info.type
+            # Ensure separation between <sample> and <index>
+            ds_chunks.append(xml_tag("data_source", "\n".join(inner_parts), attrs))
+        return xml_tag(self.tag_name, "".join(ds_chunks))
+
+    def get_usage_snapshot(self, top_k_per_ds: int = 10) -> SchemaUsageSnapshot:
+        """
+        Return a lightweight snapshot of which tables were used in context.
+        
+        This mirrors the selection logic from render_combined() to accurately
+        track what the LLM actually received.
+        
+        Parameters
+        ----------
+        top_k_per_ds : int
+            Number of top tables per data source (same as render_combined).
+            
+        Returns
+        -------
+        SchemaUsageSnapshot
+            Compact tracking of used tables with scores and selection reasons.
+        """
+        ds_usages: List[DataSourceUsage] = []
+        
+        for ds in (self.data_sources or []):
+            tables = list(ds.tables or [])
+            tables_total = len(tables)
+            
+            # Get top K tables (same logic as _render_topk_tables_full)
+            top_tables = tables[:max(0, top_k_per_ds)]
+            
+            tables_used: List[TableUsageItem] = []
+            for t in top_tables:
+                score_val = None
+                try:
+                    if getattr(t, 'score', None) is not None:
+                        score_val = float(t.score)
+                except Exception:
+                    pass
+                
+                usage_val = None
+                try:
+                    if getattr(t, 'usage_count', None) is not None:
+                        usage_val = int(t.usage_count)
+                except Exception:
+                    pass
+                
+                cols_count = len(getattr(t, 'columns', []) or [])
+                
+                tables_used.append(TableUsageItem(
+                    name=t.name,
+                    score=score_val,
+                    usage_count=usage_val,
+                    columns_count=cols_count,
+                    selection_reason="top_k_score",
+                ))
+            
+            ds_usages.append(DataSourceUsage(
+                ds_id=ds.info.id,
+                ds_name=ds.info.name,
+                ds_type=ds.info.type,
+                tables_used=tables_used,
+                tables_total=tables_total,
+                top_k_applied=top_k_per_ds,
+            ))
+        
+        return SchemaUsageSnapshot(data_sources=ds_usages)
+
+

@@ -1,0 +1,5 @@
+# backup 20260619_161244 label=fixed_shell_scroll
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       frontend/layouts/default.vue
+OK       frontend/pages/reports/[id]/index.vue
+OK       frontend/components/nav/ChatHistoryRail.vue

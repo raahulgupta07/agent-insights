@@ -1,0 +1,4 @@
+# backup 20260623_203224 label=bi-p4
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       frontend/components/DashboardComponent.vue
+OK       frontend/package.json

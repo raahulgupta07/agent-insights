@@ -1,0 +1,1331 @@
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from fastapi import HTTPException, UploadFile
+from sqlalchemy.orm.attributes import flag_modified
+
+from app.models.organization import Organization
+from app.models.user import User
+from app.models.organization_settings import OrganizationSettings
+from app.ee.license import has_feature
+from app.schemas.organization_settings_schema import (
+    OrganizationSettingsCreate,
+    OrganizationSettingsUpdate,
+    OrganizationSettingsConfig,
+    FeatureConfig,
+    FeatureState,
+    SignupPolicySchema,
+    OrgLdapSchema,
+    OrgLdapUpdate,
+    OrgSsoSchema,
+    OrgSsoGoogleSchema,
+    OrgSsoOidcProviderSchema,
+    OrgSsoGoogleUpdate,
+    OrgSsoOidcUpdate,
+    OrgSsoAuthModeUpdate,
+)
+from datetime import datetime
+import os
+import hashlib
+from PIL import Image
+from io import BytesIO
+from app.ee.audit.service import audit_service
+
+
+class OrganizationSettingsService:
+    def __init__(self):
+        pass
+
+    async def get_settings(
+        self, 
+        db: AsyncSession, 
+        organization: Organization,
+        current_user: User
+    ):
+        """Get settings for an organization"""
+        result = await db.execute(
+            select(OrganizationSettings)
+            .filter(OrganizationSettings.organization_id == organization.id)
+        )
+        
+        settings = result.scalar_one_or_none()
+        
+        # If settings don't exist yet, create default ones
+        if not settings:
+            settings = await self.create_default_settings(db, organization, current_user)
+        else:
+            # Check for any new features in schema that aren't in the DB
+            await self._sync_new_features(db, settings)
+            
+        return settings
+
+    async def _sync_new_features(self, db: AsyncSession, settings: OrganizationSettings):
+        """Sync any new features from schema that don't exist in DB config."""
+        schema_config = OrganizationSettingsConfig()
+        # Ensure current_config is mutable and handles potential None
+        current_config = dict(settings.config) if settings.config else {}
+        config_modified = False
+
+        # Ensure top-level keys from schema exist
+        schema_dict = schema_config.dict(exclude={'ai_features'})
+        for key, feature_or_value in schema_dict.items():
+             if key not in current_config:
+                 # Store the dict representation if it's a FeatureConfig
+                 current_config[key] = feature_or_value if not isinstance(feature_or_value, FeatureConfig) else feature_or_value.dict()
+                 config_modified = True
+
+        # Ensure 'ai_features' key exists and sync individual AI features
+        if 'ai_features' not in current_config:
+            current_config['ai_features'] = {}
+            config_modified = True # Mark modified if ai_features dict itself was added
+
+        schema_ai_features = schema_config.ai_features
+        # Ensure current_config['ai_features'] is a dict
+        if not isinstance(current_config.get('ai_features'), dict):
+            current_config['ai_features'] = {}
+            config_modified = True
+
+        for key, feature in schema_ai_features.items():
+            if key not in current_config['ai_features']:
+                current_config['ai_features'][key] = feature.dict()
+                config_modified = True
+
+        # Only update DB if new features were added
+        if config_modified:
+            settings.config = current_config
+            settings.updated_at = datetime.utcnow()
+            flag_modified(settings, "config")
+            db.add(settings)
+            await db.commit()
+            await db.refresh(settings)
+
+    async def update_settings(
+        self,
+        db: AsyncSession,
+        organization: Organization,
+        current_user: User,
+        settings_data: OrganizationSettingsUpdate
+    ):
+        """Update organization settings"""
+        settings = await self.get_settings(db, organization, current_user)
+        # Ensure settings.config is a dictionary
+        if settings.config is None:
+             settings.config = {}
+             flag_modified(settings, "config") # Mark as modified if initialized
+
+        update_data = settings_data.dict(exclude_unset=True)
+
+        if 'config' in update_data and update_data['config']:
+            # Use dict() to ensure we have a mutable copy
+            current_config = dict(settings.config)
+            config_changed = False
+
+            # Handle AI features updates
+            if 'ai_features' in update_data['config']:
+                ai_features_updates = update_data['config']['ai_features']
+
+                if 'ai_features' not in current_config:
+                    current_config['ai_features'] = {}
+
+                for feature_name, feature_data in ai_features_updates.items():
+                    # Get current feature config from DB or default from schema
+                    current_feature_dict = current_config['ai_features'].get(feature_name)
+                    if not current_feature_dict:
+                         # Feature not in DB, get default from schema
+                         default_feature = OrganizationSettingsConfig().ai_features.get(feature_name)
+                         if not default_feature: continue # Skip if feature unknown
+                         current_feature_dict = default_feature.dict()
+                         current_config['ai_features'][feature_name] = current_feature_dict # Add to config
+
+                    # Create FeatureConfig object from current data to check properties
+                    feature = FeatureConfig(**current_feature_dict)
+
+                    if not feature.editable or feature.state == FeatureState.LOCKED:
+                         # Allow updating non-editable/locked features only if the update doesn't change 'value' or 'state'
+                         can_update = True
+                         if 'value' in feature_data and feature_data['value'] != feature.value:
+                             can_update = False
+                         if 'state' in feature_data and feature_data['state'] != feature.state:
+                             can_update = False
+
+                         if not can_update:
+                              raise HTTPException(
+                                  status_code=403,
+                                  detail=f"Feature '{feature_name}' cannot be modified"
+                              )
+
+                    # Apply updates from feature_data to the dictionary
+                    original_dict = current_feature_dict.copy()
+                    for field, value in feature_data.items():
+                         if hasattr(feature, field): # Check if field is valid for FeatureConfig
+                             current_feature_dict[field] = value
+
+                    # Re-validate and potentially adjust state/value based on changes
+                    updated_feature = FeatureConfig(**current_feature_dict)
+                    current_config['ai_features'][feature_name] = updated_feature.dict()
+
+                    if current_config['ai_features'][feature_name] != original_dict:
+                        config_changed = True
+
+
+            # Handle top-level feature updates
+            for key, value_update in update_data['config'].items():
+                if key != 'ai_features':
+                    # Enterprise check for step_retention_days
+                    if key == 'step_retention_days':
+                        if not has_feature("step_retention_config"):
+                            raise HTTPException(
+                                status_code=402,
+                                detail="Configuring step retention requires an enterprise license."
+                            )
+                        # Validate range (7-365 days)
+                        new_value = value_update.get('value') if isinstance(value_update, dict) else value_update
+                        if not isinstance(new_value, int) or new_value < 7 or new_value > 365:
+                            raise HTTPException(
+                                status_code=400,
+                                detail="Step retention days must be between 7 and 365."
+                            )
+                    # Get current config dict from DB or default from schema
+                    current_value_dict = current_config.get(key)
+                    is_feature = False
+                    default_config = getattr(OrganizationSettingsConfig(), key, None)
+
+                    if isinstance(default_config, FeatureConfig):
+                         is_feature = True
+                         if not current_value_dict:
+                             # Feature not in DB, get default from schema
+                             current_value_dict = default_config.dict()
+                             current_config[key] = current_value_dict # Add to config
+
+
+                    if is_feature and isinstance(current_value_dict, dict):
+                         feature = FeatureConfig(**current_value_dict)
+
+                         if not feature.editable or feature.state == FeatureState.LOCKED:
+                            can_update = True
+                            if isinstance(value_update, dict):
+                                if 'value' in value_update and value_update['value'] != feature.value:
+                                    can_update = False
+                                if 'state' in value_update and value_update['state'] != feature.state:
+                                    can_update = False
+                            # Allow updating if it's not a dict (e.g. direct value update) only if value doesn't change
+                            elif value_update != feature.value:
+                                 can_update = False
+
+
+                            if not can_update:
+                                raise HTTPException(
+                                     status_code=403,
+                                     detail=f"Feature '{key}' cannot be modified"
+                                )
+
+                         original_dict = current_value_dict.copy()
+                         if isinstance(value_update, dict):
+                             for field, field_value in value_update.items():
+                                 if hasattr(feature, field):
+                                     current_value_dict[field] = field_value
+                         else:
+                             # Assume direct update is for the 'value' field
+                             current_value_dict['value'] = value_update
+
+                         # Re-validate and potentially adjust state/value
+                         updated_feature = FeatureConfig(**current_value_dict)
+                         current_config[key] = updated_feature.dict()
+
+                         if current_config[key] != original_dict:
+                             config_changed = True
+                    elif key in current_config and current_config[key] != value_update : # Handle non-feature config update or addition
+                         current_config[key] = value_update
+                         config_changed = True
+                    elif key not in current_config: # Handle adding new non-feature key
+                         current_config[key] = value_update
+                         config_changed = True
+
+
+            if config_changed:
+                settings.config = current_config
+                settings.updated_at = datetime.utcnow()
+                flag_modified(settings, "config")
+
+                db.add(settings) # Add settings to session if changed
+                await db.commit()
+                await db.refresh(settings)
+
+                # Audit log
+                try:
+                    await audit_service.log(
+                        db=db,
+                        organization_id=str(organization.id),
+                        action="settings.updated",
+                        user_id=str(current_user.id),
+                        resource_type="organization_settings",
+                        resource_id=str(settings.id),
+                        details={"changed_keys": list(update_data.get('config', {}).keys())},
+                    )
+                except Exception:
+                    pass
+
+        return settings
+
+    async def set_general_icon(
+        self,
+        db: AsyncSession,
+        organization: Organization,
+        current_user: User,
+        file: UploadFile
+    ):
+        """Validate, process (resize preserving aspect ratio), store icon on disk and update settings.general.icon fields."""
+        settings = await self.get_settings(db, organization, current_user)
+        if settings.config is None:
+            settings.config = {}
+
+        content_type = (file.content_type or "").lower()
+        if content_type not in ("image/png", "image/jpeg", "image/jpg"):
+            raise HTTPException(status_code=400, detail="Unsupported image type. Use PNG or JPEG")
+
+        raw = await file.read()
+        if len(raw) > 512 * 1024:
+            raise HTTPException(status_code=400, detail="Icon too large. Max 512KB")
+
+        try:
+            image = Image.open(BytesIO(raw))
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid image file")
+
+        # Convert to RGBA for consistent output
+        image = image.convert("RGBA")
+        width, height = image.size
+
+        # Resize to fit within max bounds while preserving aspect ratio
+        max_width, max_height = 512, 256
+        scale = min(max_width / width, max_height / height, 1.0)  # Don't upscale
+        if scale < 1.0:
+            new_width = int(width * scale)
+            new_height = int(height * scale)
+            image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+        # storage path
+        base_dir = os.path.abspath(os.path.join(os.getcwd(), "uploads", "branding"))
+        os.makedirs(base_dir, exist_ok=True)
+
+        digest = hashlib.sha256(raw).hexdigest()[:16]
+        filename = f"{organization.id}-{digest}.png"
+        file_path = os.path.join(base_dir, filename)
+
+        # save as PNG
+        with open(file_path, "wb") as f:
+            buf = BytesIO()
+            image.save(buf, format="PNG")
+            f.write(buf.getvalue())
+
+        # update settings
+        general = dict(settings.config.get("general", {}))
+        general["icon_key"] = filename
+        general["icon_url"] = f"/api/general/icon/{filename}"
+        settings.config["general"] = general
+
+        flag_modified(settings, "config")
+        db.add(settings)
+        await db.commit()
+        await db.refresh(settings)
+
+        # Audit log
+        try:
+            await audit_service.log(
+                db=db,
+                organization_id=str(organization.id),
+                action="settings.icon_uploaded",
+                user_id=str(current_user.id),
+                resource_type="organization_settings",
+                resource_id=str(settings.id),
+                details={"filename": filename},
+            )
+        except Exception:
+            pass
+
+        return settings
+
+    async def remove_general_icon(
+        self,
+        db: AsyncSession,
+        organization: Organization,
+        current_user: User
+    ):
+        settings = await self.get_settings(db, organization, current_user)
+        if settings.config is None:
+            settings.config = {}
+
+        general = dict(settings.config.get("general", {}))
+        icon_key = general.get("icon_key")
+        if icon_key:
+            base_dir = os.path.abspath(os.path.join(os.getcwd(), "uploads", "branding"))
+            file_path = os.path.join(base_dir, icon_key)
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except Exception:
+                    pass
+        general["icon_key"] = None
+        general["icon_url"] = None
+        settings.config["general"] = general
+
+        flag_modified(settings, "config")
+        db.add(settings)
+        await db.commit()
+        await db.refresh(settings)
+
+        # Audit log
+        try:
+            await audit_service.log(
+                db=db,
+                organization_id=str(organization.id),
+                action="settings.icon_removed",
+                user_id=str(current_user.id),
+                resource_type="organization_settings",
+                resource_id=str(settings.id),
+                details={},
+            )
+        except Exception:
+            pass
+
+        return settings
+
+    async def create_default_settings(
+        self,
+        db: AsyncSession,
+        organization: Organization,
+        current_user: User
+    ):
+        """Create default settings for a new organization"""
+        config = OrganizationSettingsConfig()
+        # Use the .dict() method which now correctly handles value/state consistency
+        settings = OrganizationSettings(
+            organization_id=organization.id,
+            config=config.dict()
+        )
+
+        db.add(settings)
+        await db.commit()
+        await db.refresh(settings)
+
+        return settings
+
+    async def get_signup_policy(
+        self,
+        db: AsyncSession,
+        organization: Organization,
+        current_user: User,
+    ) -> SignupPolicySchema:
+        """Return the org's signup policy, defaulting to an empty/disabled one."""
+        settings = await self.get_settings(db, organization, current_user)
+        raw = (settings.config or {}).get("signup_policy") or {}
+        return SignupPolicySchema(
+            enabled=bool(raw.get("enabled", False)),
+            allowed_domains=list(raw.get("allowed_domains", []) or []),
+            auto_invite_role=str(raw.get("auto_invite_role") or "member"),
+        )
+
+    async def update_signup_policy(
+        self,
+        db: AsyncSession,
+        organization: Organization,
+        current_user: User,
+        policy: SignupPolicySchema,
+    ) -> SignupPolicySchema:
+        """Validate and persist the org's signup policy.
+
+        Validation:
+        - domains are normalized (lowercase, trimmed), non-empty, contain a dot,
+          no '@' / whitespace / wildcard, deduped
+        - auto_invite_role must match an existing system or per-org role
+        """
+        if not has_feature("domain_signup"):
+            raise HTTPException(
+                status_code=402,
+                detail="Domain-based signup requires an enterprise license.",
+            )
+
+        from app.models.role import Role
+        from sqlalchemy import or_, and_
+
+        normalized_domains: list[str] = []
+        seen: set[str] = set()
+        for raw in (policy.allowed_domains or []):
+            if not isinstance(raw, str):
+                raise HTTPException(status_code=400, detail="Each domain must be a string")
+            d = raw.strip().lower()
+            if not d:
+                continue
+            if "@" in d or "*" in d or any(ch.isspace() for ch in d):
+                raise HTTPException(status_code=400, detail=f"Invalid domain: {raw!r}")
+            if "." not in d or len(d) > 253:
+                raise HTTPException(status_code=400, detail=f"Invalid domain: {raw!r}")
+            if d in seen:
+                continue
+            seen.add(d)
+            normalized_domains.append(d)
+
+        role_name = (policy.auto_invite_role or "").strip() or "member"
+        role_res = await db.execute(
+            select(Role).where(
+                Role.name == role_name,
+                Role.deleted_at.is_(None),
+                or_(
+                    and_(Role.is_system == True, Role.organization_id.is_(None)),
+                    Role.organization_id == organization.id,
+                ),
+            )
+        )
+        if not role_res.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail=f"Role '{role_name}' not found")
+
+        if policy.enabled and not normalized_domains:
+            raise HTTPException(
+                status_code=400,
+                detail="At least one allowed domain is required when signup policy is enabled",
+            )
+
+        settings = await self.get_settings(db, organization, current_user)
+        if settings.config is None:
+            settings.config = {}
+
+        current_config = dict(settings.config)
+        current_config["signup_policy"] = {
+            "enabled": bool(policy.enabled),
+            "allowed_domains": normalized_domains,
+            "auto_invite_role": role_name,
+        }
+        settings.config = current_config
+        settings.updated_at = datetime.utcnow()
+        flag_modified(settings, "config")
+        db.add(settings)
+        await db.commit()
+        await db.refresh(settings)
+
+        try:
+            await audit_service.log(
+                db=db,
+                organization_id=str(organization.id),
+                action="settings.signup_policy_updated",
+                user_id=str(current_user.id),
+                resource_type="organization_settings",
+                resource_id=str(settings.id),
+                details={
+                    "enabled": bool(policy.enabled),
+                    "allowed_domains": normalized_domains,
+                    "auto_invite_role": role_name,
+                },
+            )
+        except Exception:
+            pass
+
+        return SignupPolicySchema(
+            enabled=bool(policy.enabled),
+            allowed_domains=normalized_domains,
+            auto_invite_role=role_name,
+        )
+
+    async def get_smtp(self, db: AsyncSession, organization: Organization, current_user: User):
+        """Return the org's SMTP server config (password redacted)."""
+        from app.schemas.organization_settings_schema import OrgSmtpSchema
+        settings = await self.get_settings(db, organization, current_user)
+        raw = (settings.config or {}).get("smtp") or {}
+        return OrgSmtpSchema(
+            enabled=bool(raw.get("enabled", False)),
+            host=raw.get("host"),
+            port=int(raw.get("port") or 587),
+            security=raw.get("security") or "starttls",
+            username=raw.get("username"),
+            password_set=bool(raw.get("password_enc")),
+            from_address=raw.get("from_address"),
+            from_name=raw.get("from_name"),
+            validate_certs=bool(raw.get("validate_certs", True)),
+        )
+
+    async def update_smtp(self, db: AsyncSession, organization: Organization, current_user: User, data):
+        """Persist the org's SMTP server; the password is Fernet-encrypted."""
+        from app.schemas.organization_settings_schema import OrgSmtpSchema
+        from app.services.email.secrets import encrypt_secret
+
+        settings = await self.get_settings(db, organization, current_user)
+        if settings.config is None:
+            settings.config = {}
+        current_config = dict(settings.config)
+        existing = current_config.get("smtp") or {}
+
+        smtp = {
+            "enabled": bool(data.enabled),
+            "host": (data.host or "").strip() or None,
+            "port": int(data.port or 587),
+            "security": data.security or "starttls",
+            "username": (data.username or "").strip() or None,
+            "from_address": (data.from_address or "").strip() or None,
+            "from_name": data.from_name,
+            "validate_certs": bool(data.validate_certs),
+            # Keep the existing encrypted password unless a new one is supplied.
+            "password_enc": existing.get("password_enc"),
+        }
+        if data.password:
+            smtp["password_enc"] = encrypt_secret(data.password)
+
+        if smtp["enabled"] and not smtp["host"]:
+            raise HTTPException(status_code=400, detail="SMTP host is required when enabled")
+
+        current_config["smtp"] = smtp
+        settings.config = current_config
+        settings.updated_at = datetime.utcnow()
+        flag_modified(settings, "config")
+        db.add(settings)
+        await db.commit()
+        await db.refresh(settings)
+
+        try:
+            await audit_service.log(
+                db=db, organization_id=str(organization.id),
+                action="settings.org_smtp_updated", user_id=str(current_user.id),
+                resource_type="organization_settings", resource_id=str(settings.id),
+                details={"enabled": smtp["enabled"], "host": smtp["host"]},
+            )
+        except Exception:
+            pass
+
+        return await self.get_smtp(db, organization, current_user)
+
+    async def get_signup_enabled(
+        self,
+        db: AsyncSession,
+        organization: Organization,
+        current_user: User,
+    ):
+        """Return the org's public signup enabled flag."""
+        from app.schemas.organization_settings_schema import OrgSignupEnabledSchema
+        from app.settings.config import settings as app_settings
+
+        org_settings = await self.get_settings(db, organization, current_user)
+        config = org_settings.config or {}
+        if "signup_enabled" in config:
+            enabled = bool(config["signup_enabled"])
+        else:
+            enabled = bool(app_settings.dash_config.features.allow_uninvited_signups)
+        return OrgSignupEnabledSchema(enabled=enabled)
+
+    async def update_signup_enabled(
+        self,
+        db: AsyncSession,
+        organization: Organization,
+        current_user: User,
+        data,
+    ):
+        """Persist the public signup enabled flag."""
+        from app.schemas.organization_settings_schema import OrgSignupEnabledSchema
+
+        org_settings = await self.get_settings(db, organization, current_user)
+        if org_settings.config is None:
+            org_settings.config = {}
+        current_config = dict(org_settings.config)
+        current_config["signup_enabled"] = bool(data.enabled)
+        org_settings.config = current_config
+        org_settings.updated_at = datetime.utcnow()
+        flag_modified(org_settings, "config")
+        db.add(org_settings)
+        await db.commit()
+        await db.refresh(org_settings)
+
+        try:
+            await audit_service.log(
+                db=db,
+                organization_id=str(organization.id),
+                action="settings.signup_enabled_updated",
+                user_id=str(current_user.id),
+                resource_type="organization_settings",
+                resource_id=str(org_settings.id),
+                details={"enabled": bool(data.enabled)},
+            )
+        except Exception:
+            pass
+
+        return OrgSignupEnabledSchema(enabled=bool(data.enabled))
+
+    async def test_smtp(self, db: AsyncSession, organization: Organization, current_user: User) -> dict:
+        """Probe the org's saved SMTP server (connect + auth, no send)."""
+        from app.services.email_client_resolver import get_org_smtp
+        from app.services.email.sender import SmtpConfig, _tls_context
+        import aiosmtplib
+
+        smtp = await get_org_smtp(db, organization.id)
+        if not (smtp and smtp.get("host")):
+            return {"success": False, "smtp": "no SMTP host configured"}
+        cfg = SmtpConfig(
+            host=smtp["host"], port=int(smtp.get("port") or 587),
+            username=smtp.get("username"), password=smtp.get("password"),
+            security=smtp.get("security") or "starttls",
+            validate_certs=bool(smtp.get("validate_certs", True)),
+        ).resolved()
+        try:
+            kwargs = dict(
+                hostname=cfg.host, port=cfg.port,
+                use_tls=(cfg.security == "ssl"),
+                start_tls=(cfg.security == "starttls"), timeout=15,
+            )
+            tls_context = _tls_context(cfg)
+            if tls_context is not None:
+                kwargs["tls_context"] = tls_context
+            client = aiosmtplib.SMTP(**kwargs)
+            await client.connect()
+            if cfg.username and cfg.password:
+                await client.login(cfg.username, cfg.password)
+            await client.quit()
+            return {"success": True, "smtp": "ok"}
+        except Exception as e:
+            return {"success": False, "smtp": f"failed: {e}"}
+
+    async def get_locale(
+        self,
+        db: AsyncSession,
+        organization: Organization,
+        current_user: User,
+    ) -> dict:
+        """Return the org's locale override + system default + enabled list."""
+        from app.settings.config import settings as app_settings
+        settings = await self.get_settings(db, organization, current_user)
+        raw = (settings.config or {}).get("locale")
+        i18n = app_settings.dash_config.i18n
+        return {
+            "org_locale": raw if raw in i18n.enabled_locales else None,
+            "default_locale": i18n.default_locale,
+            "enabled_locales": list(i18n.enabled_locales),
+            "effective_locale": raw if raw in i18n.enabled_locales else i18n.default_locale,
+        }
+
+    async def update_locale(
+        self,
+        db: AsyncSession,
+        organization: Organization,
+        current_user: User,
+        locale: str | None,
+    ) -> dict:
+        """Set or clear the org locale override. None/empty clears to system default."""
+        from app.settings.config import settings as app_settings
+        i18n = app_settings.dash_config.i18n
+
+        new_locale: str | None
+        if locale in (None, ""):
+            new_locale = None
+        elif locale in i18n.enabled_locales:
+            new_locale = locale
+        else:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Locale '{locale}' is not enabled. Enabled: {i18n.enabled_locales}",
+            )
+
+        settings = await self.get_settings(db, organization, current_user)
+        current_config = dict(settings.config or {})
+        if current_config.get("locale") != new_locale:
+            current_config["locale"] = new_locale
+            settings.config = current_config
+            settings.updated_at = datetime.utcnow()
+            flag_modified(settings, "config")
+            db.add(settings)
+            await db.commit()
+            await db.refresh(settings)
+
+            try:
+                await audit_service.log(
+                    db=db,
+                    organization_id=str(organization.id),
+                    action="settings.locale_updated",
+                    user_id=str(current_user.id),
+                    resource_type="organization_settings",
+                    resource_id=str(settings.id),
+                    details={"locale": new_locale},
+                )
+            except Exception:
+                pass
+
+        return {
+            "org_locale": new_locale,
+            "default_locale": i18n.default_locale,
+            "enabled_locales": list(i18n.enabled_locales),
+            "effective_locale": new_locale or i18n.default_locale,
+        }
+
+    # ------------------------------------------------------------------
+    # LDAP (org-scoped)
+    # ------------------------------------------------------------------
+
+    async def get_ldap(self, db: AsyncSession, organization: Organization, current_user: User) -> OrgLdapSchema:
+        """Return the org's LDAP config (bind_password never returned)."""
+        settings = await self.get_settings(db, organization, current_user)
+        raw = (settings.config or {}).get("ldap") or {}
+        return OrgLdapSchema(
+            enabled=bool(raw.get("enabled", False)),
+            url=raw.get("url"),
+            bind_dn=raw.get("bind_dn"),
+            bind_password_set=bool(raw.get("bind_password_enc")),
+            use_ssl=bool(raw.get("use_ssl", True)),
+            start_tls=bool(raw.get("start_tls", False)),
+            base_dn=raw.get("base_dn"),
+            user_search_base=raw.get("user_search_base"),
+            user_search_filter=raw.get("user_search_filter") or "(objectClass=person)",
+            user_email_attribute=raw.get("user_email_attribute") or "mail",
+            user_name_attribute=raw.get("user_name_attribute") or "displayName",
+            group_search_base=raw.get("group_search_base"),
+            group_search_filter=raw.get("group_search_filter") or "(objectClass=group)",
+            group_name_attribute=raw.get("group_name_attribute") or "cn",
+            group_member_attribute=raw.get("group_member_attribute") or "member",
+            group_member_format=raw.get("group_member_format") or "dn",
+            sync_interval_minutes=int(raw.get("sync_interval_minutes") or 60),
+            auto_provision_users=bool(raw.get("auto_provision_users", False)),
+            connection_timeout=int(raw.get("connection_timeout") or 10),
+            page_size=int(raw.get("page_size") or 500),
+        )
+
+    async def update_ldap(self, db: AsyncSession, organization: Organization, current_user: User, data: OrgLdapUpdate) -> OrgLdapSchema:
+        """Persist the org's LDAP config; bind_password is Fernet-encrypted."""
+        from app.services.email.secrets import encrypt_secret
+
+        settings = await self.get_settings(db, organization, current_user)
+        if settings.config is None:
+            settings.config = {}
+        current_config = dict(settings.config)
+        existing = current_config.get("ldap") or {}
+
+        if data.enabled and not (data.url or "").strip():
+            raise HTTPException(status_code=400, detail="LDAP URL is required when enabled")
+
+        ldap = {
+            "enabled": bool(data.enabled),
+            "url": (data.url or "").strip() or None,
+            "bind_dn": (data.bind_dn or "").strip() or None,
+            "bind_password_enc": existing.get("bind_password_enc"),
+            "use_ssl": bool(data.use_ssl),
+            "start_tls": bool(data.start_tls),
+            "base_dn": (data.base_dn or "").strip() or None,
+            "user_search_base": (data.user_search_base or "").strip() or None,
+            "user_search_filter": data.user_search_filter or "(objectClass=person)",
+            "user_email_attribute": data.user_email_attribute or "mail",
+            "user_name_attribute": data.user_name_attribute or "displayName",
+            "group_search_base": (data.group_search_base or "").strip() or None,
+            "group_search_filter": data.group_search_filter or "(objectClass=group)",
+            "group_name_attribute": data.group_name_attribute or "cn",
+            "group_member_attribute": data.group_member_attribute or "member",
+            "group_member_format": data.group_member_format or "dn",
+            "sync_interval_minutes": int(data.sync_interval_minutes or 60),
+            "auto_provision_users": bool(data.auto_provision_users),
+            "connection_timeout": int(data.connection_timeout or 10),
+            "page_size": int(data.page_size or 500),
+        }
+        if data.bind_password:
+            ldap["bind_password_enc"] = encrypt_secret(data.bind_password)
+
+        current_config["ldap"] = ldap
+        settings.config = current_config
+        settings.updated_at = datetime.utcnow()
+        flag_modified(settings, "config")
+        db.add(settings)
+        await db.commit()
+        await db.refresh(settings)
+
+        try:
+            await audit_service.log(
+                db=db, organization_id=str(organization.id),
+                action="settings.org_ldap_updated", user_id=str(current_user.id),
+                resource_type="organization_settings", resource_id=str(settings.id),
+                details={"enabled": ldap["enabled"], "url": ldap["url"]},
+            )
+        except Exception:
+            pass
+
+        return await self.get_ldap(db, organization, current_user)
+
+    async def test_ldap(self, db: AsyncSession, organization: Organization, current_user: User) -> dict:
+        """Test the org's saved LDAP connection."""
+        from app.services.email.secrets import decrypt_secret
+        from app.settings.dash_config import LDAPConfig
+
+        settings_row = await self.get_settings(db, organization, current_user)
+        raw = (settings_row.config or {}).get("ldap") or {}
+
+        if not raw.get("url"):
+            return {"success": False, "error": "No LDAP URL configured"}
+
+        try:
+            ldap_cfg = LDAPConfig(
+                enabled=True,
+                url=raw["url"],
+                bind_dn=raw.get("bind_dn"),
+                bind_password=decrypt_secret(raw.get("bind_password_enc")),
+                use_ssl=bool(raw.get("use_ssl", True)),
+                start_tls=bool(raw.get("start_tls", False)),
+                base_dn=raw.get("base_dn") or "",
+                user_search_base=raw.get("user_search_base"),
+                user_search_filter=raw.get("user_search_filter") or "(objectClass=person)",
+                user_email_attribute=raw.get("user_email_attribute") or "mail",
+                user_name_attribute=raw.get("user_name_attribute") or "displayName",
+                group_search_base=raw.get("group_search_base"),
+                group_search_filter=raw.get("group_search_filter") or "(objectClass=group)",
+                group_name_attribute=raw.get("group_name_attribute") or "cn",
+                group_member_attribute=raw.get("group_member_attribute") or "member",
+                group_member_format=raw.get("group_member_format") or "dn",
+                auto_provision_users=bool(raw.get("auto_provision_users", False)),
+                connection_timeout=int(raw.get("connection_timeout") or 10),
+                page_size=int(raw.get("page_size") or 500),
+            )
+        except Exception as e:
+            return {"success": False, "error": f"Config error: {e}"}
+
+        try:
+            from app.ee.ldap.connection import LDAPConnectionManager
+            manager = LDAPConnectionManager(ldap_cfg)
+            conn_result = manager.test_connection()
+            result = {
+                "success": conn_result.get("connected", False),
+                "server": conn_result.get("server"),
+                "vendor": conn_result.get("vendor"),
+                "error": conn_result.get("error"),
+            }
+            if conn_result.get("connected"):
+                try:
+                    result["user_count"] = len(manager.search_users())
+                except Exception:
+                    pass
+                try:
+                    result["group_count"] = len(manager.search_groups())
+                except Exception:
+                    pass
+            return result
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    # ------------------------------------------------------------------
+    # SSO (instance-level; stored under first org's settings)
+    # ------------------------------------------------------------------
+
+    async def _get_first_org_settings(self, db: AsyncSession):
+        """Return the OrganizationSettings row for the first (only) org."""
+        from app.models.organization import Organization as OrgModel
+        from sqlalchemy import asc
+        org_res = await db.execute(
+            select(OrgModel).order_by(asc(OrgModel.created_at)).limit(1)
+        )
+        org = org_res.scalar_one_or_none()
+        if not org:
+            return None, None
+        settings_res = await db.execute(
+            select(OrganizationSettings).filter(OrganizationSettings.organization_id == org.id)
+        )
+        row = settings_res.scalar_one_or_none()
+        return org, row
+
+    async def get_sso(self, db: AsyncSession, organization: Organization, current_user: User) -> OrgSsoSchema:
+        """Return current SSO config (client secrets never returned)."""
+        _, row = await self._get_first_org_settings(db)
+        raw_sso = (row.config if row else {}) or {}
+        sso = raw_sso.get("sso") or {}
+
+        g = sso.get("google") or {}
+        google = OrgSsoGoogleSchema(
+            enabled=bool(g.get("enabled", False)),
+            client_id=g.get("client_id"),
+            client_secret_set=bool(g.get("client_secret_enc")),
+        )
+
+        oidc_list = []
+        for p in (sso.get("oidc") or []):
+            oidc_list.append(OrgSsoOidcProviderSchema(
+                name=p.get("name", ""),
+                label=p.get("label"),
+                enabled=bool(p.get("enabled", False)),
+                issuer=p.get("issuer"),
+                client_id=p.get("client_id"),
+                client_secret_set=bool(p.get("client_secret_enc")),
+                scopes=p.get("scopes") or ["openid", "profile", "email"],
+                sync_groups=bool(p.get("sync_groups", False)),
+                group_claim=p.get("group_claim") or "groups",
+            ))
+
+        return OrgSsoSchema(
+            auth_mode=sso.get("auth_mode") or "hybrid",
+            google=google,
+            oidc=oidc_list,
+        )
+
+    async def update_sso_google(self, db: AsyncSession, organization: Organization, current_user: User, data: OrgSsoGoogleUpdate) -> OrgSsoSchema:
+        """Persist Google OAuth config."""
+        from app.services.email.secrets import encrypt_secret
+
+        _, row = await self._get_first_org_settings(db)
+        if not row:
+            raise HTTPException(status_code=404, detail="No organization found")
+
+        current_config = dict(row.config or {})
+        sso = dict(current_config.get("sso") or {})
+        existing_g = dict(sso.get("google") or {})
+
+        google = {
+            "enabled": bool(data.enabled),
+            "client_id": (data.client_id or "").strip() or None,
+            "client_secret_enc": existing_g.get("client_secret_enc"),
+        }
+        if data.client_secret:
+            google["client_secret_enc"] = encrypt_secret(data.client_secret)
+
+        sso["google"] = google
+        current_config["sso"] = sso
+        row.config = current_config
+        row.updated_at = datetime.utcnow()
+        flag_modified(row, "config")
+        db.add(row)
+        await db.commit()
+        await db.refresh(row)
+
+        try:
+            await audit_service.log(
+                db=db, organization_id=str(organization.id),
+                action="settings.sso_google_updated", user_id=str(current_user.id),
+                resource_type="organization_settings", resource_id=str(row.id),
+                details={"enabled": google["enabled"]},
+            )
+        except Exception:
+            pass
+
+        return await self.get_sso(db, organization, current_user)
+
+    async def update_sso_oidc(self, db: AsyncSession, organization: Organization, current_user: User, data: OrgSsoOidcUpdate) -> OrgSsoSchema:
+        """Persist OIDC provider list."""
+        from app.services.email.secrets import encrypt_secret
+
+        _, row = await self._get_first_org_settings(db)
+        if not row:
+            raise HTTPException(status_code=404, detail="No organization found")
+
+        current_config = dict(row.config or {})
+        sso = dict(current_config.get("sso") or {})
+
+        # Build existing enc map keyed by provider name
+        existing_providers = {p.get("name"): p for p in (sso.get("oidc") or [])}
+
+        new_providers = []
+        for p in data.providers:
+            existing = existing_providers.get(p.name) or {}
+            provider = {
+                "name": p.name,
+                "label": p.label,
+                "enabled": bool(p.enabled),
+                "issuer": (p.issuer or "").strip() or None,
+                "client_id": (p.client_id or "").strip() or None,
+                "client_secret_enc": existing.get("client_secret_enc"),
+                "scopes": p.scopes or ["openid", "profile", "email"],
+                "sync_groups": bool(p.sync_groups),
+                "group_claim": p.group_claim or "groups",
+            }
+            if p.client_secret:
+                provider["client_secret_enc"] = encrypt_secret(p.client_secret)
+            new_providers.append(provider)
+
+        sso["oidc"] = new_providers
+        current_config["sso"] = sso
+        row.config = current_config
+        row.updated_at = datetime.utcnow()
+        flag_modified(row, "config")
+        db.add(row)
+        await db.commit()
+        await db.refresh(row)
+
+        try:
+            await audit_service.log(
+                db=db, organization_id=str(organization.id),
+                action="settings.sso_oidc_updated", user_id=str(current_user.id),
+                resource_type="organization_settings", resource_id=str(row.id),
+                details={"provider_count": len(new_providers)},
+            )
+        except Exception:
+            pass
+
+        return await self.get_sso(db, organization, current_user)
+
+    async def update_sso_auth_mode(self, db: AsyncSession, organization: Organization, current_user: User, data: OrgSsoAuthModeUpdate) -> OrgSsoSchema:
+        """Persist auth mode (local_only | sso_only | hybrid)."""
+        valid_modes = {"local_only", "sso_only", "hybrid"}
+        if data.mode not in valid_modes:
+            raise HTTPException(status_code=400, detail=f"auth mode must be one of {valid_modes}")
+
+        _, row = await self._get_first_org_settings(db)
+        if not row:
+            raise HTTPException(status_code=404, detail="No organization found")
+
+        current_config = dict(row.config or {})
+        sso = dict(current_config.get("sso") or {})
+        sso["auth_mode"] = data.mode
+        current_config["sso"] = sso
+        row.config = current_config
+        row.updated_at = datetime.utcnow()
+        flag_modified(row, "config")
+        db.add(row)
+        await db.commit()
+        await db.refresh(row)
+
+        try:
+            await audit_service.log(
+                db=db, organization_id=str(organization.id),
+                action="settings.sso_auth_mode_updated", user_id=str(current_user.id),
+                resource_type="organization_settings", resource_id=str(row.id),
+                details={"mode": data.mode},
+            )
+        except Exception:
+            pass
+
+        return await self.get_sso(db, organization, current_user)
+
+    async def update_ai_feature(
+        self,
+        db: AsyncSession,
+        organization: Organization,
+        current_user: User,
+        feature_name: str,
+        # Changed parameter name from 'enabled' to 'value'
+        new_value: bool # Assuming this endpoint is for boolean toggles
+    ):
+        """Update a specific AI feature setting's value"""
+        settings = await self.get_settings(db, organization, current_user)
+        if settings.config is None: settings.config = {} # Ensure config exists
+
+        # Get the feature configuration using the model's method
+        feature = settings.get_config(feature_name)
+
+        if not isinstance(feature, FeatureConfig):
+             # Might be a non-feature config, or doesn't exist
+             schema_config = OrganizationSettingsConfig()
+             if feature_name in schema_config.ai_features:
+                 # Feature exists in schema but not DB, use default
+                 feature = schema_config.ai_features[feature_name]
+             else:
+                 raise HTTPException(status_code=404, detail=f"Feature '{feature_name}' not found or is not a valid feature configuration.")
+
+
+        if not feature.editable or feature.state == FeatureState.LOCKED:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Feature '{feature_name}' cannot be modified."
+            )
+
+        # Update the feature's value
+        feature.value = new_value
+        # State will be updated automatically by FeatureConfig validator/dict if it's not LOCKED
+
+        # Update the config in the database
+        if "ai_features" not in settings.config or not isinstance(settings.config.get("ai_features"), dict):
+            settings.config["ai_features"] = {}
+
+        # Store the updated feature as a dict
+        settings.config["ai_features"][feature_name] = feature.dict()
+
+        flag_modified(settings, "config")
+        db.add(settings)
+        await db.commit()
+        await db.refresh(settings)
+
+        # Audit log
+        try:
+            await audit_service.log(
+                db=db,
+                organization_id=str(organization.id),
+                action="settings.ai_feature_toggled",
+                user_id=str(current_user.id),
+                resource_type="organization_settings",
+                resource_id=str(settings.id),
+                details={"feature_name": feature_name, "value": new_value},
+            )
+        except Exception:
+            pass
+
+        return settings
+
+
+# ---------------------------------------------------------------------------
+# Module-level resolvers — called from auth_providers.py / dash_settings.py
+# before any user session exists, so they open their own DB session.
+# ---------------------------------------------------------------------------
+
+async def get_org_ldap_config(db: AsyncSession, organization_id: str):
+    """Return a live LDAPConfig built from the org's DB settings, or None.
+
+    Falls back to None (callers should then use settings.dash_config.ldap).
+    """
+    from app.settings.dash_config import LDAPConfig
+    from app.services.email.secrets import decrypt_secret
+
+    try:
+        res = await db.execute(
+            select(OrganizationSettings).filter(
+                OrganizationSettings.organization_id == organization_id
+            )
+        )
+        row = res.scalar_one_or_none()
+        if not row:
+            return None
+        raw = (row.config or {}).get("ldap") or {}
+        if not raw.get("enabled") or not raw.get("url"):
+            return None
+        return LDAPConfig(
+            enabled=True,
+            url=raw["url"],
+            bind_dn=raw.get("bind_dn"),
+            bind_password=decrypt_secret(raw.get("bind_password_enc")),
+            use_ssl=bool(raw.get("use_ssl", True)),
+            start_tls=bool(raw.get("start_tls", False)),
+            base_dn=raw.get("base_dn") or "",
+            user_search_base=raw.get("user_search_base"),
+            user_search_filter=raw.get("user_search_filter") or "(objectClass=person)",
+            user_email_attribute=raw.get("user_email_attribute") or "mail",
+            user_name_attribute=raw.get("user_name_attribute") or "displayName",
+            group_search_base=raw.get("group_search_base"),
+            group_search_filter=raw.get("group_search_filter") or "(objectClass=group)",
+            group_name_attribute=raw.get("group_name_attribute") or "cn",
+            group_member_attribute=raw.get("group_member_attribute") or "member",
+            group_member_format=raw.get("group_member_format") or "dn",
+            auto_provision_users=bool(raw.get("auto_provision_users", False)),
+            connection_timeout=int(raw.get("connection_timeout") or 10),
+            page_size=int(raw.get("page_size") or 500),
+        )
+    except Exception:
+        return None
+
+
+async def _get_first_org_sso_raw() -> dict:
+    """Open a fresh session and return the first org's config['sso'] dict."""
+    try:
+        from app.dependencies import async_session_maker
+        from app.models.organization import Organization as OrgModel
+        from sqlalchemy import asc
+
+        async with async_session_maker() as db:
+            org_res = await db.execute(
+                select(OrgModel).order_by(asc(OrgModel.created_at)).limit(1)
+            )
+            org = org_res.scalar_one_or_none()
+            if not org:
+                return {}
+            row_res = await db.execute(
+                select(OrganizationSettings).filter(
+                    OrganizationSettings.organization_id == org.id
+                )
+            )
+            row = row_res.scalar_one_or_none()
+            if not row:
+                return {}
+            return (row.config or {}).get("sso") or {}
+    except Exception:
+        return {}
+
+
+async def get_effective_google_oauth():
+    """Return effective Google OAuth config (DB overrides file config).
+
+    Returns a dict with keys: enabled, client_id, client_secret.
+    Falls back to dash_config values if no DB config present.
+    """
+    from app.settings.config import settings as app_settings
+    from app.services.email.secrets import decrypt_secret
+
+    sso = await _get_first_org_sso_raw()
+    g = sso.get("google") or {}
+
+    # If DB has a client_id configured, use DB values
+    if g.get("client_id"):
+        return {
+            "enabled": bool(g.get("enabled", False)),
+            "client_id": g.get("client_id"),
+            "client_secret": decrypt_secret(g.get("client_secret_enc")),
+        }
+
+    # Fall back to file config
+    file_g = app_settings.dash_config.google_oauth
+    return {
+        "enabled": file_g.enabled,
+        "client_id": file_g.client_id,
+        "client_secret": file_g.client_secret,
+    }
+
+
+async def get_effective_oidc_providers() -> list:
+    """Return effective OIDC providers list (DB overrides file config).
+
+    Falls back to dash_config.oidc_providers if no DB config.
+    """
+    from app.settings.config import settings as app_settings
+    from app.services.email.secrets import decrypt_secret
+
+    sso = await _get_first_org_sso_raw()
+    db_providers = sso.get("oidc") or []
+
+    if db_providers:
+        from app.settings.dash_config import OIDCProvider
+        result = []
+        for p in db_providers:
+            result.append(OIDCProvider(
+                name=p.get("name", ""),
+                label=p.get("label"),
+                enabled=bool(p.get("enabled", False)),
+                issuer=p.get("issuer") or "",
+                client_id=p.get("client_id"),
+                client_secret=decrypt_secret(p.get("client_secret_enc")),
+                scopes=p.get("scopes") or ["openid", "profile", "email"],
+                sync_groups=bool(p.get("sync_groups", False)),
+                group_claim=p.get("group_claim") or "groups",
+            ))
+        return result
+
+    # Fall back to file config
+    return list(getattr(app_settings.dash_config, "oidc_providers", []) or [])
+
+
+async def get_effective_auth_mode() -> str:
+    """Return effective auth mode string (DB overrides file config)."""
+    from app.settings.config import settings as app_settings
+
+    sso = await _get_first_org_sso_raw()
+    db_mode = sso.get("auth_mode")
+    if db_mode in ("local_only", "sso_only", "hybrid"):
+        return db_mode
+
+    # Fall back to file config
+    auth = getattr(app_settings.dash_config, "auth", None)
+    return getattr(auth, "mode", "hybrid") if auth else "hybrid"
+
+
+async def get_effective_signup_enabled() -> bool:
+    """Return effective public signup enabled flag (DB overrides file config).
+
+    Reads config['signup_enabled'] from the first OrganizationSettings row.
+    Falls back to dash_config.features.allow_uninvited_signups if absent or on error.
+    """
+    from app.settings.config import settings as app_settings
+
+    file_default = bool(app_settings.dash_config.features.allow_uninvited_signups)
+    try:
+        from app.dependencies import async_session_maker
+        from sqlalchemy import asc
+        from app.models.organization import Organization as OrgModel
+
+        async with async_session_maker() as db:
+            org_res = await db.execute(
+                select(OrgModel).order_by(asc(OrgModel.created_at)).limit(1)
+            )
+            org = org_res.scalar_one_or_none()
+            if not org:
+                return file_default
+            row_res = await db.execute(
+                select(OrganizationSettings).filter(
+                    OrganizationSettings.organization_id == org.id
+                )
+            )
+            row = row_res.scalar_one_or_none()
+            if not row:
+                return file_default
+            config = row.config or {}
+            if "signup_enabled" in config:
+                return bool(config["signup_enabled"])
+            return file_default
+    except Exception:
+        return file_default
