@@ -14,24 +14,22 @@ An **Agent Studio** wraps a set of pinned data sources (file uploads or warehous
 
 ---
 
-## Deploy (one command)
+## Deploy
 
 Clean machine, no pre-step, no external image — the runtime base is folded into
 the `Dockerfile`, so the build is fully self-contained.
 
 ```bash
-cp .env.example .env     # then edit .env (see below)
-bash deploy.sh           # checks Docker, bootstraps .env, builds + starts everything
+cp .env.example .env          # then edit .env (see below)
+docker compose up -d --build  # build + start everything
 ```
 
-`deploy.sh` is the foolproof path: it verifies Docker is installed/running,
-creates `.env` from `.env.example` on first run (and stops so you can fill it
-in), warns if `DASH_ENCRYPTION_KEY` is empty, then runs the build and prints
-where the app is listening. Prefer the raw command? It's just:
+That's the whole deploy. The first build takes ~5–20 min; rebuilds are fast.
 
-```bash
-docker compose up -d --build
-```
+**Optional convenience:** `bash deploy.sh` runs the exact same `docker compose up
+-d --build`, but first verifies Docker is up, creates `.env` from the template on
+first run (and stops so you can fill it in), and warns if `DASH_ENCRYPTION_KEY` is
+empty. Use it or skip it — same result.
 
 Edit these in `.env` before deploying:
 
