@@ -4,6 +4,12 @@ Hybrid feature changelog (our additions on top of the bagofwords/Dash base). New
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` followed by `-` feature bullets.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.8.0 — Rebrand to City Agent Insights  (2026-06-25)
+- New CityAgent Insights logo across the app — top nav, home page and the sign-in page
+- Renamed "City Agent DASH" → "City Agent Insights" everywhere (default analyst name too)
+- Sign-in page cleaned up: removed the sign-up link
+- LDAP is now enabled by default in org settings
+
 ## v1.7.0 — Slide workspace: Open a deck to edit & analyze  (2026-06-25)
 - "Open" on a presentation now opens a clean slide workspace — the deck big on the left, a chat on the right
 - The right chat is framed for slides ("Edit & analyze slides") — ask it to edit a slide or analyze the deck

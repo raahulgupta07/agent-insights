@@ -321,6 +321,22 @@ App installs from the browser (standalone window, dock icon, offline shell). Mod
   silently don't activate. iOS = manual Share→Add to Home Screen (no programmatic prompt). Silent
   zero-click auto-install is impossible in any browser — the button is the 1-click path.
 
+## Rebrand → City Agent Insights + new logo (2026-06-25, v1.8.0, BAKED)
+- **Logo**: new brand PNG (transparent — the orange preview bg is alpha 0) processed via PIL from
+  `~/Downloads/ChatGPT Image Jun 25 ...`. Overwrote `frontend/public/assets/`: full logo (mark+"CityAgent
+  INSIGHTS") → `cityagent-dash-logo.png` (home) + `cityagent-insights-logo.png`; square C-mark → `logo-mark.png`,
+  `logo-128.png`, `logo-mark-128/512.png`, `logo.png` (nav `TopNav.vue`, sign-in, onboarding, chat avatar — all
+  reference these filenames, so no .vue change needed for the mark). LANDMINE: original PNG has a tall faint glow
+  → trim/crop with a SOLID-alpha threshold (>90), not `getbbox()`, else huge empty padding.
+- **Rename** "City Agent DASH" → "City Agent Insights" everywhere (sed over index.vue, settings/general.vue,
+  SlidesPanel.vue, sign-in.vue + backend defaults report_schema/organization_settings_schema/agent_v2/
+  organization_service/report_service). Org 55278108 DB `config.general.ai_analyst_name` also patched.
+- **Sign-in** (`pages/users/sign-in.vue`): wordmark span DASH→Insights, greeting + footer updated, logo wrapper
+  gradient → white box (mark has its own orange C), **sign-up block removed**.
+- **LDAP enabled by default**: `organization_settings_service.get_ldap` default `enabled` False→**True**
+  (UI shows it on). Login auth uses GLOBAL `dash_config.ldap` (unaffected — no break risk); per-org enable only
+  drives the EE admin UI + sync. Org 55278108 `config.ldap.enabled=true` set in DB too.
+
 ## Slide workspace — "Open" a presentation (2026-06-25, v1.7.0, BAKED)
 Fix: "Open" on a deck (`pages/presentations/index.vue` `openSlides` → `/reports/{id}?focus=slides`) used to
 show the deck + the FULL report conversation (clutter). Now it's a clean slide workspace.
@@ -401,7 +417,7 @@ Versioned feature feed surfaced as a 🔔 bell popover in TopNav (before profile
   `VERSION_HYBRID` + adds a `CHANGELOG_HYBRID.md` entry.
 
 **Current state (2026-06-25):** image `cityagent-analytics:dev` on `:3007`, branch `hybrid-brain`,
-mig head **`foldersync1`**, `VERSION_HYBRID`=**1.7.0**.
+mig head **`foldersync1`**, `VERSION_HYBRID`=**1.8.0**.
 Folder Sync (desktop folder auto-ingest, per-agent bind, delta upsert; flag ON org 55278108; E2E proven)
 BUILT+BAKED — desktop agent in `folder-sync-agent/` (not packaged/shipped yet).
 Agent Templates (export/gallery/bind + popup

@@ -922,7 +922,7 @@ class ReportService:
             if settings and isinstance(settings.config, dict):
                 general = settings.config.get("general", {}) or {}
                 schema.general = ReportSchema.PublicGeneralSettings(
-                    ai_analyst_name=general.get("ai_analyst_name", "City Agent DASH"),
+                    ai_analyst_name=general.get("ai_analyst_name", "City Agent Insights"),
                     dash_credit=general.get("dash_credit", True),
                     icon_url=general.get("icon_url")
                 )

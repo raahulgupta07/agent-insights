@@ -50,7 +50,7 @@
                 <UInput
                     v-model="form.ai_analyst_name"
                     :maxlength="50"
-                    placeholder="City Agent DASH"
+                    placeholder="City Agent Insights"
                     :ui="{ base: 'w-full', rounded: 'rounded-lg', color: { white: { outline: 'bg-white border border-[#E7E5DD] focus:border-[#C2683F] focus:ring-0' } } }"
                 />
             </div>
@@ -131,9 +131,9 @@ definePageMeta({ auth: true, permissions: ['manage_settings'], layout: 'settings
 
 const loading = ref(true)
 const error = ref('')
-const general = ref<GeneralConfig>({ ai_analyst_name: 'City Agent DASH', dash_credit: true })
+const general = ref<GeneralConfig>({ ai_analyst_name: 'City Agent Insights', dash_credit: true })
 const form = ref<{ organization_name?: string; locale: string } & GeneralConfig>({
-    ai_analyst_name: 'City Agent DASH',
+    ai_analyst_name: 'City Agent Insights',
     dash_credit: true,
     locale: '',
 })
@@ -169,7 +169,7 @@ const fetchSettings = async () => {
         ])
         if (settingsResp.status.value !== 'success') throw new Error(settingsResp.error?.value?.data?.message || t('settings.failedToFetch'))
         const cfg = (settingsResp.data.value as SettingsResponse)?.config
-        general.value = cfg?.general || { ai_analyst_name: 'City Agent DASH', dash_credit: true }
+        general.value = cfg?.general || { ai_analyst_name: 'City Agent Insights', dash_credit: true }
 
         const loc = localeResp.data.value as LocaleResponse | null
         const orgLocale = loc?.org_locale ?? ''

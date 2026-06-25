@@ -35,7 +35,7 @@ class ReportUpdate(BaseModel):
 
 class ReportSchema(ReportBase):
     class PublicGeneralSettings(BaseModel):
-        ai_analyst_name: str = "City Agent DASH"
+        ai_analyst_name: str = "City Agent Insights"
         dash_credit: bool = True
         icon_url: Optional[str] = None
 

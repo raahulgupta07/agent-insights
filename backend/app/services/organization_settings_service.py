@@ -758,7 +758,7 @@ class OrganizationSettingsService:
         settings = await self.get_settings(db, organization, current_user)
         raw = (settings.config or {}).get("ldap") or {}
         return OrgLdapSchema(
-            enabled=bool(raw.get("enabled", False)),
+            enabled=bool(raw.get("enabled", True)),  # LDAP enabled by default in the org settings UI
             url=raw.get("url"),
             bind_dn=raw.get("bind_dn"),
             bind_password_set=bool(raw.get("bind_password_enc")),

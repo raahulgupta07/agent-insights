@@ -187,7 +187,7 @@ class AgentV2:
         self.platform_context = platform_context
         self.training_build_id = None  # Track build ID for training mode instruction creation
 
-        self.ai_analyst_name = organization_settings.config.get('general', {}).get('ai_analyst_name', "City Agent DASH")
+        self.ai_analyst_name = organization_settings.config.get('general', {}).get('ai_analyst_name', "City Agent Insights")
 
         self.report = report
         self.report_type = getattr(report, 'report_type', 'regular')

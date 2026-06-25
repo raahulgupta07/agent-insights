@@ -4,11 +4,11 @@
     <!-- ============ top brand bar ============ -->
     <header class="flex items-center justify-between px-6 sm:px-10 lg:px-14 py-5">
       <div class="flex items-center gap-2.5">
-        <div class="h-10 w-10 rounded-[11px] bg-gradient-to-br from-[#c2683f] to-[#dd9269] flex items-center justify-center shadow-[0_4px_12px_rgba(194,104,63,.28)]">
-          <img src="/assets/logo-mark.png" alt="City Agent DASH" class="h-8 w-8" />
+        <div class="h-10 w-10 rounded-[11px] bg-white border border-[#E7E5DD] flex items-center justify-center shadow-[0_4px_12px_rgba(194,104,63,.16)]">
+          <img src="/assets/logo-mark.png" alt="City Agent Insights" class="h-9 w-9 object-contain" />
         </div>
         <div class="leading-tight">
-          <div class="text-[15px] font-semibold tracking-tight text-[#1f2328]">City Agent <span class="text-[#c2683f]">DASH</span></div>
+          <div class="text-[15px] font-semibold tracking-tight text-[#1f2328]">City Agent <span class="text-[#c2683f]">Insights</span></div>
           <div class="text-[10px] uppercase tracking-[2px] text-[#9a958c] mt-0.5">Data Intelligence</div>
         </div>
       </div>
@@ -23,7 +23,7 @@
       <!-- ---------- LEFT: greeting + form ---------- -->
       <div class="w-full max-w-[460px] mx-auto lg:mx-0">
         <h1 class="text-[34px] sm:text-[40px] leading-[1.08] font-semibold tracking-[-0.5px] text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">
-          {{ greeting }},<br>sign in to City Agent DASH
+          {{ greeting }},<br>sign in to City Agent Insights
         </h1>
         <p class="mt-4 text-[15px] text-[#6b6b6b] leading-relaxed max-w-[400px]">Your data intelligence — answered with the source query.</p>
 
@@ -112,11 +112,6 @@
           </div>
         </div>
 
-        <!-- sign up -->
-        <div class="mt-5 text-[13.5px] text-[#6b6b6b]" v-if="signupEnabled && authMode !== 'sso_only'">
-          New to City Agent DASH?
-          <NuxtLink to="/users/sign-up" class="text-[#c2683f] hover:text-[#a8542f] font-medium">{{ $t('auth.signUp') }}</NuxtLink>
-        </div>
       </div>
 
       <!-- ---------- RIGHT: dark animated agent panel (desktop only) ---------- -->
@@ -183,7 +178,7 @@
     </div>
 
     <!-- footer -->
-    <footer class="text-center text-[12px] text-[#9a958c] py-5">© 2026 City Agent DASH · Data Intelligence &amp; Analytics</footer>
+    <footer class="text-center text-[12px] text-[#9a958c] py-5">© 2026 City Agent Insights · Data Intelligence &amp; Analytics</footer>
   </div>
   <div v-else class="flex h-screen items-center justify-center bg-[#FBFAF6]"><Spinner class="h-6 w-6" /></div>
 </template>

@@ -85,7 +85,7 @@ class FeatureConfig(BaseModel):
 class OrganizationSettingsConfig(BaseModel):
     # General (workspace) settings
     class GeneralConfig(BaseModel):
-        ai_analyst_name: str = "City Agent DASH"
+        ai_analyst_name: str = "City Agent Insights"
         dash_credit: bool = True
         # Icon storage fields (disk/object storage)
         icon_key: Optional[str] = None

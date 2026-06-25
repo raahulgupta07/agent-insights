@@ -379,12 +379,12 @@ class OrganizationService:
         from app.services.usage_policy_service import usage_policy_service
         for org, role in results:
             icon_url = None
-            ai_analyst_name = "City Agent DASH"  # Default value
+            ai_analyst_name = "City Agent Insights"  # Default value
             org_settings = settings_map.get(org.id)
             if org_settings and isinstance(org_settings.config, dict):
                 general = org_settings.config.get('general') or {}
                 icon_url = general.get('icon_url')
-                ai_analyst_name = general.get('ai_analyst_name') or "City Agent DASH"
+                ai_analyst_name = general.get('ai_analyst_name') or "City Agent Insights"
 
             # Resolve RBAC permissions
             resolved = await resolve_permissions(db, str(current_user.id), str(org.id))

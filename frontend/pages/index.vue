@@ -91,8 +91,8 @@
           <span class="flex items-center">{{ $t('home.setupComplete') }}</span>
         </div>
       </div>
-      <!-- Full City Agent DASH logo (icon + wordmark in one image) replaces the old icon + text. -->
-      <img src="/assets/cityagent-dash-logo.png" alt="City Agent DASH" class="max-h-32 max-w-[480px] object-contain mx-auto" />
+      <!-- Full City Agent Insights logo (icon + wordmark in one image) replaces the old icon + text. -->
+      <img src="/assets/cityagent-dash-logo.png" alt="City Agent Insights" class="max-h-32 max-w-[480px] object-contain mx-auto" />
       <div class="w-full mx-auto mt-2 space-x-3 space-y-3 bg-red-100">
       </div>
       <p class="text-lg mt-5 font-light text-[#6b6b6b]">
@@ -237,7 +237,7 @@ const orgAIAnalystName = computed(() => {
   const orgId = organization.value?.id
   const orgs = (currentUser.value as any)?.organizations || []
   const org = orgs.find((o: any) => o.id === orgId) || orgs[0]
-  return org?.ai_analyst_name || "City Agent DASH"
+  return org?.ai_analyst_name || "City Agent Insights"
 })
 
 definePageMeta({ 

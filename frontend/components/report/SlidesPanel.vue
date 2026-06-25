@@ -78,7 +78,7 @@
           <template v-if="currentSlide?.kind === 'Title'">
             <div class="text-3xl font-bold mb-2">{{ currentSlide.title }}</div>
             <div class="text-base opacity-70">{{ currentSlide.subtitle }}</div>
-            <div class="mt-6 text-xs opacity-60">Generated from report artifacts · City Agent DASH</div>
+            <div class="mt-6 text-xs opacity-60">Generated from report artifacts · City Agent Insights</div>
           </template>
           <template v-else-if="currentSlide">
             <div class="text-2xl font-bold mb-3 truncate">{{ currentSlide.title }}</div>
@@ -183,7 +183,7 @@ const slides = computed<SlideModel[]>(() => {
       key: 'title',
       kind: 'Title',
       title: safeTitle.value,
-      subtitle: 'City Agent DASH',
+      subtitle: 'City Agent Insights',
     },
   ]
   visualizationList.value.forEach((v, i) => {
