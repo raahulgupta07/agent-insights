@@ -19,15 +19,45 @@ An **Agent Studio** wraps a set of pinned data sources (file uploads or warehous
 Clean machine, no pre-step, no external image — the runtime base is folded into
 the `Dockerfile`, so the build is fully self-contained.
 
+### Choose ONE deploy mode
+
+| Mode | Compose file | Port var | Proxy | Use when |
+|---|---|---|---|---|
+| **Direct** (simplest) | `docker-compose.build.yaml` | `APP_PORT` | none — app published straight to host | internal / behind an existing host proxy |
+| **nginx** | `docker-compose.nginx.yaml` | `HTTP_PORT` | nginx fronts the app (SSE/websocket/large-upload tuned) | you already run nginx, want a clean reverse proxy |
+| **Caddy (HTTPS)** | `docker-compose.yaml` | `APP_PORT` | Caddy, auto-TLS | public domain, want automatic HTTPS |
+
+> Pick the var that matches the mode. **Direct/Caddy use `APP_PORT`; nginx uses `HTTP_PORT`.** Setting the wrong one does nothing. Only ONE mode runs at a time — `docker compose down` the old one before switching (never `-v`, that wipes the DB).
+
+### Direct (no proxy)
+
 ```bash
-cp .env.example .env          # then edit .env (see below)
-docker compose up -d --build  # build + start everything
+cp .env.example .env                 # then edit .env (see below)
+# set APP_PORT to any FREE host port (e.g. 8001) + DASH_BASE_URL=http://<host>:8001
+docker compose -f docker-compose.build.yaml up -d --build
+docker compose -f docker-compose.build.yaml ps      # APP shows 0.0.0.0:<APP_PORT>->3000
+curl http://localhost:<APP_PORT>/health
 ```
+
+### nginx (reverse proxy)
+
+```bash
+cp .env.example .env
+# set HTTP_PORT to a FREE host port (e.g. 8001) + DASH_BASE_URL=http://<host>:8001
+docker compose -f docker-compose.nginx.yaml up -d --build
+docker compose -f docker-compose.nginx.yaml ps      # dash-nginx shows 0.0.0.0:<HTTP_PORT>->80
+curl http://localhost:<HTTP_PORT>/health
+```
+
+The app container always listens on **3000 internally** (the `http://0.0.0.0:3000`
+line in the logs is normal — ignore it). The host port you reach it on is whatever
+`APP_PORT`/`HTTP_PORT` you set. **"port already in use"** = another process owns that
+port — pick a different free one (`ss -ltnp | grep <port>` to check).
 
 That's the whole deploy. The first build takes ~5–20 min; rebuilds are fast.
 
-**Optional convenience:** `bash deploy.sh` runs the exact same `docker compose up
--d --build`, but first verifies Docker is up, creates `.env` from the template on
+**Optional convenience:** `bash deploy.sh` runs `docker compose up -d --build`
+(Caddy mode), but first verifies Docker is up, creates `.env` from the template on
 first run (and stops so you can fill it in), and warns if `DASH_ENCRYPTION_KEY` is
 empty. Use it or skip it — same result.
 
@@ -52,7 +82,7 @@ stored in the repo or `.env`).
 - **Docker** + Docker Compose v2 (Desktop or engine). All services run in containers.
 - **~8 GB RAM** free for the build (the Nuxt generate step needs headroom).
 - An **OpenRouter API key** (https://openrouter.ai) — the only LLM provider.
-- Ports free on the host: `3007` (app), `5439` (Postgres), `6432` (pgbouncer), `6399` (Redis).
+- A free host port for the app (`APP_PORT`/`HTTP_PORT`, default `3007`/`8001` — change if taken). Plus `5439` (Postgres), `6399` (Redis) for the build stack.
 - For local frontend iteration only: **Node 20+** and `npm`.
 
 ---
@@ -97,8 +127,10 @@ Copy `.env.example` → `.env`. The keys that matter most:
 |---|---|---|
 | `DASH_ENCRYPTION_KEY` | Fernet key encrypting per-org secrets (LLM/SMTP) | **required**; generate once, keep stable (rotating it makes stored secrets undecryptable). `python -c "import base64,secrets;print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"` |
 | `DASH_ADMIN_EMAIL` / `DASH_ADMIN_PASSWORD` | bootstrap the first owner/admin | set once for a fresh deploy; idempotent — ignored if any user exists |
+| `APP_PORT` | host port for **direct / Caddy** modes | maps `<APP_PORT>` → container 3000; pick a free port. Ignored by nginx mode. |
+| `HTTP_PORT` | host port for **nginx** mode | nginx publishes this → proxies to app:3000. Ignored by direct/Caddy modes. |
 | `DASH_DATABASE_URL` | Postgres DSN | defaults wired for the bundled `ca-postgres`; override for an external DB |
-| `DASH_BASE_URL` | external base URL | needed for embed/SDK + CORS + channel webhooks in prod |
+| `DASH_BASE_URL` | external base URL | needed for embed/SDK + CORS + channel webhooks in prod; **set to match your published port/domain** |
 | `ENVIRONMENT` | `development` \| `production` | compose sets `production` |
 
 The **OpenRouter LLM key is NOT an env var** — it is entered from the UI (Settings → Models) and stored encrypted per-org.
@@ -289,6 +321,9 @@ For stability, **Skills (heavy sandbox exec) / sub-agents / MCP are OFF by defau
 | `{"status":"ok"}` not returned | container still booting; `docker logs ca-app` and re-check `/health` |
 | Chat/training errors immediately (401) | no OpenRouter key yet — paste it in **Settings → Models** (the provider is auto-seeded; the key is stored encrypted per-org, not in `.env`) |
 | `cityagent-base:dev pull access denied` on build | old/stale build invocation — the base is now folded into the Dockerfile; just `docker compose up -d --build` (or `bash deploy.sh`) |
+| `bind: address already in use` / `port is already allocated` | another process owns that host port — `ss -ltnp \| grep <port>` to find it, then set a free `APP_PORT` (direct/Caddy) or `HTTP_PORT` (nginx) in `.env`. The app needs only ONE free host port; its other app can keep theirs. |
+| Logs say `http://0.0.0.0:3000` but you set another port | that line is the **container-internal** port (always 3000) — normal. Your real port is the `0.0.0.0:<port>->...` in `docker compose ps`. |
+| `port already in use` only when switching proxy modes | the old stack is still running — `docker compose -f <old-file> down` (no `-v`) before `up` on the new compose file. |
 | Hot-copy to `ca-app:/app/frontend/dist` → Permission denied | `dist` is root-owned — use `docker exec -u 0 ca-app` for the `rm`/`mkdir`, copy, then `chown -R app:app /app/frontend/dist` |
 | Auto-train bar "stuck" early | profiling a large connector takes minutes; the bar now moves per table — watch `docker logs -f ca-app 2>&1 \| grep "\[profile\]"` |
 | FE change didn't show | you skipped the bake — `docker cp .output/public/. ca-app:/app/frontend/dist` then `docker commit` |
