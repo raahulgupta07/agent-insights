@@ -190,6 +190,18 @@ The frontend is an installable PWA. In Chrome/Edge, open the app and click **Ins
 
 > **Prod requires HTTPS** for install + the service worker (set `PUBLIC_URL` to an https origin behind TLS); `http://localhost:3007` is exempt for testing. iOS uses Share → Add to Home Screen (no programmatic prompt).
 
+### Folder Sync — auto-ingest a local folder ("like Claude Code")
+
+Point a small desktop app at a folder; new and changed **Excel/CSV** files become data agents automatically — no clicks. A browser can't watch the local filesystem, so this is a tiny background helper (`folder-sync-agent/`) that pairs with a one-time **sync key** and pushes only deltas.
+
+- **Pairing** — Settings → **Folder Sync** (or any studio's **Add data → Sync a folder ⟳**) generates a `bow_` API key. Paste it + the server URL into the desktop app.
+- **Per-agent binding** — a folder syncs into a specific agent; the tray app picks which one (or “new agent from folder”).
+- **Smart deltas** — a local `sha256` ledger means byte-identical files are skipped without a network call; an edited file with the same schema **replaces the same agent** (no duplicates, via the existing content-hash dedup + same-schema merge); deletes are ignored.
+- **Server** — `POST /api/sync/file` (multipart + `X-API-Key`), plus `/api/sync/status`, `/api/sync/agents`, `/api/sync/key`. Auth reuses `mcp_auth` (JWT or API key) so the agent runs headless. State lives in `folder_sync_states` (path → last hash → resolved DataSource/Studio); no file bytes are stored there.
+- **Desktop app** — `folder-sync-agent/sync_agent.py` (stdlib + `requests` + `watchdog`; `setup`/`run`/`status`/`agents` CLI; config + state in `~/.cityagent-sync/`) plus an optional `pystray` tray (`tray.py`). Signed installers are not packaged yet — run `python sync_agent.py setup && python sync_agent.py run` for now.
+
+Flag `HYBRID_FOLDER_SYNC` (default OFF).
+
 ### Releasing a feature (changelog)
 
 Shipped features are versioned in `VERSION_HYBRID` (hybrid semver, e.g. `1.2.0`) with a matching entry in `CHANGELOG_HYBRID.md` (`## v<semver> — <title>  (<YYYY-MM-DD>)` + `-` bullets, newest first). The app exposes this at `GET /api/changelog` and surfaces it as a **🔔 What's new** popover in the top bar (bell before the user profile) with an unseen badge per user. Bump `VERSION_HYBRID` and prepend a `CHANGELOG_HYBRID.md` entry whenever you ship — the bell updates automatically. Full feed at `/changelog`.
@@ -200,7 +212,7 @@ Shipped features are versioned in `VERSION_HYBRID` (hybrid semver, e.g. `1.2.0`)
 
 New features are flag-gated (`backend/app/settings/hybrid_flags.py`, env `HYBRID_*`, default OFF; dev `.env` turns them on). Per-org live overrides via **Settings → Feature Flags**.
 
-Key flags: `COLUMN_INTEL · AUTO_QUERIES · AUTO_EVALS · JOIN_GRAPH · DOC_KNOWLEDGE · STUDIOS · SEMANTIC_LAYER · METRICS_CATALOG · DOMAIN_PACKS · PACK_ROUTER · PACK_AUTOBIND · TEACH_BOX · SCOPE_GATE · FOLLOWUPS`. Intelligence Layer: `PROFILE_V2 · PROACTIVE_INSIGHTS · FORECAST · GOLDEN_QUERIES · CODE_ENRICH · VERIFIED_METRICS · SEMANTIC_SEARCH`. Env knob: `STUDIO_LEARN_DAEMON_ENABLED`.
+Key flags: `COLUMN_INTEL · AUTO_QUERIES · AUTO_EVALS · JOIN_GRAPH · DOC_KNOWLEDGE · STUDIOS · SEMANTIC_LAYER · METRICS_CATALOG · DOMAIN_PACKS · PACK_ROUTER · PACK_AUTOBIND · TEACH_BOX · SCOPE_GATE · FOLLOWUPS · AGENT_TEMPLATES · FOLDER_SYNC`. Intelligence Layer: `PROFILE_V2 · PROACTIVE_INSIGHTS · FORECAST · GOLDEN_QUERIES · CODE_ENRICH · VERIFIED_METRICS · SEMANTIC_SEARCH`. Env knob: `STUDIO_LEARN_DAEMON_ENABLED`.
 
 For stability, **Skills (heavy sandbox exec) / sub-agents / MCP are OFF by default**; the lightweight Domain-Pack path is the supported "skills" mechanism.
 
