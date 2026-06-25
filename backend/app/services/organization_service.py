@@ -394,53 +394,33 @@ class OrganizationService:
         if existing is not None:
             user_id = str(existing.id)
         else:
-            # Create the user THROUGH the fastapi-users manager so the standard
-            # on_after_register hook fires. This is NOT the first user (the org
-            # already exists), so the hook does NOT auto-create an org — we
-            # attach the membership to THIS org explicitly below.
-            from app.dependencies import async_session_maker, get_user_db
-            from app.core.auth import get_user_manager
-            from app.schemas.user_schema import UserCreate
+            # Create the user DIRECTLY (hash password + insert), bypassing the
+            # fastapi-users manager's registration gate. That gate
+            # (auth.py _validate_user_creation) rejects any non-first signup when
+            # uninvited-signups are disabled ("Sign-up is disabled. Ask your
+            # admin for an invite.") — which is exactly the invite flow the admin
+            # is opting out of here. This is admin-initiated, so we skip it and
+            # attach the org membership ourselves below. Mirrors the direct
+            # user_db create the OAuth path uses. Account is active + verified
+            # immediately so the user can sign in with the password the admin set.
+            from fastapi_users.password import PasswordHelper
 
-            async def _aclose(gen):
-                try:
-                    await gen.__anext__()
-                except StopAsyncIteration:
-                    pass
-                except Exception:
-                    pass
-
-            async with async_session_maker() as mgr_session:
-                user_db_gen = get_user_db(session=mgr_session)
-                user_db = await user_db_gen.__anext__()
-                try:
-                    manager_gen = get_user_manager(user_db=user_db)
-                    manager = await manager_gen.__anext__()
-                    try:
-                        try:
-                            created = await manager.create(
-                                UserCreate(email=email, password=password, name=name),
-                                safe=False,
-                            )
-                        except Exception as exc:
-                            raise HTTPException(
-                                status_code=400,
-                                detail=f"Could not create user: {exc}",
-                            )
-                        user_id = str(created.id)
-                    finally:
-                        await _aclose(manager_gen)
-                finally:
-                    await _aclose(user_db_gen)
-
-            # Make the account usable right away (no email-verification step).
-            elevate = (
-                await db.execute(select(User).where(User.id == user_id))
-            ).scalar_one_or_none()
-            if elevate is not None:
-                elevate.is_active = True
-                elevate.is_verified = True
+            try:
+                new_user = User(
+                    email=email,
+                    name=name,
+                    hashed_password=PasswordHelper().hash(password),
+                    is_active=True,
+                    is_verified=True,
+                    is_superuser=False,
+                )
+                db.add(new_user)
                 await db.commit()
+                await db.refresh(new_user)
+            except Exception as exc:
+                await db.rollback()
+                raise HTTPException(status_code=400, detail=f"Could not create user: {exc}")
+            user_id = str(new_user.id)
 
         # Attach the membership to this org with a resolved user_id (no invite).
         membership = Membership(organization_id=organization_id, user_id=user_id, role=role)

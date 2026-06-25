@@ -4,6 +4,9 @@ Hybrid feature changelog (our additions on top of the bagofwords/Dash base). New
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` followed by `-` feature bullets.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.13.2 — Fix "Sign-up is disabled" when admin creates a user  (2026-06-25)
+- Direct user creation hit the fastapi-users registration gate (`_validate_user_creation`), which rejects any non-first signup when uninvited-signups are off → "Sign-up is disabled. Ask your admin for an invite." That gate is the invite flow the admin is explicitly opting out of. Admin-initiated creation now inserts the user directly (hash password + active/verified), bypassing the gate, then attaches the org membership. Mirrors the OAuth path's direct `user_db` create.
+
 ## v1.13.1 — Fix blank charts in dashboard full-screen  (2026-06-25)
 - Clicking full-screen on a dashboard showed only the static header card with the rest black. The full-screen overlay renders a SECOND iframe, but the data was only ever posted to the background iframe — so the full-screen one rendered its chrome with empty charts. Now `ARTIFACT_DATA` is broadcast to both iframes (background + full-screen), plus a belt-and-suspenders re-send on the full-screen iframe's load. Charts now render in full-screen.
 
