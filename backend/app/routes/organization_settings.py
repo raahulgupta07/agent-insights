@@ -283,10 +283,36 @@ def _env_default(env_name: str) -> bool:
 
 
 def _effective(env_name: str) -> bool:
-    """Effective value via the flags singleton property (override > env)."""
+    """Effective value (override > env > default).
+
+    Prefer the HybridFlags property (carries any code-default like SCOPE_GATE).
+    Some flags — the env-only daemon knobs (EVAL_SCHEDULE_ENABLED,
+    JOIN_MINE_ENABLED, STUDIO_LEARN_DAEMON_ENABLED) — have no property, so fall
+    back to the same override-or-env resolution the flags module uses.
+    """
     # Map env name -> HybridFlags property name (strip the HYBRID_ prefix).
     prop = env_name[len("HYBRID_"):] if env_name.startswith("HYBRID_") else env_name
-    return bool(getattr(flags, prop, False))
+    if hasattr(flags, prop):
+        return bool(getattr(flags, prop))
+    from app.settings.hybrid_flags import _bool
+    return _bool(env_name)
+
+
+def _flag_row(env_name: str, meta: dict, override) -> dict:
+    """Build a UI row for one flag (shared by GET list + PUT response)."""
+    key = env_name[len("HYBRID_"):] if env_name.startswith("HYBRID_") else env_name
+    return {
+        "key": key,
+        "env_name": env_name,
+        "label": meta.get("label", key),
+        "role": meta.get("role", "agent"),
+        "category": meta.get("category", "Advanced"),
+        "status": meta.get("status", "stable"),
+        "note": meta.get("note", ""),
+        "default_env": _env_default(env_name),
+        "override": (bool(override) if override is not None else None),
+        "effective": _effective(env_name),
+    }
 
 
 @router.get("/organization/hybrid-flags")
@@ -303,19 +329,10 @@ async def get_hybrid_flags(
     if not isinstance(overrides, dict):
         overrides = {}
 
-    rows = []
-    for env_name, meta in UPGRADE_FLAGS.items():
-        key = env_name[len("HYBRID_"):] if env_name.startswith("HYBRID_") else env_name
-        override = overrides.get(env_name)
-        rows.append({
-            "key": key,
-            "env_name": env_name,
-            "label": meta["label"],
-            "role": meta["role"],
-            "default_env": _env_default(env_name),
-            "override": (bool(override) if override is not None else None),
-            "effective": _effective(env_name),
-        })
+    rows = [
+        _flag_row(env_name, meta, overrides.get(env_name))
+        for env_name, meta in UPGRADE_FLAGS.items()
+    ]
     return rows
 
 
@@ -361,14 +378,4 @@ async def update_hybrid_flag(
     # Apply live to this process right away.
     set_override(env_name, enabled)
 
-    meta = UPGRADE_FLAGS[env_name]
-    key = env_name[len("HYBRID_"):] if env_name.startswith("HYBRID_") else env_name
-    return {
-        "key": key,
-        "env_name": env_name,
-        "label": meta["label"],
-        "role": meta["role"],
-        "default_env": _env_default(env_name),
-        "override": (bool(enabled) if enabled is not None else None),
-        "effective": _effective(env_name),
-    }
+    return _flag_row(env_name, UPGRADE_FLAGS[env_name], enabled)

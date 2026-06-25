@@ -4,6 +4,12 @@ Hybrid feature changelog (our additions on top of the bagofwords/Dash base). New
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` followed by `-` feature bullets.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.14.0 — All feature flags toggleable from the UI  (2026-06-25)
+- Settings → Features now lists **every** hybrid flag (65, up from ~32), grouped into 8 sections (Core, Knowledge, Intelligence, Agents & Access, Ingest, Learning, Advanced, Daemons). Previously most flags — including Agent Studios itself, the caches, semantic/metrics layer, autotrain and the daemons — weren't registered, so they couldn't be toggled from the UI and the override was silently ignored.
+- Each flag carries a status badge so risky ones are honest, not silently broken: `needs setup` (Forecast → needs Prophet bake; Federation → needs S3), `unstable` (Skills sandbox can livelock; Hybrid Search is a scaffold), `experimental` (Subagents/token-heavy, Bitemporal, etc.), `needs restart` (the boot-read daemons). Enabling an unstable/needs-setup flag pops a confirm dialog with the caveat.
+- Page gained search + an Enabled/Disabled filter and an "N / M on" counter.
+- Backend: extended `UPGRADE_FLAGS` with `category`/`status`/`note` per flag (and added every missing flag); `_effective()` now falls back to override-or-env for the env-only daemon knobs (no `flags` property). Same `GET/PUT /api/organization/hybrid-flags` endpoints — no new routes, no migration. Per-org overrides still beat `.env` and apply live (daemons after a restart).
+
 ## v1.13.2 — Fix "Sign-up is disabled" when admin creates a user  (2026-06-25)
 - Direct user creation hit the fastapi-users registration gate (`_validate_user_creation`), which rejects any non-first signup when uninvited-signups are off → "Sign-up is disabled. Ask your admin for an invite." That gate is the invite flow the admin is explicitly opting out of. Admin-initiated creation now inserts the user directly (hash password + active/verified), bypassing the gate, then attaches the org membership. Mirrors the OAuth path's direct `user_db` create.
 

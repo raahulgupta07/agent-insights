@@ -65,43 +65,108 @@ def overrides_snapshot() -> dict[str, bool]:
 
 
 # ---------------------------------------------------------------------------
-# Upgrade flag metadata (the 8 agent-upgrade env-names + UI rendering hints)
-# role: who the toggle is for — 'agent' (capability), 'user' (UX), 'review'
-# (writes learned/proposed knowledge through the approval gate).
+# Flag registry — drives the Settings → Features UI (per-org override layer).
+# Every togglable flag MUST be here or the override is silently ignored AND the
+# PUT /organization/hybrid-flags route rejects it. Each entry:
+#   label    — human name
+#   role     — who the toggle is for: 'agent' (capability) | 'user' (UX) |
+#              'review' (writes proposed knowledge through the approval gate)
+#   category — UI section grouping
+#   status   — 'stable'      : works now, flip to enable
+#              'experimental': works but changes behaviour / token-heavy
+#              'needs_dep'   : flag alone is not enough (needs infra/bake)
+#              'unstable'    : known-bad, keep off
+#              'daemon'      : background job, read at boot → needs restart
+#   note     — short caveat shown in the UI (optional)
 # ---------------------------------------------------------------------------
 UPGRADE_FLAGS: dict[str, dict[str, str]] = {
-    "HYBRID_AGENT_MEMORY": {"label": "Agent Memory", "role": "review"},
-    "HYBRID_SUBAGENTS": {"label": "Subagent Fan-out", "role": "agent"},
-    "HYBRID_SKILL_AUTOGROW": {"label": "Skill Auto-grow", "role": "review"},
-    "HYBRID_BITEMPORAL": {"label": "Bi-temporal Facts", "role": "user"},
-    "HYBRID_WORKFLOWS": {"label": "Workflow Runner", "role": "user"},
-    "HYBRID_CONTEXT_COMPACT": {"label": "Context Compaction", "role": "agent"},
-    "HYBRID_SKILL_OPTIMIZE": {"label": "Skill Optimizer", "role": "user"},
-    "HYBRID_SKILL_OPTIMIZE_DAEMON": {"label": "Skill Optimizer Daemon", "role": "agent"},
-    "HYBRID_RECURSIVE": {"label": "Recursive Verify", "role": "agent"},
-    "HYBRID_FOLLOWUPS": {"label": "Suggested Follow-ups", "role": "user"},
-    "HYBRID_SCOPE_GATE": {"label": "Scope Guardrail", "role": "user"},
-    "HYBRID_DASH_VERSIONS": {"label": "Dashboard Versions", "role": "user"},
-    "HYBRID_DOMAIN_PACKS": {"label": "Domain Packs (Skills)", "role": "agent"},
-    "HYBRID_PACK_AUTOBIND": {"label": "Pack Auto-bind", "role": "review"},
-    "HYBRID_PACK_ROUTER": {"label": "Pack Router", "role": "agent"},
-    "HYBRID_TEACH_BOX": {"label": "Teach Box (paste→skill)", "role": "review"},
-    "HYBRID_MERGE_SAME_SCHEMA": {"label": "Merge Same-Schema Uploads", "role": "user"},
-    "HYBRID_SMART_HEADER": {"label": "Smart Header + Glossary", "role": "user"},
-    "HYBRID_RESULT_CACHE": {"label": "Result Cache", "role": "agent"},
-    "HYBRID_QUERY_LEARNING": {"label": "Live Query Learning", "role": "review"},
-    "HYBRID_PROFILE_V2": {"label": "Deep Profiler (dim catalog)", "role": "agent"},
-    "HYBRID_PROACTIVE_INSIGHTS": {"label": "Proactive Insights + Anomaly", "role": "user"},
-    "HYBRID_FORECAST": {"label": "Forecasting Tool", "role": "user"},
-    "HYBRID_GOLDEN_QUERIES": {"label": "Golden Query Promotion", "role": "review"},
-    "HYBRID_VERIFIED_METRICS": {"label": "Executable Verified Metrics", "role": "review"},
-    "HYBRID_SEMANTIC_SEARCH": {"label": "Hybrid Search + KG", "role": "agent"},
-    "HYBRID_CODE_ENRICH": {"label": "Code Enrich (pipeline logic)", "role": "agent"},
-    "HYBRID_AGENT_TEMPLATES": {"label": "Agent Templates (share best practices)", "role": "user"},
-    "HYBRID_FOLDER_SYNC": {"label": "Folder Sync (desktop auto-ingest)", "role": "user"},
-    "HYBRID_AGENT_ACL": {"label": "Per-Agent Access Control", "role": "user"},
-    "HYBRID_AGENT_CHANNELS": {"label": "Agent Channels (Telegram)", "role": "user"},
+    # --- Core -------------------------------------------------------------
+    "HYBRID_STUDIOS": {"label": "Agent Studios", "role": "user", "category": "Core", "status": "stable"},
+    "HYBRID_DASH_VERSIONS": {"label": "Dashboard Versions", "role": "user", "category": "Core", "status": "stable"},
+    "HYBRID_SCOPE_GATE": {"label": "Scope Guardrail", "role": "user", "category": "Core", "status": "stable"},
+    "HYBRID_FOLLOWUPS": {"label": "Suggested Follow-ups", "role": "user", "category": "Core", "status": "stable"},
+    "HYBRID_DUAL_SCHEMA": {"label": "Dual Schema (read-only engine)", "role": "agent", "category": "Core", "status": "stable"},
+    "HYBRID_ENGINEER_ASSETS": {"label": "Engineer Assets (view builder)", "role": "agent", "category": "Core", "status": "stable"},
+
+    # --- Knowledge --------------------------------------------------------
+    "HYBRID_SEMANTIC_LAYER": {"label": "Semantic Layer", "role": "agent", "category": "Knowledge", "status": "stable"},
+    "HYBRID_METRICS_CATALOG": {"label": "Metrics Catalog", "role": "review", "category": "Knowledge", "status": "stable"},
+    "HYBRID_VERIFIED_METRICS": {"label": "Executable Verified Metrics", "role": "review", "category": "Knowledge", "status": "stable"},
+    "HYBRID_GOLDEN_QUERIES": {"label": "Golden Query Promotion", "role": "review", "category": "Knowledge", "status": "stable"},
+    "HYBRID_DOC_KNOWLEDGE": {"label": "Company Docs (RAG)", "role": "review", "category": "Knowledge", "status": "stable"},
+    "HYBRID_GOVERNANCE": {"label": "Governance (PII/freshness)", "role": "agent", "category": "Knowledge", "status": "stable"},
+    "HYBRID_AUTOMAP": {"label": "Auto-configure from Doc", "role": "review", "category": "Knowledge", "status": "stable"},
+
+    # --- Intelligence -----------------------------------------------------
+    "HYBRID_PROFILE_V2": {"label": "Deep Profiler (dim catalog)", "role": "agent", "category": "Intelligence", "status": "stable"},
+    "HYBRID_PROACTIVE_INSIGHTS": {"label": "Proactive Insights + Anomaly", "role": "user", "category": "Intelligence", "status": "stable"},
+    "HYBRID_COLUMN_INTEL": {"label": "Column Intel (pre-train profiler)", "role": "agent", "category": "Intelligence", "status": "stable"},
+    "HYBRID_COMPLIANCE_GATE": {"label": "Compliance & Quality Scan", "role": "user", "category": "Intelligence", "status": "stable"},
+    "HYBRID_CODE_ENRICH": {"label": "Code Enrich (pipeline logic)", "role": "agent", "category": "Intelligence", "status": "experimental", "note": "Extra LLM cost on train."},
+    "HYBRID_FORECAST": {"label": "Forecasting Tool", "role": "user", "category": "Intelligence", "status": "needs_dep", "note": "Needs Prophet baked into the image — flag alone errors."},
+    "HYBRID_SEMANTIC_SEARCH": {"label": "Hybrid Search + KG", "role": "agent", "category": "Intelligence", "status": "unstable", "note": "Scaffold only — no embeddings client in image."},
+
+    # --- Agents & Access --------------------------------------------------
+    "HYBRID_AGENT_TEMPLATES": {"label": "Agent Templates", "role": "user", "category": "Agents & Access", "status": "stable"},
+    "HYBRID_FOLDER_SYNC": {"label": "Folder Sync (desktop auto-ingest)", "role": "user", "category": "Agents & Access", "status": "stable"},
+    "HYBRID_AGENT_ACL": {"label": "Per-Agent Access Control", "role": "user", "category": "Agents & Access", "status": "stable"},
+    "HYBRID_AGENT_CHANNELS": {"label": "Agent Channels (Telegram)", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "Verify-page not built; reply is sync (slow agents may time out)."},
+    "HYBRID_QUOTAS": {"label": "Per-Org Quotas", "role": "agent", "category": "Agents & Access", "status": "stable"},
+    "HYBRID_DOMAIN_PACKS": {"label": "Domain Packs (Skills)", "role": "agent", "category": "Agents & Access", "status": "stable"},
+    "HYBRID_PACK_ROUTER": {"label": "Pack Router", "role": "agent", "category": "Agents & Access", "status": "stable"},
+    "HYBRID_PACK_AUTOBIND": {"label": "Pack Auto-bind", "role": "review", "category": "Agents & Access", "status": "experimental", "note": "Adds pending rows to review on every train."},
+    "HYBRID_TEACH_BOX": {"label": "Teach Box (paste→skill)", "role": "review", "category": "Agents & Access", "status": "stable"},
+
+    # --- Ingest / Autotrain ----------------------------------------------
+    "HYBRID_AUTOTRAIN": {"label": "Autotrain (file→pending knowledge)", "role": "review", "category": "Ingest", "status": "stable"},
+    "HYBRID_AUTOTRAIN_QA": {"label": "Autotrain — Verified Q&A", "role": "review", "category": "Ingest", "status": "stable"},
+    "HYBRID_AUTOTRAIN_PROFILE": {"label": "Autotrain — Profile", "role": "agent", "category": "Ingest", "status": "stable"},
+    "HYBRID_AUTOTRAIN_ON_INDEX": {"label": "Autotrain on Connector Index", "role": "agent", "category": "Ingest", "status": "experimental", "note": "Auto-trains every new table — costly on big warehouses."},
+    "HYBRID_AUTO_QUERIES": {"label": "Auto Example Queries", "role": "review", "category": "Ingest", "status": "stable"},
+    "HYBRID_AUTO_EVALS": {"label": "Auto Eval Cases", "role": "review", "category": "Ingest", "status": "stable"},
+    "HYBRID_MERGE_SAME_SCHEMA": {"label": "Merge Same-Schema Uploads", "role": "user", "category": "Ingest", "status": "stable"},
+    "HYBRID_SMART_HEADER": {"label": "Smart Header + Glossary", "role": "user", "category": "Ingest", "status": "stable"},
+
+    # --- Learning / Brain -------------------------------------------------
+    "HYBRID_BRAIN_READ": {"label": "Brain Read (inject memories)", "role": "agent", "category": "Learning", "status": "stable"},
+    "HYBRID_DISTILLER": {"label": "Self-Distiller (👎→pending)", "role": "review", "category": "Learning", "status": "stable"},
+    "HYBRID_MEMORY_LOOP": {"label": "Memory Loop (👍→pending)", "role": "review", "category": "Learning", "status": "stable"},
+    "HYBRID_QUERY_CACHE": {"label": "Reasoning Cache (proven SQL)", "role": "agent", "category": "Learning", "status": "stable"},
+    "HYBRID_QUERY_LEARNING": {"label": "Live Query Learning", "role": "review", "category": "Learning", "status": "stable"},
+    "HYBRID_RESULT_CACHE": {"label": "Result Cache", "role": "agent", "category": "Learning", "status": "stable", "note": "Uses Redis."},
+    "HYBRID_ANSWER_CACHE": {"label": "Answer Cache (Tier-0)", "role": "agent", "category": "Learning", "status": "stable", "note": "Uses Redis."},
+    "HYBRID_CODE_BANK": {"label": "Code Bank (proven snippets)", "role": "agent", "category": "Learning", "status": "stable"},
+    "HYBRID_AGENT_MEMORY": {"label": "Agent Memory", "role": "review", "category": "Learning", "status": "stable"},
+    "HYBRID_SKILL_AUTOGROW": {"label": "Skill Auto-grow", "role": "review", "category": "Learning", "status": "stable"},
+    "HYBRID_EVAL_HARNESS": {"label": "Eval Harness (result goldens)", "role": "user", "category": "Learning", "status": "stable"},
+    "HYBRID_BITEMPORAL": {"label": "Bi-temporal Facts", "role": "user", "category": "Learning", "status": "experimental", "note": "Changes how facts read (time-filtered)."},
+
+    # --- Advanced ---------------------------------------------------------
+    "HYBRID_SUBAGENTS": {"label": "Subagent Fan-out", "role": "agent", "category": "Advanced", "status": "experimental", "note": "N× token cost — budget & concurrency capped."},
+    "HYBRID_RECURSIVE": {"label": "Recursive Verify", "role": "agent", "category": "Advanced", "status": "experimental", "note": "No-op unless Subagents is also on."},
+    "HYBRID_WORKFLOWS": {"label": "Workflow Runner", "role": "user", "category": "Advanced", "status": "stable"},
+    "HYBRID_SKILLS": {"label": "Skills (sandbox exec)", "role": "agent", "category": "Advanced", "status": "unstable", "note": "Can livelock the agent loop — use Domain Packs instead."},
+    "HYBRID_SKILL_OPTIMIZE": {"label": "Skill Optimizer", "role": "user", "category": "Advanced", "status": "experimental"},
+    "HYBRID_CONTEXT_COMPACT": {"label": "Context Compaction", "role": "agent", "category": "Advanced", "status": "experimental"},
+    "HYBRID_CONTEXT_COMPACT_LLM": {"label": "Context Compaction — LLM", "role": "agent", "category": "Advanced", "status": "experimental", "note": "Allows one LLM summarize per run (extra cost)."},
+    "HYBRID_AMBIGUITY_GATE": {"label": "Ambiguity Gate (clarify first)", "role": "user", "category": "Advanced", "status": "experimental"},
+    "HYBRID_JOIN_GRAPH": {"label": "Join Graph context", "role": "agent", "category": "Advanced", "status": "stable"},
+    "HYBRID_BRAIN_GRAPH": {"label": "Brain Graph (entity/correlation)", "role": "agent", "category": "Advanced", "status": "experimental", "note": "Empty until edges are mined."},
+    "HYBRID_FEDERATION": {"label": "DuckDB Federation", "role": "agent", "category": "Advanced", "status": "needs_dep", "note": "Needs S3/MinIO (FEDERATION_S3_*) — no-op without it."},
+
+    # --- Daemons (background; read at boot → toggle needs restart) ---------
+    "HYBRID_INSIGHT_DAEMON": {"label": "Insight Daemon", "role": "agent", "category": "Daemons", "status": "daemon", "note": "Applies after a container restart."},
+    "HYBRID_SKILL_OPTIMIZE_DAEMON": {"label": "Skill Optimizer Daemon", "role": "agent", "category": "Daemons", "status": "daemon", "note": "Applies after a container restart."},
+    "EVAL_SCHEDULE_ENABLED": {"label": "Eval Schedule Daemon", "role": "agent", "category": "Daemons", "status": "daemon", "note": "Applies after a container restart."},
+    "JOIN_MINE_ENABLED": {"label": "Join Mining Daemon", "role": "agent", "category": "Daemons", "status": "daemon", "note": "Applies after a container restart."},
+    "STUDIO_LEARN_DAEMON_ENABLED": {"label": "Studio Learn Daemon", "role": "agent", "category": "Daemons", "status": "daemon", "note": "Applies after a container restart."},
 }
+
+# Stable, browser-facing order of the UI sections.
+FLAG_CATEGORIES: list[str] = [
+    "Core", "Knowledge", "Intelligence", "Agents & Access",
+    "Ingest", "Learning", "Advanced", "Daemons",
+]
 
 
 async def load_overrides_from_db(db) -> int:
