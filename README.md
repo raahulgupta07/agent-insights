@@ -43,7 +43,7 @@ curl localhost:3007/health        # -> {"status":"ok"}
 
 Open **http://localhost:3007**.
 
-**Default dev login:** `admin@cityagent.io` / `CityAgent#2026` (org "Main Org").
+**First user:** register at the login screen (or `POST /api/auth/register` with `{email, password, name}`). The first uninvited user auto-creates an org and becomes its admin. Set your own credentials — do **not** ship a default password.
 
 **Ports:** app `:3007` (internal 3000) · Postgres `:5439` · pgbouncer `:6432` · Redis `:6399`.
 
