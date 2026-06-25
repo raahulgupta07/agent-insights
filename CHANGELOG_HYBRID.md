@@ -4,6 +4,11 @@ Hybrid feature changelog (our additions on top of the bagofwords/Dash base). New
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` followed by `-` feature bullets.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.16.1 — Login version chip is real (was hardcoded v2.4.0)  (2026-06-25)
+- Sign-in page chip showed a stale hardcoded `v2.4.0 · local`. Now reads the real product version from `/api/settings.hybrid_version` (= VERSION_HYBRID) and derives the env label from the host (localhost → local, else prod).
+- `/api/settings` (public, pre-auth) now returns `hybrid_version` via `changelog.current_version()` — distinct from the upstream-base `version` (PROJECT_VERSION).
+- Dockerfile fix: `VERSION_HYBRID` + `CHANGELOG_HYBRID.md` are now COPY'd into the image at `/app/` (final stage). They were never copied, so `current_version()` always fell back to `0.0.0` — this also silently broke the in-app changelog popover. LANDMINE: `app/services/changelog.py` resolves `_REPO_ROOT=/app`; both files must live there in the image.
+
 ## v1.16.0 — Feature flags fully UI-owned; ENV is infra-only  (2026-06-25)
 - ENV/compose stripped of all ~50 `HYBRID_*` flags + skill-exec knobs + compaction ratio. They now live exclusively in the UI (Settings → Features), persisted per-org in `organization_settings.config['hybrid_overrides']`.
 - Defaults are now CODE-owned (`hybrid_flags.py`): 37 product-visible features default ON (Studios, Templates, Folder Sync, Intelligence + Knowledge layer, caches, autotrain, etc.), the rest OFF — so a fresh deploy is fully featured with zero env flags. Previously only `SCOPE_GATE` + `DASH_VERSIONS` defaulted ON and the nginx compose carried the real defaults.

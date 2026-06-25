@@ -13,7 +13,7 @@
         </div>
       </div>
       <span class="inline-flex items-center gap-2 text-[12px] font-medium text-[#6b6b6b] bg-white border border-[#E7E5DD] px-3 py-1.5 rounded-full">
-        <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>v2.4.0 · <span class="text-[#9a958c]">local</span>
+        <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>v{{ hybridVersion }} · <span class="text-[#9a958c]">{{ envLabel }}</span>
       </span>
     </header>
 
@@ -205,6 +205,17 @@ const isSubmitting = ref(false)
 const rememberMe = ref(true)
 const localOverride = computed(() => route.query.local === 'true')
 
+// Version chip: real product version (VERSION_HYBRID) from /api/settings,
+// with an env label derived from the host (localhost -> local, else prod).
+const hybridVersion = ref('…')
+const envLabel = computed(() => {
+  if (import.meta.client) {
+    const h = window.location.hostname
+    if (h === 'localhost' || h === '127.0.0.1') return 'local'
+  }
+  return 'prod'
+})
+
 // Time-of-day greeting (client-only page, so local hour is correct).
 const greeting = computed(() => {
   const h = new Date().getHours()
@@ -282,6 +293,8 @@ onMounted(async () => {
     smtpEnabled.value = settings?.smtp_enabled ?? false
     googleSignIn.value = !!(settings as any)?.google_oauth?.enabled
     signupEnabled.value = !!(settings as any)?.signup_enabled
+    const hv = (settings as any)?.hybrid_version
+    if (hv) hybridVersion.value = hv
   } catch (_) {}
   const inviteError = route.query.error as string
   if (inviteError) {

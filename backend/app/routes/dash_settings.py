@@ -13,6 +13,14 @@ async def get_frontend_settings():
     """Get frontend configuration settings"""
     is_testing = os.getenv("TESTING", "").lower() == "true"
 
+    # Hybrid product version (VERSION_HYBRID) — what the UI brands itself as.
+    # Distinct from settings.PROJECT_VERSION (the upstream dash base version).
+    try:
+        from app.services.changelog import current_version
+        hybrid_version = current_version()
+    except Exception:
+        hybrid_version = None
+
     # SSO: prefer DB config (live, no restart) over file config
     try:
         from app.services.organization_settings_service import (
@@ -63,6 +71,7 @@ async def get_frontend_settings():
         },
         "smtp_enabled": settings.dash_config.smtp_settings is not None,
         "version": settings.PROJECT_VERSION,
+        "hybrid_version": hybrid_version,
         "environment": settings.ENVIRONMENT,
         "i18n": {
             "default_locale": settings.dash_config.i18n.default_locale,

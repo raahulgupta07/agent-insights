@@ -191,6 +191,10 @@ RUN mkdir -p /app/backend/uploads/files /app/backend/uploads/branding \
 WORKDIR /app
 
 COPY --chown=app:app ./VERSION /app/VERSION
+# Hybrid product version + changelog — read at runtime by app/services/changelog.py
+# (_REPO_ROOT=/app). Without these the version chip + changelog popover show 0.0.0.
+COPY --chown=app:app ./VERSION_HYBRID /app/VERSION_HYBRID
+COPY --chown=app:app ./CHANGELOG_HYBRID.md /app/CHANGELOG_HYBRID.md
 COPY --chown=app:app ./start.sh /app/start.sh
 COPY --chown=app:app ./dash-config.yaml /app/dash-config.yaml
 
