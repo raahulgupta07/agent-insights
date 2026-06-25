@@ -160,9 +160,6 @@
           <UIcon v-else name="heroicons-plus" class="w-5 h-5" />
         </button>
 
-        <!-- What's new (changelog) — bell before profile -->
-        <WhatsNew class="hidden sm:block" />
-
         <!-- User dropdown — desktop -->
         <UDropdown
           :items="userDropdownItems"
@@ -316,7 +313,6 @@
   import AgentIcon from '~/components/icons/AgentIcon.vue'
   import McpModal from '~/components/McpModal.vue'
   import AgentSelector from '~/components/AgentSelector.vue'
-  import WhatsNew from '~/components/nav/WhatsNew.vue'
   import { useCan } from '~/composables/usePermissions'
 
   // ---- Composables (self-contained: TopNav reads its own state, no props) ----

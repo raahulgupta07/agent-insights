@@ -1,0 +1,29 @@
+# What's new — CityAgent Analytics
+
+Hybrid feature changelog (our additions on top of the bagofwords/Dash base). Newest first.
+Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` followed by `-` feature bullets.
+Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
+
+## v1.2.0 — Intelligence Layer — 8 agent grounding capabilities  (2026-06-25)
+- Deep Profiler: per-column role catalog (dimension / measure / identifier / temporal) plus value distribution and variant warnings
+- Verified Metrics: locked, authoritative metric values that override improvised formulas
+- Golden Queries: proven SQL is promoted and reused first
+- Proactive Insights: anomaly and trend chips surfaced on every result
+- Lazy Profile: tables added after training are profiled inline at query time
+- Studio Intelligence rail: a new per-agent panel to view and toggle all eight capabilities
+- "What's new" notifications: a release feed in the top bar with a version chip
+
+## v1.1.0 — Studios, Auto-train pipeline & Domain Packs  (2026-06-23)
+- Agent Studios: wrap pinned data sources into a grounded, shareable analytics agent
+- Auto-train everything: one button to profile columns, mine joins, write example queries and generate artifacts
+- Domain Packs: 48 lightweight skill recipes that steer the planner without executing code
+- Teach Box: paste an analysis and have it classified into a skill, instruction, data rule or knowledge
+- Auto-pilot studio home: add a source or upload files, then train in three steps
+- BI dashboards: cross-filtering, conditional formatting, KPI cards and data bars
+
+## v1.0.0 — Hybrid brain foundation  (2026-06-18)
+- OpenRouter-only LLM wiring (per-org Fernet-encrypted key)
+- Knowledge Layer: semantic model, metrics catalog and query library with an approval gate
+- 2nd-brain learning: self-distillation from feedback, query cache and a serving funnel
+- Self-service Skills with progressive disclosure and promote-from-chat authoring
+- Answer cache and verified-metric grounding for faster, more reliable answers

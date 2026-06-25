@@ -846,3 +846,14 @@ Closed gap vs `reference/dash` (9 prompt-context layers → Analytics had ~3-4).
 **Default-enable (org 55278108):** 5 safe layers ON org-wide via `organization_settings.config['hybrid_overrides']` (json→cast `config::jsonb` jsonb_set →`::json`) + `docker restart ca-app` (NOT --force-recreate). ON: PROFILE_V2 (covers Profiler+Lazy), VERIFIED_METRICS, GOLDEN_QUERIES, PROACTIVE_INSIGHTS. Verified via live authed API (boot log "Loaded 12 hybrid flag override(s)"). OFF kept: CODE_ENRICH (LLM cost), FORECAST (needs prophet bake), SEMANTIC_SEARCH (scaffold). Per-org flag = auto-inherited by all/new agents in org. True per-agent override (studio.config resolver) NOT built.
 
 **LANDMINE reconfirmed:** new flag needs BOTH @property AND `UPGRADE_FLAGS` dict entry + `snapshot()` else per-org override silently ignored. `docker exec ... python -c "import main"` does NOT run lifespan → flag snapshot shows False even when live process has them ON → verify via live API, not import.
+
+## 2026-06-25 — Changelog system + "What's new" notification bell
+
+Versioned feature feed (our hybrid features), surfaced as a 🔔 bell popover in the top nav (before user profile), matching the target Activity/What's-new design. Built by 2 subagents (backend + frontend) + parent wiring. BAKED, verified live.
+
+**Mig head now `chlogseen1`** (`hybridsearch1 → chlogseen1`, adds nullable `users.last_seen_changelog`).
+
+- **Source of truth:** `CHANGELOG_HYBRID.md` (repo root) — strict `## v<semver> — <title>  (<YYYY-MM-DD>)` + `-` bullets, newest first. `VERSION_HYBRID` = current semver (`1.2.0`). Separate from upstream `VERSION`(0.0.412)/`CHANGELOG.md`. Convention: every shipped feature bumps `VERSION_HYBRID` + adds an entry.
+- **Backend:** `app/services/changelog.py` (parse_changelog/load_changelog/current_version/entries_after + tuple semver compare, never-raise). `routes/changelog.py`: `GET /api/changelog` `{current,entries}`, `GET /api/changelog/unseen` `{count,latest,current}` (vs user last_seen), `POST /api/changelog/seen` (set last_seen=current, reload-by-PK). All fail-soft. Registered main.py.
+- **Frontend:** `components/nav/WhatsNew.vue` (bell + unseen badge, manual popover bottom-end, Activity/What's-new tabs, version chip `v1.2.0 · baked · ● Up to date`, per-release clay cards latest-expanded, See all → `/changelog`; opens → POST seen + optimistic badge clear). `pages/changelog/index.vue` full list. Wired into `nav/TopNav.vue` (explicit import + `<WhatsNew>` between New-Report and profile dropdown; backup `.backups/*_whatsnew-topnav`).
+- **Verified live:** GET /changelog → current 1.2.0, 3 entries (1.2.0/1.1.0/1.0.0) features parsed incl em-dash titles; unseen badge logic + POST seen → count 0. FE generated + cp + `docker commit`, health ok.

@@ -272,8 +272,21 @@ additive. Flags in `hybrid_flags.py` (each needs @property + `UPGRADE_FLAGS` ent
   `config['hybrid_overrides']`. OFF: CODE_ENRICH (cost), FORECAST (prophet), SEMANTIC_SEARCH (scaffold).
   Per-org flag auto-inherits to all/new agents; true per-agent resolver NOT built.
 
+## Changelog / "What's new" (2026-06-25, BAKED)
+Versioned feature feed surfaced as a 🔔 bell popover in TopNav (before profile).
+- Source: `CHANGELOG_HYBRID.md` (repo root, `## v<semver> — <title>  (<date>)` + `-` bullets) +
+  `VERSION_HYBRID` (current semver, now `1.2.0`). Separate from upstream `VERSION`/`CHANGELOG.md`.
+- BE: `app/services/changelog.py` (parser, fail-soft) + `routes/changelog.py`
+  (`GET /api/changelog`, `GET /api/changelog/unseen`, `POST /api/changelog/seen`) + per-user
+  `users.last_seen_changelog` (mig `chlogseen1`). Registered in main.py.
+- FE: `components/nav/WhatsNew.vue` (bell+badge+popover, Activity/What's new tabs, version chip,
+  per-release cards) + `pages/changelog/index.vue` (See all). Wired into `nav/TopNav.vue`
+  (explicit import, between New-Report and profile). RULE: every shipped feature bumps
+  `VERSION_HYBRID` + adds a `CHANGELOG_HYBRID.md` entry.
+
 **Current state (2026-06-25):** image `cityagent-analytics:dev` on `:3007`, branch `hybrid-brain`,
-mig head **`hybridsearch1`**. Intelligence Layer (8 caps + Studio rail UI) BUILT + BAKED, 5 safe flags
+mig head **`chlogseen1`**. Changelog/"What's new" bell BUILT+BAKED.
+Intelligence Layer (8 caps + Studio rail UI) BUILT + BAKED, 5 safe flags
 ON by default org-wide. Auto-pilot tab + org-library connector model + 48 Domain Packs + async
 auto-train all BUILT + BAKED. STABLE config = `HYBRID_SKILLS=0` / `SUBAGENTS=0`. OPEN BUG: Studio
 Queries tab renders blank despite approved `query_library_items` (needs browser console error).
