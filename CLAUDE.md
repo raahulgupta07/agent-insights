@@ -417,7 +417,22 @@ Versioned feature feed surfaced as a 🔔 bell popover in TopNav (before profile
   `VERSION_HYBRID` + adds a `CHANGELOG_HYBRID.md` entry.
 
 **Current state (2026-06-25):** image `cityagent-analytics:dev` on `:3007`, branch `hybrid-brain`,
-mig head **`foldersync1`**, `VERSION_HYBRID`=**1.8.0**.
+mig head **`foldersync1`**, `VERSION_HYBRID`=**1.9.0**.
+
+**v1.9.0 Default OpenRouter LLM + .env.example:** new orgs auto-seed an OpenRouter
+provider (current models: claude-sonnet-4.6 DEFAULT, claude-haiku-4.5 SMALL, claude-opus-4.8,
+gpt-5.4-mini, gemini-2.5-flash) via the existing `set_default_models_from_config` org-create hook
+(`llm_service.py`), driven by a `default_llm:` block in `dash-config.yaml` + `configs/dash-config.dev.yaml`.
+Config `LLMProvider` schema (`dash_config.py`) extended: `api_key` defaults `""`, new `is_preset`
+(default True) and `additional_config`. Seeded provider is **custom** type (base_url
+https://openrouter.ai/api/v1, verify_ssl), **is_preset:false** so the key is editable from the UI
+(Settings→Models) — key left BLANK (never in repo). LANDMINE: native `openrouter` + custom both
+`decrypt_credentials()` unconditionally at LLM init (`llm.py:60`) → a NULL key CRASHES; seeder always
+`encrypt_credentials("", "")` so blank → valid blob → "" → client builds, 401 until key set. Existing
+org 55278108 untouched (already configured). Added root `.env.example` (placeholders only; `!.env.example`
+allow-rule in gitignore; OpenRouter key is UI-set not env). LANDMINE: `docker cp` onto the bind-mounted
+`/app/dash-config.yaml` fails "device busy" AND leaves a truncated stale view (macOS file-share cache) —
+edit the repo file + `docker restart` to refresh; never cp over it.
 Folder Sync (desktop folder auto-ingest, per-agent bind, delta upsert; flag ON org 55278108; E2E proven)
 BUILT+BAKED — desktop agent in `folder-sync-agent/` (not packaged/shipped yet).
 Agent Templates (export/gallery/bind + popup

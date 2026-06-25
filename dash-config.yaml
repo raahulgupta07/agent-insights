@@ -66,6 +66,25 @@ google_oauth:
 
 encryption_key: ${DASH_ENCRYPTION_KEY}
 
+# Default LLM provider seeded for every NEW organization.
+# OpenRouter (OpenAI-compatible) with the current model set. The API key is
+# left blank on purpose — the user pastes their own OpenRouter key from the UI
+# (Settings -> Models). is_preset:false keeps it editable. Never commit a key.
+default_llm:
+  - provider_type: custom
+    provider_name: OpenRouter
+    api_key: ""
+    is_preset: false
+    additional_config:
+      base_url: https://openrouter.ai/api/v1
+      verify_ssl: true
+    models:
+      - { model_id: anthropic/claude-sonnet-4.6, model_name: Claude Sonnet 4.6, is_default: true }
+      - { model_id: anthropic/claude-haiku-4.5, model_name: Claude Haiku 4.5, is_small_default: true }
+      - { model_id: anthropic/claude-opus-4.8, model_name: Claude Opus 4.8 }
+      - { model_id: openai/gpt-5.4-mini, model_name: GPT-5.4 Mini }
+      - { model_id: google/gemini-2.5-flash, model_name: Gemini 2.5 Flash }
+
 intercom:
   enabled: true
 

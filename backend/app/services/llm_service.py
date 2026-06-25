@@ -893,16 +893,26 @@ class LLMService:
             return
         
         for llm_config in settings.dash_config.default_llm:
-            api_key = llm_config.api_key
+            api_key = llm_config.api_key or ""
             api_secret = ""
+
+            # Non-preset providers stay editable in the UI so the user can
+            # paste their own key (Settings → Models). Preset providers are
+            # locked and use the config-supplied credentials.
+            is_preset = getattr(llm_config, "is_preset", True)
 
             provider = LLMProvider(
                 name=llm_config.provider_name,
                 provider_type=llm_config.provider_type,
                 organization_id=organization.id,
-                is_preset=True,
-                use_preset_credentials=True
+                additional_config=getattr(llm_config, "additional_config", None),
+                is_preset=is_preset,
+                use_preset_credentials=is_preset,
             )
+            # Always store an (encrypted) value — a blank key encrypts to a
+            # valid blob so the client builds and fails with a clear 401 until
+            # the user sets a real key from the UI, instead of crashing on
+            # decrypt of a NULL credential.
             provider.encrypt_credentials(api_key, api_secret)
 
             db.add(provider)

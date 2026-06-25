@@ -17,7 +17,14 @@ class LLMModel(BaseModel):
 class LLMProvider(BaseModel):
     provider_type: str
     provider_name: str
-    api_key: str
+    # Blank by default — the key is meant to be entered from the UI
+    # (Settings → Models). Never commit a real key here.
+    api_key: str = ""
+    # Preset providers are locked in the UI. Set false to seed an editable
+    # provider whose key the user supplies from the UI.
+    is_preset: bool = True
+    # Provider-specific settings (e.g. base_url / verify_ssl for custom / OpenRouter).
+    additional_config: Optional[dict] = None
     models: List[LLMModel]
 
 class Intercom(BaseModel):
