@@ -13,6 +13,8 @@ core minimally (HARD RULE 3).
 | Faster rebuilds | `docs/PLAN_BUILD.md` | base image + BuildKit cache + vendored assets | designed, not started |
 | Enterprise connector gating | `docs/PLAN_CONNECTORS_EE.md` | un-badge / un-gate SharePoint/OneDrive/etc | designed, not started |
 | Push dashboards to Power BI | `docs/PLAN_POWERBI.md` | build here → push data/report to Power BI | designed, not started |
+| Changelog + "What's new" bell | `docs/PLAN_CHANGELOG_WHATSNEW.md` | versioned feature feed + top-nav notification popover | **DONE + BAKED** (v1.2.0) |
+| Ingest storage + merge | `docs/PLAN_INGEST_STORAGE.md` | Parquet canonical store + LLM merge-judge for same-schema | designed, not started |
 
 ## Recommended order (rationale)
 1. **S6 — ship skills** (`PLAN_SKILLS.md`). 5 phases built, uncommitted/unbaked/
