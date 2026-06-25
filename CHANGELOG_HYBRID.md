@@ -4,6 +4,14 @@ Hybrid feature changelog (our additions on top of the bagofwords/Dash base). New
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` followed by `-` feature bullets.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.7.0 — Slide workspace: Open a deck to edit & analyze  (2026-06-25)
+- "Open" on a presentation now opens a clean slide workspace — the deck big on the left, a chat on the right
+- The right chat is framed for slides ("Edit & analyze slides") — ask it to edit a slide or analyze the deck
+- The cluttered panel tabs are hidden in this mode — just the deck
+- Expand a slide to true fullscreen (Esc to exit); slide navigation stays usable
+- Empty decks show a clear "No slides yet — generate a deck" instead of a blank panel
+- Clearer list buttons: Open (slide workspace) vs Open in chat (the conversation); 0-slide decks say "Open & generate"
+
 ## v1.6.0 — Upload a whole folder at once  (2026-06-25)
 - New "Upload a whole folder" button in the file-upload modal — picks every Excel/CSV inside a folder in one go
 - Each spreadsheet becomes its own data agent (Office lock files and non-spreadsheets are skipped)

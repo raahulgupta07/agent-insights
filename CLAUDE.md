@@ -321,6 +321,23 @@ App installs from the browser (standalone window, dock icon, offline shell). Mod
   silently don't activate. iOS = manual Share→Add to Home Screen (no programmatic prompt). Silent
   zero-click auto-install is impossible in any browser — the button is the 1-click path.
 
+## Slide workspace — "Open" a presentation (2026-06-25, v1.7.0, BAKED)
+Fix: "Open" on a deck (`pages/presentations/index.vue` `openSlides` → `/reports/{id}?focus=slides`) used to
+show the deck + the FULL report conversation (clutter). Now it's a clean slide workspace.
+- `pages/reports/[id]/index.vue`: new `slidesFocus` ref (set in the `focus==='slides'` branch, cleared in
+  `exitDashboardFirst`). When ON: left = deck only (the dock **tab strip hidden**, `v-if="!slidesFocus"`);
+  the in-file header shows **"Edit & analyze slides"** + a Chat-first button instead of `ReportHeader`; a hint
+  chip **"Ask to edit a slide or analyze the deck…"** sits above the unchanged `PromptBoxV2`. LANDMINE noted:
+  `PromptBoxV2` placeholder + `ReportHeader` title are computed INSIDE those child components (no override
+  prop) → framing done in-file rather than mutating children (one-file constraint). Empty deck (0 slides/0 viz,
+  e.g. "Monthly EBITDA") → in-file clay empty state "No slides yet — ask chat to create a deck".
+- `components/dashboard/ArtifactFrame.vue`: expand ⛶ now = TRUE fullscreen — Fullscreen API on a Teleported
+  `fixed inset-0 z-[100]` overlay wrapper (NOT the sandboxed iframe), auto-falls-back to the overlay if the API
+  rejects; Esc + ✕ close (synced via `fullscreenchange` + keydown, listeners removed on unmount); icon swaps to
+  `arrows-pointing-in`. SlideViewer re-rendered large, prev/next stays usable. PPTX/version dropdown untouched.
+- `pages/presentations/index.vue`: button tooltips (Open = slide workspace, Open in chat = conversation);
+  0-slide decks show a "No slides yet" chip + relabel Open → **"Open & generate"** (`slideCount(p)` helper).
+
 ## Whole-folder upload (one-shot, browser) (2026-06-25, v1.6.0, BAKED)
 DIFFERENT from Folder Sync (below): a one-shot browser folder pick, no desktop app, no flag.
 `components/data/UploadSpreadsheetModal.vue` — added a 2nd hidden `<input webkitdirectory directory multiple>`
@@ -384,7 +401,7 @@ Versioned feature feed surfaced as a 🔔 bell popover in TopNav (before profile
   `VERSION_HYBRID` + adds a `CHANGELOG_HYBRID.md` entry.
 
 **Current state (2026-06-25):** image `cityagent-analytics:dev` on `:3007`, branch `hybrid-brain`,
-mig head **`foldersync1`**, `VERSION_HYBRID`=**1.6.0**.
+mig head **`foldersync1`**, `VERSION_HYBRID`=**1.7.0**.
 Folder Sync (desktop folder auto-ingest, per-agent bind, delta upsert; flag ON org 55278108; E2E proven)
 BUILT+BAKED — desktop agent in `folder-sync-agent/` (not packaged/shipped yet).
 Agent Templates (export/gallery/bind + popup

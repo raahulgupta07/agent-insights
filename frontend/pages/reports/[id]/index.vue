@@ -61,8 +61,26 @@
 				<Icon name="heroicons:chevron-double-right" class="w-4 h-4" />
 			</button>
 		</div>
+		<!-- Slide-workspace dock header: replaces the conversation title + Share with a
+		     clean "Edit & analyze slides" label so the dock reads as a slide assistant,
+		     not the raw historical thread. Same chat/composer below is untouched. -->
+		<header
+			v-if="report && slidesFocus && !isMobile"
+			class="sticky top-0 bg-white z-10 flex flex-row pt-1 h-[40px] pb-1 pe-2 ps-2 items-center border-gray-200"
+		>
+			<svg width="18" height="18" viewBox="0 0 48 48" class="flex-none me-2"><circle cx="27" cy="21" r="15" fill="url(#ppO)"/><rect x="6" y="17" width="22" height="22" rx="5" fill="url(#ppP)"/><path d="M12 22h6.5a4 4 0 0 1 0 8H15v4h-3V22zm3 3v2.5h3.2a1.25 1.25 0 0 0 0-2.5H15z" fill="#fff"/></svg>
+			<h1 class="text-sm font-semibold text-[#1f2328] truncate">Edit &amp; analyze slides</h1>
+			<button
+				@click="exitDashboardFirst"
+				title="Switch to chat-first layout"
+				class="ms-auto flex-none inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg border border-[#E7E5DD] text-[#1f2328] bg-white hover:bg-[#F4F1EA] transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#C2683F]"
+			>
+				<Icon name="heroicons:chat-bubble-left-right" class="w-3.5 h-3.5" />
+				Chat-first
+			</button>
+		</header>
 		<ReportHeader
-			v-if="report"
+			v-else-if="report"
 			:report="report"
 			:isSplitScreen="isSplitScreen"
 			:isStreaming="isStreaming"
@@ -639,6 +657,13 @@
 		<!-- Prompt box (in normal flow at the bottom of the left column) -->
 		<div class="shrink-0 bg-[#FBFAF6] pt-2 pb-6">
 			<div :class="['mx-auto w-full', isExcel ? 'px-0' : 'px-4 max-w-2xl']">
+				<!-- Slide-workspace composer framing: PromptBoxV2 owns its own placeholder
+				     (i18n, internal), so we surface the slide-scoped intent as a hint chip
+				     above the same composer — the agent can already edit/analyze the deck. -->
+				<div v-if="slidesFocus" class="flex items-center gap-1.5 mb-1.5 text-[12px] text-[#7A7066]">
+					<Icon name="heroicons:presentation-chart-bar" class="w-3.5 h-3.5 text-[#C2683F] flex-none" />
+					<span>Ask to edit a slide or analyze the deck&hellip;</span>
+				</div>
 				<PromptBoxV2
 					ref="promptBoxRef"
 					:report_id="report_id"
@@ -709,7 +734,14 @@
 				<linearGradient id="agV" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#8B5CF6"/><stop offset="50%" stop-color="#6366F1"/><stop offset="100%" stop-color="#22D3EE"/></linearGradient>
 				<linearGradient id="acR" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#F59E0B"/><stop offset="100%" stop-color="#EF4444"/></linearGradient>
 			</defs></svg>
-			<div class="flex items-center gap-0.5 min-w-0">
+			<!-- Slide-workspace header: in slidesFocus mode the deck owns the panel,
+			     so we hide the confusing tab strip and show a clean "Edit & analyze
+			     slides" label instead. Close ✕ + expand control (further right) stay. -->
+			<div v-if="slidesFocus" class="flex items-center gap-1.5 min-w-0 ps-1">
+				<svg width="18" height="18" viewBox="0 0 48 48" class="flex-none"><circle cx="27" cy="21" r="15" fill="url(#ppO)"/><rect x="6" y="17" width="22" height="22" rx="5" fill="url(#ppP)"/><path d="M12 22h6.5a4 4 0 0 1 0 8H15v4h-3V22zm3 3v2.5h3.2a1.25 1.25 0 0 0 0-2.5H15z" fill="#fff"/></svg>
+				<span class="text-sm font-semibold text-[#1f2328] truncate">Edit &amp; analyze slides</span>
+			</div>
+			<div v-else class="flex items-center gap-0.5 min-w-0">
 				<button
 					@click="setPanelView('studio', true)"
 					class="tabico relative flex items-center justify-center w-9 h-8 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#C2683F] hover:bg-gray-100"
@@ -1161,6 +1193,20 @@
 					@close="toggleSplitScreen"
 					class="h-full"
 				/>
+				<!-- Empty deck (no slides artifact AND nothing to build from, e.g. the
+				     "Monthly EBITDA" report with 0 slides): a clear CTA instead of blank. -->
+				<div
+					v-else-if="!hasSlidesArtifact && !(visualizations || []).length"
+					class="h-full flex flex-col items-center justify-center text-center gap-3 px-6"
+				>
+					<div class="w-12 h-12 rounded-xl bg-[#F6EFEA] flex items-center justify-center">
+						<Icon name="heroicons:presentation-chart-bar" class="w-6 h-6 text-[#C2683F]" />
+					</div>
+					<div class="text-sm font-semibold text-[#1f2328]">No slides yet</div>
+					<div class="text-[13px] text-[#7A7066] max-w-xs leading-relaxed">
+						Generate a deck from this report — ask the chat to <span class="font-medium text-[#1f2328]">&ldquo;create a slide deck&rdquo;</span>.
+					</div>
+				</div>
 				<SlidesPanel v-else :visualizations="visualizations" :reportTitle="report?.title || 'Report'" />
 			</div>
 
@@ -2031,6 +2077,12 @@ const isResizing = ref(false)
 // Implementation is pure re-arrange/resize of the EXISTING panes (SplitScreenLayout
 // flex-row-reverse + dock width) — no chat/composer/dashboard component is duplicated.
 const dashboardFirst = ref(false)
+// Slide-workspace mode (URL ?focus=slides). A specialisation of dashboardFirst:
+// the deck owns the big main panel and the right dock is re-framed as a slide
+// assistant (deck-only tabs hidden, "Edit & analyze slides" header, slide-scoped
+// composer hint). Defaults false so the normal report view is byte-for-byte the
+// same; only the focus=slides entry flips it on, exitDashboardFirst() resets it.
+const slidesFocus = ref(false)
 const dockCollapsed = ref(false)
 const DOCK_WIDTH_OPEN = 360
 const DOCK_WIDTH_COLLAPSED = 46
@@ -2119,6 +2171,7 @@ function enterDashboardFirst() {
 // Switch back to the normal chat-first layout + clean the ?focus query from the URL.
 function exitDashboardFirst() {
 	dashboardFirst.value = false
+	slidesFocus.value = false
 	dockCollapsed.value = false
 	userPinnedView.value = false
 	// Restore a normal panel width for the current view.
@@ -4794,6 +4847,7 @@ onMounted(async () => {
 			mobileView.value = 'dashboard'
 		} else {
 			dashboardFirst.value = true
+			slidesFocus.value = true
 			dockCollapsed.value = false
 			userPinnedView.value = true
 			if (!isSplitScreen.value) toggleSplitScreen()

@@ -100,8 +100,15 @@
                                 {{ p.report_title }}
                             </p>
                             <div class="flex items-center gap-2 pt-0.5">
-                                <span class="text-[11px] text-[#6b6b6b]">
-                                    {{ p.slide_count || 0 }} slide{{ p.slide_count === 1 ? '' : 's' }}
+                                <span
+                                    v-if="slideCount(p) === 0"
+                                    class="text-[11px] px-1.5 py-0.5 rounded bg-[#F4F1EA] text-[#9a958c]"
+                                    title="This deck has no slides yet — open it to generate some."
+                                >
+                                    No slides yet
+                                </span>
+                                <span v-else class="text-[11px] text-[#6b6b6b]">
+                                    {{ slideCount(p) }} slide{{ slideCount(p) === 1 ? '' : 's' }}
                                 </span>
                                 <span
                                     v-if="p.status === 'failed'"
@@ -125,13 +132,17 @@
                             <div class="mt-auto pt-2 grid grid-cols-2 gap-2">
                                 <button
                                     class="inline-flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg bg-[#C2683F] text-white hover:bg-[#A8542F] transition-colors"
+                                    :title="slideCount(p) === 0
+                                        ? 'Open the slide workspace — generate & edit slides with chat'
+                                        : 'Open the slide workspace — view & edit slides with chat'"
                                     @click.stop="openSlides(p)"
                                 >
                                     <Icon name="heroicons:presentation-chart-line" class="h-3.5 w-3.5" />
-                                    Open
+                                    {{ slideCount(p) === 0 ? 'Open & generate' : 'Open' }}
                                 </button>
                                 <button
                                     class="inline-flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg border border-[#E7E5DD] text-[#1f2328] hover:bg-[#F4F1EA] transition-colors"
+                                    title="Open the underlying conversation"
                                     @click.stop="openInChat(p)"
                                 >
                                     <Icon name="heroicons:chat-bubble-left-right" class="h-3.5 w-3.5" />
@@ -208,6 +219,11 @@ async function loadThumbs() {
             thumbs.value = { ...thumbs.value, [p.id]: window.URL.createObjectURL(blob) }
         } catch { /* leave icon fallback */ }
     }
+}
+
+// Slide count helper (decks with 0 slides get an empty-state cue + "generate" copy).
+function slideCount(p: Presentation): number {
+    return p.slide_count || 0
 }
 
 // Open with the presentation on the right + chat on the left (split view).

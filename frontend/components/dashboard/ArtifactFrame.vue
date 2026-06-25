@@ -92,10 +92,13 @@
           </button>
         </UTooltip>
 
-        <!-- Fullscreen -->
-        <UTooltip text="Full screen">
+        <!-- Fullscreen / collapse (true fullscreen of the deck) -->
+        <UTooltip :text="isFullscreen ? 'Exit full screen' : 'Full screen'">
           <button @click="openFullscreen" class="text-lg items-center flex gap-1 hover:bg-gray-100 px-2 py-1 rounded">
-            <Icon name="heroicons:arrows-pointing-out" class="w-3.5 h-3.5 text-gray-500" />
+            <Icon
+              :name="isFullscreen ? 'heroicons:arrows-pointing-in' : 'heroicons:arrows-pointing-out'"
+              class="w-3.5 h-3.5 text-gray-500"
+            />
           </button>
         </UTooltip>
 
@@ -286,37 +289,53 @@
       </div>
     </div>
 
-    <!-- Fullscreen Modal -->
+    <!-- True Fullscreen Deck Overlay -->
+    <!-- This wrapper is the element we hand to the native Fullscreen API; it also
+         doubles as the fixed full-viewport fallback when the API is unavailable.
+         Esc closes it (native fullscreenchange OR our keydown handler). -->
     <Teleport to="body">
-      <UModal v-model="isFullscreenOpen" :ui="{ width: 'sm:max-w-[98vw]', height: 'h-[98vh]' }">
-        <div class="h-full flex flex-col">
-          <!-- Modal Header -->
-          <div class="p-3 flex justify-between items-center border-b bg-white">
-            <div class="flex items-center gap-3">
-              <span class="text-sm font-medium text-gray-700">{{ selectedArtifact?.title || reportData?.title || 'Artifact' }}</span>
-              <span v-if="selectedArtifact" class="text-xs text-gray-400">v{{ selectedArtifact.version }}</span>
-            </div>
-            <UButton color="gray" variant="ghost" icon="i-heroicons-x-mark-20-solid" @click="closeFullscreen" />
+      <div
+        v-if="isFullscreen"
+        ref="fullscreenContainerRef"
+        class="fixed inset-0 z-[100] bg-black/90 flex flex-col"
+      >
+        <!-- Overlay header: title + visible close affordance -->
+        <div class="flex-shrink-0 flex items-center justify-between px-4 py-2 bg-black/60 text-white/90">
+          <div class="flex items-center gap-3 min-w-0">
+            <span class="text-sm font-medium truncate">{{ selectedArtifact?.title || reportData?.title || 'Artifact' }}</span>
+            <span v-if="selectedArtifact" class="text-xs text-white/50">v{{ selectedArtifact.version }}</span>
           </div>
-
-          <!-- Modal Content - Full artifact iframe or SlideViewer -->
-          <div class="flex-1 min-h-0 relative bg-white">
-            <!-- Slides with previews use SlideViewer -->
-            <SlideViewer
-              v-if="isFullscreenOpen && hasSlidesWithPreviews && selectedArtifact"
-              :artifact-id="selectedArtifact.id"
-              class="absolute inset-0"
-            />
-            <!-- Other artifacts use iframe -->
-            <iframe
-              v-else-if="isFullscreenOpen && iframeSrcdoc"
-              :srcdoc="iframeSrcdoc"
-              sandbox="allow-scripts allow-same-origin"
-              class="absolute inset-0 w-full h-full border-0"
-            />
+          <div class="flex items-center gap-2">
+            <span class="hidden sm:inline text-[11px] text-white/40">Esc to exit</span>
+            <UTooltip text="Exit full screen">
+              <button
+                @click="closeFullscreen"
+                class="flex items-center gap-1 px-2 py-1 rounded hover:bg-white/10 transition-colors"
+              >
+                <Icon name="heroicons:arrows-pointing-in" class="w-4 h-4 text-white/80" />
+                <Icon name="heroicons:x-mark" class="w-4 h-4 text-white/80" />
+              </button>
+            </UTooltip>
           </div>
         </div>
-      </UModal>
+
+        <!-- Deck content: scaled to fit the viewport, centered, no cropping. -->
+        <div class="flex-1 min-h-0 relative flex items-center justify-center p-2 sm:p-4">
+          <!-- Slides with previews use SlideViewer (internal prev/next nav) -->
+          <SlideViewer
+            v-if="hasSlidesWithPreviews && selectedArtifact"
+            :artifact-id="selectedArtifact.id"
+            class="absolute inset-2 sm:inset-4 rounded-lg overflow-hidden bg-white shadow-2xl"
+          />
+          <!-- Other artifacts use iframe -->
+          <iframe
+            v-else-if="iframeSrcdoc"
+            :srcdoc="iframeSrcdoc"
+            sandbox="allow-scripts allow-same-origin"
+            class="absolute inset-2 sm:inset-4 w-auto h-auto border-0 rounded-lg bg-white shadow-2xl"
+          />
+        </div>
+      </div>
     </Teleport>
   </div>
 </template>
@@ -388,8 +407,14 @@ defineEmits<{
   (e: 'close'): void;
 }>();
 
-// Fullscreen modal state
-const isFullscreenOpen = ref(false);
+// True-fullscreen state: tracks whether the deck overlay is currently expanded.
+// Synced with the browser Fullscreen API via a `fullscreenchange` listener so
+// the icon and DOM stay correct even when the user exits via Esc / browser UI.
+const isFullscreen = ref(false);
+// Container element we request native fullscreen on. We fullscreen this wrapper
+// (not the iframe directly) so a sandboxed/cross-origin deck iframe still works —
+// the overlay also acts as the fallback when the Fullscreen API is unavailable.
+const fullscreenContainerRef = ref<HTMLElement | null>(null);
 
 // Export state
 const isExporting = ref(false);
@@ -553,14 +578,61 @@ async function refreshDashboard() {
   }
 }
 
-// Open fullscreen modal
+// Toggle the deck into / out of a true fullscreen view of the current slide.
+// Preferred path: the browser Fullscreen API on our overlay container element,
+// which gives an edge-to-edge presenting view. If that's unavailable (older
+// browser, blocked by policy, etc.) we fall back to a fixed full-viewport
+// overlay — the overlay markup is rendered either way, so the deck shows large
+// and the close affordance + Esc handling both still work.
 function openFullscreen() {
-  isFullscreenOpen.value = true;
+  if (isFullscreen.value) {
+    closeFullscreen();
+    return;
+  }
+  // Show the overlay first so the container element exists, then request native
+  // fullscreen on it on the next tick.
+  isFullscreen.value = true;
+  nextTick(() => {
+    const el = fullscreenContainerRef.value;
+    if (el && typeof el.requestFullscreen === 'function' && !document.fullscreenElement) {
+      // Best-effort: if the API rejects (e.g. not user-gesture), the overlay
+      // fallback already covers us — just keep going.
+      el.requestFullscreen().catch((err) => {
+        console.warn('[ArtifactFrame] requestFullscreen failed, using overlay fallback:', err);
+      });
+    }
+  });
 }
 
-// Close fullscreen modal
+// Close fullscreen: exit the native Fullscreen API if active; the
+// `fullscreenchange` handler then flips `isFullscreen` off. When we're in the
+// overlay fallback (no native fullscreen element), close it directly.
 function closeFullscreen() {
-  isFullscreenOpen.value = false;
+  if (document.fullscreenElement) {
+    document.exitFullscreen().catch(() => {
+      // If exit fails, force the overlay down so the user is never trapped.
+      isFullscreen.value = false;
+    });
+  } else {
+    isFullscreen.value = false;
+  }
+}
+
+// Keep `isFullscreen` in sync with the native Fullscreen API. This fires when
+// the user exits via Esc or browser chrome, so our overlay tears down too.
+function handleFullscreenChange() {
+  if (!document.fullscreenElement) {
+    isFullscreen.value = false;
+  }
+}
+
+// Esc-to-close for the overlay fallback (when native fullscreen isn't active,
+// the browser won't emit `fullscreenchange`, so we handle the key ourselves).
+function handleFullscreenKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && isFullscreen.value && !document.fullscreenElement) {
+    e.preventDefault();
+    closeFullscreen();
+  }
 }
 
 // Export artifact as PPTX
@@ -791,6 +863,8 @@ onMounted(async () => {
   window.addEventListener('message', handleIframeMessage);
   window.addEventListener('artifact:select', handleArtifactSelect);
   window.addEventListener('artifact:created', handleArtifactCreated);
+  document.addEventListener('fullscreenchange', handleFullscreenChange);
+  window.addEventListener('keydown', handleFullscreenKeydown);
 
   // First fetch artifact list to know which artifact is selected
   await fetchArtifactsList();
@@ -861,6 +935,12 @@ onUnmounted(() => {
   window.removeEventListener('message', handleIframeMessage);
   window.removeEventListener('artifact:select', handleArtifactSelect);
   window.removeEventListener('artifact:created', handleArtifactCreated);
+  document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  window.removeEventListener('keydown', handleFullscreenKeydown);
+  // Make sure we leave native fullscreen if the component unmounts while expanded.
+  if (document.fullscreenElement) {
+    document.exitFullscreen().catch(() => {});
+  }
   if (isPolishMode.value) exitPolishMode();
   stopPolling();
 });
