@@ -4,6 +4,11 @@ Hybrid feature changelog (our additions on top of the bagofwords/Dash base). New
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` followed by `-` feature bullets.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.11.1 — Publish app on configurable host port  (2026-06-25)
+- The main `docker-compose.yaml` (Caddy/SSL variant) now publishes the app on the host via `APP_PORT` (default 3000) instead of `expose:` only — fixes "app only shows 3000, can't reach my chosen port". Set `APP_PORT=8001` in `.env` to reach it at `http://<host>:8001`. The container always listens on 3000 internally; this maps host→3000.
+- `.env.example` documents `APP_PORT` (and that `DASH_BASE_URL` should match it / your domain)
+- Caddy front-door path unchanged: for HTTPS you can drop the published port and let Caddy proxy to `app:3000`
+
 ## v1.11.0 — One-command deploy + env super-admin  (2026-06-25)
 - `docker compose up -d --build` now works on a clean machine with no pre-step — the runtime base image is folded into the main Dockerfile (no more "cityagent-base:dev pull access denied")
 - New `deploy.sh`: one friendly command — bootstraps `.env` from the template, warns on a missing encryption key, then builds and starts everything

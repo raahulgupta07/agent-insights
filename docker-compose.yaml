@@ -53,8 +53,13 @@ services:
     image: cityagent-analytics:dev
     container_name: dash-app
     restart: unless-stopped
-    expose:
-      - "3000"
+    # Publish the app on the host. Set APP_PORT in .env (e.g. APP_PORT=8001) to
+    # reach it directly at http://<host>:<APP_PORT>. The container ALWAYS listens
+    # on 3000 internally (left side = host port, right side = container port).
+    # If you front the app with Caddy (below) for HTTPS, you can omit this and
+    # let Caddy proxy to app:3000 over the internal network instead.
+    ports:
+      - "${APP_PORT:-3000}:3000"
     environment:
       - ENVIRONMENT=production
       # Database configuration
