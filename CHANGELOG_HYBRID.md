@@ -4,6 +4,12 @@ Hybrid feature changelog (our additions on top of the bagofwords/Dash base). New
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` followed by `-` feature bullets.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.3.0 — Install as an app  (2026-06-25)
+- Installable PWA: add CityAgent to your desktop or home screen as a standalone app
+- One-click "Install app" button in the top bar (next to notifications)
+- Offline app shell — the interface loads even on a flaky connection
+- Auto-update: the app refreshes to the latest version on its own
+
 ## v1.2.0 — Intelligence Layer — 8 agent grounding capabilities  (2026-06-25)
 - Deep Profiler: per-column role catalog (dimension / measure / identifier / temporal) plus value distribution and variant warnings
 - Verified Metrics: locked, authoritative metric values that override improvised formulas
