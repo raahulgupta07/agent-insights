@@ -12,11 +12,11 @@
         <!-- Persona-tinted gradient band (hue hashed from the studio name) -->
         <div class="h-14 w-full relative" :style="bandStyle">
             <div class="absolute inset-0 opacity-90" :style="bandGradient" />
-            <!-- lifecycle status chip: Draft -> Ready -> Live -> Idle -->
-            <span class="absolute top-2.5 right-3 inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full backdrop-blur"
-                  :class="lifecycleChip.cls">
-                <span class="w-1.5 h-1.5 rounded-full" :class="lifecycleChip.dot" />
-                {{ lifecycleChip.label }}
+            <!-- live status dot -->
+            <span class="absolute top-2.5 right-3 inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-white/85 backdrop-blur"
+                  :class="isLive ? 'text-green-600' : 'text-gray-400'">
+                <span class="w-1.5 h-1.5 rounded-full" :class="isLive ? 'bg-green-500 animate-pulse' : 'bg-gray-300'" />
+                {{ isLive ? $t('studio.live') || 'live' : $t('studio.idle') || 'idle' }}
             </span>
         </div>
 
@@ -62,49 +62,51 @@
                 <span class="text-[11px] text-gray-400 truncate">{{ sourceSummary }}</span>
             </div>
 
-            <!-- DRAFT (no data): setup progress + clear next step instead of four zeros -->
-            <div v-if="lifecycle === 'draft'" class="mt-3">
-                <div class="h-1.5 rounded-full bg-[#f1efe9] overflow-hidden">
-                    <i class="block h-full rounded-full bg-[#C2683F]" style="width:25%" />
+            <!-- Stat tiles -->
+            <div class="grid grid-cols-4 gap-1.5 mt-3">
+                <div class="rounded-lg bg-gray-50 py-1.5 text-center">
+                    <div class="text-sm font-semibold text-gray-800 leading-none">{{ studio.chat_count ?? 0 }}</div>
+                    <div class="text-[9px] text-gray-400 uppercase tracking-wide mt-0.5">{{ $t('studio.statChats') || 'chats' }}</div>
                 </div>
-                <div class="text-[11px] text-[#b9791f] font-medium mt-1.5">Connect data to activate</div>
-            </div>
-
-            <!-- READY (has data, untrained): nudge to train -->
-            <div v-else-if="lifecycle === 'ready'" class="mt-3">
-                <div class="h-1.5 rounded-full bg-[#f1efe9] overflow-hidden">
-                    <i class="block h-full rounded-full bg-[#3b6db8]" style="width:60%" />
+                <div class="rounded-lg bg-gray-50 py-1.5 text-center">
+                    <div class="text-sm font-semibold text-gray-800 leading-none">{{ studio.member_count ?? 0 }}</div>
+                    <div class="text-[9px] text-gray-400 uppercase tracking-wide mt-0.5">{{ $t('studio.statMembers') || 'members' }}</div>
                 </div>
-                <div class="text-[11px] text-[#3b6db8] font-medium mt-1.5">Train it to learn your data</div>
+                <div class="rounded-lg bg-gray-50 py-1.5 text-center">
+                    <div class="text-sm font-semibold text-gray-800 leading-none">{{ evalPct }}</div>
+                    <div class="text-[9px] text-gray-400 uppercase tracking-wide mt-0.5">{{ $t('studio.statEval') || 'eval' }}</div>
+                </div>
+                <div class="rounded-lg bg-gray-50 py-1.5 text-center">
+                    <div class="text-sm font-semibold text-gray-800 leading-none">{{ studio.source_count ?? 0 }}</div>
+                    <div class="text-[9px] text-gray-400 uppercase tracking-wide mt-0.5">{{ $t('studio.statSources') || 'src' }}</div>
+                </div>
             </div>
 
-            <!-- LIVE / IDLE: real stats only once they exist -->
-            <div v-else class="flex items-center gap-4 mt-3 text-[12px] text-gray-500">
-                <span><b class="text-gray-800">{{ studio.chat_count ?? 0 }}</b> chats</span>
-                <span><b class="text-gray-800">{{ studio.member_count ?? 0 }}</b> {{ (studio.member_count ?? 0) === 1 ? 'member' : 'members' }}</span>
-                <span><b class="text-gray-800">{{ studio.source_count ?? 0 }}</b> {{ (studio.source_count ?? 0) === 1 ? 'source' : 'sources' }}</span>
-                <span v-if="lastActiveLabel" class="ml-auto text-gray-400">{{ lastActiveLabel }}</span>
+            <!-- Activity sparkline + last active -->
+            <div class="flex items-center justify-between mt-3 h-5">
+                <svg v-if="hasActivity" :viewBox="`0 0 ${spark.w} ${spark.h}`" class="h-5 w-24" preserveAspectRatio="none">
+                    <polyline
+                        :points="spark.points"
+                        fill="none"
+                        :stroke="accent"
+                        stroke-width="1.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    />
+                </svg>
+                <span v-else class="text-[11px] text-gray-300">{{ $t('studio.noActivity') || 'no activity yet' }}</span>
+                <span class="text-[11px] text-gray-400">{{ lastActiveLabel }}</span>
             </div>
+        </div>
 
-            <!-- Persistent action bar — every card shows a clear next step -->
-            <div class="flex items-center gap-2 mt-4">
-                <template v-if="lifecycle === 'draft'">
-                    <UButton color="orange" size="2xs" icon="i-heroicons-plus" class="flex-1 justify-center !bg-[#C2683F] hover:!bg-[#A8542F]" @click.stop="$emit('open')">
-                        Add data
-                    </UButton>
-                    <UButton color="gray" variant="soft" size="2xs" class="flex-1 justify-center" @click.stop="$emit('open')">
-                        Open
-                    </UButton>
-                </template>
-                <template v-else>
-                    <UButton color="orange" size="2xs" icon="i-heroicons-arrow-right" class="flex-1 justify-center !bg-[#C2683F] hover:!bg-[#A8542F]" @click.stop="$emit('open')">
-                        {{ $t('studio.open') || 'Open' }}
-                    </UButton>
-                    <UButton color="gray" variant="soft" size="2xs" icon="i-heroicons-plus" class="flex-1 justify-center" @click.stop="$emit('chat')">
-                        {{ $t('studio.chat') || 'Chat' }}
-                    </UButton>
-                </template>
-            </div>
+        <!-- Hover action bar -->
+        <div class="absolute inset-x-0 bottom-0 px-3 py-2 bg-white/95 backdrop-blur border-t border-gray-100 flex items-center gap-2 translate-y-full group-hover:translate-y-0 transition-transform duration-200">
+            <UButton color="orange" size="2xs" icon="i-heroicons-arrow-right" class="flex-1 justify-center !bg-[#C2683F] hover:!bg-[#A8542F]" @click.stop="$emit('open')">
+                {{ $t('studio.open') || 'Open' }}
+            </UButton>
+            <UButton color="gray" variant="soft" size="2xs" icon="i-heroicons-plus" class="flex-1 justify-center" @click.stop="$emit('chat')">
+                {{ $t('studio.chat') || 'Chat' }}
+            </UButton>
         </div>
     </div>
 </template>
@@ -200,23 +202,6 @@ const isLive = computed(() => {
     if (!ts) return false
     const diff = Date.now() - new Date(ts).getTime()
     return diff < 7 * 24 * 3600 * 1000 // active within 7 days
-})
-
-// Lifecycle: Draft (no data) -> Ready (data, never chatted) -> Live (active) -> Idle (quiet).
-const lifecycle = computed(() => {
-    const src = props.studio.source_count ?? (props.studio.sources_preview?.length || 0)
-    if (!src) return 'draft'
-    const chats = props.studio.chat_count ?? 0
-    if (chats === 0) return 'ready'
-    return isLive.value ? 'live' : 'idle'
-})
-const lifecycleChip = computed(() => {
-    switch (lifecycle.value) {
-        case 'draft': return { label: 'Draft · needs data', cls: 'bg-[#fdf3e3] text-[#b9791f]', dot: 'bg-[#b9791f]' }
-        case 'ready': return { label: 'Ready to train', cls: 'bg-[#eaf1fb] text-[#3b6db8]', dot: 'bg-[#3b6db8]' }
-        case 'live': return { label: 'Live', cls: 'bg-[#eaf6f0] text-[#2f9e6f]', dot: 'bg-[#2f9e6f] animate-pulse' }
-        default: return { label: lastActiveLabel.value ? `Idle · ${lastActiveLabel.value.replace(' ago','')}` : 'Idle', cls: 'bg-[#f1efe9] text-[#9a958c]', dot: 'bg-[#cfcabf]' }
-    }
 })
 
 const lastActiveLabel = computed(() => {

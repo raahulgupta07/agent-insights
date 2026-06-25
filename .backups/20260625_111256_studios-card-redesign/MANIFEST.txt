@@ -1,0 +1,5 @@
+# backup 20260625_111256 label=studios-card-redesign
+# root: /Users/rahulgupta/Desktop/CityAI-Final-Project/CityAgent/CityAgent-Data/CityAgent Analytics
+OK       frontend/components/studio/StudioCard.vue
+OK       frontend/pages/studios/index.vue
+OK       frontend/components/nav/TopNav.vue

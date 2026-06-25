@@ -4,6 +4,12 @@ Hybrid feature changelog (our additions on top of the bagofwords/Dash base). New
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` followed by `-` feature bullets.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.4.2 — Clearer Agent Studios page  (2026-06-25)
+- One "New Agent Studio" button (removed the duplicate add card)
+- Lifecycle status on every card: Draft → Ready → Live → Idle
+- Agents with no data now clearly say "needs data" with an Add-data button
+- Cleaner cards — real stats only once they exist, no rows of zeros
+
 ## v1.4.1 — Smoother "Use template" journey  (2026-06-25)
 - Use template now opens a guided popup (preview → data → map → review → build) instead of a page jump
 - Three ways to add data: use an existing source, connect/upload new, or skip and add it later

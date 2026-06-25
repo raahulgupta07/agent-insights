@@ -139,7 +139,7 @@
           name="create-report"
           @click="createNewReport"
           :disabled="creatingReport"
-          class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-md text-[13px] font-medium text-[#C2683F] bg-white border border-[#E8C9B5] hover:bg-[#FBF4EF] disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+          class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-md text-[13px] font-medium text-white bg-[#C2683F] hover:bg-[#A8542F] disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
         >
           <span class="flex items-center justify-center w-[18px] h-[18px]">
             <Spinner v-if="creatingReport" class="animate-spin" />

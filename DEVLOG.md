@@ -891,3 +891,12 @@ UX upgrade to the template "Use" flow + a no-data path.
 - Backend: `instantiate` route now **allows empty data_source_ids** (skip mode) — binder already no-ops metrics/auto-match when no ds; seeds rules/examples/skills pending with placeholders intact, to bind later when data is added.
 - `pages/templates/index.vue` "Use template" → opens modal in place (`openWizard`); card click still → detail. `[id].vue` mounts wizard via v-model.
 - Verified: skip-mode instantiate live → agent "Skip-mode agent" created with no data. FE baked. Backups `.backups/*_bindwizard-modal`.
+
+## 2026-06-25 — Agent Studios page UX cleanup (v1.4.2)
+
+Fixes the "two add buttons / four zeros / no next step" confusion on `/studios`.
+- **One add affordance**: removed the duplicate ghost dashed "New Agent Studio" card in `pages/studios/index.vue`; the top-right primary is the single add button.
+- **Lifecycle status chip** in `components/studio/StudioCard.vue` (replaces the live/idle dot + the 4-zero stat grid): `draft` (no sources) → `ready` (sources, 0 chats) → `live` (active <7d) → `idle` (quiet). Derived client-side from source_count/chat_count/last_active_at.
+- **Per-card next step**: draft → progress bar + "Connect data to activate" + **Add data** button; ready → "Train it to learn your data"; live/idle → real stats (chats/members/sources + last-active) + Open/Chat. Action bar is now persistent (was hover-only).
+- **One filled primary per zone**: demoted nav "New report" to an outline button (`nav/TopNav.vue`) so it no longer competes with the page's "New Agent Studio".
+- Backups `.backups/*_studios-card-redesign`. FE baked. Changelog v1.4.2.

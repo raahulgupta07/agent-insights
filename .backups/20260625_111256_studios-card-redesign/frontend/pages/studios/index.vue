@@ -60,8 +60,6 @@
                         </div>
                     </div>
 
-                    <!-- One add affordance only (top-right primary). Ghost dashed card removed
-                         to avoid the duplicate "New Agent Studio" buttons. -->
                     <div v-else class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                         <StudioCard
                             v-for="s in ownStudios"
@@ -71,6 +69,15 @@
                             @open="goto(s.id)"
                             @chat="startStudioChat(s)"
                         />
+                        <!-- Ghost add-card -->
+                        <button
+                            type="button"
+                            class="flex flex-col items-center justify-center gap-2 min-h-[200px] rounded-2xl border-[1.5px] border-dashed border-[#d8d4ca] text-[#9a958c] hover:border-[#C2683F] hover:text-[#C2683F] hover:bg-[#F3E7DF]/40 transition cursor-pointer"
+                            @click="openCreate"
+                        >
+                            <UIcon name="i-heroicons-plus" class="w-6 h-6" />
+                            <span class="text-sm font-semibold">{{ $t('studio.newStudio') }}</span>
+                        </button>
                     </div>
                 </section>
 
