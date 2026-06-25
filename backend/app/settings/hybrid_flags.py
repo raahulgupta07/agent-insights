@@ -211,24 +211,24 @@ class HybridFlags:
     def AGENT_ACL(self) -> bool:
         # Enforce StudioMember / share_scope at chat time (per-agent access)
         # and honour per-agent model override (Studio.config.model_id).
-        return _bool("HYBRID_AGENT_ACL")
+        return _bool("HYBRID_AGENT_ACL", True)
 
     @property
     def AGENT_CHANNELS(self) -> bool:
         # Per-agent external channels (Telegram bot bound to one Studio,
         # with member-only audience + verification). Default OFF.
-        return _bool("HYBRID_AGENT_CHANNELS")
+        return _bool("HYBRID_AGENT_CHANNELS", True)
 
     # --- Slice 1: foundation -------------------------------------------------
     @property
     def DUAL_SCHEMA(self) -> bool:
         # Phase 2: DB-level read-only engine + analytics/staging schemas.
-        return _bool("HYBRID_DUAL_SCHEMA")
+        return _bool("HYBRID_DUAL_SCHEMA", True)
 
     @property
     def ENGINEER_ASSETS(self) -> bool:
         # Phase 3: build_data_asset tool (reusable analytics.* views).
-        return _bool("HYBRID_ENGINEER_ASSETS")
+        return _bool("HYBRID_ENGINEER_ASSETS", True)
 
     # --- Autotrain: dash-style "upload a file -> train -> answer" ------------
     @property
@@ -236,17 +236,17 @@ class HybridFlags:
         # Ingest a flat file (or connector table) into `staging`, profile it,
         # and auto-propose PENDING knowledge (semantic/metrics/verified-Q&A).
         # Source-agnostic, approval-only, vectorless. Default OFF.
-        return _bool("HYBRID_AUTOTRAIN")
+        return _bool("HYBRID_AUTOTRAIN", True)
 
     @property
     def AUTOTRAIN_QA(self) -> bool:
         # Sub-flag: generate+execute+keep verified Q&A during autotrain.
-        return _bool("HYBRID_AUTOTRAIN_QA")
+        return _bool("HYBRID_AUTOTRAIN_QA", True)
 
     @property
     def AUTOTRAIN_PROFILE(self) -> bool:
         # Sub-flag: write profile_v2 JSONB onto datasource_tables.metadata_json.
-        return _bool("HYBRID_AUTOTRAIN_PROFILE")
+        return _bool("HYBRID_AUTOTRAIN_PROFILE", True)
 
     @property
     def AUTOTRAIN_ON_INDEX(self) -> bool:
@@ -330,12 +330,12 @@ class HybridFlags:
         # `remember`/`recall` tools + a memory context section. Agent stows +
         # pages cross-session state. Personal scope = live; shared = pending.
         # Vectorless (PG-FTS + Jaccard). Default OFF.
-        return _bool("HYBRID_AGENT_MEMORY")
+        return _bool("HYBRID_AGENT_MEMORY", True)
 
     @property
     def ANSWER_CACHE(self) -> bool:
         # Tier-0 Redis answer-cache.
-        return _bool("HYBRID_ANSWER_CACHE")
+        return _bool("HYBRID_ANSWER_CACHE", True)
 
     @property
     def AMBIGUITY_GATE(self) -> bool:
@@ -369,17 +369,17 @@ class HybridFlags:
     @property
     def BRAIN_READ(self) -> bool:
         # Phase 4: inject brain memories + cached queries into context.
-        return _bool("HYBRID_BRAIN_READ")
+        return _bool("HYBRID_BRAIN_READ", True)
 
     @property
     def DISTILLER(self) -> bool:
         # Phase 5: 👎 self-distill -> pending memory.
-        return _bool("HYBRID_DISTILLER")
+        return _bool("HYBRID_DISTILLER", True)
 
     @property
     def QUERY_CACHE(self) -> bool:
         # Phase 5: reasoning-cache (param-swap proven SQL).
-        return _bool("HYBRID_QUERY_CACHE")
+        return _bool("HYBRID_QUERY_CACHE", True)
 
     @property
     def SKILLS(self) -> bool:
@@ -389,7 +389,7 @@ class HybridFlags:
     @property
     def STUDIOS(self) -> bool:
         # Studios: NotebookLM-style shareable agent containers. Default OFF.
-        return _bool("HYBRID_STUDIOS")
+        return _bool("HYBRID_STUDIOS", True)
 
     # --- Slice 3: federation + correlation ----------------------------------
     @property
@@ -429,12 +429,12 @@ class HybridFlags:
     @property
     def SEMANTIC_LAYER(self) -> bool:
         # dash semantic model: per-table/column meaning injected into context.
-        return _bool("HYBRID_SEMANTIC_LAYER")
+        return _bool("HYBRID_SEMANTIC_LAYER", True)
 
     @property
     def METRICS_CATALOG(self) -> bool:
         # dash metrics catalog: named metric -> SQL definition.
-        return _bool("HYBRID_METRICS_CATALOG")
+        return _bool("HYBRID_METRICS_CATALOG", True)
 
     @property
     def GOVERNANCE(self) -> bool:
@@ -467,13 +467,13 @@ class HybridFlags:
     def AUTO_QUERIES(self) -> bool:
         # Auto-train pipeline: LLM generates example SQL per pinned source,
         # runs read-only, saves verified queries to the library. Default OFF.
-        return _bool("HYBRID_AUTO_QUERIES")
+        return _bool("HYBRID_AUTO_QUERIES", True)
 
     @property
     def AUTO_EVALS(self) -> bool:
         # Auto-train pipeline: LLM generates golden eval cases from real data
         # aggregates (grounded expectations). Creation only. Default OFF.
-        return _bool("HYBRID_AUTO_EVALS")
+        return _bool("HYBRID_AUTO_EVALS", True)
 
     @property
     def FOLLOWUPS(self) -> bool:
@@ -481,25 +481,25 @@ class HybridFlags:
         # style). Generated per-agent: grounded in the Studio's voice + active
         # instructions + real column values, so each agent suggests its own
         # follow-ups. Default OFF.
-        return _bool("HYBRID_FOLLOWUPS")
+        return _bool("HYBRID_FOLLOWUPS", True)
 
     @property
     def CODE_BANK(self) -> bool:
         # Kepler Phase 2: capture proven generate_df python on success + inject the
         # closest snippet(s) as PROVEN APPROACHES context (never executed). Default OFF.
-        return _bool("HYBRID_CODE_BANK")
+        return _bool("HYBRID_CODE_BANK", True)
 
     @property
     def MEMORY_LOOP(self) -> bool:
         # Kepler Phase 3: on 👍, draft pending knowledge (proven SQL -> QueryLibraryItem,
         # bless captured code) with chat provenance. Approval-gated. Default OFF.
-        return _bool("HYBRID_MEMORY_LOOP")
+        return _bool("HYBRID_MEMORY_LOOP", True)
 
     @property
     def EVAL_HARNESS(self) -> bool:
         # Phase 4 (eval result-set goldens): result_set matcher + save-as-golden /
         # context-change re-run hooks + FE harness UI. Default OFF.
-        return _bool("HYBRID_EVAL_HARNESS")
+        return _bool("HYBRID_EVAL_HARNESS", True)
 
     @property
     def EVAL_SCHEDULE_ENABLED(self) -> bool:
@@ -516,7 +516,7 @@ class HybridFlags:
         # create_data/create_artifact loop — NO sandbox exec (unlike native
         # HYBRID_SKILLS, which livelocks). When OFF nothing reads the
         # studio_bound_packs table and the agent loop is byte-identical. Default OFF.
-        return _bool("HYBRID_DOMAIN_PACKS")
+        return _bool("HYBRID_DOMAIN_PACKS", True)
 
     @property
     def PACK_AUTOBIND(self) -> bool:
@@ -532,7 +532,7 @@ class HybridFlags:
         # the question, and inject the top-1 method+binding into the planner.
         # Off -> packs are bound/visible but never auto-injected. No-op unless
         # DOMAIN_PACKS is also on. Default OFF.
-        return _bool("HYBRID_PACK_ROUTER")
+        return _bool("HYBRID_PACK_ROUTER", True)
 
     @property
     def TEACH_BOX(self) -> bool:
@@ -542,7 +542,7 @@ class HybridFlags:
         # INSTRUCTION/DATA-RULE -> StudioInstruction; KNOWLEDGE -> KnowledgeDoc).
         # Everything is born pending behind the existing review gate. Gates only
         # the /studios/{id}/teach endpoints; no agent-loop effect. Default OFF.
-        return _bool("HYBRID_TEACH_BOX")
+        return _bool("HYBRID_TEACH_BOX", True)
 
     @property
     def MERGE_SAME_SCHEMA(self) -> bool:
@@ -555,7 +555,7 @@ class HybridFlags:
         # UNION-loaded into the one table with a `_source_label` provenance
         # column, rather than creating a new source+table. Fail-soft: any error
         # falls back to today's one-source-per-file behavior. Default OFF.
-        return _bool("HYBRID_MERGE_SAME_SCHEMA")
+        return _bool("HYBRID_MERGE_SAME_SCHEMA", True)
 
     @property
     def SMART_HEADER(self) -> bool:
@@ -568,7 +568,7 @@ class HybridFlags:
         # (KnowledgeDoc, pending) so its terms can map onto OTHER sources'
         # columns, instead of landing as a junk `Unnamed` queryable table.
         # Conservative — only reroutes when confident. Default OFF.
-        return _bool("HYBRID_SMART_HEADER")
+        return _bool("HYBRID_SMART_HEADER", True)
 
     @property
     def RESULT_CACHE(self) -> bool:
@@ -578,7 +578,7 @@ class HybridFlags:
         # + execution entirely. A re-train / new upload bumps the watermark -> the
         # key changes -> natural miss -> rebuild once. Never serves a stale entry
         # when the watermark differs. Default OFF.
-        return _bool("HYBRID_RESULT_CACHE")
+        return _bool("HYBRID_RESULT_CACHE", True)
 
     @property
     def QUERY_LEARNING(self) -> bool:
@@ -589,7 +589,7 @@ class HybridFlags:
         # (and optionally the dead path as a down-weighted negative studio note).
         # Reuse is injected into the planner context the same way auto-queries are.
         # Default OFF.
-        return _bool("HYBRID_QUERY_LEARNING")
+        return _bool("HYBRID_QUERY_LEARNING", True)
 
     @property
     def DOC_KNOWLEDGE(self) -> bool:
@@ -597,7 +597,7 @@ class HybridFlags:
         # full-text-searched (VECTORLESS — no embedder in image) and the top
         # matches injected as a "### Company definitions" block to resolve
         # business-term ambiguity. Approval-gated. Default OFF.
-        return _bool("HYBRID_DOC_KNOWLEDGE")
+        return _bool("HYBRID_DOC_KNOWLEDGE", True)
 
     @property
     def PROFILE_V2(self) -> bool:
@@ -605,13 +605,13 @@ class HybridFlags:
         # IDENTIFIER/TEMPORAL) + top-3 values/freq + variant warnings, stored in
         # DataSourceTable.metadata_json['profile_v2'] + injected as a compact
         # 80-char/col prompt catalog. Default OFF.
-        return _bool("HYBRID_PROFILE_V2")
+        return _bool("HYBRID_PROFILE_V2", True)
 
     @property
     def PROACTIVE_INSIGHTS(self) -> bool:
         # Wave1 P2: z-score/IQR anomaly + trend scan on result df → insights[]
         # attached post-create_data, rendered as chips. Default OFF.
-        return _bool("HYBRID_PROACTIVE_INSIGHTS")
+        return _bool("HYBRID_PROACTIVE_INSIGHTS", True)
 
     @property
     def FORECAST(self) -> bool:
@@ -622,13 +622,13 @@ class HybridFlags:
     def GOLDEN_QUERIES(self) -> bool:
         # Wave1 P4: promote thumbs-up / repeat-success learned queries to golden;
         # golden ranks first in coder injection. Default OFF.
-        return _bool("HYBRID_GOLDEN_QUERIES")
+        return _bool("HYBRID_GOLDEN_QUERIES", True)
 
     @property
     def VERIFIED_METRICS(self) -> bool:
         # Wave1 P7: executable locked MetricDefinition (run via metric tool,
         # overrides agent formula) + drift check. Default OFF.
-        return _bool("HYBRID_VERIFIED_METRICS")
+        return _bool("HYBRID_VERIFIED_METRICS", True)
 
     @property
     def SEMANTIC_SEARCH(self) -> bool:
@@ -648,7 +648,7 @@ class HybridFlags:
         # Share an agent's data-agnostic best practices (rules, metric formulas,
         # example patterns, skills, persona) as a portable, versioned template that
         # others bind to their own columns. Export/Gallery/bind. Default OFF.
-        return _bool("HYBRID_AGENT_TEMPLATES")
+        return _bool("HYBRID_AGENT_TEMPLATES", True)
 
     @property
     def FOLDER_SYNC(self) -> bool:
@@ -656,7 +656,7 @@ class HybridFlags:
         # changed Excel/CSV files (API-key authed) to /api/sync/file, which delta-
         # upserts them into a per-agent DataSource. Like Claude Code for data.
         # Default OFF.
-        return _bool("HYBRID_FOLDER_SYNC")
+        return _bool("HYBRID_FOLDER_SYNC", True)
 
     def snapshot(self) -> dict[str, bool]:
         """All flags as a dict (for /health, debugging, tests)."""

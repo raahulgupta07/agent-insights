@@ -4,6 +4,14 @@ Hybrid feature changelog (our additions on top of the bagofwords/Dash base). New
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` followed by `-` feature bullets.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.16.0 — Feature flags fully UI-owned; ENV is infra-only  (2026-06-25)
+- ENV/compose stripped of all ~50 `HYBRID_*` flags + skill-exec knobs + compaction ratio. They now live exclusively in the UI (Settings → Features), persisted per-org in `organization_settings.config['hybrid_overrides']`.
+- Defaults are now CODE-owned (`hybrid_flags.py`): 37 product-visible features default ON (Studios, Templates, Folder Sync, Intelligence + Knowledge layer, caches, autotrain, etc.), the rest OFF — so a fresh deploy is fully featured with zero env flags. Previously only `SCOPE_GATE` + `DASH_VERSIONS` defaulted ON and the nginx compose carried the real defaults.
+- Resolution order unchanged: per-org override > env > code default. `load_overrides_from_db()` at boot (`main.py:431`) hydrates the process override store from DB — verified live ("Loaded 65 hybrid flag override(s)").
+- One-shot migration froze each org's current effective env values into `hybrid_overrides` (org 55278108: 65 overrides, 51 ON) so removing env changed no live behaviour. Pre-existing UI overrides preserved (never clobbered).
+- Lean `.env` (~15 vars): DB conn, `DASH_ENCRYPTION_KEY`, `REDIS_URL`, ports, `DASH_CONFIG_PATH`, `DASH_LICENSE_KEY`, `AUTOTRAIN_STAGING_*`, plus bootstrap seeds (LLM key/models via dash-config or UI; super-admin `DASH_ADMIN_*`).
+- LANDMINE: do NOT re-add flag vars to compose/.env — they shadow the UI until an org sets an override. New flags get their default in `hybrid_flags.py` (`_bool("NAME", default)`), not in compose.
+
 ## v1.15.0 — Hybrid Search is real: embeddings via OpenRouter  (2026-06-25)
 - `HYBRID_SEMANTIC_SEARCH` was a scaffold (empty index, no embedder, never wired). It now works end-to-end:
   - **Embedder** (`app/ai/knowledge/embeddings.py`) — reuses the org's existing OpenRouter key (OpenAI-compatible `/embeddings`), model `openai/text-embedding-3-small` (1536-dim → matches the existing `embedding vector(1536)` column, no migration). Batched, fail-soft. Env knobs `HYBRID_EMBED_MODEL/DIM/BATCH`.

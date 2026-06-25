@@ -68,60 +68,13 @@ services:
       - DASH_CONFIG_PATH=/app/dash-config.yaml
       # Tier-2 scale-out: Redis backs the per-user skill-run concurrency cap across replicas.
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
-      # Skill-execution safety knobs (Tier-1). Safe defaults; override in .env.
-      - SKILL_EXEC_TIMEOUT_S=${SKILL_EXEC_TIMEOUT_S:-60}
-      - SKILL_MAX_CONCURRENT_PER_USER=${SKILL_MAX_CONCURRENT_PER_USER:-2}
-      - SKILL_EXEC_MEM_CAP_MB=${SKILL_EXEC_MEM_CAP_MB:-}
-      - SKILL_PER_USER_ASSETS=${SKILL_PER_USER_ASSETS:-0}
-      # Hybrid feature flags — default OFF (:-0) so a fresh deploy == upstream dash.
-      # Toggle any via .env (e.g. HYBRID_QUERY_CACHE=1) then `up -d --force-recreate`.
-      - HYBRID_DUAL_SCHEMA=${HYBRID_DUAL_SCHEMA:-0}
-      - HYBRID_ENGINEER_ASSETS=${HYBRID_ENGINEER_ASSETS:-0}
-      - HYBRID_ANSWER_CACHE=${HYBRID_ANSWER_CACHE:-0}
-      - HYBRID_BRAIN_READ=${HYBRID_BRAIN_READ:-0}
-      - HYBRID_DISTILLER=${HYBRID_DISTILLER:-0}
-      - HYBRID_QUERY_CACHE=${HYBRID_QUERY_CACHE:-0}
-      - HYBRID_SKILLS=${HYBRID_SKILLS:-0}
-      - HYBRID_FEDERATION=${HYBRID_FEDERATION:-0}
-      - HYBRID_BRAIN_GRAPH=${HYBRID_BRAIN_GRAPH:-0}
-      - HYBRID_INSIGHT_DAEMON=${HYBRID_INSIGHT_DAEMON:-0}
-      - HYBRID_QUOTAS=${HYBRID_QUOTAS:-0}
-      - HYBRID_SEMANTIC_LAYER=${HYBRID_SEMANTIC_LAYER:-0}
-      - HYBRID_METRICS_CATALOG=${HYBRID_METRICS_CATALOG:-0}
-      - HYBRID_AUTOMAP=${HYBRID_AUTOMAP:-0}
-      - HYBRID_COMPLIANCE_GATE=${HYBRID_COMPLIANCE_GATE:-0}
-      - HYBRID_COLUMN_INTEL=${HYBRID_COLUMN_INTEL:-0}
-      - HYBRID_AUTO_QUERIES=${HYBRID_AUTO_QUERIES:-0}
-      - HYBRID_AUTO_EVALS=${HYBRID_AUTO_EVALS:-0}
-      - HYBRID_FOLLOWUPS=${HYBRID_FOLLOWUPS:-0}
-      - STUDIO_LEARN_DAEMON_ENABLED=${STUDIO_LEARN_DAEMON_ENABLED:-0}
-      - HYBRID_STUDIOS=${HYBRID_STUDIOS:-0}
-      - HYBRID_GOVERNANCE=${HYBRID_GOVERNANCE:-0}
-      - HYBRID_CODE_BANK=${HYBRID_CODE_BANK:-0}
-      - HYBRID_MEMORY_LOOP=${HYBRID_MEMORY_LOOP:-0}
-      - HYBRID_EVAL_HARNESS=${HYBRID_EVAL_HARNESS:-0}
-      - EVAL_SCHEDULE_ENABLED=${EVAL_SCHEDULE_ENABLED:-0}
-      - HYBRID_JOIN_GRAPH=${HYBRID_JOIN_GRAPH:-0}
-      - JOIN_MINE_ENABLED=${JOIN_MINE_ENABLED:-0}
-      - HYBRID_DOC_KNOWLEDGE=${HYBRID_DOC_KNOWLEDGE:-0}
-      - HYBRID_AGENT_MEMORY=${HYBRID_AGENT_MEMORY:-0}
-      - HYBRID_SUBAGENTS=${HYBRID_SUBAGENTS:-0}
-      - HYBRID_SKILL_AUTOGROW=${HYBRID_SKILL_AUTOGROW:-0}
-      - HYBRID_BITEMPORAL=${HYBRID_BITEMPORAL:-0}
-      - HYBRID_WORKFLOWS=${HYBRID_WORKFLOWS:-0}
-      - HYBRID_SKILL_OPTIMIZE=${HYBRID_SKILL_OPTIMIZE:-0}
-      - HYBRID_SKILL_OPTIMIZE_DAEMON=${HYBRID_SKILL_OPTIMIZE_DAEMON:-0}
-      - HYBRID_CONTEXT_COMPACT=${HYBRID_CONTEXT_COMPACT:-0}
-      - HYBRID_CONTEXT_COMPACT_LLM=${HYBRID_CONTEXT_COMPACT_LLM:-0}
-      - HYBRID_CONTEXT_COMPACT_RATIO=${HYBRID_CONTEXT_COMPACT_RATIO:-0.75}
-      - HYBRID_AMBIGUITY_GATE=${HYBRID_AMBIGUITY_GATE:-0}
-      - HYBRID_SCOPE_GATE=${HYBRID_SCOPE_GATE:-1}
-      - HYBRID_DASH_VERSIONS=${HYBRID_DASH_VERSIONS:-1}
-      # autotrain: upload flat file -> ingest staging -> pending knowledge
-      - HYBRID_AUTOTRAIN=${HYBRID_AUTOTRAIN:-0}
-      - HYBRID_AUTOTRAIN_QA=${HYBRID_AUTOTRAIN_QA:-0}
-      - HYBRID_AUTOTRAIN_PROFILE=${HYBRID_AUTOTRAIN_PROFILE:-0}
-      - HYBRID_AUTOTRAIN_ON_INDEX=${HYBRID_AUTOTRAIN_ON_INDEX:-0}
+      # NOTE: all ~50 HYBRID_* feature flags + skill-exec knobs are NO LONGER set
+      # here. They live in the UI (Settings → Features), stored per-org in
+      # organization_settings.config['hybrid_overrides'] and loaded at boot by
+      # load_overrides_from_db(). Defaults are code-owned (hybrid_flags.py:
+      # only SCOPE_GATE + DASH_VERSIONS default ON). Skill knobs / compaction
+      # ratio also default in code. Do NOT re-add flag vars — they would shadow
+      # the UI until an org sets an override.
       # restricted staging role (agent-queryability); empty -> register no-ops safely
       - AUTOTRAIN_STAGING_DB_USER=${AUTOTRAIN_STAGING_DB_USER:-}
       - AUTOTRAIN_STAGING_DB_PASSWORD=${AUTOTRAIN_STAGING_DB_PASSWORD:-}
