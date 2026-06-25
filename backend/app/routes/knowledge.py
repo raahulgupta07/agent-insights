@@ -1539,3 +1539,48 @@ async def governance_rollup(
     except Exception:
         pass
     return out
+
+
+# ---------------------------------------------------------------------------
+# Hybrid Search index — build/refresh + status (flag: SEMANTIC_SEARCH)
+# ---------------------------------------------------------------------------
+@router.get("/search-index/status")
+async def search_index_status(
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Return whether Hybrid Search is enabled + how many rows are indexed."""
+    from app.settings.hybrid_flags import flags
+    from app.ai.knowledge.indexer import index_count
+    from app.ai.knowledge.embeddings import EMBED_MODEL
+    org_id = str(organization.id)
+    return {
+        "enabled": bool(flags.SEMANTIC_SEARCH),
+        "indexed": await index_count(db, org_id),
+        "embed_model": EMBED_MODEL,
+    }
+
+
+@router.post("/reindex")
+async def rebuild_search_index(
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Rebuild the Hybrid Search index for this org (FTS + embeddings).
+
+    Flag-gated: returns disabled when SEMANTIC_SEARCH is off. Embeddings use the
+    org's existing OpenRouter key (text-embedding-3-small); without a key only
+    the full-text index is built.
+    """
+    from app.settings.hybrid_flags import flags
+    if not flags.SEMANTIC_SEARCH:
+        return {"disabled": True, "indexed": 0, "embedded": 0}
+    from app.ai.knowledge.indexer import reindex_org
+    try:
+        summary = await reindex_org(db, organization)
+    except Exception as exc:
+        logger.warning("reindex failed: %s", exc)
+        raise AppError(ErrorCode.INTERNAL, "Failed to rebuild search index", status_code=500)
+    return summary

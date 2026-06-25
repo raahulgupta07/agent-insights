@@ -91,6 +91,16 @@
                             </div>
                             <p v-if="row.note" class="mt-1 text-xs text-[#6b6b6b]">{{ row.note }}</p>
                             <p class="mt-0.5 text-xs font-mono text-[#bcb8b0] truncate">{{ row.env_name }}</p>
+
+                            <!-- Hybrid Search: index controls (only this row, only when on) -->
+                            <div v-if="row.env_name === 'HYBRID_SEMANTIC_SEARCH' && row.effective" class="mt-2 flex items-center gap-3">
+                                <UButton size="2xs" color="gray" variant="solid" :loading="reindexing" icon="i-heroicons-arrow-path" @click="rebuildIndex">
+                                    Rebuild search index
+                                </UButton>
+                                <span v-if="indexStatus" class="text-[11px] text-[#9a958c]">
+                                    {{ indexStatus.indexed }} indexed · {{ indexStatus.embed_model }}
+                                </span>
+                            </div>
                         </div>
 
                         <UToggle
@@ -278,5 +288,34 @@ const toggleFlag = async (row: FlagRow, newValue: boolean) => {
     }
 }
 
-onMounted(fetchFlags)
+// --- Hybrid Search index controls ---
+const reindexing = ref(false)
+const indexStatus = ref<{ indexed: number; embed_model: string; enabled: boolean } | null>(null)
+
+const fetchIndexStatus = async () => {
+    try {
+        const r = await useMyFetch('/api/knowledge/search-index/status')
+        if (r.status.value === 'success') indexStatus.value = r.data.value as any
+    } catch { /* ignore */ }
+}
+
+const rebuildIndex = async () => {
+    reindexing.value = true
+    try {
+        const r = await useMyFetch('/api/knowledge/reindex', { method: 'POST' })
+        if (r.status.value !== 'success') throw new Error('Reindex failed')
+        const s = r.data.value as any
+        toast.add({ title: 'Search index rebuilt', description: `${s.indexed ?? 0} indexed, ${s.embedded ?? 0} embedded`, color: 'green', timeout: 4000 })
+        await fetchIndexStatus()
+    } catch (e: any) {
+        toast.add({ title: 'Reindex failed', description: e.message || 'Could not rebuild search index', color: 'red', timeout: 5000 })
+    } finally {
+        reindexing.value = false
+    }
+}
+
+onMounted(async () => {
+    await fetchFlags()
+    await fetchIndexStatus()
+})
 </script>

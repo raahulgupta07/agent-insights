@@ -4,6 +4,16 @@ Hybrid feature changelog (our additions on top of the bagofwords/Dash base). New
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` followed by `-` feature bullets.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.15.0 — Hybrid Search is real: embeddings via OpenRouter  (2026-06-25)
+- `HYBRID_SEMANTIC_SEARCH` was a scaffold (empty index, no embedder, never wired). It now works end-to-end:
+  - **Embedder** (`app/ai/knowledge/embeddings.py`) — reuses the org's existing OpenRouter key (OpenAI-compatible `/embeddings`), model `openai/text-embedding-3-small` (1536-dim → matches the existing `embedding vector(1536)` column, no migration). Batched, fail-soft. Env knobs `HYBRID_EMBED_MODEL/DIM/BATCH`.
+  - **Indexer** (`app/ai/knowledge/indexer.py`) — `reindex_org()` rebuilds `knowledge_search_index` from approved semantic tables / metrics / query library / docs, sets the PG `tsv` and the `embedding` vector.
+  - **Retrieval** — `hybrid_search()` gained a pgvector cosine-KNN arm; now fuses FTS + vector + token-Jaccard via 3-way RRF.
+  - **Wired into the agent** — new `HybridSearchContextBuilder` + section, primed in `context_hub` and appended to the planner instructions in `agent_v2` (gated by SEMANTIC_SEARCH). Top approved knowledge is injected as grounding for each question.
+  - **UI + API** — `POST /api/knowledge/reindex` + `GET /api/knowledge/search-index/status`; a "Rebuild search index" button appears on the Hybrid Search row in Settings → Features when it's on.
+- Proven live: 293 assets indexed + embedded via OpenRouter (200 OK); "revenue by month" returns Total Revenue / Revenue-by-Country etc. ranked by RRF.
+- Flag reclassified `unstable` → `experimental` (works once a key is set). Without a key, only the full-text arm builds (still useful).
+
 ## v1.14.0 — All feature flags toggleable from the UI  (2026-06-25)
 - Settings → Features now lists **every** hybrid flag (65, up from ~32), grouped into 8 sections (Core, Knowledge, Intelligence, Agents & Access, Ingest, Learning, Advanced, Daemons). Previously most flags — including Agent Studios itself, the caches, semantic/metrics layer, autotrain and the daemons — weren't registered, so they couldn't be toggled from the UI and the override was silently ignored.
 - Each flag carries a status badge so risky ones are honest, not silently broken: `needs setup` (Forecast → needs Prophet bake; Federation → needs S3), `unstable` (Skills sandbox can livelock; Hybrid Search is a scaffold), `experimental` (Subagents/token-heavy, Bitemporal, etc.), `needs restart` (the boot-read daemons). Enabling an unstable/needs-setup flag pops a confirm dialog with the caveat.

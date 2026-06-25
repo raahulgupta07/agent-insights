@@ -182,33 +182,69 @@ async def _jaccard_rank(
 
 
 # ---------------------------------------------------------------------------
+# Vector KNN (pgvector cosine; dialect-gated)
+# ---------------------------------------------------------------------------
+
+async def _vector_rank(
+    db: Any,
+    org_id: str,
+    qvec_literal: str,
+    limit: int,
+) -> List[Dict[str, Any]]:
+    """Return rows ranked by cosine distance on the ``embedding`` column (PG-only).
+
+    ``qvec_literal`` is a pgvector literal '[..]'. Rows with a NULL embedding are
+    excluded. Returns [] on any error / when not on PostgreSQL.
+    """
+    from sqlalchemy import text as sa_text  # noqa: WPS433
+
+    sql = sa_text(
+        """
+        SELECT id, kind, ref_id, title, body
+        FROM knowledge_search_index
+        WHERE org_id = :org_id
+          AND deleted_at IS NULL
+          AND embedding IS NOT NULL
+        ORDER BY embedding <=> (:qv)::vector
+        LIMIT :lim
+        """
+    )
+    try:
+        result = await db.execute(sql, {"qv": qvec_literal, "org_id": org_id, "lim": limit})
+        rows = result.fetchall()
+        return [
+            {"id": r.id, "kind": r.kind, "ref_id": r.ref_id,
+             "title": r.title or "", "body": r.body or ""}
+            for r in rows
+        ]
+    except Exception as exc:
+        log.debug("hybrid_search: vector rank failed (%s)", exc)
+        return []
+
+
+# ---------------------------------------------------------------------------
 # Reciprocal Rank Fusion merge
 # ---------------------------------------------------------------------------
 
 def _rrf_merge(
-    list_a: List[Dict[str, Any]],
-    list_b: List[Dict[str, Any]],
+    lists: List[List[Dict[str, Any]]],
     k: int,
 ) -> List[Dict[str, Any]]:
-    """Merge two ranked lists using Reciprocal Rank Fusion.
+    """Merge N ranked lists using Reciprocal Rank Fusion.
 
     Each list is ranked 1…N; the final score is the sum of RRF scores from
-    each list a hit appears in.  Items only in one list still get their RRF
-    contribution from that list.
+    every list a hit appears in. Items in only one list still get that list's
+    contribution.
     """
     scores: dict[str, float] = {}
     meta: dict[str, dict] = {}
 
-    for rank, item in enumerate(list_a, start=1):
-        iid = item["id"]
-        scores[iid] = scores.get(iid, 0.0) + _rrf_score(rank, k)
-        meta[iid] = item
-
-    for rank, item in enumerate(list_b, start=1):
-        iid = item["id"]
-        scores[iid] = scores.get(iid, 0.0) + _rrf_score(rank, k)
-        if iid not in meta:
-            meta[iid] = item
+    for ranked in lists:
+        for rank, item in enumerate(ranked, start=1):
+            iid = item["id"]
+            scores[iid] = scores.get(iid, 0.0) + _rrf_score(rank, k)
+            if iid not in meta:
+                meta[iid] = item
 
     merged = sorted(scores.keys(), key=lambda iid: scores[iid], reverse=True)
     return [
@@ -227,6 +263,7 @@ async def hybrid_search(
     org_id: str,
     query: str,
     k: int = 5,
+    organization: Any = None,
 ) -> List[Dict[str, Any]]:
     """Search the knowledge_search_index for ``query`` and return the top-k hits.
 
@@ -234,13 +271,15 @@ async def hybrid_search(
     so callers need no extra guard.
 
     Algorithm:
-        1. PG full-text rank (ts_rank via ``tsv`` GIN index) — fast on PG.
-        2. Token-Jaccard fallback (re-uses the C4 idiom from query_cache_store).
-        3. Reciprocal Rank Fusion merge of both lists.
+        1. PG full-text rank (ts_rank via ``tsv`` GIN index).
+        2. Vector KNN (pgvector cosine on ``embedding``) — only when an embedder
+           is available (``organization`` passed + a provider key resolves +
+           rows have embeddings). Skipped silently otherwise.
+        3. Token-Jaccard fallback (re-uses the C4 idiom from query_cache_store).
+        4. Reciprocal Rank Fusion merge of whichever lists produced hits.
 
-    Returns a list of dicts:
-        {id, kind, ref_id, title, body, score}
-    sorted descending by RRF score.  Returns [] on any error (fail-soft).
+    Returns dicts {id, kind, ref_id, title, body, score} sorted by RRF score.
+    Returns [] on any error (fail-soft).
     """
     from app.settings.hybrid_flags import flags  # local import: stays dep-free
 
@@ -253,9 +292,8 @@ async def hybrid_search(
     fetch_limit = max(k * 3, _FETCH_LIMIT)
 
     try:
-        fts_hits, jaccard_hits = [], []
+        fts_hits, jaccard_hits, vec_hits = [], [], []
 
-        # Run both rankers; each is individually fail-soft
         try:
             fts_hits = await _pg_fts_rank(db, org_id, query, fetch_limit)
         except Exception as exc:
@@ -266,7 +304,18 @@ async def hybrid_search(
         except Exception as exc:
             log.debug("hybrid_search: Jaccard ranker error (%s)", exc)
 
-        merged = _rrf_merge(fts_hits, jaccard_hits, k=_RRF_K)
+        # Vector arm — best-effort. Needs an org to resolve a provider key.
+        if organization is not None:
+            try:
+                from app.ai.knowledge.embeddings import embed_query, to_pgvector_literal
+                qvec = await embed_query(db, organization, query)
+                lit = to_pgvector_literal(qvec) if qvec else None
+                if lit:
+                    vec_hits = await _vector_rank(db, org_id, lit, fetch_limit)
+            except Exception as exc:
+                log.debug("hybrid_search: vector arm error (%s)", exc)
+
+        merged = _rrf_merge([fts_hits, vec_hits, jaccard_hits], k=_RRF_K)
         return merged[:k]
 
     except Exception as exc:

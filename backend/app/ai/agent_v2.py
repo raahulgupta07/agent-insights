@@ -2100,6 +2100,19 @@ class AgentV2:
             except Exception:
                 pass
 
+            # Hybrid Phase 8 (semantic search): inject top knowledge hits for the
+            # question (FTS + pgvector + Jaccard, RRF) primed by
+            # HybridSearchContextBuilder (empty when flags.SEMANTIC_SEARCH off or
+            # no hits). Never break the loop on error.
+            try:
+                from app.settings.hybrid_flags import flags as _hs_flags
+                if _hs_flags.SEMANTIC_SEARCH:
+                    _hs_block = self.context_hub.render_hybrid_search_section()
+                    if _hs_block:
+                        instructions = (instructions + "\n\n" + _hs_block) if instructions else _hs_block
+            except Exception:
+                pass
+
             # Hybrid Phase 6 (skills): inject the L1 skills catalog (name+desc,
             # user-scoped) primed by SkillContextBuilder into view.static.skills
             # (empty when flags.SKILLS off). The planner uses load_skill to pull

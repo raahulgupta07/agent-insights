@@ -104,7 +104,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_COMPLIANCE_GATE": {"label": "Compliance & Quality Scan", "role": "user", "category": "Intelligence", "status": "stable"},
     "HYBRID_CODE_ENRICH": {"label": "Code Enrich (pipeline logic)", "role": "agent", "category": "Intelligence", "status": "experimental", "note": "Extra LLM cost on train."},
     "HYBRID_FORECAST": {"label": "Forecasting Tool", "role": "user", "category": "Intelligence", "status": "needs_dep", "note": "Needs Prophet baked into the image — flag alone errors."},
-    "HYBRID_SEMANTIC_SEARCH": {"label": "Hybrid Search + KG", "role": "agent", "category": "Intelligence", "status": "unstable", "note": "Scaffold only — no embeddings client in image."},
+    "HYBRID_SEMANTIC_SEARCH": {"label": "Hybrid Search (FTS + embeddings)", "role": "agent", "category": "Intelligence", "status": "experimental", "note": "Uses your OpenRouter key for embeddings (text-embedding-3-small). After enabling, click Rebuild search index."},
 
     # --- Agents & Access --------------------------------------------------
     "HYBRID_AGENT_TEMPLATES": {"label": "Agent Templates", "role": "user", "category": "Agents & Access", "status": "stable"},

@@ -69,6 +69,7 @@ from .builders.instruction_context_builder import InstructionContextBuilder
 from .builders.brain_context_builder import BrainContextBuilder
 from .builders.brain_graph_context_builder import BrainGraphContextBuilder
 from .builders.join_graph_context_builder import JoinGraphContextBuilder
+from .builders.hybrid_search_context_builder import HybridSearchContextBuilder
 from .builders.docs_context_builder import DocsContextBuilder
 # hybrid Agent Memory: recall relevant remembered notes (own personal +
 # approved shared). Self-gates on flags.AGENT_MEMORY; empty section (no DB hit)
@@ -358,6 +359,15 @@ class ContextHub:
         # hybrid Phase 6: join-graph context (mined relationship/join edges).
         # Self-gates on flags.JOIN_GRAPH; empty section (no DB hit) when off.
         self.join_graph_builder = JoinGraphContextBuilder(
+            self.db,
+            self.organization,
+            data_source_ids=[str(ds.id) for ds in self.data_sources] if self.data_sources else None,
+        )
+
+        # hybrid Phase 8: hybrid search (FTS + pgvector + Jaccard, RRF). Query-
+        # driven. Self-gates on flags.SEMANTIC_SEARCH; empty section when off /
+        # no hits. Surfaces top approved knowledge for the question.
+        self.hybrid_search_builder = HybridSearchContextBuilder(
             self.db,
             self.organization,
             data_source_ids=[str(ds.id) for ds in self.data_sources] if self.data_sources else None,
@@ -759,7 +769,7 @@ class ContextHub:
 
         # Run static builders in parallel; schemas/instructions come from
         # the cache when warm.
-        schemas, instructions, resources, files, brain, brain_graph, skills, studio, semantic, metrics, code_bank, join_graph, docs, agent_memory, profile_v2, pipeline_logic = await asyncio.gather(
+        schemas, instructions, resources, files, brain, brain_graph, skills, studio, semantic, metrics, code_bank, join_graph, docs, agent_memory, profile_v2, pipeline_logic, hybrid_search_sec = await asyncio.gather(
             _build_or_get_schemas(),
             _build_or_get_instructions(),
             _timed("resources", self.resource_builder.build()),
@@ -776,6 +786,7 @@ class ContextHub:
             _timed("agent_memory", self.agent_memory_builder.build(query=query)),
             _timed("profile_v2", self.profile_v2_builder.build(query=query)),
             _timed("pipeline_logic", self.pipeline_logic_builder.build(query=query)),
+            _timed("hybrid_search", self.hybrid_search_builder.build(query=query)),
             return_exceptions=True,
         )
         _hub_logger.info(f"[context_hub:prime_static] all_done +{(time.monotonic()-_t0)*1000:.0f}ms")
@@ -798,6 +809,7 @@ class ContextHub:
         self._static_cache["agent_memory"] = agent_memory if not isinstance(agent_memory, Exception) else None
         self._static_cache["profile_v2"] = profile_v2 if not isinstance(profile_v2, Exception) else None
         self._static_cache["pipeline_logic"] = pipeline_logic if not isinstance(pipeline_logic, Exception) else None
+        self._static_cache["hybrid_search"] = hybrid_search_sec if not isinstance(hybrid_search_sec, Exception) else None
 
     async def refresh_warm(self) -> None:
         """Rebuild warm sections each loop (messages, queries, observations, entities).
@@ -976,6 +988,21 @@ class ContextHub:
         """
         try:
             section = self._static_cache.get("join_graph", None)
+            return section.render() if section else ""
+        except Exception:
+            return ""
+
+    def render_hybrid_search_section(self) -> str:
+        """Render the primed Hybrid Search block, or "".
+
+        hybrid Phase 8 (SEMANTIC_SEARCH): HybridSearchContextBuilder runs the
+        unified hybrid search (FTS + pgvector + Jaccard, RRF) for the question
+        and primes a HybridSearchSection into ``_static_cache['hybrid_search']``
+        (empty section, no DB hit, when flags.SEMANTIC_SEARCH is OFF or there's
+        no query). Never raises — returns "" on any error / when off.
+        """
+        try:
+            section = self._static_cache.get("hybrid_search", None)
             return section.render() if section else ""
         except Exception:
             return ""
