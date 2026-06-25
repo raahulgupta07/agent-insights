@@ -15,6 +15,7 @@ core minimally (HARD RULE 3).
 | Push dashboards to Power BI | `docs/PLAN_POWERBI.md` | build here → push data/report to Power BI | designed, not started |
 | Changelog + "What's new" bell | `docs/PLAN_CHANGELOG_WHATSNEW.md` | versioned feature feed + top-nav notification popover | **DONE + BAKED** (v1.2.0) |
 | Ingest storage + merge | `docs/PLAN_INGEST_STORAGE.md` | Parquet canonical store + LLM merge-judge for same-schema | designed, not started |
+| Installable PWA | `docs/PLAN_PWA.md` | Add-to-Home-Screen / desktop app + Install button + offline shell | **DONE + BAKED** |
 
 ## Recommended order (rationale)
 1. **S6 — ship skills** (`PLAN_SKILLS.md`). 5 phases built, uncommitted/unbaked/

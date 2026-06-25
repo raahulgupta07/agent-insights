@@ -272,6 +272,23 @@ additive. Flags in `hybrid_flags.py` (each needs @property + `UPGRADE_FLAGS` ent
   `config['hybrid_overrides']`. OFF: CODE_ENRICH (cost), FORECAST (prophet), SEMANTIC_SEARCH (scaffold).
   Per-org flag auto-inherits to all/new agents; true per-agent resolver NOT built.
 
+## PWA — installable desktop/mobile app (2026-06-25, BAKED)
+App installs from the browser (standalone window, dock icon, offline shell). Module `@vite-pwa/nuxt`.
+- `nuxt.config.ts` `pwa{}`: manifest (name/short_name, `display:standalone`, `start_url:/`,
+  `theme_color #C2683F`, icons 192/512 + maskable), `registerType:autoUpdate`, `devOptions.enabled:false`.
+- workbox: `navigateFallback:'/'`, precache shell; **`/api` + `/ws` = `NetworkOnly`** (never cache
+  API/auth/data); `_nuxt/*` CacheFirst. `globIgnores` the giant editor blobs (Monaco TS worker ~9MB,
+  babel ~3MB) + `maximumFileSizeToCacheInBytes:4MB` — else `yarn generate` ERRORS on precache size.
+- icons in `frontend/public/`: `pwa-192x192.png`, `pwa-512x512.png`, `pwa-maskable-512x512.png`,
+  `apple-touch-icon.png` (generated from `assets/logo-mark-512.png` via PIL).
+- `components/nav/InstallApp.vue` — one-click Install button (catches `beforeinstallprompt`, shows only
+  when installable + not already standalone), wired into `nav/TopNav.vue` left of the bell.
+- SPA (`ssr:false`) → manifest link + SW register are injected at RUNTIME by the module plugin, NOT in
+  static index.html (curl of `/` won't show them; they're in the JS bundle — verify there).
+- LANDMINE: **prod install needs HTTPS** (localhost exempt for testing); without TLS the prompt + SW
+  silently don't activate. iOS = manual Share→Add to Home Screen (no programmatic prompt). Silent
+  zero-click auto-install is impossible in any browser — the button is the 1-click path.
+
 ## Changelog / "What's new" (2026-06-25, BAKED)
 Versioned feature feed surfaced as a 🔔 bell popover in TopNav (before profile).
 - Source: `CHANGELOG_HYBRID.md` (repo root, `## v<semver> — <title>  (<date>)` + `-` bullets) +
@@ -285,7 +302,8 @@ Versioned feature feed surfaced as a 🔔 bell popover in TopNav (before profile
   `VERSION_HYBRID` + adds a `CHANGELOG_HYBRID.md` entry.
 
 **Current state (2026-06-25):** image `cityagent-analytics:dev` on `:3007`, branch `hybrid-brain`,
-mig head **`chlogseen1`**. Changelog/"What's new" bell BUILT+BAKED.
+mig head **`chlogseen1`**. PWA (installable app + Install button) BUILT+BAKED.
+Changelog/"What's new" bell BUILT+BAKED.
 Intelligence Layer (8 caps + Studio rail UI) BUILT + BAKED, 5 safe flags
 ON by default org-wide. Auto-pilot tab + org-library connector model + 48 Domain Packs + async
 auto-train all BUILT + BAKED. STABLE config = `HYBRID_SKILLS=0` / `SUBAGENTS=0`. OPEN BUG: Studio

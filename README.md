@@ -180,6 +180,12 @@ docker commit ca-app cityagent-analytics:dev
 
 Per-org feature flags can be flipped live: `PUT /api/organization/hybrid-flags/{env}` body `{"enabled": true|false}` (or **Settings → Feature Flags**).
 
+### Install as an app (PWA)
+
+The frontend is an installable PWA. In Chrome/Edge, open the app and click **Install app** in the top bar (left of the 🔔 bell) or the ⊕ in the address bar — it installs to the dock/start menu as a standalone window with an offline shell. The service worker precaches the app shell but **never caches `/api` or `/ws`** (always live data/auth). Built automatically by `@vite-pwa/nuxt` during `nuxt generate` (`sw.js` + `manifest.webmanifest`).
+
+> **Prod requires HTTPS** for install + the service worker (set `PUBLIC_URL` to an https origin behind TLS); `http://localhost:3007` is exempt for testing. iOS uses Share → Add to Home Screen (no programmatic prompt).
+
 ### Releasing a feature (changelog)
 
 Shipped features are versioned in `VERSION_HYBRID` (hybrid semver, e.g. `1.2.0`) with a matching entry in `CHANGELOG_HYBRID.md` (`## v<semver> — <title>  (<YYYY-MM-DD>)` + `-` bullets, newest first). The app exposes this at `GET /api/changelog` and surfaces it as a **🔔 What's new** popover in the top bar (bell before the user profile) with an unseen badge per user. Bump `VERSION_HYBRID` and prepend a `CHANGELOG_HYBRID.md` entry whenever you ship — the bell updates automatically. Full feed at `/changelog`.
