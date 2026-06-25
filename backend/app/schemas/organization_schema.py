@@ -31,6 +31,16 @@ class MembershipUpdate(BaseModel):
     note: Optional[str] = Field(default=None, max_length=MEMBERSHIP_NOTE_MAX_LENGTH)
 
 
+# Direct user creation by an admin — no email invite. The admin sets the
+# password and the account is active immediately (the user can log in at once).
+class DirectUserCreate(BaseModel):
+    email: str
+    password: str = Field(..., min_length=6)
+    name: str = Field(..., min_length=3, max_length=50)
+    role: Optional[str] = "member"
+    note: Optional[str] = Field(default=None, max_length=MEMBERSHIP_NOTE_MAX_LENGTH)
+
+
 # Import row outcomes returned to the caller. Mirrors what the UI shows
 # in the preview / commit report.
 class MembershipImportRow(BaseModel):

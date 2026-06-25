@@ -356,7 +356,126 @@ class OrganizationService:
         schema = MembershipSchema.from_orm(membership_with_user)
         schema.invite_email_status = invite_email_status
         return schema
-    
+
+    async def create_user_with_password(
+        self,
+        db: AsyncSession,
+        organization_id: str,
+        email: str,
+        password: str,
+        name: str,
+        role: str,
+        current_user: User,
+    ) -> MembershipSchema:
+        """Admin-side DIRECT user creation — no email invite.
+
+        Creates a real, active, verified User with the given password and adds
+        it to this organization with `role`. The user can log in immediately.
+        If the email already maps to a user, that user is reused (and added to
+        the org if not already a member). Idempotent-ish: a duplicate member
+        400s rather than silently re-adding.
+        """
+        email = (email or "").strip()
+        if not email:
+            raise HTTPException(status_code=400, detail="Email is required")
+
+        # Already a member of THIS org (pending invite or active) → 400.
+        if await self._is_email_already_in_organization(db, email, organization_id):
+            raise HTTPException(status_code=400, detail="Already a member with this email")
+
+        # Seat cap (enterprise license), same guard as add_member.
+        await self._enforce_user_limit(db, organization_id)
+
+        # Does a global user already exist for this email?
+        existing = (
+            await db.execute(select(User).where(User.email == email))
+        ).scalar_one_or_none()
+
+        if existing is not None:
+            user_id = str(existing.id)
+        else:
+            # Create the user THROUGH the fastapi-users manager so the standard
+            # on_after_register hook fires. This is NOT the first user (the org
+            # already exists), so the hook does NOT auto-create an org — we
+            # attach the membership to THIS org explicitly below.
+            from app.dependencies import async_session_maker, get_user_db
+            from app.core.auth import get_user_manager
+            from app.schemas.user_schema import UserCreate
+
+            async def _aclose(gen):
+                try:
+                    await gen.__anext__()
+                except StopAsyncIteration:
+                    pass
+                except Exception:
+                    pass
+
+            async with async_session_maker() as mgr_session:
+                user_db_gen = get_user_db(session=mgr_session)
+                user_db = await user_db_gen.__anext__()
+                try:
+                    manager_gen = get_user_manager(user_db=user_db)
+                    manager = await manager_gen.__anext__()
+                    try:
+                        try:
+                            created = await manager.create(
+                                UserCreate(email=email, password=password, name=name),
+                                safe=False,
+                            )
+                        except Exception as exc:
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"Could not create user: {exc}",
+                            )
+                        user_id = str(created.id)
+                    finally:
+                        await _aclose(manager_gen)
+                finally:
+                    await _aclose(user_db_gen)
+
+            # Make the account usable right away (no email-verification step).
+            elevate = (
+                await db.execute(select(User).where(User.id == user_id))
+            ).scalar_one_or_none()
+            if elevate is not None:
+                elevate.is_active = True
+                elevate.is_verified = True
+                await db.commit()
+
+        # Attach the membership to this org with a resolved user_id (no invite).
+        membership = Membership(organization_id=organization_id, user_id=user_id, role=role)
+        db.add(membership)
+        await db.commit()
+        await db.refresh(membership)
+
+        # RBAC role assignment (mirrors add_member).
+        if role:
+            await self._assign_system_role(db, organization_id, user_id, role)
+
+        result = await db.execute(
+            select(Membership)
+            .options(selectinload(Membership.user))
+            .where(Membership.id == membership.id)
+        )
+        membership_with_user = result.scalar_one()
+
+        try:
+            await telemetry.capture(
+                "organization_member_created_direct",
+                {
+                    "organization_id": str(organization_id),
+                    "membership_id": str(membership_with_user.id),
+                    "role": role,
+                    "user_id": user_id,
+                },
+                user_id=current_user.id,
+                org_id=organization_id,
+            )
+        except Exception:
+            pass
+
+        return MembershipSchema.from_orm(membership_with_user)
+
     async def get_user_organizations(self, db: AsyncSession, current_user: User) -> List[OrganizationAndRoleSchema]:
         from app.core.permission_resolver import resolve_permissions
 

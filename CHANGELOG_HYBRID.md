@@ -4,6 +4,12 @@ Hybrid feature changelog (our additions on top of the bagofwords/Dash base). New
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` followed by `-` feature bullets.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.13.0 — Super-admin creates users directly + features ON in nginx deploy  (2026-06-25)
+- Add user with email + password directly — NO email invitation. Settings → Members → "Add user" now takes a name, email and password and creates an active, verified account the user can sign in with immediately. New endpoint `POST /api/organizations/{id}/members/create-user` (admin-gated, `manage_members`); the password is set by the admin and shown in plain text in the form so it can be shared. The old email-invite path still exists for SMTP deployments.
+- Fix "Agent Studios are not enabled" (and other locked pages) on the nginx deploy: `docker-compose.nginx.yaml` was missing the `HYBRID_*` env block entirely, so every feature flag fell back to its default-OFF. It now passes the full flag set with product-visible, stable features defaulting ON (Studios, Agent Templates, Folder Sync, per-agent ACL/Channels, follow-ups, semantic/metrics layer, deep profiler, proactive insights, golden queries, verified metrics, query/result/answer cache, domain packs, teach box, agent memory, auto-train, dual-schema/engineer assets, brain read/distiller). Daemons, experimental and token-heavy paths (Skills sandbox, Subagents, Skill Optimizer, Workflows, context compaction, federation, forecasting, all background daemons) stay OFF — enable per `.env`.
+- `docker-compose.nginx.yaml` gains a Redis service (`dash-redis`) so the cache-backed features have a backing store; `REDIS_URL` defaults to `redis://redis:6379/0`.
+- Apply on the server: `docker compose -f docker-compose.nginx.yaml up -d --build` (rebuilds the image with the new user-create UI/endpoint and recreates the app with flags on). To override any flag, set it in `.env` (e.g. `HYBRID_SUBAGENTS=1` or `HYBRID_STUDIOS=0`).
+
 ## v1.12.0 — nginx reverse-proxy stack  (2026-06-25)
 - New `docker-compose.nginx.yaml` + `nginx/nginx.conf`: front the app with nginx (the default proxy for this deployment). nginx publishes the host port (`HTTP_PORT`, default 8001) and proxies to the app over the internal network; the app is not exposed directly.
 - nginx tuned for this app: SSE streaming (`proxy_buffering off` so chat streams token-by-token), websocket upgrade passthrough, unlimited upload size, 1h read/send timeouts (no 504 on long agent runs).

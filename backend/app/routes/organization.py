@@ -6,6 +6,7 @@ from app.services.organization_service import OrganizationService
 from app.schemas.organization_schema import OrganizationCreate, OrganizationSchema, OrganizationAndRoleSchema, OrganizationUpdate
 from app.schemas.organization_schema import MembershipCreate, MembershipSchema, MembershipUpdate
 from app.schemas.organization_schema import MembershipImportReport
+from app.schemas.organization_schema import DirectUserCreate
 from app.models.user import User
 from app.models.organization import Organization
 from app.core.auth import current_user
@@ -44,6 +45,45 @@ async def add_member(
         details={"email": membership.email, "role": membership.role},
         request=request,
     )
+    return result
+
+@router.post("/organizations/{organization_id}/members/create-user", response_model=MembershipSchema)
+@requires_permission('manage_members')
+async def create_user_directly(
+    organization_id: str,
+    payload: DirectUserCreate,
+    request: Request,
+    organization: Organization = Depends(get_current_organization),
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """Admin creates a user with email + password directly (no email invite).
+
+    The account is active/verified immediately, so the new user can sign in
+    right away with the password the admin set.
+    """
+    result = await organization_service.create_user_with_password(
+        db=db,
+        organization_id=organization_id,
+        email=payload.email,
+        password=payload.password,
+        name=payload.name,
+        role=payload.role or "member",
+        current_user=current_user,
+    )
+    try:
+        await audit_service.log(
+            db=db,
+            organization_id=organization_id,
+            action="member.created",
+            user_id=current_user.id,
+            resource_type="membership",
+            resource_id=result.id,
+            details={"email": payload.email, "role": payload.role},
+            request=request,
+        )
+    except Exception:
+        pass
     return result
 
 @router.get("/organizations/{organization_id}/members", response_model=List[MembershipSchema])

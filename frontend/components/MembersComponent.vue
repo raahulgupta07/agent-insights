@@ -426,11 +426,21 @@
             <button @click="inviteModalOpen = false" class="absolute top-2 end-2 text-gray-500 hover:text-gray-700 outline-none">
                 <Icon name="heroicons:x-mark" class="w-5 h-5" />
             </button>
-            <h1 class="text-lg font-semibold">{{ $t('settings.members.inviteTitle') }}</h1>
-            <p class="text-sm text-gray-500">{{ $t('settings.members.inviteSubtitle') }}</p>
+            <h1 class="text-lg font-semibold">Add user</h1>
+            <p class="text-sm text-gray-500">Create a user with an email and password. The account is active immediately — no email invite needed. Share the password with the user so they can sign in.</p>
             <hr class="my-4" />
 
-            <form @submit.prevent="inviteMember" class="space-y-4">
+            <form @submit.prevent="createUser" class="space-y-4">
+                <div class="flex flex-col">
+                    <label class="text-sm font-medium text-gray-700 mb-2">Full name</label>
+                    <UInput
+                        v-model="inviteForm.name"
+                        type="text"
+                        required
+                        placeholder="Jane Doe"
+                    />
+                </div>
+
                 <div class="flex flex-col">
                     <label class="text-sm font-medium text-gray-700 mb-2">{{ $t('settings.members.emailLabel') }}</label>
                     <UInput
@@ -439,6 +449,18 @@
                         required
                         :placeholder="$t('settings.members.emailPlaceholder')"
                     />
+                </div>
+
+                <div class="flex flex-col">
+                    <label class="text-sm font-medium text-gray-700 mb-2">Password</label>
+                    <UInput
+                        v-model="inviteForm.password"
+                        type="text"
+                        required
+                        minlength="6"
+                        placeholder="At least 6 characters"
+                    />
+                    <p class="text-xs text-gray-400 mt-1">Shown as plain text so you can copy it. Minimum 6 characters.</p>
                 </div>
 
                 <div class="flex flex-col">
@@ -496,8 +518,9 @@
                     <UButton
                         type="submit"
                         color="primary"
+                        :loading="creatingUser"
                     >
-                        {{ $t('settings.members.sendInvitation') }}
+                        Create user
                     </UButton>
                 </div>
             </form>
@@ -1129,8 +1152,11 @@ watch(showQuotaColumn, (enabled) => {
 const canManageGroups = computed(() => hasFeature('custom_roles') && useCan('manage_groups'))
 
 const inviteModalOpen = ref(false)
+const creatingUser = ref(false)
 const inviteForm = ref({
+    name: '',
     email: '',
+    password: '',
     role: 'member',
     group_ids: [] as string[],
     quota_policy_id: null as string | null,
@@ -1346,13 +1372,15 @@ const removeMember = async (member: Member) => {
     }
 }
 
-const inviteMember = async () => {
+const createUser = async () => {
+    creatingUser.value = true
     try {
-        const response = await useMyFetch(`/organizations/${organizationId}/members`, {
+        const response = await useMyFetch(`/organizations/${organizationId}/members/create-user`, {
             method: 'POST',
             body: {
-                organization_id: organizationId,
                 email: inviteForm.value.email,
+                password: inviteForm.value.password,
+                name: inviteForm.value.name,
                 role: inviteForm.value.role,
             }
         })
@@ -1361,35 +1389,34 @@ const inviteMember = async () => {
             const errorDetail = response.error.value.data?.detail
             toast.add({
                 title: t('common.error'),
-                description: errorDetail || t('settings.members.failedToInvite'),
+                description: errorDetail || 'Failed to create user',
                 color: 'red'
             })
-            throw new Error(errorDetail || t('settings.members.failedToInvite'))
+            throw new Error(errorDetail || 'Failed to create user')
         }
 
-        // Pre-assign the pending invite to any selected groups. The new
-        // membership has no user yet, so it's added by its membership id.
-        const newMembershipId = (response.data.value as any)?.id
-        if (newMembershipId && inviteForm.value.group_ids.length) {
+        // The created account is a real user — assign groups / quota by user_id.
+        const newUserId = (response.data.value as any)?.user?.id || (response.data.value as any)?.user_id
+        if (newUserId && inviteForm.value.group_ids.length) {
             for (const groupId of inviteForm.value.group_ids) {
                 const gr = await useMyFetch(`/organizations/${organizationId}/groups/${groupId}/members`, {
                     method: 'POST',
-                    body: { membership_id: newMembershipId },
+                    body: { user_id: newUserId },
                 })
                 if (gr.error?.value) {
-                    const detail = (gr.error.value as any).data?.detail || t('settings.members.failedToInvite')
+                    const detail = (gr.error.value as any).data?.detail || 'Failed to add to group'
                     toast.add({ title: detail, color: 'red' })
                 }
             }
         }
 
-        // Pre-assign a quota policy to the pending invite (enterprise only).
-        if (newMembershipId && showQuotaColumn.value && inviteForm.value.quota_policy_id) {
+        // Pre-assign a quota policy (enterprise only).
+        if (newUserId && showQuotaColumn.value && inviteForm.value.quota_policy_id) {
             const qr = await useMyFetch(`/organizations/${organizationId}/usage-policy-assignments/principal`, {
                 method: 'PUT',
                 body: {
-                    principal_type: 'membership',
-                    principal_id: newMembershipId,
+                    principal_type: 'user',
+                    principal_id: newUserId,
                     policy_id: inviteForm.value.quota_policy_id,
                 },
             })
@@ -1399,7 +1426,7 @@ const inviteMember = async () => {
             }
         }
 
-        // Refresh members, groups and quotas so the new pending row reflects them.
+        // Refresh members, groups and quotas so the new row reflects them.
         const membersResponse = await useMyFetch(`/organizations/${organizationId}/members`)
         members.value = (membersResponse.data.value || []) as Member[]
         await loadGroups()
@@ -1407,14 +1434,16 @@ const inviteMember = async () => {
 
         toast.add({
             title: t('common.success'),
-            description: t('settings.members.successInvited', { email: inviteForm.value.email }),
+            description: `User ${inviteForm.value.email} created — they can sign in now.`,
             color: 'green'
         })
 
-        inviteForm.value = { email: '', role: 'member', group_ids: [], quota_policy_id: null, organization_id: organizationId }
+        inviteForm.value = { name: '', email: '', password: '', role: 'member', group_ids: [], quota_policy_id: null, organization_id: organizationId }
         inviteModalOpen.value = false
     } catch (error) {
-        console.error('Failed to invite member:', error)
+        console.error('Failed to create user:', error)
+    } finally {
+        creatingUser.value = false
     }
 }
 </script>
