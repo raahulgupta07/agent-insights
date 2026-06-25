@@ -144,3 +144,6 @@ k8s/
 uploads/
 .sass-cache/
 .cache/
+# Hybrid version + changelog must reach the image (read at runtime by changelog.py)
+!VERSION_HYBRID
+!CHANGELOG_HYBRID.md
