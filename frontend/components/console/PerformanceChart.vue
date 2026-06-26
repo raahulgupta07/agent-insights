@@ -13,7 +13,7 @@
             <div class="h-80">
                 <div v-if="isLoading" class="flex items-center justify-center h-full">
                     <div class="flex items-center space-x-2">
-                        <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-[#C2683F]"></div>
+                        <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-[#C2541E]"></div>
                         <span class="text-gray-600">Loading chart...</span>
                     </div>
                 </div>

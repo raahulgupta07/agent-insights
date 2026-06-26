@@ -4,8 +4,8 @@
       <!-- header -->
       <div class="flex items-start justify-between px-5 py-4 border-b border-[#EFEDE6]">
         <div>
-          <h3 class="text-base font-semibold text-[#2B2622] flex items-center gap-1.5" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">
-            <span class="text-[#C2683F]">⟳</span> Set up Folder Sync
+          <h3 class="text-base font-semibold text-[#2B2622] flex items-center gap-1.5" style="font-family: 'Spectral', ui-serif, Georgia, serif">
+            <span class="text-[#C2541E]">⟳</span> Set up Folder Sync
           </h3>
           <p class="text-[11.5px] text-[#8A7E76] mt-0.5">
             Auto-ingest a local folder into your agent — like Claude Code.
@@ -32,7 +32,7 @@
           <div class="flex flex-wrap gap-2">
             <a v-for="os in osButtons" :key="os.key" :href="os.href" download
                class="inline-flex items-center gap-1.5 text-[12px] font-medium text-[#2B2622] bg-white border border-[#E8C9B5] rounded-lg px-3 py-1.5 hover:bg-[#F4E5DA] transition-colors">
-              <UIcon :name="os.icon" class="w-3.5 h-3.5 text-[#C2683F]" /> {{ os.label }}
+              <UIcon :name="os.icon" class="w-3.5 h-3.5 text-[#C2541E]" /> {{ os.label }}
             </a>
           </div>
           <p class="text-[10.5px] text-[#8A7E76] mt-2">Downloads the Python sync app (+ INSTALL.txt). Run <span class="font-mono">python sync_agent.py setup</span> then <span class="font-mono">run</span>.</p>
@@ -42,10 +42,10 @@
         <div class="relative border border-[#E8C9B5] rounded-xl bg-white p-4">
           <span class="absolute -top-2.5 left-4 bg-[#2B2622] text-white text-[9.5px] font-semibold px-2.5 py-0.5 rounded-full tracking-wide">2 · KEY</span>
           <p class="text-[13px] font-semibold text-[#2B2622] mt-1">Copy your sync key</p>
-          <p class="text-[11.5px] text-[#8A7E76] mt-0.5 mb-3">The key authenticates the desktop app as you. <b class="text-[#A8542F]">Shown once — store it safe.</b></p>
+          <p class="text-[11.5px] text-[#8A7E76] mt-0.5 mb-3">The key authenticates the desktop app as you. <b class="text-[#A8330F]">Shown once — store it safe.</b></p>
 
           <button v-if="!generated" type="button" :disabled="generating"
-                  class="inline-flex items-center gap-1.5 text-[12px] font-semibold text-white bg-[#C2683F] hover:bg-[#A8542F] rounded-lg px-3.5 py-2 transition-colors disabled:opacity-50"
+                  class="inline-flex items-center gap-1.5 text-[12px] font-semibold text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-lg px-3.5 py-2 transition-colors disabled:opacity-50"
                   @click="generateKey">
             <Spinner v-if="generating" class="h-3.5 w-3.5 text-white" />
             <UIcon v-else name="i-heroicons-key" class="w-3.5 h-3.5" />
@@ -58,7 +58,7 @@
               <div class="flex items-stretch gap-2">
                 <code class="flex-1 text-[11.5px] font-mono text-[#2B2622] bg-[#FBF4EF] border border-dashed border-[#E8C9B5] rounded-lg px-3 py-2 break-all">{{ keyVal }}</code>
                 <button type="button" class="shrink-0 inline-flex items-center gap-1 text-[11px] font-medium text-[#2B2622] bg-white border border-[#E8C9B5] rounded-lg px-2.5 hover:bg-[#F4E5DA]" @click="copy(keyVal, 'key')">
-                  <UIcon :name="copied === 'key' ? 'i-heroicons-check' : 'i-heroicons-clipboard-document'" class="w-3.5 h-3.5" :class="copied === 'key' ? 'text-[#3F8C5E]' : 'text-[#C2683F]'" />
+                  <UIcon :name="copied === 'key' ? 'i-heroicons-check' : 'i-heroicons-clipboard-document'" class="w-3.5 h-3.5" :class="copied === 'key' ? 'text-[#3F8C5E]' : 'text-[#C2541E]'" />
                   {{ copied === 'key' ? 'Copied' : 'Copy' }}
                 </button>
               </div>
@@ -68,7 +68,7 @@
               <div class="flex items-stretch gap-2">
                 <code class="flex-1 text-[11.5px] font-mono text-[#2B2622] bg-[#FBF4EF] border border-dashed border-[#E8C9B5] rounded-lg px-3 py-2 break-all">{{ serverUrl }}</code>
                 <button type="button" class="shrink-0 inline-flex items-center gap-1 text-[11px] font-medium text-[#2B2622] bg-white border border-[#E8C9B5] rounded-lg px-2.5 hover:bg-[#F4E5DA]" @click="copy(serverUrl, 'url')">
-                  <UIcon :name="copied === 'url' ? 'i-heroicons-check' : 'i-heroicons-clipboard-document'" class="w-3.5 h-3.5" :class="copied === 'url' ? 'text-[#3F8C5E]' : 'text-[#C2683F]'" />
+                  <UIcon :name="copied === 'url' ? 'i-heroicons-check' : 'i-heroicons-clipboard-document'" class="w-3.5 h-3.5" :class="copied === 'url' ? 'text-[#3F8C5E]' : 'text-[#C2541E]'" />
                   {{ copied === 'url' ? 'Copied' : 'Copy' }}
                 </button>
               </div>
@@ -100,7 +100,7 @@
       <!-- footer -->
       <div class="flex items-center justify-end gap-2 px-5 py-3 border-t border-[#EFEDE6]">
         <button type="button" class="text-[12px] font-medium text-[#8A7E76] hover:text-[#2B2622] px-3 py-1.5" @click="close">Cancel</button>
-        <button type="button" class="text-[12px] font-semibold text-white bg-[#C2683F] hover:bg-[#A8542F] rounded-lg px-4 py-1.5 transition-colors" @click="close">Done</button>
+        <button type="button" class="text-[12px] font-semibold text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-lg px-4 py-1.5 transition-colors" @click="close">Done</button>
       </div>
     </div>
   </UModal>

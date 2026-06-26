@@ -3,7 +3,7 @@
         <button
             type="button"
             @click.stop="toggle"
-            class="text-[10px] text-[#C2683F] hover:underline"
+            class="text-[10px] text-[#C2541E] hover:underline"
         >
             {{ label }}
         </button>
@@ -22,7 +22,7 @@
                         v-model="search"
                         type="text"
                         placeholder="Search instructions…"
-                        class="w-full h-8 ps-7 pe-2 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-[#C2683F]/40"
+                        class="w-full h-8 ps-7 pe-2 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-[#C2541E]/40"
                         @input="onSearchInput"
                         @click.stop
                     />
@@ -44,13 +44,13 @@
                     :disabled="inst.id === currentInstructionId"
                     @click.stop="select(inst)"
                     class="w-full text-start px-3 py-2 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    :class="inst.id === currentInstructionId ? 'bg-[#F3E7DF]/50' : ''"
+                    :class="inst.id === currentInstructionId ? 'bg-[#FBEFE4]/50' : ''"
                 >
                     <div class="flex items-center gap-1.5">
                         <span class="text-xs font-medium text-gray-800 truncate">
                             {{ inst.title || 'Untitled instruction' }}
                         </span>
-                        <span v-if="inst.id === currentInstructionId" class="text-[9px] px-1 py-0.5 bg-[#F3E7DF] text-[#A8542F] rounded shrink-0">
+                        <span v-if="inst.id === currentInstructionId" class="text-[9px] px-1 py-0.5 bg-[#FBEFE4] text-[#A8330F] rounded shrink-0">
                             Current
                         </span>
                     </div>

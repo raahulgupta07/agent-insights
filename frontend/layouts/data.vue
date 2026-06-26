@@ -26,12 +26,12 @@
                         <template v-else-if="!fetchError">
                             <!-- Agent identity: clay database tile + serif name -->
                             <div class="flex items-center gap-3.5 min-w-0">
-                                <span class="shrink-0 inline-flex items-center justify-center w-11 h-11 rounded-xl bg-[#F4F1EA] border border-[#E7E5DD]" aria-hidden="true">
-                                    <UIcon name="heroicons-circle-stack" class="w-5 h-5 text-[#C2683F]" />
+                                <span class="shrink-0 inline-flex items-center justify-center w-11 h-11 rounded-xl bg-[#F4EEE5] border border-[#E9E0D3]" aria-hidden="true">
+                                    <UIcon name="heroicons-circle-stack" class="w-5 h-5 text-[#C2541E]" />
                                 </span>
                                 <h1
                                     class="text-2xl font-semibold text-[#1f2328] leading-tight tracking-tight truncate"
-                                    style="font-family: ui-serif, Georgia, 'Times New Roman', serif"
+                                    style="font-family: 'Spectral', ui-serif, Georgia, serif"
                                 >
                                     {{ integration?.name || 'Agent' }}
                                 </h1>
@@ -44,7 +44,7 @@
                                         ref="descInputRef"
                                         v-model="descForm"
                                         type="text"
-                                        class="flex-1 text-sm text-[#6b6b6b] border-b border-[#C2683F] bg-transparent outline-none py-0.5"
+                                        class="flex-1 text-sm text-[#6b6b6b] border-b border-[#C2541E] bg-transparent outline-none py-0.5"
                                         @keydown.enter="saveDesc"
                                         @keydown.escape="cancelDesc"
                                         @blur="saveDesc"
@@ -58,7 +58,7 @@
                                     >{{ integration?.description || '' }}</p>
                                     <button
                                         v-if="useCan('update_data_source')"
-                                        class="text-[10px] text-[#C2683F] hover:underline opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                                        class="text-[10px] text-[#C2541E] hover:underline opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                                         @click="startEditDesc"
                                     >Edit</button>
                                 </template>
@@ -103,7 +103,7 @@
                         </template>
 
                         <template v-else>
-                            <h1 class="text-2xl font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">Agent</h1>
+                            <h1 class="text-2xl font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">Agent</h1>
                         </template>
                     </div>
 
@@ -117,7 +117,7 @@
                         <UButton
                             color="gray"
                             size="sm"
-                            class="bg-[#C2683F] hover:bg-[#A8542F] text-white ring-0"
+                            class="bg-[#C2541E] hover:bg-[#A8330F] text-white ring-0"
                             :loading="startingChat"
                             @click="startChat"
                         >
@@ -129,26 +129,26 @@
 
                 <!-- Error states -->
                 <div v-if="!isLoading && fetchError === 403" class="mt-8">
-                    <div class="bg-white border border-[#E7E5DD] rounded-2xl p-10 text-center">
+                    <div class="bg-white border border-[#E9E0D3] rounded-2xl p-10 text-center">
                         <Icon name="i-heroicons-lock-closed" class="w-10 h-10 text-[#9a958c] mx-auto mb-3" />
                         <h2 class="text-base font-medium text-[#1f2328]">Access Restricted</h2>
                         <p class="mt-1.5 text-sm text-[#6b6b6b] max-w-sm mx-auto">
                             This agent is private. Contact the owner or an admin to request access.
                         </p>
-                        <NuxtLink to="/agents" class="mt-4 inline-block text-sm text-[#C2683F] hover:underline">
+                        <NuxtLink to="/agents" class="mt-4 inline-block text-sm text-[#C2541E] hover:underline">
                             ← Back to agents
                         </NuxtLink>
                     </div>
                 </div>
 
                 <div v-else-if="!isLoading && fetchError === 404" class="mt-8">
-                    <div class="bg-white border border-[#E7E5DD] rounded-2xl p-10 text-center">
+                    <div class="bg-white border border-[#E9E0D3] rounded-2xl p-10 text-center">
                         <Icon name="i-heroicons-exclamation-circle" class="w-10 h-10 text-[#9a958c] mx-auto mb-3" />
                         <h2 class="text-base font-medium text-[#1f2328]">Agent Not Found</h2>
                         <p class="mt-1.5 text-sm text-[#6b6b6b] max-w-sm mx-auto">
                             The agent you're looking for doesn't exist or has been removed.
                         </p>
-                        <NuxtLink to="/agents" class="mt-4 inline-block text-sm text-[#C2683F] hover:underline">
+                        <NuxtLink to="/agents" class="mt-4 inline-block text-sm text-[#C2541E] hover:underline">
                             ← Back to agents
                         </NuxtLink>
                     </div>
@@ -156,7 +156,7 @@
 
                 <!-- Tabs + content -->
                 <template v-else-if="!fetchError">
-                    <div class="mt-6 border-b border-[#E7E5DD]">
+                    <div class="mt-6 border-b border-[#E9E0D3]">
                         <nav class="flex items-center gap-6 overflow-x-auto">
                             <NuxtLink
                                 v-for="tab in tabs"
@@ -164,7 +164,7 @@
                                 :to="tabTo(tab.name)"
                                 :class="[
                                     isTabActive(tab.name)
-                                        ? 'text-[#1f2328] border-b-2 border-[#C2683F] font-semibold'
+                                        ? 'text-[#1f2328] border-b-2 border-[#C2541E] font-semibold'
                                         : 'text-[#6b6b6b] border-b-2 border-transparent hover:text-[#1f2328]',
                                     'whitespace-nowrap -mb-px pb-2.5 text-sm transition-colors'
                                 ]"

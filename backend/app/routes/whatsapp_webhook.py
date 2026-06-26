@@ -32,8 +32,17 @@ processed_message_ids: set = set()
 
 
 async def _list_whatsapp_platforms(db: AsyncSession):
-    """List all WhatsApp ExternalPlatform rows (used by verify handshake)."""
-    stmt = select(ExternalPlatform).where(ExternalPlatform.platform_type == "whatsapp")
+    """List WhatsApp ExternalPlatform rows (used by verify handshake + routing).
+    Per-agent (studio-bound) rows sort first so they win over the org-wide row
+    when both map the same phone_number_id."""
+    stmt = (
+        select(ExternalPlatform)
+        .where(
+            ExternalPlatform.platform_type == "whatsapp",
+            ExternalPlatform.deleted_at.is_(None),
+        )
+        .order_by(ExternalPlatform.studio_id.is_(None).asc())
+    )
     result = await db.execute(stmt)
     return list(result.scalars().all())
 
@@ -154,7 +163,7 @@ async def whatsapp_webhook(
             return {"ok": True}
 
         result = await platform_manager.handle_incoming_message(
-            db, "whatsapp", platform.organization_id, event_data
+            db, "whatsapp", platform.organization_id, event_data, platform=platform
         )
         return {"ok": True, "result": result}
 

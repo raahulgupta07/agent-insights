@@ -59,7 +59,7 @@
               :class="[
                 'px-3 py-1.5 text-xs font-medium border-b-2 transition-colors',
                 activeTab === 'chart' 
-                  ? 'border-[#C2683F] text-[#C2683F]'
+                  ? 'border-[#C2541E] text-[#C2541E]'
                   : 'border-transparent text-gray-400 hover:text-gray-600'
               ]"
             >
@@ -71,7 +71,7 @@
               :class="[
                 'px-3 py-1.5 text-xs font-medium border-b-2 transition-colors',
                 activeTab === 'table' 
-                  ? 'border-[#C2683F] text-[#C2683F]'
+                  ? 'border-[#C2541E] text-[#C2541E]'
                   : 'border-transparent text-gray-400 hover:text-gray-600'
               ]"
             >
@@ -83,7 +83,7 @@
               :class="[
                 'px-3 py-1.5 text-xs font-medium border-b-2 transition-colors',
                 activeTab === 'code' 
-                  ? 'border-[#C2683F] text-[#C2683F]'
+                  ? 'border-[#C2541E] text-[#C2541E]'
                   : 'border-transparent text-gray-400 hover:text-gray-600'
               ]"
             >
@@ -277,7 +277,7 @@
             <button
               v-else-if="canAddToDashboard"
               :disabled="isAddingToDashboard"
-              class="text-xs px-2 py-0.5 rounded transition-colors flex items-center hover:bg-gray-50 text-[#C2683F] hover:text-[#A8542F] disabled:opacity-40"
+              class="text-xs px-2 py-0.5 rounded transition-colors flex items-center hover:bg-gray-50 text-[#C2541E] hover:text-[#A8330F] disabled:opacity-40"
               @click.stop="addToDashboard"
             >
               <Icon v-if="!isAddingToDashboard" name="heroicons:squares-plus" class="w-3.5 h-3.5 me-1" />
@@ -291,7 +291,7 @@
               class="text-xs px-2 py-0.5 rounded transition-colors flex items-center hover:bg-gray-50"
               @click.stop="openEntityModal = true"
             >
-              <Icon name="heroicons-bookmark" class="w-3.5 h-3.5 text-[#C2683F] me-1" />
+              <Icon name="heroicons-bookmark" class="w-3.5 h-3.5 text-[#C2541E] me-1" />
               {{ $t('tools.widgetPreview.saveQuery') }}
             </button>
             <span v-else class="text-xs flex items-center">

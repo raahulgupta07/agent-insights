@@ -17,7 +17,7 @@
 
     <div v-if="success" class="text-xs text-gray-600">
       <div class="flex items-center py-1 px-1 rounded">
-        <NuxtLink :to="`/evals`" class="font-medium text-gray-700 truncate hover:text-[#C2683F]">
+        <NuxtLink :to="`/evals`" class="font-medium text-gray-700 truncate hover:text-[#C2541E]">
           {{ caseName || t('tools.createEval.unnamed') }}
         </NuxtLink>
         <span v-if="suiteName" class="ms-1.5 text-[9px] px-1 py-0.5 rounded bg-gray-100 text-gray-500 flex-shrink-0">{{ suiteName }}</span>

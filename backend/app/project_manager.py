@@ -465,7 +465,9 @@ class ProjectManager:
     async def update_step_with_data(self, db, step, data):
         safe_data = _to_json_safe(data)
         try:
-            step.data = safe_data
+            from app.services import parquet_store
+            parquet_store.delete_file(step.data)
+            step.data = parquet_store.maybe_offload(safe_data)
             db.add(step)
             await db.commit()
         except Exception as exc:

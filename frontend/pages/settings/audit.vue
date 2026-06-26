@@ -1,13 +1,13 @@
 <template>
   <div class="mt-4">
     <div class="mb-4">
-      <h2 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">{{ $t('settings.audit.title') }}</h2>
+      <h2 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ $t('settings.audit.title') }}</h2>
       <p class="text-xs text-[#9a958c] mt-0.5">{{ $t('settings.audit.subtitle') }}</p>
     </div>
 
     <!-- Enterprise Gate -->
     <template v-if="!hasFeature('audit_logs')">
-      <div class="rounded-lg border border-[#E7E5DD] p-4 bg-[#F4F1EA]">
+      <div class="rounded-lg border border-[#E9E0D3] p-4 bg-[#F4EEE5]">
         <p class="text-xs text-[#6b6b6b] mb-2">
           {{ $t('settings.audit.enterpriseRequired') }}
         </p>
@@ -15,7 +15,7 @@
           href="https://docs.bagofwords.com/enterprise"
           target="_blank"
           rel="noopener noreferrer"
-          class="text-xs text-[#C2683F] hover:text-[#A8542F]"
+          class="text-xs text-[#C2541E] hover:text-[#A8330F]"
         >
           {{ $t('settings.audit.learnMore') }}
         </a>
@@ -31,7 +31,7 @@
             v-model="searchQuery"
             type="text"
             :placeholder="$t('settings.audit.search')"
-            class="w-full ps-7 pe-2 py-1 text-xs border border-[#E7E5DD] rounded-lg focus:outline-none focus:border-[#C2683F] bg-white"
+            class="w-full ps-7 pe-2 py-1 text-xs border border-[#E9E0D3] rounded-lg focus:outline-none focus:border-[#C2541E] bg-white"
             @input="debouncedSearch"
           />
           <svg class="absolute start-2 top-1.5 w-3.5 h-3.5 text-[#9a958c]" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -43,7 +43,7 @@
         <div class="relative" ref="dropdownRef">
           <button
             type="button"
-            class="flex items-center gap-1.5 px-3 py-2 text-xs border border-[#E7E5DD] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4F1EA] transition-colors cursor-pointer"
+            class="flex items-center gap-1.5 px-3 py-2 text-xs border border-[#E9E0D3] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4EEE5] transition-colors cursor-pointer"
             @click="showActionDropdown = !showActionDropdown"
           >
             <span class="text-[#6b6b6b]">
@@ -55,19 +55,19 @@
           </button>
           <div
             v-if="showActionDropdown"
-            class="absolute top-full start-0 mt-1 w-44 bg-white border border-[#E7E5DD] rounded-lg shadow-sm z-10"
+            class="absolute top-full start-0 mt-1 w-44 bg-white border border-[#E9E0D3] rounded-lg shadow-sm z-10"
           >
             <div class="py-1">
               <label
                 v-for="action in actionOptions"
                 :key="action.value"
-                class="flex items-center gap-2 px-2 py-1 hover:bg-[#F4F1EA] cursor-pointer"
+                class="flex items-center gap-2 px-2 py-1 hover:bg-[#F4EEE5] cursor-pointer"
               >
                 <input
                   type="checkbox"
                   :value="action.value"
                   v-model="selectedActions"
-                  class="w-3 h-3 rounded border-[#E7E5DD] text-[#1f2328] focus:ring-0"
+                  class="w-3 h-3 rounded border-[#E9E0D3] text-[#1f2328] focus:ring-0"
                   @change="applyFilters"
                 />
                 <span class="text-xs text-[#6b6b6b]">{{ action.label }}</span>
@@ -87,7 +87,7 @@
 
       <!-- Loading State -->
       <div v-if="loading" class="py-8 text-center">
-        <div class="inline-block w-4 h-4 border-2 border-[#E7E5DD] border-t-[#9a958c] rounded-full animate-spin"></div>
+        <div class="inline-block w-4 h-4 border-2 border-[#E9E0D3] border-t-[#9a958c] rounded-full animate-spin"></div>
       </div>
 
       <!-- Error State -->
@@ -96,13 +96,13 @@
       </div>
 
       <!-- Logs List -->
-      <div v-else class="border border-[#E7E5DD] rounded-lg overflow-hidden">
+      <div v-else class="border border-[#E9E0D3] rounded-lg overflow-hidden">
         <template v-if="logs.length > 0">
           <div
             v-for="(log, idx) in logs"
             :key="log.id"
-            class="flex items-center px-3 py-2 text-xs hover:bg-[#F4F1EA]"
-            :class="{ 'border-t border-[#E7E5DD]': idx > 0 }"
+            class="flex items-center px-3 py-2 text-xs hover:bg-[#F4EEE5]"
+            :class="{ 'border-t border-[#E9E0D3]': idx > 0 }"
           >
             <!-- Timestamp -->
             <span class="w-20 flex-shrink-0 text-[#9a958c] font-mono text-[11px]">
@@ -299,11 +299,11 @@ const getActionClass = (action: string) => {
     case 'removed':
       return 'bg-red-50 text-red-700'
     case 'published':
-      return 'bg-[#F6EFEA] text-[#A8542F]'
+      return 'bg-[#F6EFEA] text-[#A8330F]'
     case 'invited':
       return 'bg-purple-50 text-purple-700'
     default:
-      return 'bg-[#F4F1EA] text-[#9a958c]'
+      return 'bg-[#F4EEE5] text-[#9a958c]'
   }
 }
 

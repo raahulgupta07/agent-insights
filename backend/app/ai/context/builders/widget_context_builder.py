@@ -180,16 +180,18 @@ class WidgetContextBuilder:
             
             # Always include metadata about the data if available
             if step.data and isinstance(step.data, dict):
-                if "info" in step.data:
-                    observation_data["stats"] = step.data["info"]
-                
-                if "columns" in step.data and isinstance(step.data["columns"], list):
+                from app.services.parquet_store import hydrate as _hydrate_parquet
+                _sd = _hydrate_parquet(step.data)
+                if "info" in _sd:
+                    observation_data["stats"] = _sd["info"]
+
+                if "columns" in _sd and isinstance(_sd["columns"], list):
                     observation_data["column_names"] = [
-                        col.get("field", "?") for col in step.data["columns"]
+                        col.get("field", "?") for col in _sd["columns"]
                     ]
-                
-                if "rows" in step.data and isinstance(step.data["rows"], list):
-                    rows = step.data["rows"]
+
+                if "rows" in _sd and isinstance(_sd["rows"], list):
+                    rows = _sd["rows"]
                     observation_data["row_count"] = len(rows)
                     observation_data["data"] = rows
                     
@@ -286,9 +288,14 @@ class WidgetContextBuilder:
             step_title = step.title if step else 'No step'
             row_count = 0
             
-            # Get row count if available
-            if step and step.data and isinstance(step.data, dict) and 'rows' in step.data:
-                row_count = len(step.data['rows'])
+            # Get row count if available. Prefer info.total_rows (kept inline even
+            # when rows are offloaded to Parquet) to avoid reading the file.
+            if step and step.data and isinstance(step.data, dict):
+                _info = step.data.get('info') if isinstance(step.data.get('info'), dict) else {}
+                if isinstance(_info.get('total_rows'), int):
+                    row_count = _info['total_rows']
+                elif isinstance(step.data.get('rows'), list):
+                    row_count = len(step.data['rows'])
             
             parts.append(f"  {i+1}. {widget.title} ({widget_type}) - {row_count} rows")
             parts.append(f"     Step: {step_title}")

@@ -56,7 +56,7 @@
             <div class="flex-1 min-h-0">
                 <!-- Loading state -->
                 <div v-if="initialLoading || inst.isLoading.value" class="flex items-center justify-center h-full">
-                    <Spinner class="w-6 h-6 text-[#C2683F]" />
+                    <Spinner class="w-6 h-6 text-[#C2541E]" />
                 </div>
 
                 <InstructionsTable

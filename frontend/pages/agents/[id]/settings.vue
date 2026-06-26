@@ -52,7 +52,7 @@
                         <button
                             v-if="canManageDsMembers"
                             @click="openAdd"
-                            class="px-2.5 py-1.5 text-xs bg-[#C2683F] text-white rounded-lg hover:bg-[#A8542F]"
+                            class="px-2.5 py-1.5 text-xs bg-[#C2541E] text-white rounded-lg hover:bg-[#A8330F]"
                         >
                             Add member
                         </button>
@@ -190,7 +190,7 @@
                         :class="[
                             'px-3 py-1 text-xs rounded-lg border transition-colors',
                             addPrincipalType === tab.key
-                                ? 'bg-[#F6EFEA] border-[#E8C9B5] text-[#A8542F]'
+                                ? 'bg-[#F6EFEA] border-[#E8C9B5] text-[#A8330F]'
                                 : 'border-gray-200 text-gray-600 hover:bg-gray-50'
                         ]"
                     >
@@ -245,7 +245,7 @@
 
                 <div class="flex justify-end space-x-2 mt-4">
                     <button @click="showAddModal = false" class="px-3 py-1.5 text-xs border border-gray-300 text-gray-700 rounded-lg">Cancel</button>
-                    <button @click="addSelected" :disabled="addDisabled || adding" class="px-3 py-1.5 text-xs bg-[#C2683F] text-white rounded-lg hover:bg-[#A8542F] disabled:opacity-50">
+                    <button @click="addSelected" :disabled="addDisabled || adding" class="px-3 py-1.5 text-xs bg-[#C2541E] text-white rounded-lg hover:bg-[#A8330F] disabled:opacity-50">
                         {{ adding ? 'Adding…' : 'Add' }}
                     </button>
                 </div>

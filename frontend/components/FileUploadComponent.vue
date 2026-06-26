@@ -34,9 +34,9 @@
             <div class="flex mt-2 flex-col items-center justify-center py-10">
               <Icon 
                 name="heroicons-cloud-arrow-up" 
-                :class="['w-12 h-12 transition-colors', isDragging ? 'text-[#C2683F]' : 'text-[#A8542F]']"
+                :class="['w-12 h-12 transition-colors', isDragging ? 'text-[#C2541E]' : 'text-[#A8330F]']"
               />
-              <span class="mt-3 text-sm text-[#C2683F]">
+              <span class="mt-3 text-sm text-[#C2541E]">
                 {{ isDragging ? 'Drop files here' : 'Click or drag files to upload' }}
               </span>
             </div>
@@ -53,8 +53,8 @@
               :key="file.id" 
               class="text-xs py-2 text-gray-600 flex items-center justify-between border-b border-gray-100 last:border-b-0">
               <div class="flex items-center gap-1.5">
-                <Spinner v-if="file.status === 'processing'" class="w-3 h-3 text-[#C2683F] flex-shrink-0" />
-                <Icon v-else-if="file.status === 'uploaded'" name="heroicons-check-circle" class="text-[#C2683F] w-4 h-4 flex-shrink-0" />
+                <Spinner v-if="file.status === 'processing'" class="w-3 h-3 text-[#C2541E] flex-shrink-0" />
+                <Icon v-else-if="file.status === 'uploaded'" name="heroicons-check-circle" class="text-[#C2541E] w-4 h-4 flex-shrink-0" />
                 <Icon v-else-if="file.status === 'error'" name="heroicons-x-circle" class="text-red-500 w-4 h-4 flex-shrink-0" />
 
                 <span class="truncate">{{ file.filename }}</span>
@@ -70,7 +70,7 @@
                 isDragging ? 'bg-[#F6EFEA] border-1 border-dashed border-[#E8C9B5]' : 'border-2 border-dashed border-gray-200 hover:border-[#E8C9B5] hover:bg-[#F6EFEA]']"
               v-if="allFiles.length > 0"
               @click="$refs.fileInput.click()">
-              <div class="text-sm text-[#C2683F] flex items-center justify-center gap-2 w-full">
+              <div class="text-sm text-[#C2541E] flex items-center justify-center gap-2 w-full">
                 <Icon name="heroicons-cloud-arrow-up" class="w-5 h-5" />
                 {{ isDragging ? 'Drop files here' : 'Click or drag to upload more' }}
               </div>
@@ -276,7 +276,7 @@ const isDragging = ref(false);
 }
 
 .drop-zone-active {
-  border-color: #C2683F;
+  border-color: #C2541E;
   background-color: #F6EFEA;
 }
 </style>

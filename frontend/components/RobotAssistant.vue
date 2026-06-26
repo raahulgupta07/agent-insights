@@ -38,9 +38,9 @@
         <div class="ra-avatar">
           <svg width="20" height="20" viewBox="0 0 32 32" fill="none">
             <rect x="6" y="8" width="20" height="16" rx="6" fill="#fff" />
-            <circle cx="12" cy="16" r="2.3" fill="#C2683F" />
-            <circle cx="20" cy="16" r="2.3" fill="#C2683F" />
-            <rect x="12.5" y="20" width="7" height="1.6" rx="0.8" fill="#C2683F" />
+            <circle cx="12" cy="16" r="2.3" fill="#C2541E" />
+            <circle cx="20" cy="16" r="2.3" fill="#C2541E" />
+            <rect x="12.5" y="20" width="7" height="1.6" rx="0.8" fill="#C2541E" />
           </svg>
         </div>
         <div class="ra-head-text">
@@ -133,7 +133,7 @@ const robotClasses = computed(() => {
 })
 
 const statusDotColor = computed(() =>
-  state.value === 'error' ? '#7a1f1f' : state.value === 'success' ? '#2f7d34' : '#C2683F'
+  state.value === 'error' ? '#7a1f1f' : state.value === 'success' ? '#2f7d34' : '#C2541E'
 )
 const statusClass = computed(() => (state.value === 'error' ? 'err' : state.value === 'success' ? 'ok' : 'run'))
 

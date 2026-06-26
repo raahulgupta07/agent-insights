@@ -12,12 +12,12 @@
           <button
             v-if="canEditCode"
             class="py-2 text-xs transition-colors border-b-2 -mb-px"
-            :class="activeTab === 'code' ? 'text-[#C2683F] border-[#C2683F] font-medium' : 'text-gray-500 border-transparent hover:text-gray-700'"
+            :class="activeTab === 'code' ? 'text-[#C2541E] border-[#C2541E] font-medium' : 'text-gray-500 border-transparent hover:text-gray-700'"
             @click="activeTab = 'code'"
           >Query</button>
           <button
             class="py-2 text-xs transition-colors border-b-2 -mb-px"
-            :class="activeTab === 'visuals' ? 'text-[#C2683F] border-[#C2683F] font-medium' : 'text-gray-500 border-transparent hover:text-gray-700'"
+            :class="activeTab === 'visuals' ? 'text-[#C2541E] border-[#C2541E] font-medium' : 'text-gray-500 border-transparent hover:text-gray-700'"
             @click="activeTab = 'visuals'"
           >Visuals</button>
         </nav>

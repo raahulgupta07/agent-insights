@@ -57,13 +57,13 @@
           type="button"
           :data-idx="i"
           class="w-full text-start px-3 py-2 text-xs hover:bg-gray-50 flex items-start gap-2 border-b border-gray-100 last:border-0"
-          :class="{ 'bg-[#F3E7DF]': i === mentionState.selectedIndex }"
+          :class="{ 'bg-[#FBEFE4]': i === mentionState.selectedIndex }"
           @mousedown.prevent="selectMentionItem(item)"
         >
           <Icon
             :name="item.type === 'instruction' ? 'heroicons:cube' : item.type === 'connection_tool' ? 'heroicons:wrench-screwdriver' : 'heroicons:table-cells'"
             class="w-3.5 h-3.5 mt-0.5 shrink-0"
-            :class="item.type === 'instruction' ? 'text-[#C2683F]' : item.type === 'connection_tool' ? 'text-gray-500' : 'text-[#C2683F]'"
+            :class="item.type === 'instruction' ? 'text-[#C2541E]' : item.type === 'connection_tool' ? 'text-gray-500' : 'text-[#C2541E]'"
           />
           <div class="flex-1 min-w-0">
             <template v-if="item.type === 'instruction'">

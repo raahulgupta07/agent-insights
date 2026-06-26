@@ -61,7 +61,7 @@
           @click="goToSlide(index)"
           :class="[
             'flex-shrink-0 w-12 h-7 rounded overflow-hidden border-2 transition-all hover:scale-105',
-            currentSlide === index ? 'border-[#C2683F] ring-1 ring-[#C2683F]/50' : 'border-transparent opacity-60 hover:opacity-100'
+            currentSlide === index ? 'border-[#C2541E] ring-1 ring-[#C2541E]/50' : 'border-transparent opacity-60 hover:opacity-100'
           ]"
         >
           <img

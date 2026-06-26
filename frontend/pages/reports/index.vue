@@ -1,10 +1,10 @@
 <template>
-    <div class="flex justify-center ps-2 md:ps-4 text-sm bg-[#FBFAF6]">
+    <div class="flex justify-center ps-2 md:ps-4 text-sm bg-[#F6F1EA]">
         <div class="w-full max-w-7xl px-4 ps-0 py-2 text-[#1f2328]">
             <div>
                 <h1
                     class="text-2xl font-semibold tracking-tight flex items-center"
-                    style="font-family: ui-serif, Georgia, 'Times New Roman', serif"
+                    style="font-family: 'Spectral', ui-serif, Georgia, serif"
                 >
                     <GoBackChevron v-if="isExcel" />
                     {{ $t('reports.title') }}
@@ -14,13 +14,13 @@
 
             <div class="mt-6">
                 <!-- Main tabs (My / Shared) -->
-                <div class="border-b border-[#E7E5DD] mb-4">
+                <div class="border-b border-[#E9E0D3] mb-4">
                     <nav class="-mb-px flex space-x-6">
                         <button
                             class="whitespace-nowrap border-b-2 py-2 px-1 text-sm flex items-center font-medium"
                             :class="activeFilter === 'my'
-                                ? 'border-[#C2683F] text-[#1f2328]'
-                                : 'border-transparent text-[#6b6b6b] hover:border-[#E7E5DD] hover:text-[#1f2328]'"
+                                ? 'border-[#C2541E] text-[#1f2328]'
+                                : 'border-transparent text-[#6b6b6b] hover:border-[#E9E0D3] hover:text-[#1f2328]'"
                             @click="setActiveFilter('my')"
                         >
                             <span>{{ $t('reports.myReports') }}</span>
@@ -28,8 +28,8 @@
                         <button
                             class="whitespace-nowrap border-b-2 py-2 px-1 text-sm flex items-center font-medium"
                             :class="activeFilter === 'shared'
-                                ? 'border-[#C2683F] text-[#1f2328]'
-                                : 'border-transparent text-[#6b6b6b] hover:border-[#E7E5DD] hover:text-[#1f2328]'"
+                                ? 'border-[#C2541E] text-[#1f2328]'
+                                : 'border-transparent text-[#6b6b6b] hover:border-[#E9E0D3] hover:text-[#1f2328]'"
                             @click="setActiveFilter('shared')"
                         >
                             <span>{{ $t('reports.sharedWithMe') }}</span>
@@ -45,7 +45,7 @@
                                 v-model="searchTerm"
                                 type="text"
                                 :placeholder="$t('reports.searchPlaceholder')"
-                                class="w-full ps-10 pe-4 py-2.5 bg-white text-[#1f2328] border border-[#E7E5DD] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#C2683F]/40 focus:border-[#C2683F]"
+                                class="w-full ps-10 pe-4 py-2.5 bg-white text-[#1f2328] border border-[#E9E0D3] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#C2541E]/40 focus:border-[#C2541E]"
                             />
                             <UIcon
                                 name="i-heroicons-magnifying-glass"
@@ -61,14 +61,14 @@
                                 @click="showFilters = !showFilters"
                                 class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl border transition-colors"
                                 :class="showFilters || activeFilterCount > 0
-                                    ? 'border-[#C2683F]/40 bg-[#F3E7DF] text-[#A8542F]'
-                                    : 'border-[#E7E5DD] bg-white text-[#1f2328] hover:bg-[#faf8f3]'"
+                                    ? 'border-[#C2541E]/40 bg-[#FBEFE4] text-[#A8330F]'
+                                    : 'border-[#E9E0D3] bg-white text-[#1f2328] hover:bg-[#faf8f3]'"
                             >
                                 <UIcon name="i-heroicons-funnel" class="h-4 w-4" />
                                 <span>{{ $t('reports.filtersButton') }}</span>
                                 <span
                                     v-if="activeFilterCount > 0"
-                                    class="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[11px] font-semibold rounded-full bg-[#C2683F] text-white"
+                                    class="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[11px] font-semibold rounded-full bg-[#C2541E] text-white"
                                 >
                                     {{ activeFilterCount }}
                                 </span>
@@ -82,7 +82,7 @@
                             <!-- Filters popover -->
                             <div
                                 v-if="showFilters"
-                                class="absolute end-0 z-20 mt-2 w-[360px] bg-white border border-[#E7E5DD] rounded-2xl shadow-lg p-4"
+                                class="absolute end-0 z-20 mt-2 w-[360px] bg-white border border-[#E9E0D3] rounded-2xl shadow-lg p-4"
                             >
                                 <div class="space-y-3">
                                     <div class="flex items-center justify-between gap-3">
@@ -161,7 +161,7 @@
                                         </USelectMenu>
                                     </div>
                                 </div>
-                                <div v-if="activeFilterCount > 0" class="mt-4 pt-3 border-t border-[#E7E5DD] flex justify-end">
+                                <div v-if="activeFilterCount > 0" class="mt-4 pt-3 border-t border-[#E9E0D3] flex justify-end">
                                     <button
                                         @click="clearFilters"
                                         class="text-xs font-medium text-[#6b6b6b] hover:text-[#1f2328]"
@@ -182,7 +182,7 @@
                                 color="white"
                                 variant="solid"
                                 size="md"
-                                class="border border-[#E7E5DD] text-[#1f2328] hover:bg-[#faf8f3] py-2.5"
+                                class="border border-[#E9E0D3] text-[#1f2328] hover:bg-[#faf8f3] py-2.5"
                                 trailing-icon="i-heroicons-chevron-down-20-solid"
                             >
                                 {{ $t('reports.actions') }}
@@ -202,14 +202,14 @@
                         type="checkbox"
                         :checked="allVisibleSelected"
                         @change="toggleAllVisible"
-                        class="rounded border-[#E7E5DD] text-[#C2683F] focus:ring-[#C2683F]/40"
+                        class="rounded border-[#E9E0D3] text-[#C2541E] focus:ring-[#C2541E]/40"
                     />
                     <span v-if="selectedIds.size > 0">{{ selectedIds.size }} selected</span>
                     <span v-else>Select all</span>
                 </div>
 
                 <!-- List -->
-                <div class="mt-1 bg-white border border-[#E7E5DD] rounded-2xl overflow-hidden">
+                <div class="mt-1 bg-white border border-[#E9E0D3] rounded-2xl overflow-hidden">
                     <!-- Loading state -->
                     <div v-if="isLoading" class="py-16 flex items-center justify-center text-[#6b6b6b]">
                         <Spinner class="w-4 h-4 me-2" />
@@ -219,10 +219,10 @@
                     <template v-else>
                         <!-- Empty state (canonical: clay tile + serif title) -->
                         <div v-if="visibleReports.length === 0" class="py-16 text-center">
-                            <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4F1EA] border border-[#E7E5DD] text-[#C2683F]">
+                            <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] text-[#C2541E]">
                                 <Icon name="heroicons:document-text" class="h-6 w-6" />
                             </span>
-                            <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">{{ $t('reports.empty') }}</h3>
+                            <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ $t('reports.empty') }}</h3>
                             <p class="mt-1 text-sm text-[#9a958c]">{{ $t('reports.emptyHint') }}</p>
                         </div>
 
@@ -241,7 +241,7 @@
                                     :checked="selectedIds.has(report.id)"
                                     @change="toggleOne(report.id)"
                                     @click.stop
-                                    class="rounded border-[#E7E5DD] text-[#C2683F] focus:ring-[#C2683F]/40 opacity-0 group-hover:opacity-100 checked:opacity-100 transition-opacity"
+                                    class="rounded border-[#E9E0D3] text-[#C2541E] focus:ring-[#C2541E]/40 opacity-0 group-hover:opacity-100 checked:opacity-100 transition-opacity"
                                 />
 
                                 <!-- Star -->
@@ -259,8 +259,8 @@
                                 </UTooltip>
 
                                 <!-- Type avatar -->
-                                <div class="shrink-0 h-9 w-9 rounded-xl bg-[#F4F1EA] border border-[#E7E5DD] flex items-center justify-center">
-                                    <Icon :name="reportTypeIcon(report)" class="h-5 w-5 text-[#C2683F]" />
+                                <div class="shrink-0 h-9 w-9 rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] flex items-center justify-center">
+                                    <Icon :name="reportTypeIcon(report)" class="h-5 w-5 text-[#C2541E]" />
                                 </div>
 
                                 <!-- Title block -->
@@ -270,7 +270,7 @@
                                             v-if="reportLink(report)"
                                             :to="reportLink(report)"
                                             @click.stop
-                                            class="font-medium text-[#1f2328] hover:text-[#C2683F] truncate"
+                                            class="font-medium text-[#1f2328] hover:text-[#C2541E] truncate"
                                         >
                                             {{ report.title }}
                                         </NuxtLink>
@@ -283,13 +283,13 @@
                                         </span>
                                         <!-- Visibility badges -->
                                         <UTooltip v-if="report.artifact_modes?.length > 0" :text="report.artifact_visibility !== 'none' ? $t('reports.dashboardWithVisibility', { visibility: visibilityLabel(report.artifact_visibility) }) : $t('reports.dashboardPrivate')">
-                                            <span class="inline-flex items-center gap-1 text-[11px] font-medium text-[#A8542F] bg-[#F3E7DF] border border-[#ecd8cb] rounded-full px-2 py-px">
+                                            <span class="inline-flex items-center gap-1 text-[11px] font-medium text-[#A8330F] bg-[#FBEFE4] border border-[#ecd8cb] rounded-full px-2 py-px">
                                                 {{ $t('reports.dashboardLabel') }}
                                                 <Icon v-if="report.artifact_visibility !== 'none'" :name="visibilityIcon(report.artifact_visibility)" class="w-3 h-3" />
                                             </span>
                                         </UTooltip>
                                         <UTooltip v-if="report.conversation_visibility !== 'none'" :text="visibilityLabel(report.conversation_visibility)">
-                                            <span class="inline-flex items-center gap-1 text-[11px] font-medium text-[#7a756c] bg-[#F4F1EA] border border-[#E7E5DD] rounded-full px-2 py-px">
+                                            <span class="inline-flex items-center gap-1 text-[11px] font-medium text-[#7a756c] bg-[#F4EEE5] border border-[#E9E0D3] rounded-full px-2 py-px">
                                                 {{ $t('reports.conversationLabel') }}
                                                 <Icon :name="visibilityIcon(report.conversation_visibility)" class="w-3 h-3" />
                                             </span>
@@ -383,7 +383,7 @@
                 <!-- Pagination -->
                 <div
                     v-if="!isLoading && visibleReports.length"
-                    class="mt-4 pt-4 border-t border-[#E7E5DD] flex items-center justify-between gap-3"
+                    class="mt-4 pt-4 border-t border-[#E9E0D3] flex items-center justify-between gap-3"
                 >
                     <div class="flex items-center gap-2 text-xs text-[#6b6b6b]">
                         <span>{{ $t('reports.pagination.rowsPerPage') }}</span>
@@ -405,8 +405,8 @@
                             :disabled="currentPage === 1"
                             class="p-1.5 rounded-lg border transition-colors"
                             :class="currentPage === 1
-                                ? 'border-[#E7E5DD] text-[#cbc7be] cursor-not-allowed'
-                                : 'border-[#E7E5DD] text-[#6b6b6b] hover:bg-[#faf8f3]'"
+                                ? 'border-[#E9E0D3] text-[#cbc7be] cursor-not-allowed'
+                                : 'border-[#E9E0D3] text-[#6b6b6b] hover:bg-[#faf8f3]'"
                         >
                             <Icon name="heroicons:chevron-left" class="w-4 h-4" />
                         </button>
@@ -415,8 +415,8 @@
                             :disabled="currentPage >= pagination.total_pages"
                             class="p-1.5 rounded-lg border transition-colors"
                             :class="currentPage >= pagination.total_pages
-                                ? 'border-[#E7E5DD] text-[#cbc7be] cursor-not-allowed'
-                                : 'border-[#E7E5DD] text-[#6b6b6b] hover:bg-[#faf8f3]'"
+                                ? 'border-[#E9E0D3] text-[#cbc7be] cursor-not-allowed'
+                                : 'border-[#E9E0D3] text-[#6b6b6b] hover:bg-[#faf8f3]'"
                         >
                             <Icon name="heroicons:chevron-right" class="w-4 h-4" />
                         </button>

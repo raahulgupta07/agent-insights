@@ -1,5 +1,5 @@
 <template>
-    <div class="flex h-full text-sm w-full">
+    <div class="flex h-full text-sm w-full bg-[#F6F1EA]" style="font-family:'Hanken Grotesk',system-ui,sans-serif">
             <!-- Loading -->
             <div v-if="loading" class="flex flex-col items-center justify-center py-20 w-full">
                 <Spinner class="h-4 w-4 text-gray-400" />
@@ -18,9 +18,9 @@
 
             <template v-else-if="studio">
                 <!-- LEFT RAIL: studio header + grouped nav (anchored, neutral selection) -->
-                <aside class="w-60 shrink-0 m-2 bg-[#FBFAF6] border border-[#E7E5DD] rounded-2xl flex flex-col overflow-y-auto">
+                <aside class="w-60 shrink-0 m-2 bg-[#FBFAF6] border border-[#E9E0D3] rounded-2xl flex flex-col overflow-y-auto">
                     <!-- studio header -->
-                    <div class="px-3 pt-3 pb-2 border-b border-[#E7E5DD]">
+                    <div class="px-3 pt-3 pb-2 border-b border-[#E9E0D3]">
                         <button class="text-[11px] text-[#9a958c] hover:text-[#6b6b6b] mb-1.5 inline-flex items-center gap-1" @click="router.push('/studios')">
                             <UIcon name="i-heroicons-arrow-left" class="w-3 h-3" /> {{ $t('studio.backToStudios') }}
                         </button>
@@ -30,14 +30,14 @@
                             :class="activeTab === 'chat' ? 'bg-[#ECEAE1]' : 'hover:bg-[#faf8f3]'"
                             @click="activeTab = 'chat'"
                         >
-                            <div class="shrink-0 flex items-center justify-center w-7 h-7 rounded-lg bg-[#F4F1EA] border border-[#E7E5DD] text-base text-[#C2683F] overflow-hidden">
+                            <div class="shrink-0 flex items-center justify-center w-7 h-7 rounded-lg bg-[#F4F1EA] border border-[#E9E0D3] text-base text-[#C2541E] overflow-hidden">
                                 <img v-if="isImageAvatar" :src="studio.avatar || ''" alt="" class="w-full h-full object-cover" />
                                 <span v-else-if="studio.avatar">{{ studio.avatar }}</span>
-                                <UIcon v-else name="i-heroicons-film" class="w-4 h-4 text-[#C2683F]" />
+                                <UIcon v-else name="i-heroicons-film" class="w-4 h-4 text-[#C2541E]" />
                             </div>
                             <div class="min-w-0">
                                 <div class="flex items-center gap-1.5">
-                                    <span class="text-sm font-semibold text-[#1f2328] truncate" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">{{ studio.name }}</span>
+                                    <span class="text-sm font-semibold text-[#1f2328] truncate" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ studio.name }}</span>
                                     <span :class="scopeBadgeClass" class="text-[9px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0">{{ scopeLabel }}</span>
                                 </div>
                                 <p v-if="studio.description" class="text-[11px] text-[#9a958c] truncate">{{ studio.description }}</p>
@@ -69,9 +69,9 @@
                 </aside>
 
                 <!-- MAIN CONTENT -->
-                <main class="flex-1 min-w-0 my-2 me-2 overflow-y-auto px-8 py-6 bg-[#FBFAF6] border border-[#E7E5DD] rounded-2xl">
+                <main class="flex-1 min-w-0 my-2 me-2 overflow-y-auto px-8 py-6 bg-[#FBFAF6] border border-[#E9E0D3] rounded-2xl">
                     <!-- Read-only banner -->
-                    <div v-if="role === 'viewer'" class="mb-4 flex items-center gap-2 text-[11px] text-[#6b6b6b] bg-[#F4F1EA] border border-[#E7E5DD] rounded-lg px-3 py-1.5">
+                    <div v-if="role === 'viewer'" class="mb-4 flex items-center gap-2 text-[11px] text-[#6b6b6b] bg-[#F4F1EA] border border-[#E9E0D3] rounded-lg px-3 py-1.5">
                         <UIcon name="i-heroicons-eye" class="w-3.5 h-3.5" />
                         {{ $t('studio.readOnly') }}
                     </div>
@@ -81,29 +81,29 @@
                         <section v-if="activeTab === 'chat'">
                             <div class="flex items-start justify-between mb-4">
                                 <div>
-                                    <h2 class="text-lg font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">{{ $t('studio.chatTitle') }}</h2>
+                                    <h2 class="text-lg font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ $t('studio.chatTitle') }}</h2>
                                     <p class="text-xs text-[#6b6b6b] mt-0.5">{{ $t('studio.chatHint') }}</p>
                                 </div>
                                 <div class="flex items-center gap-2 shrink-0">
-                                    <button v-if="canEdit" type="button" :disabled="improving" class="inline-flex items-center gap-1.5 text-xs font-medium text-[#6b6b6b] bg-white border border-[#E7E5DD] rounded-lg px-3 py-1.5 hover:bg-[#faf8f3] hover:border-[#dcd9cf] transition-colors disabled:opacity-50" @click="improveNow">
+                                    <button v-if="canEdit" type="button" :disabled="improving" class="inline-flex items-center gap-1.5 text-xs font-medium text-[#6b6b6b] bg-white border border-[#E9E0D3] rounded-lg px-3 py-1.5 hover:bg-[#faf8f3] hover:border-[#dcd9cf] transition-colors disabled:opacity-50" @click="improveNow">
                                         <Spinner v-if="improving" class="h-3.5 w-3.5" />
-                                        <UIcon v-else name="i-heroicons-sparkles" class="w-3.5 h-3.5 text-[#C2683F]" />
+                                        <UIcon v-else name="i-heroicons-sparkles" class="w-3.5 h-3.5 text-[#C2541E]" />
                                         {{ $t('studio.improveNow') }}
                                     </button>
-                                    <button type="button" class="inline-flex items-center gap-1.5 text-xs font-medium text-[#6b6b6b] bg-white border border-[#E7E5DD] rounded-lg px-3 py-1.5 hover:bg-[#faf8f3] hover:border-[#dcd9cf] transition-colors" @click="showShare = true">
+                                    <button type="button" class="inline-flex items-center gap-1.5 text-xs font-medium text-[#6b6b6b] bg-white border border-[#E9E0D3] rounded-lg px-3 py-1.5 hover:bg-[#faf8f3] hover:border-[#dcd9cf] transition-colors" @click="showShare = true">
                                         <UIcon name="i-heroicons-share" class="w-3.5 h-3.5 text-[#9a958c]" />
                                         {{ $t('studio.tabMembers') }}
                                     </button>
-                                    <button v-if="canEdit && agentTemplatesEnabled" type="button" :disabled="exportingTemplate" class="inline-flex items-center gap-1.5 text-xs font-medium text-[#6b6b6b] bg-white border border-[#E7E5DD] rounded-lg px-3 py-1.5 hover:bg-[#faf8f3] hover:border-[#dcd9cf] transition-colors disabled:opacity-50" @click="exportAsTemplate" title="Share this agent's best practices as a reusable template">
+                                    <button v-if="canEdit && agentTemplatesEnabled" type="button" :disabled="exportingTemplate" class="inline-flex items-center gap-1.5 text-xs font-medium text-[#6b6b6b] bg-white border border-[#E9E0D3] rounded-lg px-3 py-1.5 hover:bg-[#faf8f3] hover:border-[#dcd9cf] transition-colors disabled:opacity-50" @click="exportAsTemplate" title="Share this agent's best practices as a reusable template">
                                         <Spinner v-if="exportingTemplate" class="h-3.5 w-3.5" />
-                                        <UIcon v-else name="i-heroicons-square-3-stack-3d" class="w-3.5 h-3.5 text-[#C2683F]" />
+                                        <UIcon v-else name="i-heroicons-square-3-stack-3d" class="w-3.5 h-3.5 text-[#C2541E]" />
                                         Export as Template
                                     </button>
                                     <UTooltip :text="sources.length === 0 ? $t('studio.needSourcesForChat') : $t('studio.newChat')">
                                         <button
                                             type="button"
                                             :disabled="sources.length === 0 || creatingChat"
-                                            class="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-[#C2683F] hover:bg-[#A8542F] rounded-lg px-3.5 py-1.5 transition-colors disabled:opacity-50 disabled:hover:bg-[#C2683F]"
+                                            class="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-lg px-3.5 py-1.5 transition-colors disabled:opacity-50 disabled:hover:bg-[#C2541E]"
                                             @click="startChat"
                                         >
                                             <Spinner v-if="creatingChat" class="h-3.5 w-3.5 text-white" />
@@ -120,7 +120,7 @@
                                 <div
                                     v-for="s in sources"
                                     :key="s.id"
-                                    class="group flex items-center gap-2 pl-2 pr-1.5 py-1.5 rounded-full border border-[#E7E5DD] bg-[#F4F1EA] hover:border-[#dcd9cf]"
+                                    class="group flex items-center gap-2 pl-2 pr-1.5 py-1.5 rounded-full border border-[#E9E0D3] bg-[#F4F1EA] hover:border-[#dcd9cf]"
                                 >
                                     <DataSourceIcon v-if="s.type" class="h-3.5 shrink-0" :type="s.type" />
                                     <UIcon v-else name="i-heroicons-circle-stack" class="w-3.5 h-3.5 shrink-0 text-[#9a958c]" />
@@ -128,7 +128,7 @@
                                     <span class="w-1.5 h-1.5 rounded-full bg-[#3f9e6a] shrink-0" :title="$t('common.connected') || 'connected'"></span>
                                     <button
                                         v-if="canEdit"
-                                        class="w-4 h-4 rounded-full text-[#9a958c] hover:text-[#6b6b6b] hover:bg-[#E7E5DD] flex items-center justify-center opacity-0 group-hover:opacity-100"
+                                        class="w-4 h-4 rounded-full text-[#9a958c] hover:text-[#6b6b6b] hover:bg-[#E9E0D3] flex items-center justify-center opacity-0 group-hover:opacity-100"
                                         :title="$t('studio.unpin')"
                                         @click="unpinSource(s.agent_id)"
                                     >
@@ -137,7 +137,7 @@
                                 </div>
                                 <button
                                     v-if="canEdit"
-                                    class="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-dashed border-[#E7E5DD] text-xs text-[#6b6b6b] hover:border-[#dcd9cf] hover:text-[#1f2328]"
+                                    class="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-dashed border-[#E9E0D3] text-xs text-[#6b6b6b] hover:border-[#dcd9cf] hover:text-[#1f2328]"
                                     @click="openAddSource"
                                 >
                                     <UIcon name="i-heroicons-plus" class="w-3.5 h-3.5" /> Add source
@@ -147,11 +147,11 @@
                             <div v-if="loadingChats" class="flex items-center justify-center py-10 text-[#9a958c]">
                                 <Spinner class="h-4 w-4" /><span class="ms-2 text-xs">{{ $t('common.loading') }}</span>
                             </div>
-                            <div v-else-if="chats.length === 0" class="py-12 text-center border border-dashed border-[#E7E5DD] rounded-2xl">
-                                <div class="w-12 h-12 rounded-xl bg-[#F4F1EA] border border-[#E7E5DD] flex items-center justify-center text-[#C2683F] mx-auto mb-3">
+                            <div v-else-if="chats.length === 0" class="py-12 text-center border border-dashed border-[#E9E0D3] rounded-2xl">
+                                <div class="w-12 h-12 rounded-xl bg-[#F4F1EA] border border-[#E9E0D3] flex items-center justify-center text-[#C2541E] mx-auto mb-3">
                                     <UIcon name="i-heroicons-chat-bubble-left-right" class="w-6 h-6" />
                                 </div>
-                                <h3 class="text-base font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">{{ $t('studio.noChats') }}</h3>
+                                <h3 class="text-base font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ $t('studio.noChats') }}</h3>
 
                                 <!-- Suggested questions: clickable chips that seed a new grounded chat -->
                                 <div v-if="suggestedQuestions.length" class="mt-4 max-w-xl mx-auto">
@@ -161,17 +161,17 @@
                                             v-for="(q, i) in suggestedQuestions"
                                             :key="i"
                                             type="button"
-                                            class="inline-flex items-center gap-2 text-xs text-[#1f2328] bg-white border border-[#E7E5DD] rounded-full px-3.5 py-2 hover:border-[#dcd9cf] hover:bg-[#faf8f3] transition-colors disabled:opacity-50"
+                                            class="inline-flex items-center gap-2 text-xs text-[#1f2328] bg-white border border-[#E9E0D3] rounded-full px-3.5 py-2 hover:border-[#dcd9cf] hover:bg-[#faf8f3] transition-colors disabled:opacity-50"
                                             :disabled="sources.length === 0 || creatingChat"
                                             @click="startChat(q)"
                                         >
-                                            <span class="w-1.5 h-1.5 rounded-full bg-[#C2683F] shrink-0"></span>
+                                            <span class="w-1.5 h-1.5 rounded-full bg-[#C2541E] shrink-0"></span>
                                             <span class="truncate max-w-[18rem]">{{ q }}</span>
                                         </button>
                                     </div>
                                 </div>
                             </div>
-                            <ul v-else class="divide-y divide-[#E7E5DD] border border-[#E7E5DD] rounded-2xl overflow-hidden bg-white">
+                            <ul v-else class="divide-y divide-[#E9E0D3] border border-[#E9E0D3] rounded-2xl overflow-hidden bg-white">
                                 <li
                                     v-for="c in chats"
                                     :key="c.id"
@@ -191,49 +191,49 @@
                         <section v-else-if="activeTab === 'autopilot'">
                             <div class="flex items-start justify-between gap-4 mb-1">
                                 <div>
-                                    <h2 class="text-lg font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">AI Auto-pilot</h2>
+                                    <h2 class="text-lg font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">AI Auto-pilot</h2>
                                     <p class="text-xs text-[#6b6b6b] mt-0.5 max-w-[460px]">Add any source. The router sorts each into Data · Knowledge · Skill · Rule. Then one button trains it all — no per-dataset code.</p>
                                 </div>
                                 <div class="shrink-0 text-center">
                                     <div class="relative w-[54px] h-[54px] mx-auto">
                                         <svg width="54" height="54" style="transform:rotate(-90deg)">
                                             <circle cx="27" cy="27" r="22" stroke="#ECE7E0" stroke-width="6" fill="none" />
-                                            <circle cx="27" cy="27" r="22" stroke="#C2683F" stroke-width="6" fill="none" stroke-linecap="round" stroke-dasharray="138" :stroke-dashoffset="Math.round(138 - 138 * readiness.score / 100)" style="transition:stroke-dashoffset .5s" />
+                                            <circle cx="27" cy="27" r="22" stroke="#C2541E" stroke-width="6" fill="none" stroke-linecap="round" stroke-dasharray="138" :stroke-dashoffset="Math.round(138 - 138 * readiness.score / 100)" style="transition:stroke-dashoffset .5s" />
                                         </svg>
-                                        <div class="absolute inset-0 flex items-center justify-center text-[15px] font-semibold text-[#C2683F]" style="font-family: ui-serif, Georgia, serif">{{ readiness.score }}</div>
+                                        <div class="absolute inset-0 flex items-center justify-center text-[15px] font-semibold text-[#C2541E]" style="font-family: ui-serif, Georgia, serif">{{ readiness.score }}</div>
                                     </div>
                                     <div class="text-[9px] uppercase tracking-wide text-[#9a958c] mt-0.5">readiness</div>
                                 </div>
                             </div>
 
                             <!-- STEP 1 · ADD -->
-                            <div class="relative mt-4 border border-[#E7E5DD] rounded-2xl bg-white p-4">
+                            <div class="relative mt-4 border border-[#E9E0D3] rounded-2xl bg-white p-4">
                                 <span class="absolute -top-2.5 left-4 bg-[#2B2A26] text-white text-[9.5px] font-semibold px-2.5 py-0.5 rounded-full tracking-wide">1 · ADD</span>
                                 <p class="text-xs text-[#6b6b6b] mt-1 mb-3">Three ways in — attach a source, upload a file, or sync a folder:</p>
                                 <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                                     <!-- Add a source = pick from org library OR + New (merges old Connect + Pin) -->
-                                    <button type="button" :disabled="!canEdit" class="text-left border border-[#E7E5DD] rounded-xl p-3 bg-gradient-to-b from-white to-[#fdfcf9] hover:border-[#2F6F4F] transition-colors disabled:opacity-50 flex flex-col min-h-[120px]" @click="openAddPicker">
+                                    <button type="button" :disabled="!canEdit" class="text-left border border-[#E9E0D3] rounded-xl p-3 bg-gradient-to-b from-white to-[#fdfcf9] hover:border-[#2F6F4F] transition-colors disabled:opacity-50 flex flex-col min-h-[120px]" @click="openAddPicker">
                                         <span class="w-8 h-8 rounded-lg bg-[#E7F1EB] flex items-center justify-center mb-2"><UIcon name="i-heroicons-circle-stack" class="w-4 h-4 text-[#2F6F4F]" /></span>
                                         <span class="text-[13px] font-semibold text-[#1f2328]">Add a source</span>
                                         <span class="text-[11px] text-[#6b6b6b] mt-0.5">Pin a connection from your org library, or create a new one (46 types). Shared across the org; pinning scopes it to this agent.</span>
                                         <span class="mt-auto pt-2 text-[10px] text-[#9a958c]">Browse org library →</span>
                                     </button>
                                     <!-- Upload stays separate — a local file is not a warehouse connection -->
-                                    <button type="button" :disabled="!canEdit" class="text-left border border-[#E7E5DD] rounded-xl p-3 bg-gradient-to-b from-white to-[#fdfcf9] hover:border-[#C2683F] transition-colors disabled:opacity-50 flex flex-col min-h-[120px]" @click="openUploadSource">
-                                        <span class="w-8 h-8 rounded-lg bg-[#F6EBE3] flex items-center justify-center mb-2"><UIcon name="i-heroicons-arrow-up-tray" class="w-4 h-4 text-[#C2683F]" /></span>
+                                    <button type="button" :disabled="!canEdit" class="text-left border border-[#E9E0D3] rounded-xl p-3 bg-gradient-to-b from-white to-[#fdfcf9] hover:border-[#C2541E] transition-colors disabled:opacity-50 flex flex-col min-h-[120px]" @click="openUploadSource">
+                                        <span class="w-8 h-8 rounded-lg bg-[#F6EBE3] flex items-center justify-center mb-2"><UIcon name="i-heroicons-arrow-up-tray" class="w-4 h-4 text-[#C2541E]" /></span>
                                         <span class="text-[13px] font-semibold text-[#1f2328]">Upload file</span>
                                         <span class="text-[11px] text-[#6b6b6b] mt-0.5">Spreadsheet, doc, slide deck or PDF off your machine. Becomes its own source and auto-pins on drop.</span>
                                         <span class="mt-auto pt-2 flex flex-wrap gap-1">
-                                            <span class="text-[10px] border border-[#E7E5DD] rounded-full px-1.5 py-0.5 text-[#6b6b6b]">.xlsx</span>
-                                            <span class="text-[10px] border border-[#E7E5DD] rounded-full px-1.5 py-0.5 text-[#6b6b6b]">.csv</span>
-                                            <span class="text-[10px] border border-[#E7E5DD] rounded-full px-1.5 py-0.5 text-[#6b6b6b]">.pdf</span>
-                                            <span class="text-[10px] border border-[#E7E5DD] rounded-full px-1.5 py-0.5 text-[#6b6b6b]">.docx</span>
+                                            <span class="text-[10px] border border-[#E9E0D3] rounded-full px-1.5 py-0.5 text-[#6b6b6b]">.xlsx</span>
+                                            <span class="text-[10px] border border-[#E9E0D3] rounded-full px-1.5 py-0.5 text-[#6b6b6b]">.csv</span>
+                                            <span class="text-[10px] border border-[#E9E0D3] rounded-full px-1.5 py-0.5 text-[#6b6b6b]">.pdf</span>
+                                            <span class="text-[10px] border border-[#E9E0D3] rounded-full px-1.5 py-0.5 text-[#6b6b6b]">.docx</span>
                                         </span>
                                     </button>
                                     <!-- Sync a folder = desktop helper auto-ingests a local folder (flag HYBRID_FOLDER_SYNC) -->
-                                    <button type="button" :disabled="!canEdit" class="text-left border border-[#E7E5DD] rounded-xl p-3 bg-gradient-to-b from-white to-[#fdfcf9] hover:border-[#C2683F] transition-colors disabled:opacity-50 flex flex-col min-h-[120px]" @click="openFolderSync">
-                                        <span class="w-8 h-8 rounded-lg bg-[#F4E5DA] flex items-center justify-center mb-2 text-[#C2683F] text-base">⟳</span>
-                                        <span class="text-[13px] font-semibold text-[#1f2328]">Sync a folder <span class="text-[#C2683F]">⟳</span></span>
+                                    <button type="button" :disabled="!canEdit" class="text-left border border-[#E9E0D3] rounded-xl p-3 bg-gradient-to-b from-white to-[#fdfcf9] hover:border-[#C2541E] transition-colors disabled:opacity-50 flex flex-col min-h-[120px]" @click="openFolderSync">
+                                        <span class="w-8 h-8 rounded-lg bg-[#F4E5DA] flex items-center justify-center mb-2 text-[#C2541E] text-base">⟳</span>
+                                        <span class="text-[13px] font-semibold text-[#1f2328]">Sync a folder <span class="text-[#C2541E]">⟳</span></span>
                                         <span class="text-[11px] text-[#6b6b6b] mt-0.5">auto-ingest a local folder. A tiny desktop helper watches a folder and pushes new &amp; changed files into this agent — like Claude Code.</span>
                                         <span class="mt-auto pt-2 text-[10px] text-[#9a958c]">Set up folder sync →</span>
                                     </button>
@@ -242,12 +242,12 @@
                             </div>
 
                             <!-- STEP 2 · ROUTE -->
-                            <div class="relative mt-5 border border-[#E7E5DD] rounded-2xl bg-white p-4">
+                            <div class="relative mt-5 border border-[#E9E0D3] rounded-2xl bg-white p-4">
                                 <span class="absolute -top-2.5 left-4 bg-[#2B2A26] text-white text-[9.5px] font-semibold px-2.5 py-0.5 rounded-full tracking-wide">2 · ROUTE</span>
                                 <p class="text-[10px] uppercase tracking-wide text-[#9a958c] mt-1 mb-3 flex items-center gap-2"><span class="h-px bg-[#EFEDE6] flex-1"></span>router sorts each input into 4 lanes · all born pending (review gate)<span class="h-px bg-[#EFEDE6] flex-1"></span></p>
                                 <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2.5">
                                     <!-- DATA -->
-                                    <div class="rounded-xl border border-[#E7E5DD] bg-[#E7F1EB] p-3 flex flex-col min-h-[164px]">
+                                    <div class="rounded-xl border border-[#E9E0D3] bg-[#E7F1EB] p-3 flex flex-col min-h-[164px]">
                                         <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#2F6F4F]"></span><h4 class="text-xs font-semibold text-[#2F6F4F]">Data</h4><span class="ms-auto text-[10px] text-[#2F6F4F] font-semibold">{{ sources.length }}</span></div>
                                         <p class="text-[9.5px] text-[#5f7d6c] mb-1">tables → profiled &amp; queryable</p>
                                         <div v-for="s in sources.slice(0,4)" :key="s.id" class="bg-white border border-black/5 rounded-lg p-2 mt-1.5">
@@ -258,7 +258,7 @@
                                         <button type="button" class="mt-auto pt-2 text-[10px] text-[#2F6F4F] font-medium text-left hover:underline" @click="activeTab='sources'">Manage in Sources →</button>
                                     </div>
                                     <!-- KNOWLEDGE -->
-                                    <div class="rounded-xl border border-[#E7E5DD] bg-[#E4F0F4] p-3 flex flex-col min-h-[164px]">
+                                    <div class="rounded-xl border border-[#E9E0D3] bg-[#E4F0F4] p-3 flex flex-col min-h-[164px]">
                                         <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#1F6F8B]"></span><h4 class="text-xs font-semibold text-[#1F6F8B]">Knowledge</h4><span class="ms-auto text-[10px] text-[#1F6F8B] font-semibold">{{ docs.length }}</span></div>
                                         <p class="text-[9.5px] text-[#5a7d89] mb-1">docs → definitions extracted</p>
                                         <div v-for="d in docs.slice(0,4)" :key="d.id" class="bg-white border border-black/5 rounded-lg p-2 mt-1.5">
@@ -268,7 +268,7 @@
                                         <button type="button" class="mt-auto pt-2 text-[10px] text-[#1F6F8B] font-medium text-left hover:underline" @click="activeTab='sources'">Manage in Knowledge →</button>
                                     </div>
                                     <!-- SKILL -->
-                                    <div class="rounded-xl border border-[#E7E5DD] bg-[#ECEAFB] p-3 flex flex-col min-h-[164px]">
+                                    <div class="rounded-xl border border-[#E9E0D3] bg-[#ECEAFB] p-3 flex flex-col min-h-[164px]">
                                         <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#5A4FCF]"></span><h4 class="text-xs font-semibold text-[#5A4FCF]">Skill</h4></div>
                                         <p class="text-[9.5px] text-[#6f67b0] mb-1">a method/recipe → pack</p>
                                         <div class="bg-white border border-black/5 rounded-lg p-2 mt-1.5">
@@ -277,7 +277,7 @@
                                         <button type="button" class="mt-auto pt-2 text-[10px] text-[#5A4FCF] font-medium text-left hover:underline" @click="activeTab = teachEnabled ? 'teach' : 'skills'">{{ teachEnabled ? 'Add in Teach →' : 'Open Skills →' }}</button>
                                     </div>
                                     <!-- RULE / INSTRUCTION -->
-                                    <div class="rounded-xl border border-[#E7E5DD] bg-[#F6EEDD] p-3 flex flex-col min-h-[164px]">
+                                    <div class="rounded-xl border border-[#E9E0D3] bg-[#F6EEDD] p-3 flex flex-col min-h-[164px]">
                                         <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#9A6A12]"></span><h4 class="text-xs font-semibold text-[#9A6A12]">Rule / Instruction</h4><span class="ms-auto text-[10px] text-[#9A6A12] font-semibold">{{ activeInstr + activeExamples }}</span></div>
                                         <p class="text-[9.5px] text-[#8a7333] mb-1">a constraint you type</p>
                                         <div v-if="activeInstr" class="bg-white border border-black/5 rounded-lg p-2 mt-1.5">
@@ -290,17 +290,17 @@
                                         <button type="button" class="mt-auto pt-2 text-[10px] text-[#9A6A12] font-medium text-left hover:underline" @click="activeTab='instructions'">Manage in Instructions →</button>
                                     </div>
                                 </div>
-                                <div class="text-[11px] text-[#6b6b6b] bg-[#F6EBE3] rounded-lg px-3 py-2 mt-2.5">Paste a method or rule in <button class="text-[#A8542F] font-medium" @click="activeTab = teachEnabled ? 'teach' : 'instructions'">Teach</button> — the router classifies it into a lane with a confidence score, and you can <b>Re-route</b> it there if it guessed wrong. Low-confidence items auto-flag for review.</div>
+                                <div class="text-[11px] text-[#6b6b6b] bg-[#F6EBE3] rounded-lg px-3 py-2 mt-2.5">Paste a method or rule in <button class="text-[#A8330F] font-medium" @click="activeTab = teachEnabled ? 'teach' : 'instructions'">Teach</button> — the router classifies it into a lane with a confidence score, and you can <b>Re-route</b> it there if it guessed wrong. Low-confidence items auto-flag for review.</div>
                             </div>
 
                             <!-- STEP 3 · TRAIN -->
-                            <div class="relative mt-5 border border-[#E7E5DD] rounded-2xl bg-white p-4 mb-4">
+                            <div class="relative mt-5 border border-[#E9E0D3] rounded-2xl bg-white p-4 mb-4">
                                 <span class="absolute -top-2.5 left-4 bg-[#2B2A26] text-white text-[9.5px] font-semibold px-2.5 py-0.5 rounded-full tracking-wide">3 · TRAIN</span>
                                 <div class="flex items-center justify-between gap-3 mt-1 flex-wrap">
                                     <div class="text-[11.5px] text-[#6b6b6b]"><b class="text-[#1f2328]">{{ sources.length }} source{{ sources.length===1?'':'s' }} · {{ docs.length }} doc{{ docs.length===1?'':'s' }} · {{ activeInstr + activeExamples }} rule{{ (activeInstr+activeExamples)===1?'':'s' }}</b> routed · pending review</div>
                                     <div v-if="canEdit" class="flex gap-2 shrink-0">
-                                        <button type="button" class="text-[11.5px] border border-[#E7E5DD] rounded-lg px-3 py-2 text-[#6b6b6b] hover:bg-[#faf8f3] font-medium" @click="activeTab='sources'">Review routing</button>
-                                        <button type="button" :disabled="trainingAll || !sources.length" class="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-white bg-[#C2683F] hover:bg-[#A8542F] rounded-lg px-3.5 py-2 transition-colors disabled:opacity-50" @click="runFullTrain">
+                                        <button type="button" class="text-[11.5px] border border-[#E9E0D3] rounded-lg px-3 py-2 text-[#6b6b6b] hover:bg-[#faf8f3] font-medium" @click="activeTab='sources'">Review routing</button>
+                                        <button type="button" :disabled="trainingAll || !sources.length" class="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-lg px-3.5 py-2 transition-colors disabled:opacity-50" @click="runFullTrain">
                                             <Spinner v-if="trainingAll" class="h-3.5 w-3.5 text-white" />
                                             <UIcon v-else name="i-heroicons-bolt" class="w-3.5 h-3.5" />
                                             {{ trainingAll ? 'Training…' : 'Auto-train everything' }}
@@ -315,20 +315,20 @@
 
                                 <!-- STAT GRID -->
                                 <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-4">
-                                    <div class="rounded-xl border border-[#E7E5DD] bg-white px-3 py-2.5"><div class="text-lg font-bold" style="font-family: ui-serif, Georgia, serif">{{ profiledCols }}</div><div class="text-[10px] uppercase tracking-wide text-[#9a958c]">Columns trained</div></div>
-                                    <div class="rounded-xl border border-[#E7E5DD] bg-white px-3 py-2.5"><div class="text-lg font-bold" style="font-family: ui-serif, Georgia, serif">{{ docs.length }}</div><div class="text-[10px] uppercase tracking-wide text-[#9a958c]">Knowledge docs</div></div>
-                                    <div class="rounded-xl border border-[#E7E5DD] bg-white px-3 py-2.5"><div class="text-lg font-bold" style="font-family: ui-serif, Georgia, serif">{{ activeInstr }}·{{ activeExamples }}</div><div class="text-[10px] uppercase tracking-wide text-[#9a958c]">Instr · Examples</div></div>
-                                    <div class="rounded-xl border border-[#E7E5DD] bg-white px-3 py-2.5"><div class="text-lg font-bold" style="font-family: ui-serif, Georgia, serif">{{ studioArtifactCount }}</div><div class="text-[10px] uppercase tracking-wide text-[#9a958c]">Artifacts</div></div>
+                                    <div class="rounded-xl border border-[#E9E0D3] bg-white px-3 py-2.5"><div class="text-lg font-bold" style="font-family: ui-serif, Georgia, serif">{{ profiledCols }}</div><div class="text-[10px] uppercase tracking-wide text-[#9a958c]">Columns trained</div></div>
+                                    <div class="rounded-xl border border-[#E9E0D3] bg-white px-3 py-2.5"><div class="text-lg font-bold" style="font-family: ui-serif, Georgia, serif">{{ docs.length }}</div><div class="text-[10px] uppercase tracking-wide text-[#9a958c]">Knowledge docs</div></div>
+                                    <div class="rounded-xl border border-[#E9E0D3] bg-white px-3 py-2.5"><div class="text-lg font-bold" style="font-family: ui-serif, Georgia, serif">{{ activeInstr }}·{{ activeExamples }}</div><div class="text-[10px] uppercase tracking-wide text-[#9a958c]">Instr · Examples</div></div>
+                                    <div class="rounded-xl border border-[#E9E0D3] bg-white px-3 py-2.5"><div class="text-lg font-bold" style="font-family: ui-serif, Georgia, serif">{{ studioArtifactCount }}</div><div class="text-[10px] uppercase tracking-wide text-[#9a958c]">Artifacts</div></div>
                                 </div>
 
                                 <!-- CONNECTED SOURCES COCKPIT -->
                                 <div class="flex items-center justify-between mb-2">
-                                    <h3 class="text-sm font-semibold text-[#1f2328] flex items-center gap-1.5" style="font-family: ui-serif, Georgia, serif"><UIcon name="i-heroicons-signal" class="w-4 h-4 text-[#C2683F]" /> Connected data</h3>
-                                    <button type="button" class="text-[11px] text-[#C2683F] hover:text-[#A8542F] font-medium" @click="activeTab='sources'">Manage →</button>
+                                    <h3 class="text-sm font-semibold text-[#1f2328] flex items-center gap-1.5" style="font-family: ui-serif, Georgia, serif"><UIcon name="i-heroicons-signal" class="w-4 h-4 text-[#C2541E]" /> Connected data</h3>
+                                    <button type="button" class="text-[11px] text-[#C2541E] hover:text-[#A8330F] font-medium" @click="activeTab='sources'">Manage →</button>
                                 </div>
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5 mb-4">
-                                    <div v-for="s in sources" :key="s.id" class="rounded-xl border border-[#E7E5DD] bg-white p-3 flex items-center gap-3">
-                                        <span class="w-8 h-8 rounded-lg bg-[#FBF6F2] text-[#C2683F] flex items-center justify-center shrink-0">
+                                    <div v-for="s in sources" :key="s.id" class="rounded-xl border border-[#E9E0D3] bg-white p-3 flex items-center gap-3">
+                                        <span class="w-8 h-8 rounded-lg bg-[#FBF6F2] text-[#C2541E] flex items-center justify-center shrink-0">
                                             <DataSourceIcon v-if="s.type" class="h-4" :type="s.type" />
                                             <UIcon v-else name="i-heroicons-circle-stack" class="w-4 h-4" />
                                         </span>
@@ -340,18 +340,18 @@
                                             <div class="text-[11px] text-[#9a958c] mt-0.5">
                                                 {{ s.type || 'data agent' }} ·
                                                 <template v-if="intelFor(s.agent_id).tables.length">{{ intelFor(s.agent_id).tables.length }} table{{ intelFor(s.agent_id).tables.length === 1 ? '' : 's' }} · {{ intelFor(s.agent_id).tables.reduce((a,t)=>a+(t.columns?.length||0),0) }} cols · <span class="text-[#3f9e6a] font-medium">trained</span></template>
-                                                <template v-else><span class="text-[#A8542F] font-medium">not trained</span> — run Auto-train</template>
+                                                <template v-else><span class="text-[#A8330F] font-medium">not trained</span> — run Auto-train</template>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
 
                                 <!-- CAPABILITY MAP -->
-                                <h3 class="text-sm font-semibold text-[#1f2328] mb-2 flex items-center gap-1.5" style="font-family: ui-serif, Georgia, serif"><UIcon name="i-heroicons-squares-2x2" class="w-4 h-4 text-[#C2683F]" /> What the AI handles</h3>
+                                <h3 class="text-sm font-semibold text-[#1f2328] mb-2 flex items-center gap-1.5" style="font-family: ui-serif, Georgia, serif"><UIcon name="i-heroicons-squares-2x2" class="w-4 h-4 text-[#C2541E]" /> What the AI handles</h3>
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5 mb-4">
-                                    <div v-for="cap in capabilities" :key="cap.key" class="rounded-xl border border-[#E7E5DD] bg-white p-3" :class="cap.go ? 'cursor-pointer hover:border-[#E8C9B5]' : ''" @click="cap.go && (activeTab = cap.go)">
+                                    <div v-for="cap in capabilities" :key="cap.key" class="rounded-xl border border-[#E9E0D3] bg-white p-3" :class="cap.go ? 'cursor-pointer hover:border-[#E8C9B5]' : ''" @click="cap.go && (activeTab = cap.go)">
                                         <div class="flex items-center gap-2 mb-1">
-                                            <span class="w-7 h-7 rounded-lg bg-[#FBF6F2] text-[#C2683F] flex items-center justify-center shrink-0"><UIcon :name="cap.icon" class="w-4 h-4" /></span>
+                                            <span class="w-7 h-7 rounded-lg bg-[#FBF6F2] text-[#C2541E] flex items-center justify-center shrink-0"><UIcon :name="cap.icon" class="w-4 h-4" /></span>
                                             <span class="text-[13px] font-semibold text-[#1f2328]">{{ cap.title }}</span>
                                             <span class="ms-auto text-[9px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full" :class="cap.tag === 'auto' ? 'bg-[#E7F2EC] text-[#2f7a52]' : cap.tag === 'off' ? 'bg-[#F3F0E9] text-[#9a958c]' : 'bg-[#EEF1F4] text-[#475569]'">{{ cap.tag === 'auto' ? 'Auto' : cap.tag === 'off' ? 'Not needed' : 'Manual' }}</span>
                                         </div>
@@ -362,11 +362,11 @@
 
                                 <!-- AI SUGGESTIONS -->
                                 <div v-if="aiSuggestions.length" class="rounded-2xl border border-dashed border-[#E8C9B5] bg-[#FBF6F2] p-4">
-                                    <h3 class="text-[13px] font-semibold text-[#1f2328] mb-1 flex items-center gap-1.5" style="font-family: ui-serif, Georgia, serif"><UIcon name="i-heroicons-sparkles" class="w-4 h-4 text-[#C2683F]" /> AI suggestions</h3>
+                                    <h3 class="text-[13px] font-semibold text-[#1f2328] mb-1 flex items-center gap-1.5" style="font-family: ui-serif, Georgia, serif"><UIcon name="i-heroicons-sparkles" class="w-4 h-4 text-[#C2541E]" /> AI suggestions</h3>
                                     <div v-for="(sg, i) in aiSuggestions" :key="i" class="flex items-start gap-2.5 py-2 border-b border-[#F4E5DA] last:border-0">
-                                        <span class="text-[#C2683F] mt-0.5">✦</span>
+                                        <span class="text-[#C2541E] mt-0.5">✦</span>
                                         <span class="flex-1 text-[12px] text-[#1f2328]">{{ sg.text }}</span>
-                                        <button v-if="canEdit" type="button" class="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-white border border-[#E8C9B5] text-[#C2683F] hover:bg-[#F6EFEA] shrink-0" @click="doSuggestion(sg.fn)">{{ sg.action }}</button>
+                                        <button v-if="canEdit" type="button" class="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-white border border-[#E8C9B5] text-[#C2541E] hover:bg-[#F6EFEA] shrink-0" @click="doSuggestion(sg.fn)">{{ sg.action }}</button>
                                     </div>
                                 </div>
                             </template>
@@ -376,15 +376,15 @@
                         <section v-else-if="activeTab === 'sources'">
                             <div class="flex items-start justify-between mb-4">
                                 <div>
-                                    <h2 class="text-lg font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">Sources &amp; Knowledge</h2>
+                                    <h2 class="text-lg font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">Sources &amp; Knowledge</h2>
                                     <p class="text-xs text-[#6b6b6b] mt-0.5">Each data agent plus the docs that ground it. Add definitions per source, or org-wide below.</p>
                                 </div>
-                                <div v-if="canEdit" class="inline-flex items-center rounded-lg overflow-hidden border border-[#C2683F]">
-                                    <button type="button" class="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-[#C2683F] hover:bg-[#A8542F] px-3.5 py-1.5 transition-colors" @click="openAddSource">
+                                <div v-if="canEdit" class="inline-flex items-center rounded-lg overflow-hidden border border-[#C2541E]">
+                                    <button type="button" class="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-[#C2541E] hover:bg-[#A8330F] px-3.5 py-1.5 transition-colors" @click="openAddSource">
                                         <UIcon name="i-heroicons-link" class="w-3.5 h-3.5" />
                                         Pin existing
                                     </button>
-                                    <button type="button" class="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-[#C2683F] hover:bg-[#A8542F] px-3.5 py-1.5 border-s border-[#A8542F] transition-colors" @click="openUploadSource">
+                                    <button type="button" class="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-[#C2541E] hover:bg-[#A8330F] px-3.5 py-1.5 border-s border-[#A8330F] transition-colors" @click="openUploadSource">
                                         <UIcon name="i-heroicons-arrow-up-tray" class="w-3.5 h-3.5" />
                                         Upload file
                                     </button>
@@ -394,46 +394,46 @@
                             <!-- PRE-TRAIN HERO (Column Intelligence) -->
                             <div v-if="canEdit && sources.length" class="rounded-2xl border border-[#E8C9B5] bg-gradient-to-br from-[#FBF3EC] to-white p-4 mb-4">
                                 <div class="flex items-center gap-3 flex-wrap">
-                                    <div class="shrink-0 w-11 h-11 rounded-xl bg-[#C2683F] text-white flex items-center justify-center">
+                                    <div class="shrink-0 w-11 h-11 rounded-xl bg-[#C2541E] text-white flex items-center justify-center">
                                         <UIcon name="i-heroicons-cpu-chip" class="w-6 h-6" />
                                     </div>
                                     <div class="flex-1 min-w-[200px]">
-                                        <h3 class="text-sm font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">Auto-train this studio</h3>
+                                        <h3 class="text-sm font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">Auto-train this studio</h3>
                                         <p class="text-[11px] text-[#9a958c] mt-0.5">Profiles every column, learns real values, extracts docs, mines joins &amp; regenerates insights — all applied live. No approve step.</p>
                                     </div>
-                                    <button type="button" :disabled="pretraining" class="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-[#C2683F] hover:bg-[#A8542F] rounded-lg px-3.5 py-2 transition-colors disabled:opacity-50" @click="runStudioPretrain">
+                                    <button type="button" :disabled="pretraining" class="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-lg px-3.5 py-2 transition-colors disabled:opacity-50" @click="runStudioPretrain">
                                         <Spinner v-if="pretraining" class="h-3.5 w-3.5 text-white" />
                                         <UIcon v-else name="i-heroicons-bolt" class="w-3.5 h-3.5" />
                                         {{ pretraining ? 'Training…' : 'Auto-train now' }}
                                     </button>
                                 </div>
                                 <div v-if="pretrainResult" class="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
-                                    <span class="px-2 py-0.5 rounded-full bg-white border border-[#E7E5DD] text-[#6b6b6b]">{{ Number(pretrainResult.row_count || 0).toLocaleString() }} rows</span>
-                                    <span class="px-2 py-0.5 rounded-full bg-white border border-[#E7E5DD] text-[#6b6b6b]">{{ pretrainResult.columns_written }} columns</span>
+                                    <span class="px-2 py-0.5 rounded-full bg-white border border-[#E9E0D3] text-[#6b6b6b]">{{ Number(pretrainResult.row_count || 0).toLocaleString() }} rows</span>
+                                    <span class="px-2 py-0.5 rounded-full bg-white border border-[#E9E0D3] text-[#6b6b6b]">{{ pretrainResult.columns_written }} columns</span>
                                     <span v-if="pretrainResult.knowledge" class="px-2 py-0.5 rounded-full bg-green-100 text-green-700">{{ pretrainResult.knowledge }} knowledge</span>
                                     <span class="text-[#9a958c]">across {{ pretrainResult.sources }} source{{ pretrainResult.sources === 1 ? '' : 's' }}</span>
                                 </div>
                             </div>
 
                             <!-- empty: no sources pinned at all -->
-                            <div v-if="sources.length === 0" class="py-10 text-center border border-dashed border-[#E7E5DD] rounded-2xl">
+                            <div v-if="sources.length === 0" class="py-10 text-center border border-dashed border-[#E9E0D3] rounded-2xl">
                                 <UIcon name="i-heroicons-circle-stack" class="w-7 h-7 mx-auto text-[#9a958c] mb-1.5" />
                                 <p class="text-xs text-[#6b6b6b]">{{ $t('studio.noSources') }}</p>
                             </div>
 
                             <!-- knowledge flag off -->
-                            <div v-if="docsDisabled" class="mb-4 flex items-center gap-2 text-[11px] text-[#6b6b6b] bg-[#F4F1EA] border border-[#E7E5DD] rounded-lg px-3 py-2">
+                            <div v-if="docsDisabled" class="mb-4 flex items-center gap-2 text-[11px] text-[#6b6b6b] bg-[#F4F1EA] border border-[#E9E0D3] rounded-lg px-3 py-2">
                                 <UIcon name="i-heroicons-information-circle" class="w-3.5 h-3.5 text-[#9a958c]" />
                                 Enable Knowledge Docs in Settings → Feature Flags to add definitions.
                             </div>
 
                             <!-- PER-SOURCE CARDS: a data agent + the docs that ground it -->
                             <div v-if="sources.length" class="space-y-3">
-                                <div v-for="s in sources" :key="s.id" class="rounded-2xl border border-[#E7E5DD] bg-white overflow-hidden">
+                                <div v-for="s in sources" :key="s.id" class="rounded-2xl border border-[#E9E0D3] bg-white overflow-hidden">
                                     <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-[#F0EEE6]">
                                         <div class="flex items-center gap-2 min-w-0">
                                             <DataSourceIcon v-if="s.type" class="h-4 shrink-0" :type="s.type" />
-                                            <UIcon v-else name="i-heroicons-circle-stack" class="w-4 h-4 shrink-0 text-[#C2683F]" />
+                                            <UIcon v-else name="i-heroicons-circle-stack" class="w-4 h-4 shrink-0 text-[#C2541E]" />
                                             <span class="text-sm font-medium text-[#1f2328] truncate">{{ s.name || s.agent_id }}</span>
                                             <span v-if="docsForSource(s.agent_id).length" class="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-[#F4F1EA] text-[#6b6b6b]">{{ docsForSource(s.agent_id).length }} doc{{ docsForSource(s.agent_id).length === 1 ? '' : 's' }}</span>
                                         </div>
@@ -444,12 +444,12 @@
                                     <div class="flex items-center gap-1 px-3 pt-2 border-b border-[#F0EEE6]">
                                         <button v-for="ctb in cardTabDefs" :key="ctb.k" type="button"
                                             class="text-[12px] px-3 py-1.5 border-b-2 transition-colors flex items-center gap-1.5"
-                                            :class="cardTabOf(s.agent_id) === ctb.k ? 'border-[#C2683F] text-[#1f2328] font-semibold' : 'border-transparent text-[#6b6b6b] hover:text-[#1f2328]'"
+                                            :class="cardTabOf(s.agent_id) === ctb.k ? 'border-[#C2541E] text-[#1f2328] font-semibold' : 'border-transparent text-[#6b6b6b] hover:text-[#1f2328]'"
                                             @click="setCardTab(s.agent_id, ctb.k)">
                                             {{ ctb.label }}
-                                            <span v-if="ctb.k === 'tables' && intelFor(s.agent_id).tables.length" class="text-[10px] font-semibold bg-[#F4E5DA] text-[#A8542F] rounded-full px-1.5">{{ intelFor(s.agent_id).tables.length }}</span>
-                                            <span v-else-if="ctb.k === 'knowledge' && docsForSource(s.agent_id).length" class="text-[10px] font-semibold bg-[#F4E5DA] text-[#A8542F] rounded-full px-1.5">{{ docsForSource(s.agent_id).length }}</span>
-                                            <span v-else-if="ctb.k === 'insights' && insightsFor(s.agent_id).length" class="text-[10px] font-semibold bg-[#F4E5DA] text-[#A8542F] rounded-full px-1.5">{{ insightsFor(s.agent_id).length }}</span>
+                                            <span v-if="ctb.k === 'tables' && intelFor(s.agent_id).tables.length" class="text-[10px] font-semibold bg-[#F4E5DA] text-[#A8330F] rounded-full px-1.5">{{ intelFor(s.agent_id).tables.length }}</span>
+                                            <span v-else-if="ctb.k === 'knowledge' && docsForSource(s.agent_id).length" class="text-[10px] font-semibold bg-[#F4E5DA] text-[#A8330F] rounded-full px-1.5">{{ docsForSource(s.agent_id).length }}</span>
+                                            <span v-else-if="ctb.k === 'insights' && insightsFor(s.agent_id).length" class="text-[10px] font-semibold bg-[#F4E5DA] text-[#A8330F] rounded-full px-1.5">{{ insightsFor(s.agent_id).length }}</span>
                                         </button>
                                     </div>
 
@@ -460,7 +460,7 @@
                                         <div v-else-if="!intelFor(s.agent_id).tables.length" class="text-[11px] text-[#9a958c] py-3">No tables yet — run Auto-train to profile this source.</div>
                                         <div v-for="tb in intelFor(s.agent_id).tables" :key="tb.table_id" class="mb-4 last:mb-0">
                                             <div class="text-[12px] font-semibold text-[#1f2328] flex items-center gap-1.5 mb-1.5">
-                                                <UIcon name="i-heroicons-table-cells" class="w-3.5 h-3.5 text-[#C2683F]" />
+                                                <UIcon name="i-heroicons-table-cells" class="w-3.5 h-3.5 text-[#C2541E]" />
                                                 {{ tb.table_name }}
                                                 <span class="font-normal text-[11px] text-[#9a958c]">· {{ tb.columns.length }} cols</span>
                                             </div>
@@ -502,7 +502,7 @@
                                     <!-- KNOWLEDGE pane -->
                                     <div v-show="cardTabOf(s.agent_id) === 'knowledge'" class="px-4 py-3">
                                         <div class="flex items-center justify-end gap-1 mb-2" v-if="canEdit">
-                                            <button type="button" class="inline-flex items-center gap-1 text-[11px] font-medium text-[#C2683F] hover:text-[#A8542F] rounded-md px-2 py-1 hover:bg-[#F6EFEA] transition-colors" @click="openAddKnowledge(s.agent_id)">
+                                            <button type="button" class="inline-flex items-center gap-1 text-[11px] font-medium text-[#C2541E] hover:text-[#A8330F] rounded-md px-2 py-1 hover:bg-[#F6EFEA] transition-colors" @click="openAddKnowledge(s.agent_id)">
                                                 <UIcon name="i-heroicons-plus" class="w-3 h-3" /> Add
                                             </button>
                                             <button type="button" class="inline-flex items-center gap-1 text-[11px] font-medium text-[#6b6b6b] hover:text-[#1f2328] rounded-md px-2 py-1 hover:bg-[#faf8f3] transition-colors" @click="openAutoConfigure(s.agent_id)">
@@ -539,11 +539,11 @@
                                     <div v-show="cardTabOf(s.agent_id) === 'insights'" class="px-4 py-3">
                                         <ul v-if="insightsFor(s.agent_id).length" class="space-y-0.5">
                                             <li v-for="(ins, i) in insightsFor(s.agent_id)" :key="i" class="flex items-start gap-2 text-[12px] py-1.5 border-b border-[#F0EEE6] last:border-0">
-                                                <span class="text-[#C2683F] shrink-0">✦</span><span class="text-[#1f2328]">{{ ins }}</span>
+                                                <span class="text-[#C2541E] shrink-0">✦</span><span class="text-[#1f2328]">{{ ins }}</span>
                                             </li>
                                         </ul>
                                         <p v-else class="text-[11px] text-[#9a958c] py-3">No insights yet — run Auto-train to profile this source.</p>
-                                        <p v-if="insightsFor(s.agent_id).length" class="text-[11px] text-[#9a958c] mt-2 flex items-center gap-1.5"><UIcon name="i-heroicons-sparkles" class="w-3.5 h-3.5 text-[#C2683F]" /> Auto-derived from the column profile. Refreshed each train.</p>
+                                        <p v-if="insightsFor(s.agent_id).length" class="text-[11px] text-[#9a958c] mt-2 flex items-center gap-1.5"><UIcon name="i-heroicons-sparkles" class="w-3.5 h-3.5 text-[#C2541E]" /> Auto-derived from the column profile. Refreshed each train.</p>
                                     </div>
 
                                     <!-- CONNECTION pane -->
@@ -557,7 +557,7 @@
                                             </tbody>
                                         </table>
                                         <div class="mt-3 flex gap-2" v-if="canEdit">
-                                            <button type="button" class="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#6b6b6b] bg-white border border-[#E7E5DD] rounded-lg px-3 py-1.5 hover:bg-[#faf8f3]" @click="refreshSchema(s.agent_id)">
+                                            <button type="button" class="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#6b6b6b] bg-white border border-[#E9E0D3] rounded-lg px-3 py-1.5 hover:bg-[#faf8f3]" @click="refreshSchema(s.agent_id)">
                                                 <UIcon name="i-heroicons-arrow-path" class="w-3.5 h-3.5" /> Refresh schema
                                             </button>
                                         </div>
@@ -566,14 +566,14 @@
                             </div>
 
                             <!-- ORG-WIDE KNOWLEDGE (not tied to one agent) -->
-                            <div v-if="sources.length" class="rounded-2xl border border-dashed border-[#E7E5DD] bg-[#FBFAF6] mt-3 px-4 py-3">
+                            <div v-if="sources.length" class="rounded-2xl border border-dashed border-[#E9E0D3] bg-[#FBFAF6] mt-3 px-4 py-3">
                                 <div class="flex items-center justify-between mb-2">
                                     <div class="flex items-center gap-2">
                                         <UIcon name="i-heroicons-globe-alt" class="w-4 h-4 text-[#9a958c]" />
                                         <span class="text-sm font-medium text-[#1f2328]">Org-wide knowledge</span>
                                         <span v-if="orgDocs.length" class="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-[#F4F1EA] text-[#6b6b6b]">{{ orgDocs.length }}</span>
                                     </div>
-                                    <button v-if="canEdit" type="button" class="inline-flex items-center gap-1 text-[11px] font-medium text-[#C2683F] hover:text-[#A8542F] rounded-md px-2 py-1 hover:bg-[#F6EFEA] transition-colors" @click="openAddKnowledge(null)">
+                                    <button v-if="canEdit" type="button" class="inline-flex items-center gap-1 text-[11px] font-medium text-[#C2541E] hover:text-[#A8330F] rounded-md px-2 py-1 hover:bg-[#F6EFEA] transition-colors" @click="openAddKnowledge(null)">
                                         <UIcon name="i-heroicons-plus" class="w-3 h-3" /> Add
                                     </button>
                                 </div>
@@ -606,19 +606,19 @@
                             </div>
 
                             <!-- FEDERATION — auto-mined cross-source joins -->
-                            <div v-if="sources.length" class="rounded-2xl border border-[#E7E5DD] bg-white p-4 mt-3">
+                            <div v-if="sources.length" class="rounded-2xl border border-[#E9E0D3] bg-white p-4 mt-3">
                                 <div class="flex items-center justify-between gap-2 mb-1">
                                     <div class="flex items-center gap-1.5">
-                                        <UIcon name="i-heroicons-arrows-right-left" class="w-4 h-4 text-[#C2683F]" />
-                                        <h3 class="text-sm font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">Federation</h3>
+                                        <UIcon name="i-heroicons-arrows-right-left" class="w-4 h-4 text-[#C2541E]" />
+                                        <h3 class="text-sm font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">Federation</h3>
                                         <span class="text-[11px] text-[#9a958c]">· query across sources</span>
                                     </div>
-                                    <button v-if="canEdit && !joinsDisabled" type="button" :disabled="miningJoins" class="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#6b6b6b] bg-white border border-[#E7E5DD] rounded-lg px-3 py-1.5 hover:bg-[#faf8f3] disabled:opacity-50" @click="mineJoins">
+                                    <button v-if="canEdit && !joinsDisabled" type="button" :disabled="miningJoins" class="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#6b6b6b] bg-white border border-[#E9E0D3] rounded-lg px-3 py-1.5 hover:bg-[#faf8f3] disabled:opacity-50" @click="mineJoins">
                                         <Spinner v-if="miningJoins" class="h-3.5 w-3.5" /><UIcon v-else name="i-heroicons-magnifying-glass" class="w-3.5 h-3.5" /> Mine joins
                                     </button>
                                 </div>
                                 <p class="text-[11px] text-[#9a958c] mb-2.5">Joins auto-mined from proven SQL (% = confidence · ×N = times seen). High-confidence joins auto-enable on Auto-train; enable the rest yourself.</p>
-                                <div v-if="joinsDisabled" class="text-[11px] text-[#6b6b6b] bg-[#F4F1EA] border border-[#E7E5DD] rounded-lg px-3 py-2 flex items-center gap-2">
+                                <div v-if="joinsDisabled" class="text-[11px] text-[#6b6b6b] bg-[#F4F1EA] border border-[#E9E0D3] rounded-lg px-3 py-2 flex items-center gap-2">
                                     <UIcon name="i-heroicons-information-circle" class="w-3.5 h-3.5 text-[#9a958c]" /> Enable Join Graph in Settings → Feature Flags.
                                 </div>
                                 <div v-else-if="!joinEdges.length" class="text-[11px] text-[#9a958c] py-2">No joins yet — run answers across sources, then Mine joins.</div>
@@ -629,39 +629,39 @@
                                         <code class="text-[11px] bg-white border border-[#F0EEE6] rounded px-1.5 py-0.5">{{ e.right_table }}.{{ e.right_col }}</code>
                                         <span class="ms-auto text-[11px] text-[#9a958c] tabular-nums">{{ Math.round((e.confidence||0)*100) }}% · {{ e.join_count }}×</span>
                                         <span v-if="e.status === 'approved'" class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700">live</span>
-                                        <button v-else-if="canEdit" type="button" class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#F4F1EA] border border-[#E7E5DD] text-[#6b6b6b] hover:bg-[#F6EFEA]" @click="approveJoin(e)">enable</button>
+                                        <button v-else-if="canEdit" type="button" class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#F4F1EA] border border-[#E9E0D3] text-[#6b6b6b] hover:bg-[#F6EFEA]" @click="approveJoin(e)">enable</button>
                                     </div>
                                 </div>
                             </div>
 
                             <!-- STUDIO INSIGHTS — auto-derived across sources -->
-                            <div v-if="sources.length && studioInsights.length" class="rounded-2xl border border-dashed border-[#E7E5DD] bg-[#FBFAF6] p-4 mt-3">
+                            <div v-if="sources.length && studioInsights.length" class="rounded-2xl border border-dashed border-[#E9E0D3] bg-[#FBFAF6] p-4 mt-3">
                                 <div class="flex items-center gap-1.5 mb-1">
-                                    <UIcon name="i-heroicons-sparkles" class="w-4 h-4 text-[#C2683F]" />
-                                    <h3 class="text-sm font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">Studio insights</h3>
+                                    <UIcon name="i-heroicons-sparkles" class="w-4 h-4 text-[#C2541E]" />
+                                    <h3 class="text-sm font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">Studio insights</h3>
                                     <span class="text-[11px] text-[#9a958c]">· auto-generated</span>
                                 </div>
                                 <ul class="space-y-0.5">
                                     <li v-for="(ins, i) in studioInsights" :key="i" class="flex items-start gap-2 text-[12px] py-1.5 border-b border-[#F0EEE6] last:border-0">
-                                        <span class="text-[#C2683F] shrink-0">✦</span><span class="text-[#1f2328]">{{ ins }}</span>
+                                        <span class="text-[#C2541E] shrink-0">✦</span><span class="text-[#1f2328]">{{ ins }}</span>
                                     </li>
                                 </ul>
                             </div>
 
                             <!-- AUTO-CONFIGURE FROM DOCUMENT (Feature 1) — one shared block, mapped via the card "From doc" button -->
-                            <div v-if="canEdit && sources.length" id="studio-autoconfigure" class="rounded-2xl border border-[#E7E5DD] bg-white p-4 mt-3">
+                            <div v-if="canEdit && sources.length" id="studio-autoconfigure" class="rounded-2xl border border-[#E9E0D3] bg-white p-4 mt-3">
                                 <div class="flex items-start justify-between gap-3 mb-3">
                                     <div>
                                         <div class="flex items-center gap-1.5">
-                                            <UIcon name="i-heroicons-sparkles" class="w-4 h-4 text-[#C2683F]" />
-                                            <h3 class="text-sm font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">Auto-configure from document</h3>
+                                            <UIcon name="i-heroicons-sparkles" class="w-4 h-4 text-[#C2541E]" />
+                                            <h3 class="text-sm font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">Auto-configure from document</h3>
                                         </div>
                                         <p class="text-[11px] text-[#9a958c] mt-0.5">Upload .xlsx / .pptx — we extract column descriptions, instructions &amp; examples, then you review before applying.</p>
                                     </div>
                                 </div>
 
                                 <!-- disabled hint -->
-                                <div v-if="acDisabled" class="mb-3 flex items-center gap-2 text-[11px] text-[#6b6b6b] bg-[#F4F1EA] border border-[#E7E5DD] rounded-lg px-3 py-2">
+                                <div v-if="acDisabled" class="mb-3 flex items-center gap-2 text-[11px] text-[#6b6b6b] bg-[#F4F1EA] border border-[#E9E0D3] rounded-lg px-3 py-2">
                                     <UIcon name="i-heroicons-information-circle" class="w-3.5 h-3.5 text-[#9a958c]" />
                                     Auto-configure is disabled. Enable it in Settings → Feature Flags.
                                 </div>
@@ -677,22 +677,22 @@
                                         @click="$refs.acFileInput.click()"
                                         :class="[
                                             'cursor-pointer rounded-xl border-2 border-dashed transition-all',
-                                            acDragging ? 'border-[#C2683F] bg-[#F6EFEA]' : 'border-[#E8C9B5] hover:border-[#C2683F] hover:bg-[#F6EFEA]'
+                                            acDragging ? 'border-[#C2541E] bg-[#F6EFEA]' : 'border-[#E8C9B5] hover:border-[#C2541E] hover:bg-[#F6EFEA]'
                                         ]"
                                     >
                                         <div class="flex flex-col items-center justify-center py-6 px-4 text-center">
-                                            <UIcon name="i-heroicons-cloud-arrow-up" :class="['w-8 h-8', acDragging ? 'text-[#C2683F]' : 'text-[#A8542F]']" />
-                                            <span class="mt-2 text-xs font-medium text-[#C2683F]">{{ acDragging ? 'Drop files here' : 'Click or drag .xlsx / .pptx files' }}</span>
+                                            <UIcon name="i-heroicons-cloud-arrow-up" :class="['w-8 h-8', acDragging ? 'text-[#C2541E]' : 'text-[#A8330F]']" />
+                                            <span class="mt-2 text-xs font-medium text-[#C2541E]">{{ acDragging ? 'Drop files here' : 'Click or drag .xlsx / .pptx files' }}</span>
                                             <span class="mt-0.5 text-[11px] text-[#9a958c]">Multiple files supported</span>
                                         </div>
                                     </div>
 
                                     <!-- selected files -->
                                     <ul v-if="acFiles.length" class="mt-3 space-y-1.5">
-                                        <li v-for="(f, i) in acFiles" :key="i" class="flex items-center justify-between gap-3 rounded-lg border border-[#E7E5DD] bg-[#F4F1EA] px-2.5 py-1.5">
+                                        <li v-for="(f, i) in acFiles" :key="i" class="flex items-center justify-between gap-3 rounded-lg border border-[#E9E0D3] bg-[#F4F1EA] px-2.5 py-1.5">
                                             <div class="flex items-center gap-2 min-w-0">
-                                                <span class="inline-flex items-center justify-center w-6 h-6 rounded bg-white border border-[#E7E5DD] shrink-0">
-                                                    <Spinner v-if="f.uploading" class="w-3 h-3 text-[#C2683F]" />
+                                                <span class="inline-flex items-center justify-center w-6 h-6 rounded bg-white border border-[#E9E0D3] shrink-0">
+                                                    <Spinner v-if="f.uploading" class="w-3 h-3 text-[#C2541E]" />
                                                     <UIcon v-else-if="f.error" name="i-heroicons-x-circle" class="w-3.5 h-3.5 text-red-500" />
                                                     <UIcon v-else-if="f.fileId" name="i-heroicons-document-check" class="w-3.5 h-3.5 text-[#3f9e6a]" />
                                                     <UIcon v-else name="i-heroicons-document" class="w-3.5 h-3.5 text-[#9a958c]" />
@@ -710,8 +710,8 @@
                                     <div class="mt-3 flex items-center justify-between gap-2">
                                         <div class="flex items-center gap-1.5 text-[11px] text-[#6b6b6b] min-w-0">
                                             <span class="text-[#9a958c]">Mapping to</span>
-                                            <span class="inline-flex items-center gap-1 font-medium text-[#1f2328] px-2 py-0.5 rounded-full bg-[#F4F1EA] border border-[#E7E5DD] truncate">
-                                                <UIcon name="i-heroicons-circle-stack" class="w-3 h-3 text-[#C2683F]" />
+                                            <span class="inline-flex items-center gap-1 font-medium text-[#1f2328] px-2 py-0.5 rounded-full bg-[#F4F1EA] border border-[#E9E0D3] truncate">
+                                                <UIcon name="i-heroicons-circle-stack" class="w-3 h-3 text-[#C2541E]" />
                                                 {{ (sources.find(s => String(s.agent_id) === String(acSourceId))?.name) || acSourceId || '—' }}
                                             </span>
                                         </div>
@@ -732,12 +732,12 @@
                                     </p>
 
                                     <!-- REVIEW panel -->
-                                    <div v-if="acProposal" class="mt-4 border-t border-[#E7E5DD] pt-4 space-y-4">
+                                    <div v-if="acProposal" class="mt-4 border-t border-[#E9E0D3] pt-4 space-y-4">
                                         <!-- matched column descriptions -->
                                         <div v-if="acColumns.length">
                                             <p class="text-[11px] font-semibold uppercase tracking-wider text-[#9a958c] mb-2">Column descriptions ({{ acColumnsChecked }} of {{ acColumns.length }})</p>
                                             <ul class="space-y-1.5">
-                                                <li v-for="(c, i) in acColumns" :key="'c'+i" class="flex items-start gap-2 rounded-lg border border-[#E7E5DD] bg-white p-2">
+                                                <li v-for="(c, i) in acColumns" :key="'c'+i" class="flex items-start gap-2 rounded-lg border border-[#E9E0D3] bg-white p-2">
                                                     <UCheckbox v-model="c.include" :disabled="!c.matched" class="mt-0.5" />
                                                     <div class="min-w-0 flex-1">
                                                         <div class="flex items-center gap-1.5 flex-wrap">
@@ -764,10 +764,10 @@
                                         <div v-if="acInstructions.length">
                                             <p class="text-[11px] font-semibold uppercase tracking-wider text-[#9a958c] mb-2">Instructions ({{ acInstructionsChecked }} of {{ acInstructions.length }})</p>
                                             <ul class="space-y-1.5">
-                                                <li v-for="(ins, i) in acInstructions" :key="'i'+i" class="flex items-start gap-2 rounded-lg border border-[#E7E5DD] bg-white p-2">
+                                                <li v-for="(ins, i) in acInstructions" :key="'i'+i" class="flex items-start gap-2 rounded-lg border border-[#E9E0D3] bg-white p-2">
                                                     <UCheckbox v-model="ins.include" class="mt-0.5" />
                                                     <div class="min-w-0 flex-1">
-                                                        <span v-if="ins.compliance" class="text-[9px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded bg-[#F4E5DA] text-[#A8542F] me-1">compliance</span>
+                                                        <span v-if="ins.compliance" class="text-[9px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded bg-[#F4E5DA] text-[#A8330F] me-1">compliance</span>
                                                         <span class="text-xs text-[#1f2328] whitespace-pre-wrap">{{ ins.content }}</span>
                                                     </div>
                                                 </li>
@@ -778,12 +778,12 @@
                                         <div v-if="acExamples.length">
                                             <p class="text-[11px] font-semibold uppercase tracking-wider text-[#9a958c] mb-2">Examples ({{ acExamplesChecked }} of {{ acExamples.length }})</p>
                                             <ul class="space-y-1.5">
-                                                <li v-for="(ex, i) in acExamples" :key="'e'+i" class="flex items-start gap-2 rounded-lg border border-[#E7E5DD] bg-white p-2">
+                                                <li v-for="(ex, i) in acExamples" :key="'e'+i" class="flex items-start gap-2 rounded-lg border border-[#E9E0D3] bg-white p-2">
                                                     <UCheckbox v-model="ex.include" class="mt-0.5" />
                                                     <div class="min-w-0 flex-1">
                                                         <p class="text-xs font-medium text-[#1f2328]">{{ ex.question }}</p>
                                                         <p v-if="ex.answer" class="text-[11px] text-[#6b6b6b] mt-0.5 whitespace-pre-wrap">{{ ex.answer }}</p>
-                                                        <pre v-if="ex.sql" class="text-[10px] text-[#6b6b6b] bg-[#F4F1EA] border border-[#E7E5DD] rounded px-2 py-1 mt-1 overflow-x-auto whitespace-pre-wrap">{{ ex.sql }}</pre>
+                                                        <pre v-if="ex.sql" class="text-[10px] text-[#6b6b6b] bg-[#F4F1EA] border border-[#E9E0D3] rounded px-2 py-1 mt-1 overflow-x-auto whitespace-pre-wrap">{{ ex.sql }}</pre>
                                                     </div>
                                                 </li>
                                             </ul>
@@ -799,7 +799,7 @@
 
                             <!-- FOLDER SYNC — auto-ingest a local folder into this agent (flag-gated, self-hides on 404) -->
                             <div class="mt-3">
-                                <FolderSyncCard :studio-id="studioId" :studio-name="studio.name" />
+                                <FolderSyncCard :studio-id="studioId" :studio-name="studio?.name || ''" />
                             </div>
 
                             <!-- doc loading hint (docs render per-source above) -->
@@ -812,16 +812,16 @@
                         <section v-else-if="activeTab === 'instructions'">
                             <div class="flex items-start justify-between mb-4">
                                 <div>
-                                    <h2 class="text-lg font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">{{ $t('studio.instructionsTitle') }}</h2>
+                                    <h2 class="text-lg font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ $t('studio.instructionsTitle') }}</h2>
                                     <p class="text-xs text-[#6b6b6b] mt-0.5">{{ $t('studio.instructionsHint') }}</p>
                                 </div>
                                 <div v-if="canEdit" class="flex items-center gap-2">
-                                    <button type="button" :disabled="regenInstr" class="inline-flex items-center gap-1.5 text-xs font-medium text-[#6b6b6b] bg-white border border-[#E7E5DD] rounded-lg px-3 py-1.5 hover:bg-[#faf8f3] hover:border-[#dcd9cf] transition-colors disabled:opacity-50" @click="regenerateInstructions">
+                                    <button type="button" :disabled="regenInstr" class="inline-flex items-center gap-1.5 text-xs font-medium text-[#6b6b6b] bg-white border border-[#E9E0D3] rounded-lg px-3 py-1.5 hover:bg-[#faf8f3] hover:border-[#dcd9cf] transition-colors disabled:opacity-50" @click="regenerateInstructions">
                                         <Spinner v-if="regenInstr" class="h-3.5 w-3.5" />
-                                        <UIcon v-else name="i-heroicons-sparkles" class="w-3.5 h-3.5 text-[#C2683F]" />
+                                        <UIcon v-else name="i-heroicons-sparkles" class="w-3.5 h-3.5 text-[#C2541E]" />
                                         {{ $t('studio.regenerate') }}
                                     </button>
-                                    <button type="button" class="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-[#C2683F] hover:bg-[#A8542F] rounded-lg px-3.5 py-1.5 transition-colors" @click="openAddInstruction">
+                                    <button type="button" class="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-lg px-3.5 py-1.5 transition-colors" @click="openAddInstruction">
                                         <UIcon name="i-heroicons-plus" class="w-3.5 h-3.5" />
                                         {{ $t('studio.addInstruction') }}
                                     </button>
@@ -831,8 +831,8 @@
                             <!-- SELF-LEARNING REVIEW QUEUE (Feature 5) -->
                             <div v-if="reviewQueueCount > 0" class="rounded-2xl border border-amber-200 bg-amber-50/40 p-4 mb-4">
                                 <div class="flex items-center gap-2 mb-3">
-                                    <UIcon name="i-heroicons-inbox-arrow-down" class="w-4 h-4 text-[#C2683F]" />
-                                    <h3 class="text-sm font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">Review queue</h3>
+                                    <UIcon name="i-heroicons-inbox-arrow-down" class="w-4 h-4 text-[#C2541E]" />
+                                    <h3 class="text-sm font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">Review queue</h3>
                                     <span class="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">{{ reviewQueueCount }} pending</span>
                                     <button v-if="canEdit" type="button" :disabled="approvingAll" class="ms-auto inline-flex items-center gap-1.5 text-[11px] font-semibold text-white bg-[#3f9e6a] hover:bg-[#357f57] rounded-lg px-3 py-1.5 transition-colors disabled:opacity-50" @click="approveAllPending">
                                         <Spinner v-if="approvingAll" class="h-3 w-3 text-white" />
@@ -849,7 +849,7 @@
 
                                 <!-- pending instructions -->
                                 <ul v-if="pendingInstructions.length" class="space-y-1.5 mb-2">
-                                    <li v-for="ins in pendingInstructions" :key="'pi'+ins.id" class="flex items-start justify-between gap-3 rounded-lg border border-[#E7E5DD] bg-white p-2.5">
+                                    <li v-for="ins in pendingInstructions" :key="'pi'+ins.id" class="flex items-start justify-between gap-3 rounded-lg border border-[#E9E0D3] bg-white p-2.5">
                                         <div class="min-w-0 flex-1">
                                             <span class="text-[9px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 me-1">rule</span>
                                             <span class="text-xs text-[#1f2328] whitespace-pre-wrap">{{ ins.content }}</span>
@@ -863,12 +863,12 @@
 
                                 <!-- pending examples -->
                                 <ul v-if="pendingExamples.length" class="space-y-1.5">
-                                    <li v-for="ex in pendingExamples" :key="'pe'+ex.id" class="flex items-start justify-between gap-3 rounded-lg border border-[#E7E5DD] bg-white p-2.5">
+                                    <li v-for="ex in pendingExamples" :key="'pe'+ex.id" class="flex items-start justify-between gap-3 rounded-lg border border-[#E9E0D3] bg-white p-2.5">
                                         <div class="min-w-0 flex-1">
-                                            <span class="text-[9px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded bg-[#F4E5DA] text-[#A8542F] me-1">example</span>
+                                            <span class="text-[9px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded bg-[#F4E5DA] text-[#A8330F] me-1">example</span>
                                             <span class="text-xs font-medium text-[#1f2328]">{{ ex.question }}</span>
                                             <p v-if="ex.answer" class="text-[11px] text-[#6b6b6b] mt-0.5 whitespace-pre-wrap">{{ ex.answer }}</p>
-                                            <pre v-if="ex.sql" class="text-[10px] text-[#6b6b6b] bg-[#F4F1EA] border border-[#E7E5DD] rounded px-2 py-1 mt-1 overflow-x-auto whitespace-pre-wrap">{{ ex.sql }}</pre>
+                                            <pre v-if="ex.sql" class="text-[10px] text-[#6b6b6b] bg-[#F4F1EA] border border-[#E9E0D3] rounded px-2 py-1 mt-1 overflow-x-auto whitespace-pre-wrap">{{ ex.sql }}</pre>
                                         </div>
                                         <div v-if="canEdit" class="flex items-center gap-1 shrink-0">
                                             <UButton color="green" variant="soft" size="2xs" icon="i-heroicons-check" @click="approveExample(ex)">{{ $t('studio.approve') }}</UButton>
@@ -881,7 +881,7 @@
                             <div v-if="loadingInstr" class="flex items-center justify-center py-10 text-[#9a958c]">
                                 <Spinner class="h-4 w-4" /><span class="ms-2 text-xs">{{ $t('common.loading') }}</span>
                             </div>
-                            <div v-else-if="instructions.length === 0" class="py-10 text-center border border-dashed border-[#E7E5DD] rounded-2xl">
+                            <div v-else-if="instructions.length === 0" class="py-10 text-center border border-dashed border-[#E9E0D3] rounded-2xl">
                                 <UIcon name="i-heroicons-clipboard-document-list" class="w-7 h-7 mx-auto text-[#9a958c] mb-1.5" />
                                 <p class="text-xs text-[#6b6b6b]">{{ $t('studio.noInstructions') }}</p>
                             </div>
@@ -889,7 +889,7 @@
                                 <li
                                     v-for="ins in instructions"
                                     :key="ins.id"
-                                    class="rounded-2xl border border-[#E7E5DD] bg-white p-3"
+                                    class="rounded-2xl border border-[#E9E0D3] bg-white p-3"
                                 >
                                     <div class="flex items-start justify-between gap-3">
                                         <div class="min-w-0 flex-1">
@@ -920,16 +920,16 @@
                         <section v-else-if="activeTab === 'examples'">
                             <div class="flex items-start justify-between mb-4">
                                 <div>
-                                    <h2 class="text-lg font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">{{ $t('studio.examplesTitle') }}</h2>
+                                    <h2 class="text-lg font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ $t('studio.examplesTitle') }}</h2>
                                     <p class="text-xs text-[#6b6b6b] mt-0.5">{{ $t('studio.examplesHint') }}</p>
                                 </div>
                                 <div v-if="canEdit" class="flex items-center gap-2">
-                                    <button type="button" :disabled="regenEx" class="inline-flex items-center gap-1.5 text-xs font-medium text-[#6b6b6b] bg-white border border-[#E7E5DD] rounded-lg px-3 py-1.5 hover:bg-[#faf8f3] hover:border-[#dcd9cf] transition-colors disabled:opacity-50" @click="regenerateExamples">
+                                    <button type="button" :disabled="regenEx" class="inline-flex items-center gap-1.5 text-xs font-medium text-[#6b6b6b] bg-white border border-[#E9E0D3] rounded-lg px-3 py-1.5 hover:bg-[#faf8f3] hover:border-[#dcd9cf] transition-colors disabled:opacity-50" @click="regenerateExamples">
                                         <Spinner v-if="regenEx" class="h-3.5 w-3.5" />
-                                        <UIcon v-else name="i-heroicons-sparkles" class="w-3.5 h-3.5 text-[#C2683F]" />
+                                        <UIcon v-else name="i-heroicons-sparkles" class="w-3.5 h-3.5 text-[#C2541E]" />
                                         {{ $t('studio.regenerate') }}
                                     </button>
-                                    <button type="button" class="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-[#C2683F] hover:bg-[#A8542F] rounded-lg px-3.5 py-1.5 transition-colors" @click="openAddExample">
+                                    <button type="button" class="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-lg px-3.5 py-1.5 transition-colors" @click="openAddExample">
                                         <UIcon name="i-heroicons-plus" class="w-3.5 h-3.5" />
                                         {{ $t('studio.addExample') }}
                                     </button>
@@ -939,7 +939,7 @@
                             <div v-if="loadingEx" class="flex items-center justify-center py-10 text-[#9a958c]">
                                 <Spinner class="h-4 w-4" /><span class="ms-2 text-xs">{{ $t('common.loading') }}</span>
                             </div>
-                            <div v-else-if="examples.length === 0" class="py-10 text-center border border-dashed border-[#E7E5DD] rounded-2xl">
+                            <div v-else-if="examples.length === 0" class="py-10 text-center border border-dashed border-[#E9E0D3] rounded-2xl">
                                 <UIcon name="i-heroicons-academic-cap" class="w-7 h-7 mx-auto text-[#9a958c] mb-1.5" />
                                 <p class="text-xs text-[#6b6b6b]">{{ $t('studio.noExamples') }}</p>
                             </div>
@@ -947,7 +947,7 @@
                                 <li
                                     v-for="ex in examples"
                                     :key="ex.id"
-                                    class="rounded-2xl border border-[#E7E5DD] bg-white p-3"
+                                    class="rounded-2xl border border-[#E9E0D3] bg-white p-3"
                                 >
                                     <div class="flex items-start justify-between gap-3">
                                         <div class="min-w-0 flex-1">
@@ -957,7 +957,7 @@
                                             <template v-if="editingExId !== ex.id">
                                                 <p class="text-xs font-medium text-[#1f2328] mt-1.5">{{ ex.question }}</p>
                                                 <p v-if="ex.answer" class="text-xs text-[#6b6b6b] mt-1 whitespace-pre-wrap">{{ ex.answer }}</p>
-                                                <pre v-if="ex.sql" class="text-[11px] text-[#6b6b6b] bg-[#F4F1EA] border border-[#E7E5DD] rounded px-2 py-1.5 mt-1.5 overflow-x-auto whitespace-pre-wrap">{{ ex.sql }}</pre>
+                                                <pre v-if="ex.sql" class="text-[11px] text-[#6b6b6b] bg-[#F4F1EA] border border-[#E9E0D3] rounded px-2 py-1.5 mt-1.5 overflow-x-auto whitespace-pre-wrap">{{ ex.sql }}</pre>
                                             </template>
                                             <div v-else class="mt-1.5 space-y-1.5">
                                                 <UInput v-model="editEx.question" :placeholder="$t('studio.exampleQuestion')" size="sm" />
@@ -1076,32 +1076,32 @@
                         <!-- SETTINGS (auto avatar + voice + summary) -->
                         <section v-else-if="activeTab === 'settings'">
                             <div class="mb-4">
-                                <h2 class="text-lg font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">{{ $t('studio.settingsTitle') }}</h2>
+                                <h2 class="text-lg font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ $t('studio.settingsTitle') }}</h2>
                                 <p class="text-xs text-[#6b6b6b] mt-0.5">{{ $t('studio.settingsHint') }}</p>
                             </div>
 
                             <!-- Avatar (auto) -->
-                            <div class="rounded-2xl border border-[#E7E5DD] bg-white p-4 mb-3">
+                            <div class="rounded-2xl border border-[#E9E0D3] bg-white p-4 mb-3">
                                 <div class="flex items-center justify-between mb-1">
                                     <label class="text-xs font-medium text-[#1f2328]">{{ $t('studio.avatarLabel') }}</label>
                                     <span class="text-[10px] text-[#9a958c]">{{ $t('studio.autoBadge') }}</span>
                                 </div>
                                 <div class="flex items-center gap-3 mt-2">
-                                    <div class="shrink-0 flex items-center justify-center w-10 h-10 rounded-lg bg-[#F4F1EA] border border-[#E7E5DD] text-xl text-[#C2683F] overflow-hidden">
+                                    <div class="shrink-0 flex items-center justify-center w-10 h-10 rounded-lg bg-[#F4F1EA] border border-[#E9E0D3] text-xl text-[#C2541E] overflow-hidden">
                                         <img v-if="isImageAvatar" :src="studio?.avatar || ''" alt="" class="w-full h-full object-cover" />
                                         <span v-else-if="studio?.avatar">{{ studio?.avatar }}</span>
-                                        <UIcon v-else name="i-heroicons-film" class="w-5 h-5 text-[#C2683F]" />
+                                        <UIcon v-else name="i-heroicons-film" class="w-5 h-5 text-[#C2541E]" />
                                     </div>
-                                    <button v-if="canEdit" type="button" :disabled="regenAvatar" class="inline-flex items-center gap-1.5 text-xs font-medium text-[#6b6b6b] bg-white border border-[#E7E5DD] rounded-lg px-3 py-1.5 hover:bg-[#faf8f3] hover:border-[#dcd9cf] transition-colors disabled:opacity-50" @click="regenerateAvatar">
+                                    <button v-if="canEdit" type="button" :disabled="regenAvatar" class="inline-flex items-center gap-1.5 text-xs font-medium text-[#6b6b6b] bg-white border border-[#E9E0D3] rounded-lg px-3 py-1.5 hover:bg-[#faf8f3] hover:border-[#dcd9cf] transition-colors disabled:opacity-50" @click="regenerateAvatar">
                                         <Spinner v-if="regenAvatar" class="h-3.5 w-3.5" />
-                                        <UIcon v-else name="i-heroicons-sparkles" class="w-3.5 h-3.5 text-[#C2683F]" />
+                                        <UIcon v-else name="i-heroicons-sparkles" class="w-3.5 h-3.5 text-[#C2541E]" />
                                         {{ $t('studio.regenerate') }}
                                     </button>
                                 </div>
                             </div>
 
                             <!-- Voice (= persona, auto, editable) -->
-                            <div class="rounded-2xl border border-[#E7E5DD] bg-white p-4 mb-3">
+                            <div class="rounded-2xl border border-[#E9E0D3] bg-white p-4 mb-3">
                                 <div class="flex items-center justify-between mb-1">
                                     <label class="text-xs font-medium text-[#1f2328]">{{ $t('studio.voiceLabel') }}</label>
                                     <span class="text-[10px] text-[#9a958c]">{{ $t('studio.autoEditableBadge') }}</span>
@@ -1112,16 +1112,16 @@
                                     <UButton color="orange" size="xs" :loading="savingVoice" :disabled="voiceDraft === (studio?.persona || '')" @click="saveVoice">
                                         {{ $t('common.save') }}
                                     </UButton>
-                                    <button type="button" :disabled="regenVoice" class="inline-flex items-center gap-1.5 text-xs font-medium text-[#6b6b6b] bg-white border border-[#E7E5DD] rounded-lg px-3 py-1.5 hover:bg-[#faf8f3] hover:border-[#dcd9cf] transition-colors disabled:opacity-50" @click="regenerateVoice">
+                                    <button type="button" :disabled="regenVoice" class="inline-flex items-center gap-1.5 text-xs font-medium text-[#6b6b6b] bg-white border border-[#E9E0D3] rounded-lg px-3 py-1.5 hover:bg-[#faf8f3] hover:border-[#dcd9cf] transition-colors disabled:opacity-50" @click="regenerateVoice">
                                         <Spinner v-if="regenVoice" class="h-3.5 w-3.5" />
-                                        <UIcon v-else name="i-heroicons-sparkles" class="w-3.5 h-3.5 text-[#C2683F]" />
+                                        <UIcon v-else name="i-heroicons-sparkles" class="w-3.5 h-3.5 text-[#C2541E]" />
                                         {{ $t('studio.regenerate') }}
                                     </button>
                                 </div>
                             </div>
 
                             <!-- Summary (auto) -->
-                            <div class="rounded-2xl border border-[#E7E5DD] bg-white p-4">
+                            <div class="rounded-2xl border border-[#E9E0D3] bg-white p-4">
                                 <div class="flex items-center justify-between mb-1">
                                     <label class="text-xs font-medium text-[#1f2328]">{{ $t('studio.summaryLabel') }}</label>
                                     <span class="text-[10px] text-[#9a958c]">{{ $t('studio.autoBadge') }}</span>
@@ -1135,10 +1135,10 @@
                         <section v-else-if="activeTab === 'members'">
                             <div class="flex items-start justify-between mb-4">
                                 <div>
-                                    <h2 class="text-lg font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">{{ $t('studio.membersTitle') }}</h2>
+                                    <h2 class="text-lg font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ $t('studio.membersTitle') }}</h2>
                                     <p class="text-xs text-[#6b6b6b] mt-0.5">{{ $t('studio.membersHint') }}</p>
                                 </div>
-                                <button type="button" class="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-[#C2683F] hover:bg-[#A8542F] rounded-lg px-3.5 py-1.5 transition-colors" @click="showShare = true">
+                                <button type="button" class="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-lg px-3.5 py-1.5 transition-colors" @click="showShare = true">
                                     <UIcon name="i-heroicons-share" class="w-3.5 h-3.5" />
                                     {{ $t('studio.shareTitle') }}
                                 </button>
@@ -1146,12 +1146,12 @@
                             <p class="text-xs text-[#6b6b6b]">
                                 {{ $t('studio.shareScope') }}: <span class="font-medium text-[#1f2328]">{{ scopeLabel }}</span>
                             </p>
-                            <button type="button" class="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-[#6b6b6b] bg-white border border-[#E7E5DD] rounded-lg px-3 py-1.5 hover:bg-[#faf8f3] hover:border-[#dcd9cf] transition-colors" @click="showShare = true">
+                            <button type="button" class="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-[#6b6b6b] bg-white border border-[#E9E0D3] rounded-lg px-3 py-1.5 hover:bg-[#faf8f3] hover:border-[#dcd9cf] transition-colors" @click="showShare = true">
                                 <UIcon name="i-heroicons-users" class="w-3.5 h-3.5 text-[#9a958c]" />
                                 {{ $t('studio.tabMembers') }}
                             </button>
 
-                            <div v-if="role === 'owner'" class="mt-8 pt-4 border-t border-[#E7E5DD]">
+                            <div v-if="role === 'owner'" class="mt-8 pt-4 border-t border-[#E9E0D3]">
                                 <UButton color="red" variant="outline" size="xs" icon="i-heroicons-trash" :loading="deleting" @click="deleteStudio">
                                     {{ $t('studio.deleteStudio') }}
                                 </UButton>
@@ -1169,6 +1169,14 @@
                                 @share-updated="onShareUpdated"
                                 @config-updated="onConfigUpdated"
                             />
+                        </section>
+
+                        <section v-else-if="activeTab === 'channels'">
+                            <StudioChannels :studio-id="studioId" :can-edit="canEdit" />
+                        </section>
+
+                        <section v-else-if="activeTab === 'email'">
+                            <StudioEmail :studio-id="studioId" :can-edit="canEdit" />
                         </section>
                     </div>
                 </main>
@@ -1190,7 +1198,7 @@
             <UModal v-model="showAddSource" :ui="{ width: 'sm:max-w-md' }">
                 <div class="p-6">
                     <div class="flex items-center justify-between mb-4">
-                        <h2 class="text-lg font-medium text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">{{ $t('studio.pickSource') }}</h2>
+                        <h2 class="text-lg font-medium text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ $t('studio.pickSource') }}</h2>
                         <button @click="showAddSource = false" class="text-[#9a958c] hover:text-[#6b6b6b]">
                             <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
                         </button>
@@ -1243,32 +1251,32 @@
                             <p class="text-[11px] text-[#9a958c] mt-0.5">Org library · {{ allAgents.length }} connection{{ allAgents.length===1?'':'s' }} · pinning scopes one to this agent</p>
                         </div>
                         <div class="flex items-center gap-3">
-                            <NuxtLink to="/connectors" class="text-[10.5px] text-[#C2683F] hover:text-[#A8542F] font-medium">Manage in Connectors →</NuxtLink>
+                            <NuxtLink to="/connectors" class="text-[10.5px] text-[#C2541E] hover:text-[#A8330F] font-medium">Manage in Connectors →</NuxtLink>
                             <button type="button" class="text-[#9a958c] hover:text-[#6b6b6b]" @click="addOpen = false"><UIcon name="i-heroicons-x-mark" class="w-5 h-5" /></button>
                         </div>
                     </div>
                     <div class="px-4 py-3 border-b border-[#EFEDE6]">
-                        <input v-model="orgSearch" type="text" placeholder="Search by name, host, type…  (postgres, prod, fabric…)" class="w-full text-xs border border-[#E7E5DD] rounded-lg px-2.5 py-2 text-[#1f2328] placeholder-[#9a958c] focus:outline-none focus:border-[#C2683F]" />
+                        <input v-model="orgSearch" type="text" placeholder="Search by name, host, type…  (postgres, prod, fabric…)" class="w-full text-xs border border-[#E9E0D3] rounded-lg px-2.5 py-2 text-[#1f2328] placeholder-[#9a958c] focus:outline-none focus:border-[#C2541E]" />
                     </div>
                     <div class="max-h-[52vh] overflow-y-auto">
                         <div v-if="loadingAgents" class="text-[11px] text-[#9a958c] py-6 text-center">Loading library…</div>
                         <template v-else>
                             <div v-for="a in filteredOrgSources" :key="a.id" class="flex items-center gap-2.5 px-4 py-2.5 border-b border-[#F4F2EC] last:border-0">
-                                <span class="w-8 h-8 rounded-lg bg-[#FBFAF6] border border-[#E7E5DD] flex items-center justify-center shrink-0"><DataSourceIcon v-if="connTypeOf(a)" class="h-4" :type="connTypeOf(a)" /><UIcon v-else name="i-heroicons-circle-stack" class="w-4 h-4 text-[#9a958c]" /></span>
+                                <span class="w-8 h-8 rounded-lg bg-[#FBFAF6] border border-[#E9E0D3] flex items-center justify-center shrink-0"><DataSourceIcon v-if="connTypeOf(a)" class="h-4" :type="connTypeOf(a)" /><UIcon v-else name="i-heroicons-circle-stack" class="w-4 h-4 text-[#9a958c]" /></span>
                                 <div class="min-w-0">
                                     <div class="text-[13px] font-semibold text-[#1f2328] truncate">{{ a.name || a.id }}</div>
                                     <div class="text-[10.5px] text-[#9a958c] truncate">{{ connTypeOf(a) || 'data source' }}<template v-if="connHostOf(a)"> · {{ connHostOf(a) }}</template></div>
                                 </div>
                                 <span class="ms-auto shrink-0">
                                     <span v-if="isPinned(a.id)" class="text-[11px] font-semibold text-[#2F6F4F] bg-[#E7F1EB] border border-[#cfe6da] rounded-md px-3 py-1.5">✓ Pinned</span>
-                                    <button v-else type="button" class="text-[11px] font-semibold text-white bg-[#C2683F] hover:bg-[#A8542F] rounded-md px-4 py-1.5" @click="pinSource(a)">Pin</button>
+                                    <button v-else type="button" class="text-[11px] font-semibold text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-md px-4 py-1.5" @click="pinSource(a)">Pin</button>
                                 </span>
                             </div>
                             <div v-if="!filteredOrgSources.length" class="text-[11px] text-[#9a958c] py-5 text-center">{{ orgSearch ? 'No match.' : 'No connections yet — create your first below.' }}</div>
                         </template>
                     </div>
-                    <button type="button" :disabled="!canEdit" class="w-full flex items-center gap-2 px-4 py-3 text-[12.5px] font-semibold text-[#C2683F] hover:bg-[#F6EFEA] border-t border-dashed border-[#E7E5DD] disabled:opacity-50" @click="openConnect()">
-                        <span class="w-5 h-5 rounded-md bg-[#F6EBE3] text-[#C2683F] grid place-items-center font-bold">+</span> New connection — pick a type (46)
+                    <button type="button" :disabled="!canEdit" class="w-full flex items-center gap-2 px-4 py-3 text-[12.5px] font-semibold text-[#C2541E] hover:bg-[#F6EFEA] border-t border-dashed border-[#E9E0D3] disabled:opacity-50" @click="openConnect()">
+                        <span class="w-5 h-5 rounded-md bg-[#F6EBE3] text-[#C2541E] grid place-items-center font-bold">+</span> New connection — pick a type (46)
                     </button>
                 </div>
             </UModal>
@@ -1277,7 +1285,7 @@
             <UModal v-model="showAddSkill" :ui="{ width: 'sm:max-w-md' }">
                 <div class="p-6">
                     <div class="flex items-center justify-between mb-4">
-                        <h2 class="text-lg font-medium text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">{{ $t('studio.pinSkill') }}</h2>
+                        <h2 class="text-lg font-medium text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ $t('studio.pinSkill') }}</h2>
                         <button @click="showAddSkill = false" class="text-[#9a958c] hover:text-[#6b6b6b]">
                             <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
                         </button>
@@ -1297,7 +1305,7 @@
                         >
                             <div class="min-w-0">
                                 <div class="flex items-center gap-1.5">
-                                    <UIcon name="i-heroicons-sparkles" class="w-3.5 h-3.5 text-[#C2683F] shrink-0" />
+                                    <UIcon name="i-heroicons-sparkles" class="w-3.5 h-3.5 text-[#C2541E] shrink-0" />
                                     <span class="text-xs text-[#1f2328] truncate">{{ sk.name }}</span>
                                 </div>
                                 <p v-if="sk.description" class="text-[11px] text-[#9a958c] line-clamp-1">{{ sk.description }}</p>
@@ -1312,7 +1320,7 @@
             <UModal v-model="showAddInstruction" :ui="{ width: 'sm:max-w-md' }">
                 <div class="p-6">
                     <div class="flex items-center justify-between mb-4">
-                        <h2 class="text-lg font-medium text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">{{ $t('studio.addInstruction') }}</h2>
+                        <h2 class="text-lg font-medium text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ $t('studio.addInstruction') }}</h2>
                         <button @click="showAddInstruction = false" class="text-[#9a958c] hover:text-[#6b6b6b]">
                             <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
                         </button>
@@ -1329,7 +1337,7 @@
             <UModal v-model="showAddExample" :ui="{ width: 'sm:max-w-md' }">
                 <div class="p-6">
                     <div class="flex items-center justify-between mb-4">
-                        <h2 class="text-lg font-medium text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">{{ $t('studio.addExample') }}</h2>
+                        <h2 class="text-lg font-medium text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ $t('studio.addExample') }}</h2>
                         <button @click="showAddExample = false" class="text-[#9a958c] hover:text-[#6b6b6b]">
                             <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
                         </button>
@@ -1348,9 +1356,10 @@
 
             <!-- Folder Sync setup modal (download → key → folder), this studio pre-selected -->
             <FolderSyncSetupModal
+                v-if="studio"
                 v-model:open="showFolderSync"
                 :target-studio-id="studioId"
-                :target-studio-name="studio.name"
+                :target-studio-name="studio?.name || ''"
             />
     </div>
 </template>
@@ -1439,7 +1448,12 @@ const loadingChats = ref(false)
 
 // Studio landing = Sources (training-first home), not chat. Chat stays reachable
 // via the studio-header button; it is just no longer the default surface.
-const activeTab = ref('autopilot')
+// Persist the active tab in the URL (?tab=) so a refresh keeps you on the same
+// sub-screen instead of resetting to Auto-pilot.
+const activeTab = ref(typeof route.query.tab === 'string' ? route.query.tab : 'autopilot')
+watch(activeTab, (t) => {
+    router.replace({ query: { ...route.query, tab: t } })
+})
 
 // pre-train (Column Intelligence) — Sources hero "Auto-train" button.
 // Wired to POST /data_sources/{id}/pretrain (self-gates on COLUMN_INTEL flag).
@@ -1565,8 +1579,8 @@ async function fetchIntel(id: any, force = false) {
 }
 
 // table-cell helpers
-const roleClass = (r: string) => (({ dimension: 'bg-[#EEF1F4] text-[#475569]', dim: 'bg-[#EEF1F4] text-[#475569]', measure: 'bg-[#E7F2EC] text-[#2f7a52]', date: 'bg-[#F4E5DA] text-[#A8542F]', id: 'bg-[#F1ECF6] text-[#7c5cab]' } as Record<string, string>)[r] || 'bg-gray-100 text-gray-500')
-const nullClass = (n: any) => (Number(n) || 0) >= 50 ? 'text-[#C2683F] font-semibold' : 'text-[#6b6b6b]'
+const roleClass = (r: string) => (({ dimension: 'bg-[#EEF1F4] text-[#475569]', dim: 'bg-[#EEF1F4] text-[#475569]', measure: 'bg-[#E7F2EC] text-[#2f7a52]', date: 'bg-[#F4E5DA] text-[#A8330F]', id: 'bg-[#F1ECF6] text-[#7c5cab]' } as Record<string, string>)[r] || 'bg-gray-100 text-gray-500')
+const nullClass = (n: any) => (Number(n) || 0) >= 50 ? 'text-[#C2541E] font-semibold' : 'text-[#6b6b6b]'
 const fmtNull = (n: any) => (n == null ? '—' : `${Math.round(Number(n))}%`)
 
 // ---- insights derived from the column profile (honest — no invented numbers) ----
@@ -2098,7 +2112,9 @@ const tabs = computed(() => [
     { value: 'monitoring', label: t('studio.tabMonitoring') || 'Monitoring', icon: 'i-heroicons-chart-bar', group: 'operate' },
     { value: 'artifacts', label: t('studio.tabArtifacts'), icon: 'i-heroicons-document-text', group: 'operate' },
     { value: 'settings', label: t('studio.tabSettings'), icon: 'i-heroicons-cog-6-tooth', group: 'manage' },
-    { value: 'access', label: 'Access & Channels', icon: 'i-heroicons-lock-closed', group: 'manage' },
+    { value: 'access', label: 'Access & Members', icon: 'i-heroicons-lock-closed', group: 'manage' },
+    { value: 'channels', label: 'Channels', icon: 'i-heroicons-megaphone', group: 'manage' },
+    { value: 'email', label: 'Email / SMTP', icon: 'i-heroicons-envelope', group: 'manage' },
     { value: 'members', label: t('studio.tabMembers'), icon: 'i-heroicons-users', group: 'manage' },
 ])
 
@@ -2135,7 +2151,7 @@ const scopeLabel = computed(() => {
 })
 const scopeBadgeClass = computed(() => {
     const s = (studio.value?.share_scope || 'private').toLowerCase()
-    if (s === 'org') return 'bg-[#F4E5DA] text-[#A8542F]'
+    if (s === 'org') return 'bg-[#F4E5DA] text-[#A8330F]'
     if (s === 'link') return 'bg-purple-100 text-purple-700'
     return 'bg-gray-100 text-gray-600'
 })
@@ -2943,9 +2959,9 @@ onMounted(async () => {
 }
 
 /* Claude redesign: neutralize the scope-badge palette.
-   scopeBadgeClass (script computed) emits clay tints for org (bg-[#F4E5DA]/text-[#A8542F])
+   scopeBadgeClass (script computed) emits clay tints for org (bg-[#F4E5DA]/text-[#A8330F])
    and bg-purple-100/text-purple-700 (link). Only the purple link utilities need recoloring
    here to clay-soft per the mockup; the org badge is already clay via its computed classes. */
 .bg-purple-100 { background-color: #F3E7DF !important; }
-.text-purple-700 { color: #C2683F !important; }
+.text-purple-700 { color: #C2541E !important; }
 </style>

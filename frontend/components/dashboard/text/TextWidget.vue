@@ -50,7 +50,7 @@ const contentHtml = computed(() => (widget?.value?.content || step?.value?.conte
 }
 :deep(.rendered-html h2) { font-family: var(--headingFont); font-size: 1.1rem; font-weight: 600; margin: 0.7rem 0 0.4rem 0; }
 :deep(.rendered-html p) { margin: 0.75rem 0; }
-:deep(.rendered-html a) { color: #C2683F; text-decoration: underline; }
+:deep(.rendered-html a) { color: #C2541E; text-decoration: underline; }
 :deep(.rendered-html strong) { font-weight: 600; }
 :deep(.rendered-html em) { font-style: italic; }
 :deep(.rendered-html ul), :deep(.rendered-html ol) { margin: 0.5rem 0 0.5rem 1.5rem; padding-left: revert; }

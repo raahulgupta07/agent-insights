@@ -11,9 +11,9 @@
           {{ $t('tools.editInstruction.editing') }}
         </span>
         <span v-else-if="isSuccess" class="text-gray-600 flex items-center">
-          <Icon name="heroicons-cube" class="w-3 h-3 me-1.5 text-[#C2683F]" />
+          <Icon name="heroicons-cube" class="w-3 h-3 me-1.5 text-[#C2541E]" />
           <span dir="auto" class="truncate max-w-[300px]">{{ $t('tools.editInstruction.editedPrefix', { text: truncatedText }) }}</span>
-          <span v-if="versionNumber" class="ms-1.5 px-1.5 py-0.5 bg-[#F4E5DA] text-[#A8542F] rounded text-[10px] shrink-0">v{{ versionNumber }}</span>
+          <span v-if="versionNumber" class="ms-1.5 px-1.5 py-0.5 bg-[#F4E5DA] text-[#A8330F] rounded text-[10px] shrink-0">v{{ versionNumber }}</span>
           <span v-if="linesAdded > 0" class="ms-1.5 text-[10px] text-green-600 shrink-0">+{{ linesAdded }}</span>
           <span v-if="linesRemoved > 0" class="ms-0.5 text-[10px] text-red-500 shrink-0">-{{ linesRemoved }}</span>
           <Icon
@@ -102,7 +102,7 @@
           <div v-if="displayLoadMode" class="flex items-center gap-1">
             <span class="text-gray-500">{{ $t('tools.editInstruction.load') }}</span>
             <span class="px-1.5 py-0.5 rounded text-[9px] font-medium"
-              :class="displayLoadMode === 'always' ? 'bg-[#F4E5DA] text-[#A8542F]' : 'bg-gray-100 text-gray-600'"
+              :class="displayLoadMode === 'always' ? 'bg-[#F4E5DA] text-[#A8330F]' : 'bg-gray-100 text-gray-600'"
             >
               {{ displayLoadMode }}
             </span>

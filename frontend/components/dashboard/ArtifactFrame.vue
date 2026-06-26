@@ -52,7 +52,7 @@
             v-if="!isLatestSelected && artifactsList.length > 1"
             @click="useThisVersion"
             :disabled="isDuplicating"
-            class="text-xs px-2 py-1 bg-[#F6EFEA] text-[#C2683F] hover:bg-[#F4E5DA] rounded border border-[#E8C9B5] transition-colors disabled:opacity-50 flex items-center gap-1"
+            class="text-xs px-2 py-1 bg-[#F6EFEA] text-[#C2541E] hover:bg-[#F4E5DA] rounded border border-[#E8C9B5] transition-colors disabled:opacity-50 flex items-center gap-1"
           >
             <Spinner v-if="isDuplicating" class="w-3 h-3" />
             <Icon v-else name="heroicons:arrow-uturn-up" class="w-3 h-3" />
@@ -148,13 +148,13 @@
       </div>
 
       <!-- Build Stopped / Timed-out State (anti-stuck) -->
-      <div v-else-if="isPendingArtifact && buildError" class="absolute inset-0 flex flex-col items-center justify-center bg-[#FBFAF6] gap-2.5 text-center px-6">
+      <div v-else-if="isPendingArtifact && buildError" class="absolute inset-0 flex flex-col items-center justify-center bg-[#F6F1EA] gap-2.5 text-center px-6">
         <Icon name="heroicons:exclamation-triangle" class="w-8 h-8 text-red-500 mb-1" />
-        <h3 class="text-base font-medium text-[#1f2328]" style="font-family: ui-serif, Georgia, serif;">Dashboard build stopped</h3>
+        <h3 class="text-base font-medium text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif;">Dashboard build stopped</h3>
         <p class="text-xs text-[#6b6b6b] max-w-xs">The agent hit an error before finishing. No more spinning.</p>
         <button
           @click="retryBuild"
-          class="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-[#C2683F] hover:bg-[#A8542F] border border-[#C2683F] transition-colors"
+          class="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-[#C2541E] hover:bg-[#A8330F] border border-[#C2541E] transition-colors"
         >
           <Icon name="heroicons:arrow-path" class="w-4 h-4" />
           Retry build
@@ -175,13 +175,13 @@
 
       <!-- Slides with no rendered preview (failed / not rendered) — clean state,
            never the python-pptx code dump. -->
-      <div v-else-if="isUnrenderableSlides" class="absolute inset-0 flex flex-col items-center justify-center bg-[#FBFAF6] gap-2.5 text-center px-6">
+      <div v-else-if="isUnrenderableSlides" class="absolute inset-0 flex flex-col items-center justify-center bg-[#F6F1EA] gap-2.5 text-center px-6">
         <Icon
           :name="selectedArtifact?.status === 'failed' ? 'heroicons:exclamation-triangle' : 'heroicons:presentation-chart-line'"
           class="w-8 h-8 mb-1"
-          :class="selectedArtifact?.status === 'failed' ? 'text-red-500' : 'text-[#C2683F]'"
+          :class="selectedArtifact?.status === 'failed' ? 'text-red-500' : 'text-[#C2541E]'"
         />
-        <h3 class="text-base font-medium text-[#1f2328]" style="font-family: ui-serif, Georgia, serif;">
+        <h3 class="text-base font-medium text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif;">
           {{ selectedArtifact?.status === 'failed' ? 'Presentation generation failed' : 'No rendered slides yet' }}
         </h3>
         <p class="text-xs text-[#6b6b6b] max-w-xs">
@@ -190,7 +190,7 @@
         <div class="flex items-center gap-2 mt-1">
           <button
             @click="regenerateSlides"
-            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-[#C2683F] hover:bg-[#A8542F] border border-[#C2683F] transition-colors"
+            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-[#C2541E] hover:bg-[#A8330F] border border-[#C2541E] transition-colors"
           >
             <Icon name="heroicons:arrow-path" class="w-4 h-4" />
             Regenerate
@@ -198,7 +198,7 @@
           <button
             v-if="selectedArtifact?.pptx_path"
             @click="exportPptx"
-            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-[#1f2328] bg-white hover:bg-[#F4F1EA] border border-[#E7E5DD] transition-colors"
+            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-[#1f2328] bg-white hover:bg-[#F4EEE5] border border-[#E9E0D3] transition-colors"
           >
             <Icon name="heroicons:arrow-down-tray" class="w-4 h-4" />
             Download .pptx

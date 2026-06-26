@@ -1,10 +1,10 @@
 <template>
-    <div class="flex justify-center ps-2 md:ps-4 text-sm bg-[#FBFAF6] min-h-full">
+    <div class="flex justify-center ps-2 md:ps-4 text-sm bg-[#F6F1EA] min-h-full">
         <div class="w-full max-w-7xl px-4 ps-0 py-2">
             <div>
                 <h1
-                    class="text-2xl font-semibold text-[#1f2328] tracking-tight flex items-center"
-                    style="font-family: ui-serif, Georgia, 'Times New Roman', serif"
+                    class="text-[32px] font-medium text-[#211B14] tracking-tight flex items-center"
+                    style="font-family: 'Spectral', ui-serif, Georgia, serif"
                 >
                     <GoBackChevron v-if="isExcel" />
                     {{ $t('dashboards.title') }}
@@ -14,13 +14,13 @@
 
             <div class="mt-6">
                 <!-- Main tabs (My / Shared) — directly under header, ABOVE search (canonical) -->
-                <div class="border-b border-[#E7E5DD] mb-4">
+                <div class="border-b border-[#E9E0D3] mb-4">
                     <nav class="-mb-px flex space-x-6">
                         <button
                             class="whitespace-nowrap border-b-2 py-2 px-1 text-sm flex items-center font-medium"
                             :class="activeFilter === 'my'
-                                ? 'border-[#C2683F] text-[#1f2328]'
-                                : 'border-transparent text-[#6b6b6b] hover:border-[#E7E5DD] hover:text-[#1f2328]'"
+                                ? 'border-[#C2541E] text-[#1f2328]'
+                                : 'border-transparent text-[#6b6b6b] hover:border-[#E9E0D3] hover:text-[#1f2328]'"
                             @click="setActiveFilter('my')"
                         >
                             <span>{{ $t('dashboards.myDashboards') }}</span>
@@ -28,8 +28,8 @@
                         <button
                             class="whitespace-nowrap border-b-2 py-2 px-1 text-sm flex items-center font-medium"
                             :class="activeFilter === 'shared'
-                                ? 'border-[#C2683F] text-[#1f2328]'
-                                : 'border-transparent text-[#6b6b6b] hover:border-[#E7E5DD] hover:text-[#1f2328]'"
+                                ? 'border-[#C2541E] text-[#1f2328]'
+                                : 'border-transparent text-[#6b6b6b] hover:border-[#E9E0D3] hover:text-[#1f2328]'"
                             @click="setActiveFilter('shared')"
                         >
                             <span>{{ $t('dashboards.sharedWithMe') }}</span>
@@ -45,7 +45,7 @@
                                 v-model="searchTerm"
                                 type="text"
                                 :placeholder="$t('dashboards.searchPlaceholder')"
-                                class="w-full ps-10 pe-4 py-2.5 bg-white border border-[#E7E5DD] rounded-xl text-[#1f2328] placeholder:text-[#9a958c] focus:outline-none focus:ring-2 focus:ring-[#C2683F]/30 focus:border-[#C2683F]"
+                                class="w-full ps-10 pe-4 py-2.5 bg-white border border-[#E9E0D3] rounded-xl text-[#1f2328] placeholder:text-[#9a958c] focus:outline-none focus:ring-2 focus:ring-[#C2541E]/30 focus:border-[#C2541E]"
                             />
                             <UIcon
                                 name="i-heroicons-magnifying-glass"
@@ -61,7 +61,7 @@
                         <div
                             v-for="i in 10"
                             :key="i"
-                            class="bg-white border border-[#E7E5DD] rounded-2xl overflow-hidden"
+                            class="bg-white border border-[#E9E0D3] rounded-2xl overflow-hidden"
                         >
                             <div class="aspect-[4/3] ca-sk !rounded-none"></div>
                             <div class="p-3 space-y-2">
@@ -103,8 +103,8 @@
                                 :class="[
                                     'px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors',
                                     currentPage === 1
-                                        ? 'bg-[#F4F1EA] text-[#9a958c] cursor-not-allowed border-[#E7E5DD]'
-                                        : 'bg-white text-[#1f2328] hover:bg-[#F4F1EA] border-[#E7E5DD]'
+                                        ? 'bg-[#F4EEE5] text-[#9a958c] cursor-not-allowed border-[#E9E0D3]'
+                                        : 'bg-white text-[#1f2328] hover:bg-[#F4EEE5] border-[#E9E0D3]'
                                 ]"
                             >
                                 <Icon name="heroicons:chevron-left" class="w-4 h-4" />
@@ -116,8 +116,8 @@
                                 :class="[
                                     'px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors min-w-[36px]',
                                     page === currentPage
-                                        ? 'bg-[#C2683F] text-white border-[#C2683F]'
-                                        : 'bg-white text-[#1f2328] hover:bg-[#F4F1EA] border-[#E7E5DD]'
+                                        ? 'bg-[#C2541E] text-white border-[#C2541E]'
+                                        : 'bg-white text-[#1f2328] hover:bg-[#F4EEE5] border-[#E9E0D3]'
                                 ]"
                             >
                                 {{ page }}
@@ -128,8 +128,8 @@
                                 :class="[
                                     'px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors',
                                     currentPage === pagination.total_pages
-                                        ? 'bg-[#F4F1EA] text-[#9a958c] cursor-not-allowed border-[#E7E5DD]'
-                                        : 'bg-white text-[#1f2328] hover:bg-[#F4F1EA] border-[#E7E5DD]'
+                                        ? 'bg-[#F4EEE5] text-[#9a958c] cursor-not-allowed border-[#E9E0D3]'
+                                        : 'bg-white text-[#1f2328] hover:bg-[#F4EEE5] border-[#E9E0D3]'
                                 ]"
                             >
                                 <Icon name="heroicons:chevron-right" class="w-4 h-4" />
@@ -140,15 +140,15 @@
 
                 <!-- Empty state -->
                 <div v-else class="mt-12 flex flex-col items-center text-center">
-                    <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-[#F4F1EA] border border-[#E7E5DD]">
+                    <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-[#F4EEE5] border border-[#E9E0D3]">
                         <Icon
                             name="heroicons:chart-bar-square"
-                            class="h-6 w-6 text-[#C2683F]"
+                            class="h-6 w-6 text-[#C2541E]"
                         />
                     </div>
                     <h3
                         class="mt-3 text-base font-semibold text-[#1f2328]"
-                        style="font-family: ui-serif, Georgia, 'Times New Roman', serif"
+                        style="font-family: 'Spectral', ui-serif, Georgia, serif"
                     >
                         {{ $t('dashboards.empty') }}
                     </h3>

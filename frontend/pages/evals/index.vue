@@ -1,11 +1,11 @@
 <template>
-    <div class="flex justify-center px-4 md:px-6 text-sm bg-[#FBFAF6] min-h-full">
+    <div class="flex justify-center px-4 md:px-6 text-sm bg-[#F6F1EA] min-h-full">
         <div class="w-full max-w-7xl py-2 text-[#1f2328]">
             <!-- Header -->
             <div>
                 <h1
-                    class="text-2xl font-semibold text-[#1f2328] tracking-tight flex items-center"
-                    style="font-family: ui-serif, Georgia, 'Times New Roman', serif"
+                    class="text-[32px] font-medium text-[#211B14] tracking-tight flex items-center"
+                    style="font-family: 'Spectral', ui-serif, Georgia, serif"
                 >
                     {{ $t('evals.title') }}
                 </h1>
@@ -15,15 +15,15 @@
             <div class="mt-6">
                 <!-- Top metrics -->
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    <div class="bg-white p-6 border border-[#E7E5DD] rounded-xl shadow-sm">
+                    <div class="bg-white p-6 border border-[#E9E0D3] rounded-xl shadow-sm">
                         <div class="text-sm font-medium text-[#6b6b6b]">{{ $t('evals.totalTestCases') }}</div>
                         <div class="text-2xl font-bold text-[#1f2328] mt-1">{{ metrics?.total_test_cases ?? 0 }}</div>
                     </div>
-                    <div class="bg-white p-6 border border-[#E7E5DD] rounded-xl shadow-sm">
+                    <div class="bg-white p-6 border border-[#E9E0D3] rounded-xl shadow-sm">
                         <div class="text-sm font-medium text-[#6b6b6b]">{{ $t('evals.totalTestRuns') }}</div>
                         <div class="text-2xl font-bold text-[#1f2328] mt-1">{{ metrics?.total_test_runs ?? 0 }}</div>
                     </div>
-                    <div class="bg-white p-6 border border-[#E7E5DD] rounded-xl shadow-sm">
+                    <div class="bg-white p-6 border border-[#E9E0D3] rounded-xl shadow-sm">
                         <div class="text-sm font-medium text-[#6b6b6b]">{{ $t('evals.lastTestResult') }}</div>
                         <div class="mt-1">
                             <span v-if="metrics?.last_result_status" :class="['inline-flex items-center px-2 py-1 rounded-full text-xs font-medium', statusClass(derivedStatus(metrics?.last_result_status))]">
@@ -38,7 +38,7 @@
                 </div>
 
                 <!-- Tabs -->
-                <div class="border-b border-[#E7E5DD] mb-6">
+                <div class="border-b border-[#E9E0D3] mb-6">
                     <nav class="-mb-px flex space-x-8" aria-label="Tabs">
                         <button
                             type="button"
@@ -59,8 +59,8 @@
 
                 <!-- Tests tab -->
                 <div v-if="activeTab === 'tests'">
-                    <div class="bg-white shadow-sm border border-[#E7E5DD] rounded-lg overflow-hidden">
-                        <div class="px-6 py-4 border-b border-[#E7E5DD]">
+                    <div class="bg-white shadow-sm border border-[#E9E0D3] rounded-lg overflow-hidden">
+                        <div class="px-6 py-4 border-b border-[#E9E0D3]">
                             <div class="flex flex-col md:flex-row md:items-center gap-3">
                                 <div class="text-sm font-medium text-[#1f2328] me-auto">{{ $t('evals.tests.title') }}</div>
                                 <div class="flex items-center gap-2 w-full md:w-auto">
@@ -75,7 +75,7 @@
                                         :ui="{ option: { base: 'text-xs py-1.5' } }"
                                     >
                                         <template #option="{ option }">
-                                            <div v-if="option.value === '__manage__'" class="flex items-center gap-1.5 text-xs text-[#6b6b6b] border-t border-[#E7E5DD] -mx-2 px-2 pt-2 -mb-0.5">
+                                            <div v-if="option.value === '__manage__'" class="flex items-center gap-1.5 text-xs text-[#6b6b6b] border-t border-[#E9E0D3] -mx-2 px-2 pt-2 -mb-0.5">
                                                 <Icon name="heroicons:cog-6-tooth" class="w-3.5 h-3.5" />
                                                 {{ option.label }}
                                             </div>
@@ -88,7 +88,7 @@
                                             v-model="searchTerm"
                                             type="text"
                                             :placeholder="$t('evals.tests.search')"
-                                            class="w-full ps-10 pe-4 py-2.5 bg-white border border-[#E7E5DD] rounded-xl text-[#1f2328] placeholder:text-[#9a958c] focus:outline-none focus:ring-2 focus:ring-[#C2683F]/40 focus:border-[#C2683F]"
+                                            class="w-full ps-10 pe-4 py-2.5 bg-white border border-[#E9E0D3] rounded-xl text-[#1f2328] placeholder:text-[#9a958c] focus:outline-none focus:ring-2 focus:ring-[#C2541E]/40 focus:border-[#C2541E]"
                                         />
                                         <UIcon
                                             name="i-heroicons-magnifying-glass"
@@ -102,7 +102,7 @@
                             </div>
                         </div>
                         <div class="overflow-x-auto">
-                            <table class="min-w-full divide-y divide-[#E7E5DD]">
+                            <table class="min-w-full divide-y divide-[#E9E0D3]">
                                 <thead class="bg-[#faf8f3]">
                                     <tr>
                                         <th class="px-4 py-3 w-10 text-center">
@@ -114,7 +114,7 @@
                                         <th class="px-6 py-3 text-start text-xs font-medium text-[#9a958c] uppercase tracking-wider">{{ $t('evals.tests.colOptions') }}</th>
                                     </tr>
                                 </thead>
-                                <tbody class="bg-white divide-y divide-[#E7E5DD] text-xs">
+                                <tbody class="bg-white divide-y divide-[#E9E0D3] text-xs">
                                     <tr v-for="c in filteredTests" :key="c.id" class="hover:bg-[#faf8f3]">
                                         <td class="px-4 py-3 w-10 text-center">
                                             <div class="flex items-center justify-center">
@@ -124,7 +124,7 @@
                                         <td class="px-6 py-3">
                                             <div class="flex items-center gap-2 max-w-[620px]">
                                                 <span v-if="c.status === 'draft'" class="inline-flex items-center rounded-full bg-amber-100 text-amber-800 text-[10px] font-medium px-2 py-0.5 shrink-0" title="Draft — promote to active to include in default suite runs">Draft</span>
-                                                <span v-else-if="c.status === 'archived'" class="inline-flex items-center rounded-full bg-[#F4F1EA] text-[#9a958c] border border-[#E7E5DD] text-[10px] font-medium px-2 py-0.5 shrink-0">Archived</span>
+                                                <span v-else-if="c.status === 'archived'" class="inline-flex items-center rounded-full bg-[#F4EEE5] text-[#9a958c] border border-[#E9E0D3] text-[10px] font-medium px-2 py-0.5 shrink-0">Archived</span>
                                                 <span v-if="c.auto_generated" class="inline-flex items-center rounded-full bg-purple-100 text-purple-800 text-[10px] font-medium px-2 py-0.5 shrink-0" title="Auto-drafted by the knowledge harness">Auto</span>
                                                 <span class="block flex-1 truncate" :title="c.prompt_json?.content || ''">{{ c.prompt_json?.content || '—' }}</span>
                                             </div>
@@ -151,7 +151,7 @@
                                     </tr>
                                     <tr v-if="filteredTests.length === 0">
                                         <td colspan="5" class="px-6 py-10 text-center">
-                                            <div class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4F1EA] border border-[#E7E5DD] text-[#C2683F]">
+                                            <div class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] text-[#C2541E]">
                                                 <Icon name="heroicons:beaker" class="w-6 h-6" />
                                             </div>
                                             <h3 class="text-[15px] font-semibold text-[#1f2328]">{{ $t('evals.tests.empty') }}</h3>
@@ -160,7 +160,7 @@
                                 </tbody>
                             </table>
                         </div>
-                        <div class="px-6 py-3 border-t border-[#E7E5DD] flex flex-col md:flex-row gap-3 md:items-center justify-between">
+                        <div class="px-6 py-3 border-t border-[#E9E0D3] flex flex-col md:flex-row gap-3 md:items-center justify-between">
                             <div class="text-xs text-[#9a958c]">{{ $t('evals.pagination.showing', { page: testsPage, n: filteredTests.length }) }}</div>
                             <div class="flex items-center gap-2">
                                 <USelectMenu
@@ -180,8 +180,8 @@
 
                 <!-- Runs tab -->
                 <div v-else>
-                    <div class="bg-white shadow-sm border border-[#E7E5DD] rounded-lg overflow-hidden">
-                        <div class="px-6 py-4 border-b border-[#E7E5DD]">
+                    <div class="bg-white shadow-sm border border-[#E9E0D3] rounded-lg overflow-hidden">
+                        <div class="px-6 py-4 border-b border-[#E9E0D3]">
                             <div class="flex flex-col md:flex-row md:items-center gap-3">
                                 <div class="text-sm font-medium text-[#1f2328] me-auto">{{ $t('evals.runs.title') }}</div>
                                 <div class="flex items-center gap-2 w-full md:w-auto">
@@ -195,7 +195,7 @@
                                       :ui="{ option: { base: 'text-xs py-1.5' } }"
                                     >
                                         <template #option="{ option }">
-                                            <div v-if="option.value === '__manage__'" class="flex items-center gap-1.5 text-xs text-[#6b6b6b] border-t border-[#E7E5DD] -mx-2 px-2 pt-2 -mb-0.5">
+                                            <div v-if="option.value === '__manage__'" class="flex items-center gap-1.5 text-xs text-[#6b6b6b] border-t border-[#E9E0D3] -mx-2 px-2 pt-2 -mb-0.5">
                                                 <Icon name="heroicons:cog-6-tooth" class="w-3.5 h-3.5" />
                                                 {{ option.label }}
                                             </div>
@@ -215,7 +215,7 @@
                                           v-model="runSearchTerm"
                                           type="text"
                                           :placeholder="$t('evals.filter.searchRuns')"
-                                          class="w-full ps-10 pe-4 py-2.5 bg-white border border-[#E7E5DD] rounded-xl text-[#1f2328] placeholder:text-[#9a958c] focus:outline-none focus:ring-2 focus:ring-[#C2683F]/40 focus:border-[#C2683F]"
+                                          class="w-full ps-10 pe-4 py-2.5 bg-white border border-[#E9E0D3] rounded-xl text-[#1f2328] placeholder:text-[#9a958c] focus:outline-none focus:ring-2 focus:ring-[#C2541E]/40 focus:border-[#C2541E]"
                                         />
                                         <UIcon
                                             name="i-heroicons-magnifying-glass"
@@ -226,7 +226,7 @@
                             </div>
                         </div>
                         <div class="overflow-x-auto">
-                            <table class="min-w-full divide-y divide-[#E7E5DD]">
+                            <table class="min-w-full divide-y divide-[#E9E0D3]">
                                 <thead class="bg-[#faf8f3]">
                                     <tr>
                                         <th class="px-6 py-3 text-start text-xs font-medium text-[#9a958c] uppercase tracking-wider">{{ $t('evals.runs.colTitle') }}</th>
@@ -238,10 +238,10 @@
                                         <th class="px-6 py-3 text-start text-xs font-medium text-[#9a958c] uppercase tracking-wider">{{ $t('evals.runs.colDuration') }}</th>
                                     </tr>
                                 </thead>
-                                <tbody class="bg-white divide-y divide-[#E7E5DD] text-xs">
+                                <tbody class="bg-white divide-y divide-[#E9E0D3] text-xs">
                                     <tr v-for="r in filteredRuns" :key="r.id" class="hover:bg-[#faf8f3]">
                                         <td class="px-6 py-3 text-[#1f2328]">
-                                            <NuxtLink :to="`/evals/runs/${r.id}`" class="text-[#C2683F] hover:underline">
+                                            <NuxtLink :to="`/evals/runs/${r.id}`" class="text-[#C2541E] hover:underline">
                                                 {{ r.title || $t('evals.runs.fallbackTitle') }}
                                             </NuxtLink>
                                         </td>
@@ -266,7 +266,7 @@
                                     </tr>
                                     <tr v-if="filteredRuns.length === 0">
                                         <td colspan="7" class="px-6 py-10 text-center">
-                                            <div class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4F1EA] border border-[#E7E5DD] text-[#C2683F]">
+                                            <div class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] text-[#C2541E]">
                                                 <Icon name="heroicons:play-circle" class="w-6 h-6" />
                                             </div>
                                             <h3 class="text-[15px] font-semibold text-[#1f2328]">{{ $t('evals.runs.empty') }}</h3>
@@ -275,7 +275,7 @@
                                 </tbody>
                             </table>
                         </div>
-                        <div class="px-6 py-3 border-t border-[#E7E5DD] flex flex-col md:flex-row gap-3 md:items-center justify-between">
+                        <div class="px-6 py-3 border-t border-[#E9E0D3] flex flex-col md:flex-row gap-3 md:items-center justify-between">
                             <div class="text-xs text-[#9a958c]">{{ $t('evals.pagination.showing', { page: runsPage, n: filteredRuns.length }) }}</div>
                             <div class="flex items-center gap-2">
                                 <USelectMenu
@@ -400,8 +400,8 @@ const localizedStatus = (status?: string) => {
 const statusClass = (status?: string) => {
     if (status === 'success') return 'bg-green-100 text-green-800'
     if (status === 'error') return 'bg-red-100 text-red-800'
-    if (status === 'in_progress') return 'bg-[#F4F1EA] text-[#6b6b6b]'
-    return 'bg-[#F4F1EA] text-[#6b6b6b]'
+    if (status === 'in_progress') return 'bg-[#F4EEE5] text-[#6b6b6b]'
+    return 'bg-[#F4EEE5] text-[#6b6b6b]'
 }
 
 const tabClass = (tab: 'tests' | 'runs') => {
@@ -409,8 +409,8 @@ const tabClass = (tab: 'tests' | 'runs') => {
     return [
         'whitespace-nowrap py-4 px-1 border-b-2 text-sm font-medium',
         isActive
-            ? 'border-[#C2683F] text-[#1f2328]'
-            : 'border-transparent text-[#6b6b6b] hover:text-[#1f2328] hover:border-[#E7E5DD]'
+            ? 'border-[#C2541E] text-[#1f2328]'
+            : 'border-transparent text-[#6b6b6b] hover:text-[#1f2328] hover:border-[#E9E0D3]'
     ]
 }
 
@@ -513,14 +513,14 @@ function categoriesForCase(c: TestCaseRow): { key: string; label: string }[] {
 
 function badgeClassesFor(catKey: string): string {
     const map: Record<string, string> = {
-        'tool:create_data': 'bg-[#F4F1EA] text-[#A8542F] border-[#E7E5DD]',
+        'tool:create_data': 'bg-[#F4EEE5] text-[#A8330F] border-[#E9E0D3]',
         'tool:clarify': 'bg-amber-50 text-amber-700 border-amber-100',
         'tool:describe_table': 'bg-teal-50 text-teal-700 border-teal-100',
         'metadata': 'bg-slate-50 text-slate-700 border-slate-100',
         'completion': 'bg-purple-50 text-purple-700 border-purple-100',
-        'judge': 'bg-[#F4F1EA] text-[#6b6b6b] border-[#E7E5DD]',
+        'judge': 'bg-[#F4EEE5] text-[#6b6b6b] border-[#E9E0D3]',
     }
-    return map[catKey] || 'bg-[#F4F1EA] text-[#6b6b6b] border-[#E7E5DD]'
+    return map[catKey] || 'bg-[#F4EEE5] text-[#6b6b6b] border-[#E9E0D3]'
 }
 
 async function loadSuites() {
@@ -619,9 +619,9 @@ function goRuns() {
 
 function resultBadgeClassByStatus(status?: string) {
     if (status === 'success') return 'inline-flex px-2 py-1 rounded-full bg-green-100 text-green-800'
-    if (status === 'in_progress') return 'inline-flex px-2 py-1 rounded-full bg-[#F4F1EA] text-[#6b6b6b]'
+    if (status === 'in_progress') return 'inline-flex px-2 py-1 rounded-full bg-[#F4EEE5] text-[#6b6b6b]'
     if (status === 'fail') return 'inline-flex px-2 py-1 rounded-full bg-red-100 text-red-800'
-    return 'inline-flex px-2 py-1 rounded-full bg-[#F4F1EA] text-[#6b6b6b]'
+    return 'inline-flex px-2 py-1 rounded-full bg-[#F4EEE5] text-[#6b6b6b]'
 }
 
 function resultSummaryReal(r: RunItem) {
@@ -643,7 +643,7 @@ function runStatusClass(r: RunItem) {
     const s = derivedRunStatus(r)
     if (s === 'success') return 'bg-green-100 text-green-800'
     if (s === 'fail') return 'bg-red-100 text-red-800'
-    return 'bg-[#F4F1EA] text-[#6b6b6b]'
+    return 'bg-[#F4EEE5] text-[#6b6b6b]'
 }
 
 async function runSelected() {
@@ -865,7 +865,7 @@ const resultSummary = (r: TestRunRow) => {
 
 const resultBadgeClass = (r: TestRunRow) => {
     if (r.status === 'success') return 'inline-flex px-2 py-1 rounded-full bg-green-100 text-green-800'
-    if (r.status === 'in_progress') return 'inline-flex px-2 py-1 rounded-full bg-[#F4F1EA] text-[#6b6b6b]'
+    if (r.status === 'in_progress') return 'inline-flex px-2 py-1 rounded-full bg-[#F4EEE5] text-[#6b6b6b]'
     return 'inline-flex px-2 py-1 rounded-full bg-red-100 text-red-800'
 }
 

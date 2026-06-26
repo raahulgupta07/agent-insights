@@ -46,7 +46,7 @@
         <span :class="{ 'line-clamp-1': !promptExpanded }">{{ editInstruction }}</span>
         <button
           v-if="editInstruction.length > 80"
-          class="ms-1 text-[#C2683F] hover:text-[#A8542F] text-[11px]"
+          class="ms-1 text-[#C2541E] hover:text-[#A8330F] text-[11px]"
           @click="promptExpanded = !promptExpanded"
         >
           {{ promptExpanded ? $t('tools.editArtifact.less') : $t('tools.editArtifact.more') }}
@@ -97,11 +97,11 @@
         </div>
         <input
           v-model="editableTitle"
-          class="w-full px-2 py-1 text-xs border border-gray-200 rounded bg-white focus:outline-none focus:border-[#C2683F]"
+          class="w-full px-2 py-1 text-xs border border-gray-200 rounded bg-white focus:outline-none focus:border-[#C2541E]"
           :placeholder="$t('tools.editArtifact.titlePlaceholder')"
         />
         <div class="flex items-center gap-2">
-          <button class="px-2.5 py-1 text-xs font-medium text-white bg-[#C2683F] rounded hover:bg-[#A8542F] transition-colors" @click="approveConfirmation">{{ $t('tools.editArtifact.approve') }}</button>
+          <button class="px-2.5 py-1 text-xs font-medium text-white bg-[#C2541E] rounded hover:bg-[#A8330F] transition-colors" @click="approveConfirmation">{{ $t('tools.editArtifact.approve') }}</button>
           <button class="px-2.5 py-1 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded hover:bg-gray-50 transition-colors" @click="rejectConfirmation">{{ $t('tools.editArtifact.cancel') }}</button>
           <span class="text-[10px] text-gray-400">{{ $t('tools.editArtifact.autoApprovingIn', { n: confirmationCountdown }) }}</span>
         </div>
@@ -123,8 +123,8 @@
             @error="thumbnailError = true"
           />
           <template v-else>
-            <Spinner v-if="status === 'running'" class="w-4 h-4 text-[#C2683F]" />
-            <Icon v-else name="heroicons:pencil-square" class="w-4 h-4 text-[#C2683F]" />
+            <Spinner v-if="status === 'running'" class="w-4 h-4 text-[#C2541E]" />
+            <Icon v-else name="heroicons:pencil-square" class="w-4 h-4 text-[#C2541E]" />
           </template>
         </div>
         <!-- Title and info -->

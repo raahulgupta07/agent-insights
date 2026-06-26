@@ -5,7 +5,7 @@
       <UChip v-if="activeFilterCount > 0" :text="activeFilterCount" size="2xl" color="primary">
         <button
           type="button"
-          class="relative p-1 hover:bg-gray-100 rounded transition-colors text-[#C2683F]"
+          class="relative p-1 hover:bg-gray-100 rounded transition-colors text-[#C2541E]"
         >
           <Icon name="heroicons:funnel" class="w-3.5 h-3.5" />
         </button>
@@ -72,7 +72,7 @@
                   :key="condition.id"
                   class="mb-2 last:mb-0"
                 >
-                  <div v-if="condIndex > 0" class="text-[10px] font-semibold text-[#C2683F] mb-1">AND</div>
+                  <div v-if="condIndex > 0" class="text-[10px] font-semibold text-[#C2541E] mb-1">AND</div>
 
                   <div class="flex items-center gap-1.5">
                     <!-- Column Select -->

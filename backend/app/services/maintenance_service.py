@@ -165,6 +165,19 @@ async def purge_step_payloads_per_organization(
             "organizations_processed": len(retention_settings),
         }
     )
+
+    # Reclaim Parquet result files no longer referenced by any step (purged /
+    # archived / deleted steps leave orphans on disk). No-op when the feature is off.
+    try:
+        from app.settings.hybrid_flags import flags
+        if flags.PARQUET_RESULTS:
+            from app.services.parquet_store import sweep_orphans
+            async with async_session_maker() as session:
+                summary = await sweep_orphans(session)
+            logger.info("Parquet orphan sweep", extra=summary)
+    except Exception:
+        logger.exception("Parquet orphan sweep failed (non-fatal)")
+
     return total_purged
 
 

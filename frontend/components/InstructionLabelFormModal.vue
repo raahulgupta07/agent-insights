@@ -98,7 +98,7 @@
                                 Cancel
                             </UButton>
                             <UButton
-                                class="!bg-[#C2683F] hover:!bg-[#A8542F] !text-white"
+                                class="!bg-[#C2541E] hover:!bg-[#A8330F] !text-white"
                                 :loading="isSaving"
                                 @click="submit"
                                 :disabled="!canSubmit"

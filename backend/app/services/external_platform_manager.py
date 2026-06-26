@@ -24,19 +24,27 @@ class ExternalPlatformManager:
         self.data_source_service = DataSourceService()
 
     async def handle_incoming_message(
-        self, 
-        db: AsyncSession, 
+        self,
+        db: AsyncSession,
         platform_type: str,
         organization_id: str,
-        event_data: Dict[str, Any]
+        event_data: Dict[str, Any],
+        platform: ExternalPlatform = None,
     ) -> Dict[str, Any]:
-        """Handle incoming message from external platform"""
-        
+        """Handle incoming message from external platform.
+
+        When ``platform`` is provided (the webhook already matched the exact row by
+        team_id / phone_number_id / tenant_id), it is used verbatim — including its
+        ``studio_id`` for per-agent data scoping. Otherwise we fall back to the
+        org-wide platform for this type (legacy behavior).
+        """
+
         try:
-            # Get platform
-            platform = await self.platform_service.get_platform_by_type(
-                db, organization_id, platform_type
-            )
+            # Get platform (prefer the webhook-matched row; carries studio_id)
+            if platform is None:
+                platform = await self.platform_service.get_platform_by_type(
+                    db, organization_id, platform_type
+                )
             if not platform or not platform.is_active:
                 return {"success": False, "error": "Platform not found or inactive"}
             
@@ -62,9 +70,9 @@ class ExternalPlatformManager:
                 )
                 return {"success": True, "action": "verification_sent"}
             
-            # Process verified message
+            # Process verified message (pass platform → carries studio_id for scoping)
             return await self._process_verified_message(
-                db, adapter, processed_data, user_mapping
+                db, adapter, processed_data, user_mapping, platform
             )
             
         except Exception as e:
@@ -290,6 +298,7 @@ class ExternalPlatformManager:
         user: Any,
         user_mapping: ExternalUserMapping,
         channel_type: str = None,
+        studio_id: str = None,
     ) -> Tuple[Any, bool]:
         """
         Get a report for a user if one from the platform exists from the last 24 hours,
@@ -345,10 +354,14 @@ class ExternalPlatformManager:
             data_sources = await self.data_source_service.get_active_data_sources(db, organization, user)
 
         data_source_ids = [data_source.id for data_source in data_sources]
+        # When the channel is bound to a Studio (per-agent), pass studio_id →
+        # ReportService scopes the report to that studio's pinned data sources
+        # (cross-org/agent data isolation). NULL studio_id keeps org-wide behavior.
         report_create_data = ReportCreate(
             title=f"Chat with {user.name} via {platform_name}",
             data_sources=data_source_ids,
-            external_platform_id=user_mapping.platform_id
+            external_platform_id=user_mapping.platform_id,
+            studio_id=studio_id,
         )
 
         report = await report_service.create_report(
@@ -414,7 +427,8 @@ class ExternalPlatformManager:
         db: AsyncSession,
         adapter: PlatformAdapter,
         processed_data: Dict[str, Any],
-        user_mapping: ExternalUserMapping
+        user_mapping: ExternalUserMapping,
+        platform: ExternalPlatform = None,
     ) -> Dict[str, Any]:
         """Process message from verified user"""
 
@@ -468,7 +482,8 @@ class ExternalPlatformManager:
             # - channel: only public data sources
             # - im/DM: public + user's private data sources
             report, created = await self._get_or_create_conversation_report(
-                db, organization, user, user_mapping, channel_type
+                db, organization, user, user_mapping, channel_type,
+                studio_id=getattr(platform, "studio_id", None),
             )
 
             if created:

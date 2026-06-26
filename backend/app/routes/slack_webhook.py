@@ -98,7 +98,7 @@ async def slack_webhook(
         
         # Handle the event
         result = await platform_manager.handle_incoming_message(
-            db, "slack", platform.organization_id, event_data
+            db, "slack", platform.organization_id, event_data, platform=platform
         )
         
         return {"ok": True, "result": result}
@@ -112,15 +112,24 @@ async def find_platform_by_team_id(db: AsyncSession, team_id: str) -> ExternalPl
     
     from sqlalchemy import select
     
-    stmt = select(ExternalPlatform).where(
-        ExternalPlatform.platform_type == "slack"
+    # Prefer per-agent (studio-bound) rows over the org-wide row when both match
+    # the same workspace — so a Slack app wired to a specific agent answers from
+    # that agent's data scope. studio_id NOT NULL sorts first.
+    stmt = (
+        select(ExternalPlatform)
+        .where(
+            ExternalPlatform.platform_type == "slack",
+            ExternalPlatform.is_active.is_(True),
+            ExternalPlatform.deleted_at.is_(None),
+        )
+        .order_by(ExternalPlatform.studio_id.is_(None).asc())
     )
     result = await db.execute(stmt)
     platforms = result.scalars().all()
-    
+
     for platform in platforms:
-        config = platform.platform_config
+        config = platform.platform_config or {}
         if config.get("team_id") == team_id:
             return platform
-    
+
     return None

@@ -132,7 +132,7 @@
             <span
               v-for="(t, ti) in (q.tags || [])"
               :key="ti"
-              class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#F6EFEA] text-[#A8542F]"
+              class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#F6EFEA] text-[#A8330F]"
             >{{ t }}</span>
           </div>
 

@@ -2,10 +2,10 @@
   <div class="h-full w-full flex flex-col" :style="wrapperStyle">
     <!-- P2b drill-down breadcrumb -->
     <div v-if="drillStack.length" class="flex items-center gap-1 px-1 pb-1 text-[11px] text-[#6b6b6b] flex-none overflow-x-auto no-scrollbar">
-      <button class="hover:text-[#C2683F] cursor-pointer shrink-0" @click="drillTo(0)">All</button>
+      <button class="hover:text-[#C2541E] cursor-pointer shrink-0" @click="drillTo(0)">All</button>
       <template v-for="(d, i) in drillStack" :key="i">
         <span class="text-[#cdc8bf] shrink-0">›</span>
-        <button class="hover:text-[#C2683F] cursor-pointer truncate max-w-[120px]" :title="d.value" @click="drillTo(i + 1)">{{ d.value }}</button>
+        <button class="hover:text-[#C2541E] cursor-pointer truncate max-w-[120px]" :title="d.value" @click="drillTo(i + 1)">{{ d.value }}</button>
       </template>
     </div>
     <div v-if="!isLoading && chartOptions && Object.keys(chartOptions).length > 0 && (data?.rows?.length || 0) > 0" class="flex-1 min-h-0" @contextmenu.prevent>

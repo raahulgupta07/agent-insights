@@ -56,11 +56,11 @@
                 </div>
 
                 <!-- ── Skill Optimizer ─────────────────────────────────────── -->
-                <div class="rounded-xl border border-[#E7E5DD] bg-[#FBFAF6] p-4">
+                <div class="rounded-xl border border-[#E9E0D3] bg-[#F6F1EA] p-4">
                     <div class="flex items-start justify-between gap-3">
                         <div class="min-w-0">
                             <div class="flex items-center gap-1.5 text-[13px] font-medium text-[#1f2328]">
-                                <Icon name="heroicons:beaker" class="w-4 h-4 text-[#C2683F] shrink-0" />
+                                <Icon name="heroicons:beaker" class="w-4 h-4 text-[#C2541E] shrink-0" />
                                 Skill Optimizer
                             </div>
                             <p class="mt-1 text-xs text-[#6b6b6b] leading-relaxed">
@@ -91,7 +91,7 @@
                                 type="number"
                                 min="1"
                                 max="10"
-                                class="w-20 rounded-lg border border-[#E7E5DD] bg-white px-2 py-1 text-xs outline-none focus:border-[#C2683F]"
+                                class="w-20 rounded-lg border border-[#E9E0D3] bg-white px-2 py-1 text-xs outline-none focus:border-[#C2541E]"
                                 :disabled="optimizing"
                             />
                         </label>
@@ -101,31 +101,31 @@
                                 v-model.trim="optEvalSuiteId"
                                 type="text"
                                 placeholder="leave blank to use default"
-                                class="w-56 rounded-lg border border-[#E7E5DD] bg-white px-2 py-1 text-xs outline-none focus:border-[#C2683F] placeholder:text-[#9a958c]"
+                                class="w-56 rounded-lg border border-[#E9E0D3] bg-white px-2 py-1 text-xs outline-none focus:border-[#C2541E] placeholder:text-[#9a958c]"
                                 :disabled="optimizing"
                             />
                         </label>
                     </div>
 
                     <!-- Optimizer result / note -->
-                    <div v-if="optNote" class="mt-3 rounded-lg border border-[#E7E5DD] bg-[#F3E7DF] p-3 text-xs text-[#A8542F]">
+                    <div v-if="optNote" class="mt-3 rounded-lg border border-[#E9E0D3] bg-[#FBEFE4] p-3 text-xs text-[#A8330F]">
                         {{ optNote }}
                     </div>
 
                     <div
                         v-if="optResult"
-                        class="mt-3 rounded-lg border border-[#E7E5DD] bg-white p-3 text-xs text-[#1f2328]"
+                        class="mt-3 rounded-lg border border-[#E9E0D3] bg-white p-3 text-xs text-[#1f2328]"
                     >
                         <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
                             <span class="inline-flex items-center gap-1.5">
                                 <span class="text-[#6b6b6b]">Score</span>
                                 <span class="font-medium">{{ fmtScore(optResult.baseline_score) }}</span>
                                 <Icon name="heroicons:arrow-right" class="w-3 h-3 text-[#9a958c]" />
-                                <span class="font-semibold text-[#C2683F]">{{ fmtScore(optResult.best_score) }}</span>
+                                <span class="font-semibold text-[#C2541E]">{{ fmtScore(optResult.best_score) }}</span>
                             </span>
                             <span
                                 class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
-                                :class="optResult.improved ? 'bg-[#eef6f0] text-[#3f9e6a] border border-[#d7ebde]' : 'bg-[#F4F1EA] text-[#6b6b6b] border border-[#E7E5DD]'"
+                                :class="optResult.improved ? 'bg-[#eef6f0] text-[#3f9e6a] border border-[#d7ebde]' : 'bg-[#F4EEE5] text-[#6b6b6b] border border-[#E9E0D3]'"
                             >
                                 {{ optResult.improved ? 'Improved' : 'No improvement' }}
                             </span>
@@ -146,9 +146,9 @@
                 </div>
 
                 <!-- ── Versions ────────────────────────────────────────────── -->
-                <div v-if="otherVersions.length" class="rounded-xl border border-[#E7E5DD] bg-white p-4">
+                <div v-if="otherVersions.length" class="rounded-xl border border-[#E9E0D3] bg-white p-4">
                     <div class="flex items-center gap-1.5 text-[13px] font-medium text-[#1f2328]">
-                        <Icon name="heroicons:clock" class="w-4 h-4 text-[#C2683F] shrink-0" />
+                        <Icon name="heroicons:clock" class="w-4 h-4 text-[#C2541E] shrink-0" />
                         Versions
                         <span class="text-xs font-normal text-[#9a958c]">({{ otherVersions.length }})</span>
                     </div>
@@ -161,7 +161,7 @@
                         <div
                             v-for="v in otherVersions"
                             :key="v.id"
-                            class="rounded-lg border border-[#E7E5DD] bg-[#FBFAF6] p-3"
+                            class="rounded-lg border border-[#E9E0D3] bg-[#F6F1EA] p-3"
                         >
                             <div class="flex items-center justify-between gap-2">
                                 <div class="flex items-center gap-2 min-w-0">
@@ -190,11 +190,11 @@
                             <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 <div class="min-w-0">
                                     <div class="text-[10px] uppercase tracking-wide text-[#9a958c] mb-1">Active</div>
-                                    <pre class="max-h-40 overflow-auto rounded border border-[#E7E5DD] bg-white p-2 text-[11px] leading-relaxed whitespace-pre-wrap text-[#6b6b6b]">{{ activeBodyPreview }}</pre>
+                                    <pre class="max-h-40 overflow-auto rounded border border-[#E9E0D3] bg-white p-2 text-[11px] leading-relaxed whitespace-pre-wrap text-[#6b6b6b]">{{ activeBodyPreview }}</pre>
                                 </div>
                                 <div class="min-w-0">
                                     <div class="text-[10px] uppercase tracking-wide text-[#9a958c] mb-1">This version</div>
-                                    <pre class="max-h-40 overflow-auto rounded border border-[#E7E5DD] bg-white p-2 text-[11px] leading-relaxed whitespace-pre-wrap text-[#1f2328]">{{ bodyPreview(v.skill_md) }}</pre>
+                                    <pre class="max-h-40 overflow-auto rounded border border-[#E9E0D3] bg-white p-2 text-[11px] leading-relaxed whitespace-pre-wrap text-[#1f2328]">{{ bodyPreview(v.skill_md) }}</pre>
                                 </div>
                             </div>
                         </div>
@@ -308,7 +308,7 @@ const scopeLabel = computed(() => {
 
 const scopeBadgeClass = computed(() => {
     const s = (scope.value || '').toLowerCase()
-    if (s === 'org' || s === 'organization') return 'bg-[#F4E5DA] text-[#A8542F]'
+    if (s === 'org' || s === 'organization') return 'bg-[#F4E5DA] text-[#A8330F]'
     if (s === 'global') return 'bg-purple-100 text-purple-700'
     return 'bg-gray-100 text-gray-700'
 })
@@ -472,7 +472,7 @@ const bodyPreview = (md?: string | null) => {
 const versionPillClass = (status?: string) => {
     const s = (status || 'draft').toLowerCase()
     if (s === 'archived') return 'bg-gray-100 text-gray-600 border-gray-200'
-    return 'bg-[#F3E7DF] text-[#A8542F] border-[#E7E5DD]'
+    return 'bg-[#FBEFE4] text-[#A8330F] border-[#E9E0D3]'
 }
 
 const fmtDate = (iso?: string | null) => {

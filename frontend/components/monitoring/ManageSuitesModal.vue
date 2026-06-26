@@ -46,7 +46,7 @@
                             <tr v-for="suite in suites" :key="suite.id" class="hover:bg-gray-50">
                                 <td class="px-4 py-3 text-sm text-gray-900">{{ suite.name }}</td>
                                 <td class="px-4 py-3 text-sm text-gray-600">
-                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#F4E5DA] text-[#A8542F]">
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#F4E5DA] text-[#A8330F]">
                                         {{ suite.tests_count }} test{{ suite.tests_count !== 1 ? 's' : '' }}
                                     </span>
                                 </td>

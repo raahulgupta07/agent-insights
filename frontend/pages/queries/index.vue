@@ -1,26 +1,26 @@
 <template>
-  <div class="flex justify-center px-4 md:px-6 text-sm bg-[#FBFAF6] min-h-full">
+  <div class="flex justify-center px-4 md:px-6 text-sm bg-[#F6F1EA] min-h-full">
     <div class="w-full max-w-7xl py-2 text-[#1f2328]">
       <div class="mb-6">
-        <h1 class="text-2xl font-semibold text-[#1f2328] tracking-tight flex items-center" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">{{ $t('queries.title') }}</h1>
+        <h1 class="text-[32px] font-medium text-[#211B14] tracking-tight flex items-center" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ $t('queries.title') }}</h1>
         <p class="mt-2 text-[#6b6b6b] leading-relaxed max-w-2xl">{{ $t('queries.subtitle') }}</p>
 
         <!-- Search -->
         <div class="mt-4">
           <div class="relative">
-            <input v-model="q" type="text" :placeholder="$t('queries.searchPlaceholder')" class="w-full ps-10 pe-4 py-2.5 bg-white border border-[#E7E5DD] rounded-xl text-[#1f2328] placeholder:text-[#9a958c] focus:outline-none focus:ring-2 focus:ring-[#C2683F]/40 focus:border-[#C2683F] transition-colors" @keyup.enter="reload()" />
+            <input v-model="q" type="text" :placeholder="$t('queries.searchPlaceholder')" class="w-full ps-10 pe-4 py-2.5 bg-white border border-[#E9E0D3] rounded-xl text-[#1f2328] placeholder:text-[#9a958c] focus:outline-none focus:ring-2 focus:ring-[#C2541E]/40 focus:border-[#C2541E] transition-colors" @keyup.enter="reload()" />
             <UIcon name="i-heroicons-magnifying-glass" class="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9a958c]" />
           </div>
         </div>
 
         <!-- Filter tabs -->
-        <div class="mt-4 flex items-center gap-1 border-b border-[#E7E5DD]">
+        <div class="mt-4 flex items-center gap-1 border-b border-[#E9E0D3]">
           <button
             @click="filterType = 'published'"
             :class="[
               'px-3 py-2 text-sm border-b-2 transition-colors',
               filterType === 'published'
-                ? 'border-[#C2683F] text-[#1f2328] font-semibold'
+                ? 'border-[#C2541E] text-[#1f2328] font-semibold'
                 : 'border-transparent text-[#6b6b6b] hover:text-[#1f2328]'
             ]"
           >
@@ -31,12 +31,12 @@
             :class="[
               'px-3 py-2 text-sm border-b-2 transition-colors inline-flex items-center',
               filterType === 'suggested'
-                ? 'border-[#C2683F] text-[#1f2328] font-semibold'
+                ? 'border-[#C2541E] text-[#1f2328] font-semibold'
                 : 'border-transparent text-[#6b6b6b] hover:text-[#1f2328]'
             ]"
           >
             {{ isAdmin ? $t('queries.draftSuggested') : $t('queries.myDrafts') }}
-            <span v-if="suggestedCount > 0" class="ms-1.5 px-1.5 py-0.5 rounded-full text-[10px] bg-[#F4F1EA] text-[#6b6b6b]">{{ suggestedCount }}</span>
+            <span v-if="suggestedCount > 0" class="ms-1.5 px-1.5 py-0.5 rounded-full text-[10px] bg-[#F4EEE5] text-[#6b6b6b]">{{ suggestedCount }}</span>
           </button>
         </div>
       </div>
@@ -45,13 +45,13 @@
         <Spinner class="me-1" /> {{ $t('queries.loading') }}
       </div>
       <div v-else-if="filteredItems.length === 0" class="mt-12 flex flex-col items-center text-center">
-        <div class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4F1EA] border border-[#E7E5DD] text-[#C2683F]">
+        <div class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] text-[#C2541E]">
           <Icon
             :name="filterType === 'suggested' ? 'heroicons:light-bulb' : 'heroicons:cube'"
             class="w-6 h-6"
           />
         </div>
-        <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">
+        <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">
           {{ filterType === 'suggested' ? $t('queries.noDrafts') : $t('queries.noPublished') }}
         </h3>
         <p class="mt-1 text-sm text-[#9a958c] max-w-sm">
@@ -66,14 +66,14 @@
         <div
           v-for="item in filteredItems"
           :key="item.id"
-          class="bg-white border border-[#E7E5DD] rounded-2xl p-4 hover:shadow-lg hover:-translate-y-0.5 hover:border-[#d9d6cd] transition-all cursor-pointer flex flex-col h-full"
+          class="bg-white border border-[#E9E0D3] rounded-2xl p-4 hover:shadow-lg hover:-translate-y-0.5 hover:border-[#d9d6cd] transition-all cursor-pointer flex flex-col h-full"
           @click="navigateToEntity(item.id)"
         >
           <div class="min-w-0 flex-1 flex flex-col">
             <div class="flex items-center gap-2 mb-2">
               <span
                 class="text-[10px] px-1.5 py-0.5 rounded-md border font-medium"
-                :class="item.type === 'metric' ? 'text-[#3f9e6a] border-[#cde7d6] bg-[#eef6f0]' : 'text-[#6b6b6b] border-[#E7E5DD] bg-[#F4F1EA]'"
+                :class="item.type === 'metric' ? 'text-[#3f9e6a] border-[#cde7d6] bg-[#eef6f0]' : 'text-[#6b6b6b] border-[#E9E0D3] bg-[#F4EEE5]'"
               >{{ (item.type || '').toUpperCase() }}</span>
 
               <!-- Green check badge for approved/published entities -->
@@ -93,24 +93,24 @@
               >{{ $t('queries.archivedBadge') }}</span>
               <span
                 v-else-if="getEntityType(item) === 'draft'"
-                class="text-[10px] px-1.5 py-0.5 rounded-md border text-[#6b6b6b] border-[#E7E5DD] bg-[#F4F1EA] font-medium"
+                class="text-[10px] px-1.5 py-0.5 rounded-md border text-[#6b6b6b] border-[#E9E0D3] bg-[#F4EEE5] font-medium"
               >{{ $t('queries.draftBadge') }}</span>
               <span
                 v-else-if="getEntityType(item) === 'private'"
-                class="text-[10px] px-1.5 py-0.5 rounded-md border text-[#6b6b6b] border-[#E7E5DD] bg-[#F4F1EA] font-medium"
+                class="text-[10px] px-1.5 py-0.5 rounded-md border text-[#6b6b6b] border-[#E9E0D3] bg-[#F4EEE5] font-medium"
               >{{ $t('queries.draftBadge') }}</span>
               <span
                 v-else-if="getEntityType(item) === 'suggested'"
-                class="text-[10px] px-1.5 py-0.5 rounded-md border text-[#C2683F] border-[#ecd8cb] bg-[#F3E7DF] font-medium"
+                class="text-[10px] px-1.5 py-0.5 rounded-md border text-[#C2541E] border-[#ecd8cb] bg-[#FBEFE4] font-medium"
               >{{ $t('queries.suggestedBadge') }}</span>
 
               <span class="ms-auto text-[11px] text-[#9a958c]">{{ timeAgo(item.updated_at) }}</span>
             </div>
-            <div class="text-[15px] font-semibold text-[#1f2328] mb-1" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">{{ item.title || item.slug }}</div>
+            <div class="text-[15px] font-semibold text-[#1f2328] mb-1" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ item.title || item.slug }}</div>
             <div class="text-[13px] text-[#6b6b6b] line-clamp-2 leading-snug">{{ item.description || $t('queries.noDescription') }}</div>
 
             <!-- SQL preview tile -->
-            <div v-if="item.code" class="mt-3 bg-[#F4F1EA] border border-[#E7E5DD] rounded-xl px-3 py-2.5 overflow-hidden">
+            <div v-if="item.code" class="mt-3 bg-[#F4EEE5] border border-[#E9E0D3] rounded-xl px-3 py-2.5 overflow-hidden">
               <pre class="text-[11px] text-[#1f2328] leading-relaxed whitespace-pre-wrap break-words line-clamp-3" style="font-family: ui-monospace, 'SF Mono', Menlo, monospace">{{ item.code }}</pre>
             </div>
 
@@ -123,7 +123,7 @@
                   :src="dataSourceIcon(ds.type)"
                   :alt="ds.type"
                   :title="ds.name || ds.type"
-                  class="w-4 h-4 rounded border border-[#E7E5DD] bg-white object-contain p-0.5"
+                  class="w-4 h-4 rounded border border-[#E9E0D3] bg-white object-contain p-0.5"
                   @error="(e: any) => e.target && (e.target.style.visibility = 'hidden')"
                 />
                 <span v-if="item.data_sources.length > 3" class="text-[11px] text-[#9a958c]">+{{ item.data_sources.length - 3 }}</span>
@@ -147,11 +147,11 @@
             </div>
 
             <!-- Tags -->
-            <div v-if="item.tags && item.tags.length > 0" class="flex items-center gap-1.5 flex-wrap mt-3 pt-3 border-t border-[#E7E5DD]">
+            <div v-if="item.tags && item.tags.length > 0" class="flex items-center gap-1.5 flex-wrap mt-3 pt-3 border-t border-[#E9E0D3]">
               <span
                 v-for="tag in item.tags.slice(0, 4)"
                 :key="tag"
-                class="text-[10px] px-1.5 py-0.5 rounded-md bg-[#F4F1EA] border border-[#E7E5DD] text-[#6b6b6b]"
+                class="text-[10px] px-1.5 py-0.5 rounded-md bg-[#F4EEE5] border border-[#E9E0D3] text-[#6b6b6b]"
               >{{ tag }}</span>
             </div>
           </div>

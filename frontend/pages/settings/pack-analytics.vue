@@ -8,7 +8,7 @@
             <button
                 type="button"
                 :disabled="loading"
-                class="inline-flex items-center gap-1.5 text-xs text-[#6b6b6b] hover:text-[#1f2328] border border-[#E7E5DD] rounded-lg px-2.5 py-1.5 transition-colors disabled:opacity-50"
+                class="inline-flex items-center gap-1.5 text-xs text-[#6b6b6b] hover:text-[#1f2328] border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 transition-colors disabled:opacity-50"
                 @click="load"
             >
                 <Spinner v-if="loading" class="h-3.5 w-3.5" />
@@ -19,7 +19,7 @@
 
         <!-- Loading (first load) -->
         <div v-if="loading && !loaded" class="py-12 flex justify-center">
-            <Spinner class="h-6 w-6 text-[#C2683F]" />
+            <Spinner class="h-6 w-6 text-[#C2541E]" />
         </div>
 
         <!-- Error -->
@@ -34,9 +34,9 @@
                 <div
                     v-for="card in totalCards"
                     :key="card.label"
-                    class="rounded-2xl border border-[#E7E5DD] bg-white px-4 py-3.5"
+                    class="rounded-2xl border border-[#E9E0D3] bg-white px-4 py-3.5"
                 >
-                    <div class="text-2xl font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">
+                    <div class="text-2xl font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">
                         {{ card.value }}
                     </div>
                     <div class="text-xs text-[#6b6b6b] mt-0.5">{{ card.label }}</div>
@@ -44,20 +44,20 @@
             </div>
 
             <!-- Empty -->
-            <div v-if="!packs.length" class="py-10 text-center border border-dashed border-[#E7E5DD] rounded-2xl">
+            <div v-if="!packs.length" class="py-10 text-center border border-dashed border-[#E9E0D3] rounded-2xl">
                 <UIcon name="i-heroicons-puzzle-piece" class="w-7 h-7 mx-auto text-[#9a958c] mb-1.5" />
                 <p class="text-xs text-[#6b6b6b]">No Domain Packs are bound in any studio yet. Bind a pack in a studio's Skills tab, or run Auto-train.</p>
             </div>
 
             <!-- Packs table -->
             <div v-else class="mb-8">
-                <h2 class="text-[15px] font-semibold text-[#1f2328] mb-3" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">
+                <h2 class="text-[15px] font-semibold text-[#1f2328] mb-3" style="font-family: 'Spectral', ui-serif, Georgia, serif">
                     Packs
                 </h2>
-                <div class="border border-[#E7E5DD] rounded-2xl overflow-hidden">
+                <div class="border border-[#E9E0D3] rounded-2xl overflow-hidden">
                     <div class="overflow-x-auto">
                         <table class="min-w-full text-sm">
-                            <thead class="bg-[#F4F1EA] text-[#6b6b6b]">
+                            <thead class="bg-[#F4EEE5] text-[#6b6b6b]">
                                 <tr>
                                     <th class="text-start font-medium px-4 py-2.5 whitespace-nowrap">Pack</th>
                                     <th class="text-center font-medium px-3 py-2.5 whitespace-nowrap">Studios</th>
@@ -66,13 +66,13 @@
                                     <th class="text-center font-medium px-4 py-2.5 whitespace-nowrap">Win rate</th>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-[#E7E5DD]">
+                            <tbody class="divide-y divide-[#E9E0D3]">
                                 <tr v-for="p in packs" :key="p.pack_id" class="bg-white">
                                     <!-- Name + source -->
                                     <td class="px-4 py-3 align-top">
                                         <div class="flex items-center gap-2 flex-wrap">
                                             <span class="font-medium text-[#1f2328]">{{ p.name }}</span>
-                                            <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-[#F4F1EA] border border-[#E7E5DD] text-[#6b6b6b]">
+                                            <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-[#F4EEE5] border border-[#E9E0D3] text-[#6b6b6b]">
                                                 {{ sourceLabel(p.source) }}
                                             </span>
                                         </div>
@@ -119,7 +119,7 @@
 
             <!-- Dormant backlog -->
             <div v-if="dormant.length">
-                <h2 class="text-[15px] font-semibold text-[#1f2328] mb-1" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">
+                <h2 class="text-[15px] font-semibold text-[#1f2328] mb-1" style="font-family: 'Spectral', ui-serif, Georgia, serif">
                     Dormant backlog
                 </h2>
                 <p class="text-xs text-[#6b6b6b] mb-3 max-w-2xl">
@@ -129,22 +129,22 @@
                     <div
                         v-for="(d, i) in dormant"
                         :key="`${d.pack_id}-${d.studio_id}-${i}`"
-                        class="rounded-2xl border border-[#E7E5DD] bg-white px-4 py-3"
+                        class="rounded-2xl border border-[#E9E0D3] bg-white px-4 py-3"
                     >
                         <div class="flex items-center gap-2 flex-wrap mb-1.5">
                             <span class="text-sm font-medium text-[#1f2328]">{{ d.name }}</span>
-                            <span class="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border border-[#E7E5DD] bg-[#F4F1EA] text-[#6b6b6b]">
+                            <span class="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border border-[#E9E0D3] bg-[#F4EEE5] text-[#6b6b6b]">
                                 <UIcon name="i-heroicons-moon" class="w-3 h-3" /> Dormant
                             </span>
                             <span class="text-[11px] text-[#9a958c]" :title="d.studio_id">studio {{ shortId(d.studio_id) }}</span>
                         </div>
-                        <div class="text-[11px] text-[#A8542F] flex items-center gap-1.5 flex-wrap">
+                        <div class="text-[11px] text-[#A8330F] flex items-center gap-1.5 flex-wrap">
                             <UIcon name="i-heroicons-exclamation-triangle" class="w-3.5 h-3.5 shrink-0" />
                             <span class="text-[#6b6b6b]">needs a column for:</span>
                             <code
                                 v-for="m in (d.missing || [])"
                                 :key="m"
-                                class="bg-[#F6EFEA] border border-[#E8C9B5] text-[#A8542F] rounded px-1.5 py-0.5"
+                                class="bg-[#F6EFEA] border border-[#E8C9B5] text-[#A8330F] rounded px-1.5 py-0.5"
                             >{{ m }}</code>
                             <span v-if="!(d.missing || []).length" class="text-[#9a958c]">unspecified</span>
                         </div>
@@ -208,8 +208,8 @@ function shortId(id: string): string {
 
 const _statusMeta: { key: 'active' | 'pending' | 'dormant' | 'rejected'; short: string; cls: string }[] = [
     { key: 'active', short: 'active', cls: 'border-[#CFE0CF] bg-[#EEF5EE] text-[#2f7d53]' },
-    { key: 'pending', short: 'pending', cls: 'border-[#E8C9B5] bg-[#F6EFEA] text-[#A8542F]' },
-    { key: 'dormant', short: 'dormant', cls: 'border-[#E7E5DD] bg-[#F4F1EA] text-[#6b6b6b]' },
+    { key: 'pending', short: 'pending', cls: 'border-[#E8C9B5] bg-[#F6EFEA] text-[#A8330F]' },
+    { key: 'dormant', short: 'dormant', cls: 'border-[#E9E0D3] bg-[#F4EEE5] text-[#6b6b6b]' },
     { key: 'rejected', short: 'rejected', cls: 'border-[#EAD4D4] bg-[#FBF2F2] text-[#A83F3F]' },
 ]
 
@@ -220,7 +220,7 @@ function statusBadges(p: PackRow) {
 }
 
 function winrateClass(p: PackRow): string {
-    if (!p.samples || p.win_rate === null) return 'bg-[#F4F1EA] text-[#6b6b6b]'
+    if (!p.samples || p.win_rate === null) return 'bg-[#F4EEE5] text-[#6b6b6b]'
     return p.win_rate >= 0.5 ? 'bg-[#E4F1EA] text-[#2f7d53]' : 'bg-[#FBE4E4] text-[#A83F3F]'
 }
 

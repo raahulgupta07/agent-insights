@@ -7,7 +7,7 @@
         v-model="localForm.title" 
         type="text" 
         placeholder="Revenue by month" 
-        class="border border-gray-300 rounded-lg px-3 py-1.5 w-full text-sm focus:outline-none focus:border-[#C2683F]" 
+        class="border border-gray-300 rounded-lg px-3 py-1.5 w-full text-sm focus:outline-none focus:border-[#C2541E]" 
       />
     </div>
 
@@ -18,7 +18,7 @@
         v-model="localForm.description" 
         rows="4" 
         placeholder="Description" 
-        class="border border-gray-300 rounded-lg px-3 py-1.5 w-full text-sm focus:outline-none focus:border-[#C2683F] min-h-[100px]" 
+        class="border border-gray-300 rounded-lg px-3 py-1.5 w-full text-sm focus:outline-none focus:border-[#C2541E] min-h-[100px]" 
       />
     </div>
 
@@ -38,7 +38,7 @@
           <div class="flex items-center flex-wrap gap-1">
             <span v-if="selectedDataSourceIds.length === 0" class="text-gray-500">Select data sources</span>
             <div v-else class="flex items-center flex-wrap gap-1">
-              <span v-for="ds in selectedDataSourceObjects" :key="ds.id" class="flex items-center bg-[#F4E5DA] text-[#A8542F] text-[10px] px-1.5 py-0.5 rounded">
+              <span v-for="ds in selectedDataSourceObjects" :key="ds.id" class="flex items-center bg-[#F4E5DA] text-[#A8330F] text-[10px] px-1.5 py-0.5 rounded">
                 <DataSourceIcon :type="ds.type" class="h-3 me-1" />
                 {{ ds.name }}
               </span>

@@ -27,7 +27,7 @@
             <div v-if="dashboardFirst && !isDockCollapsed"
                  class="absolute start-0 top-0 bottom-0 w-[8px] cursor-col-resize z-40 group"
                  @mousedown="startDockResize">
-                <div class="absolute inset-y-0 start-[2px] w-[3px] rounded-full opacity-0 group-hover:opacity-100 bg-[#C2683F] transition-opacity"></div>
+                <div class="absolute inset-y-0 start-[2px] w-[3px] rounded-full opacity-0 group-hover:opacity-100 bg-[#C2541E] transition-opacity"></div>
             </div>
         </div>
 
@@ -54,7 +54,7 @@
                      flips to the correct visual side under RTL. -->
                 <div v-if="!dashboardFirst" class="absolute start-[5px] top-0 bottom-0 w-[8px] cursor-col-resize z-30 group"
                      @mousedown="$emit('startResize', $event)">
-                    <div class="absolute inset-y-0 start-[3px] w-[3px] rounded-full opacity-0 group-hover:opacity-100 bg-[#C2683F] transition-opacity"></div>
+                    <div class="absolute inset-y-0 start-[3px] w-[3px] rounded-full opacity-0 group-hover:opacity-100 bg-[#C2541E] transition-opacity"></div>
                 </div>
             </div>
             <!-- Overlay to prevent iframe from capturing mouse events during resize -->

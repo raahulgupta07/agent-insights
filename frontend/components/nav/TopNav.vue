@@ -1,128 +1,37 @@
 <template>
   <header
-    class="sticky top-0 z-40 w-full bg-white border-b border-gray-200/80"
+    class="cag-nav sticky top-0 z-40 w-full"
   >
-    <nav class="flex items-center h-12 px-3 gap-2 sm:gap-3">
-      <!-- Logo -->
+    <nav class="flex items-center h-14 px-4 sm:px-6 gap-3 sm:gap-5 w-full">
+      <!-- Logo — design gradient mark + wordmark -->
       <button
         @click="router.push('/')"
-        class="flex items-center shrink-0 p-1 rounded-md hover:bg-gray-100 transition-colors"
+        class="flex items-center gap-[11px] shrink-0 pe-1"
         :aria-label="$t('nav.home') /* falls back to key text if missing */"
       >
-        <img
-          :src="workspaceIconUrl || '/assets/logo-128.png'"
-          alt="CityAgent"
-          class="max-h-7 max-w-[120px] object-contain"
-        />
+        <span class="cag-mark">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#fff" stroke-width="2" opacity=".55"/><path d="M12 3a9 9 0 0 1 0 18" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="12" r="2.6" fill="#fff"/></svg>
+        </span>
+        <span class="cag-word">City Agent <span class="cag-word-em">Insights</span></span>
       </button>
 
-      <!-- ============ Desktop: grouped dropdown menubar ============ -->
-      <div class="hidden sm:flex items-center gap-0.5">
+      <!-- ============ Desktop: group tabs (no dropdowns) ============
+           Each group is a single link. Clicking it routes to the group's first
+           page; the contextual left rail (AppRail) then lists that group's items.
+           Agent Studios is a direct standalone tab (no rail). -->
+      <div class="hidden sm:flex items-center gap-[18px] ms-1">
         <template v-for="group in visibleGroups" :key="group.title">
-        <!-- Direct top-level tab (no dropdown), e.g. Agent Studios -->
-        <NuxtLink
-          v-if="group.direct"
-          :to="group.direct"
-          :class="[
-            'flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[13px] font-medium transition-colors',
-            isGroupActive(group)
-              ? 'text-gray-900 bg-gray-100'
-              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-          ]"
-        >
-          <span>{{ $t(group.title) }}</span>
-        </NuxtLink>
-        <UPopover
-          v-else
-          :popper="{ placement: 'bottom-start', offsetDistance: 4 }"
-          :ui="{ width: 'max-w-none' }"
-        >
-          <button
+          <NuxtLink
+            :to="group.direct || firstHref(group) || '/'"
             :class="[
-              'flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[13px] font-medium transition-colors',
+              'flex items-center gap-1 text-[14px] transition-colors whitespace-nowrap',
               isGroupActive(group)
-                ? 'text-gray-900 bg-gray-100'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                ? 'text-[#A8330F] font-semibold'
+                : 'text-[#574E44] font-medium hover:text-[#A8330F]'
             ]"
           >
             <span>{{ $t(group.title) }}</span>
-            <UIcon name="heroicons-chevron-down" class="w-3.5 h-3.5 text-gray-400" />
-          </button>
-
-          <template #panel="{ close }">
-            <div class="w-56 bg-white rounded-xl shadow-xl border border-gray-200 p-1.5">
-              <template v-for="item in group.items" :key="item.key">
-                <!-- Expandable item (e.g. Settings → sub-tabs) -->
-                <template v-if="item.children">
-                  <button
-                    @click="toggleExpand(item.key)"
-                    :class="[
-                      'w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-start text-[13px] transition-colors',
-                      isRouteActive('/settings')
-                        ? 'text-gray-900 font-medium'
-                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                    ]"
-                  >
-                    <span class="flex items-center justify-center w-[18px] h-[18px] shrink-0">
-                      <UIcon v-if="item.icon" :name="item.icon" />
-                    </span>
-                    <span class="flex-1">{{ $t(item.label) }}</span>
-                    <UIcon
-                      name="heroicons-chevron-right"
-                      :class="['w-3.5 h-3.5 text-gray-400 transition-transform', expandedKey === item.key ? 'rotate-90' : '']"
-                    />
-                  </button>
-                  <div v-if="expandedKey === item.key" class="ms-3.5 ps-2 border-s border-gray-100 mt-0.5 mb-1 space-y-0.5">
-                    <NuxtLink
-                      v-for="child in item.children"
-                      :key="child.key"
-                      :to="child.href"
-                      @click="close()"
-                      :class="[
-                        'w-full flex items-center px-2.5 py-1.5 rounded-md text-start text-[13px] transition-colors',
-                        isRouteActive(child.href!)
-                          ? 'text-gray-900 bg-gray-200/70 font-medium'
-                          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                      ]"
-                    >
-                      <span>{{ $t(child.label) }}</span>
-                    </NuxtLink>
-                  </div>
-                </template>
-                <!-- Action item (e.g. MCP Server modal) -->
-                <button
-                  v-else-if="item.action"
-                  @click="item.action(); close()"
-                  class="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-start text-[13px] text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
-                >
-                  <span class="flex items-center justify-center w-[18px] h-[18px] shrink-0">
-                    <UIcon v-if="item.icon" :name="item.icon" />
-                    <component v-else-if="item.component" :is="item.component" class="w-[18px] h-[18px]" />
-                  </span>
-                  <span>{{ $t(item.label) }}</span>
-                </button>
-                <!-- Route item -->
-                <NuxtLink
-                  v-else
-                  :to="item.href"
-                  @click="close()"
-                  :class="[
-                    'w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-start text-[13px] transition-colors',
-                    isRouteActive(item.activePath || item.href!)
-                      ? 'text-gray-900 bg-gray-200/70 font-medium'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                  ]"
-                >
-                  <span class="flex items-center justify-center w-[18px] h-[18px] shrink-0">
-                    <UIcon v-if="item.icon" :name="item.icon" />
-                    <component v-else-if="item.component" :is="item.component" class="w-[18px] h-[18px]" />
-                  </span>
-                  <span>{{ $t(item.label) }}</span>
-                </NuxtLink>
-              </template>
-            </div>
-          </template>
-        </UPopover>
+          </NuxtLink>
         </template>
       </div>
 
@@ -139,7 +48,7 @@
           name="create-report"
           @click="createNewReport"
           :disabled="creatingReport"
-          class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-md text-[13px] font-medium text-[#C2683F] bg-white border border-[#E8C9B5] hover:bg-[#FBF4EF] disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+          class="hidden sm:flex items-center gap-2 px-[15px] py-2 rounded-[10px] text-[13.5px] font-semibold text-[#A8330F] bg-[#FCFAF6] border border-[#E4C9B6] hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
         >
           <span class="flex items-center justify-center w-[18px] h-[18px]">
             <Spinner v-if="creatingReport" class="animate-spin" />
@@ -153,7 +62,7 @@
           v-if="!isReportPage"
           @click="createNewReport"
           :disabled="creatingReport"
-          class="sm:hidden flex items-center justify-center w-8 h-8 rounded-md text-white bg-[#C2683F] hover:bg-[#A8542F] disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+          class="sm:hidden flex items-center justify-center w-8 h-8 rounded-md text-white bg-[#C2541E] hover:bg-[#A8330F] disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
           :aria-label="$t('nav.newReport')"
         >
           <Spinner v-if="creatingReport" class="animate-spin w-[18px] h-[18px]" />
@@ -173,7 +82,7 @@
           class="hidden sm:block"
         >
           <button
-            class="flex items-center justify-center w-7 h-7 rounded-full bg-[#5B6470] text-white text-[11px] font-bold hover:bg-[#4b535d] transition-colors"
+            class="cag-avatar flex items-center justify-center w-[38px] h-[38px] rounded-full text-white text-[14px] font-semibold transition-transform hover:scale-105"
             :aria-label="$t('nav.loggedInAs', { name: currentUserName })"
           >
             {{ userInitial }}
@@ -313,10 +222,6 @@
 
 <script setup lang="ts">
   import Spinner from '~/components/Spinner.vue'
-  import McpIcon from '~/components/icons/McpIcon.vue'
-  import LibraryIcon from '~/components/icons/LibraryIcon.vue'
-  import ActivityIcon from '~/components/icons/ActivityIcon.vue'
-  import AgentIcon from '~/components/icons/AgentIcon.vue'
   import McpModal from '~/components/McpModal.vue'
   import AgentSelector from '~/components/AgentSelector.vue'
   import WhatsNew from '~/components/nav/WhatsNew.vue'
@@ -324,19 +229,37 @@
   import { useCan } from '~/composables/usePermissions'
 
   // ---- Composables (self-contained: TopNav reads its own state, no props) ----
+  // Design fonts (Spectral serif + Hanken Grotesk) — loaded here so they're
+  // available app-wide (TopNav mounts on every authed page).
+  useHead({
+    link: [
+      { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
+      { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' },
+      { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Hanken+Grotesk:wght@400;500;600;700&display=swap' },
+    ],
+  })
+
   const route = useRoute()
   // Hide "New Report" on a report route — that page's ChatHistoryRail already
   // owns a "+ New chat" button, so the top-bar button is redundant there.
   const isReportPage = computed(() => /^\/reports\/[^/]+/.test(route.path))
   const router = useRouter()
   const { t } = useI18n()
-  const { isMcpEnabled } = useOrgSettings()
   const { signOut, data: currentUser } = useAuth()
   const { organization, setOrganization } = useOrganization()
   // New report uses the live AgentSelector context (selected agents + studio).
   const { initAgent, selectedAgentObjects, selectedStudioId } = useAgent()
 
-  const showMcpModal = ref(false)
+  // Nav model (groups, active-state helpers, MCP modal) — shared with AppRail.
+  const {
+    visibleGroups,
+    isRouteActive,
+    isGroupActive,
+    firstHref,
+    showMcpModal,
+    loadDomainPacksFlag,
+  } = useAppNav()
+
   const mobileOpen = ref(false)
   const creatingReport = ref(false)
 
@@ -345,35 +268,6 @@
     showMcpModal.value = false
     mobileOpen.value = false
   })
-
-  const isAdmin = computed<boolean>(() => useCan('full_admin_access'))
-
-  // ---- Active-state helpers ----
-  const isRouteActive = (path: string) => {
-    if (path === '/') return route.path === '/'
-    return route.path === path || route.path.startsWith(path + '/')
-  }
-
-  // ---- Nav model -------------------------------------------------------------
-  interface NavItem {
-    key: string
-    label: string
-    href?: string
-    activePath?: string
-    icon?: string
-    component?: any
-    adminOnly?: boolean
-    permission?: string
-    action?: () => void
-    children?: NavItem[]
-  }
-  interface NavGroup {
-    title: string
-    items: NavItem[]
-    // When set, the group header is itself a direct route link (no dropdown) —
-    // used for top-level standalone tabs like Agent Studios.
-    direct?: string
-  }
 
   // Settings tabs + the permission each requires — mirror of layouts/settings.vue.
   // Used to deep-link the user-menu Settings entry at the first reachable tab and
@@ -391,138 +285,12 @@
     settingsTabPermissions.find(tab => useCan(tab.permission)) || null
   )
 
-  // Settings sub-tabs (mirror of layouts/settings.vue) rendered as a nested
-  // dropdown under Manage → Settings, each gated by its own permission.
-  const settingsTabs: { name: string; label: string; permission: string; icon: string }[] = [
-    { name: 'members', label: 'settings.membersTab', permission: 'view_members', icon: 'heroicons-users' },
-    { name: 'models', label: 'settings.llm', permission: 'manage_llm', icon: 'heroicons-cpu-chip' },
-    { name: 'ai_settings', label: 'settings.aiSettings', permission: 'manage_settings', icon: 'heroicons-sparkles' },
-    { name: 'general', label: 'settings.general', permission: 'manage_settings', icon: 'heroicons-cog-6-tooth' },
-    { name: 'integrations', label: 'settings.integrations.title', permission: 'manage_settings', icon: 'heroicons-squares-2x2' },
-    { name: 'folder-sync', label: 'Folder Sync', permission: 'manage_settings', icon: 'heroicons-folder-arrow-down' },
-    { name: 'audit', label: 'settings.auditLogs', permission: 'view_audit_logs', icon: 'heroicons-clipboard-document-list' },
-    { name: 'identity-provider', label: 'settings.identityProviderTab', permission: 'manage_identity_providers', icon: 'heroicons-finger-print' },
-    { name: 'smtp', label: 'settings.smtpTab', permission: 'manage_settings', icon: 'heroicons-envelope' },
-    { name: 'features', label: 'Feature Flags', permission: 'manage_settings', icon: 'heroicons-flag' },
-  ]
-  // "Pack Analytics" (Skills Analytics) — only surfaced when the org has the
-  // HYBRID_DOMAIN_PACKS feature effectively on. Fetched once; fail-soft (hidden
-  // on any error so it never blocks the rest of the Settings menu).
-  const domainPacksEnabled = ref(false)
-  const loadDomainPacksFlag = async () => {
-    try {
-      const { data } = await useMyFetch<any[]>('/api/organization/hybrid-flags')
-      const rows = (data.value as any[]) || []
-      const row = rows.find(r => r?.env_name === 'HYBRID_DOMAIN_PACKS')
-      domainPacksEnabled.value = !!row?.effective
-    } catch {
-      domainPacksEnabled.value = false
-    }
-  }
-
-  const settingsChildren = computed<NavItem[]>(() => {
-    const tabs = settingsTabs.filter(tab => useCan(tab.permission))
-    const children = tabs.map(tab => ({ key: `settings-${tab.name}`, label: tab.label, href: `/settings/${tab.name}`, icon: tab.icon }))
-    if (domainPacksEnabled.value && useCan('manage_settings')) {
-      children.push({ key: 'settings-pack-analytics', label: 'Pack Analytics', href: '/settings/pack-analytics', icon: 'heroicons-chart-bar-square' })
-    }
-    return children
-  })
-
-  // Which nested item is currently expanded in a dropdown panel (one at a time).
+  // Mobile drawer: which group is expanded (one at a time). Desktop has no
+  // dropdowns anymore — groups route directly and AppRail shows the items.
   const expandedKey = ref<string | null>(null)
   const toggleExpand = (key: string) => {
     expandedKey.value = expandedKey.value === key ? null : key
   }
-
-  // Full group model — hrefs/icons/labels/gating ported verbatim from default.vue.
-  const allGroups = computed<NavGroup[]>(() => [
-    {
-      // Agent Studios — promoted to its own top-level tab (direct link, no dropdown).
-      title: 'nav.studios',
-      direct: '/studios',
-      items: [
-        { key: 'studios', href: '/studios', activePath: '/studios', icon: 'heroicons-film', label: 'nav.studios' },
-      ],
-    },
-    {
-      title: 'nav.workspace',
-      items: [
-        { key: 'templates', href: '/templates', activePath: '/templates', icon: 'heroicons-square-3-stack-3d', label: 'Agent Templates' },
-        { key: 'reports', href: '/reports', icon: 'heroicons-chat-bubble-left-right', label: 'nav.reports' },
-        { key: 'dashboards', href: '/dashboards', icon: 'heroicons-chart-bar-square', label: 'nav.dashboards' },
-        { key: 'presentations', href: '/presentations', icon: 'heroicons-presentation-chart-line', label: 'nav.presentations' },
-        { key: 'spreadsheets', href: '/spreadsheets', icon: 'heroicons-table-cells', label: 'nav.spreadsheets' },
-        { key: 'scheduled', href: '/scheduled-tasks', icon: 'heroicons-clock', label: 'nav.scheduled' },
-      ],
-    },
-    {
-      // Build = what the agent is made of: data it reaches + knowledge + rules + reusable skills.
-      title: 'nav.build',
-      items: [
-        // Data Agents retired from the nav — connections now live in Manage →
-        // Connectors (admin), and users pin sources inside Studios. The /agents
-        // route + agent-detail pages still exist (Studio/agent flyouts deep-link
-        // to them); only the standalone list nav entry is removed.
-        { key: 'knowledge', href: '/knowledge', icon: 'heroicons-academic-cap', label: 'nav.knowledge' },
-        { key: 'instructions', href: '/instructions', icon: 'heroicons-cube', label: 'nav.instructions' },
-        { key: 'queries', href: '/queries', component: LibraryIcon, label: 'nav.queries' },
-        // Skills had no nav entry before. 'Skills' is a literal (no nav.skills i18n key);
-        // $t() returns the string as-is, so it renders correctly without touching locales.
-        { key: 'skills', href: '/skills', icon: 'heroicons-sparkles', label: 'Skills' },
-        { key: 'memory', href: '/memory', icon: 'heroicons-cpu-chip', label: 'Memory' },
-      ],
-    },
-    {
-      // Manage = operate & oversee: observability + quality + the integration endpoint.
-      title: 'nav.manage',
-      items: [
-        { key: 'connectors', href: '/connectors', icon: 'heroicons-circle-stack', label: 'Connectors', permission: 'create_data_source' },
-        { key: 'monitoring', href: '/monitoring', component: ActivityIcon, label: 'nav.monitoring', adminOnly: true },
-        { key: 'evals', href: '/evals', icon: 'heroicons-check-circle', label: 'nav.evals', permission: 'manage_evals' },
-        { key: 'workflows', href: '/workflows', icon: 'heroicons-arrow-path', label: 'Workflows', permission: 'manage_settings' },
-        // MCP Server opens a modal rather than navigating. Shown only when the MCP
-        // feature is enabled AND the user can manage settings (ported from default.vue).
-        {
-          key: 'mcp',
-          label: 'nav.mcpServer',
-          component: McpIcon,
-          permission: 'manage_settings',
-          action: () => { if (isMcpEnabled.value) showMcpModal.value = true },
-        },
-      ],
-    },
-    {
-      // Settings = its own top-level menu (sibling of Manage). Each sub-tab is a
-      // direct route item; the whole group drops out if none are reachable.
-      title: 'nav.settings',
-      items: settingsChildren.value,
-    },
-  ])
-
-  // An item shows when its permission/admin gate passes. MCP additionally requires
-  // the feature to be enabled (its permission gate is checked here too).
-  const itemVisible = (item: NavItem) => {
-    if (item.key === 'mcp' && !isMcpEnabled.value) return false
-    if (item.children && item.children.length === 0) return false
-    if (item.permission && !useCan(item.permission)) return false
-    if (item.adminOnly && !isAdmin.value) return false
-    return true
-  }
-
-  // Filter items per group; drop a group entirely if it has zero visible items.
-  const visibleGroups = computed<NavGroup[]>(() =>
-    allGroups.value
-      .map(g => ({ title: g.title, direct: g.direct, items: g.items.filter(itemVisible) }))
-      .filter(g => g.items.length > 0)
-  )
-
-  // A group's trigger is active when the current route matches any of its children.
-  const isGroupActive = (group: NavGroup) =>
-    group.items.some(it =>
-      (it.href && isRouteActive(it.activePath || it.href)) ||
-      (it.children?.some(c => c.href && isRouteActive(c.href)) ?? false)
-    )
 
   // ---- User dropdown (org switcher + settings + logout) ----------------------
   const currentUserName = computed<string>(() => {
@@ -593,3 +361,26 @@
     loadDomainPacksFlag()
   })
 </script>
+
+<style scoped>
+.cag-nav {
+  background: rgba(246, 241, 234, .82);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid #E9E0D3;
+  font-family: 'Hanken Grotesk', system-ui, sans-serif;
+}
+.cag-mark {
+  width: 34px; height: 34px; border-radius: 9px;
+  background: linear-gradient(150deg, #D67037, #A8330F);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 5px 14px -5px rgba(168, 51, 15, .6);
+  flex-shrink: 0;
+}
+.cag-word {
+  font-size: 15.5px; font-weight: 600; letter-spacing: -.01em;
+  color: #1A1611; white-space: nowrap;
+}
+.cag-word-em { color: #C2541E; }
+.cag-avatar { background: linear-gradient(150deg, #3A332B, #1A1611); }
+</style>

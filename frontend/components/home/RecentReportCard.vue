@@ -1,11 +1,11 @@
 <template>
   <NuxtLink
     :to="reportLink"
-    class="group block bg-white rounded-2xl border border-[#E7E5DD] overflow-hidden hover:shadow-lg hover:border-[#dcd9cf] hover:-translate-y-1 transition-all duration-200"
+    class="rrc group block bg-white rounded-2xl border border-[#E9E0D3] overflow-hidden"
   >
     <!-- Thumbnail -->
-    <div class="aspect-[4/3] relative overflow-hidden" :class="!thumbnailUrl || imageError ? badgeStyle.cardBg : ''">
-      <!-- Actual thumbnail -->
+    <div class="relative h-32 overflow-hidden" :class="(!thumbnailUrl || imageError) ? (isDark ? 'rrc-dark-empty' : 'rrc-chat') : ''">
+      <!-- REAL preview from the actual dashboard/report -->
       <img
         v-if="thumbnailUrl && !imageError"
         :src="thumbnailUrl"
@@ -13,22 +13,15 @@
         class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
         @error="onImageError"
       />
-      <!-- Placeholder when no thumbnail -->
-      <div
-        v-else
-        class="w-full h-full flex items-center justify-center"
-      >
-        <Icon
-          :name="reportIcon"
-          class="w-12 h-12"
-          :class="badgeStyle.iconColor"
-        />
+      <!-- No preview yet: mode icon placeholder (no fake numbers) -->
+      <div v-else class="w-full h-full flex items-center justify-center">
+        <Icon :name="reportIcon" class="w-12 h-12" :class="isDark ? 'text-[#9A8F80]/50' : 'text-[#C2A07E]'" />
       </div>
 
       <!-- Edit button - top right -->
       <div
         v-if="isOwner"
-        class="absolute top-2 end-2 opacity-0 group-hover:opacity-100 transition-opacity"
+        class="absolute top-2 end-2 opacity-0 group-hover:opacity-100 transition-opacity z-10"
         @click.prevent="navigateTo(`/reports/${report.id}`)"
       >
         <div class="p-1.5 bg-white/90 rounded-full hover:bg-white shadow-sm">
@@ -37,45 +30,31 @@
       </div>
 
       <!-- Mode badge - bottom left -->
-      <div class="absolute bottom-2 start-2">
-        <span
-          :class="[
-            'px-2 py-0.5 text-xs font-medium rounded-full',
-            badgeStyle.bg,
-            badgeStyle.text
-          ]"
-        >
-          {{ badgeStyle.label }}
-        </span>
-      </div>
+      <span class="rrc-badge" :class="badgeStyle.cls">{{ badgeStyle.label }}</span>
     </div>
 
     <!-- Content -->
-    <div class="p-3 text-start">
-      <h3 class="font-medium text-gray-900 truncate text-sm">
-        {{ report.title || 'Untitled' }}
-      </h3>
-      <p class="text-xs text-gray-400 mt-1 truncate">
-        {{ report.user?.name ? `by ${report.user.name}` : '' }}
-      </p>
+    <div class="p-[14px] text-start">
+      <h3 class="rrc-title">{{ report.title || 'Untitled' }}</h3>
+      <p class="rrc-by">{{ report.user?.name ? `by ${report.user.name}` : '' }}</p>
 
       <!-- Open actions -->
       <div class="flex items-center gap-2 mt-3">
         <button
           type="button"
-          class="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium border border-[#E7E5DD] bg-white text-[#1f2328] hover:bg-[#F4F1EA] transition-colors cursor-pointer"
+          class="rrc-ghost"
           @click.stop.prevent="navigateTo(reportLink)"
         >
-          <UIcon name="i-heroicons-chat-bubble-left-right" class="w-3.5 h-3.5" />
-          Open in chat
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.5 8.4 8.4 0 0 1-4.2-1.1L3 20l1.1-5.3A8.5 8.5 0 1 1 21 11z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Chat
         </button>
         <button
           type="button"
-          class="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold bg-[#C2683F] text-white hover:bg-[#A8542F] transition-colors cursor-pointer"
+          class="rrc-prim"
           @click.stop.prevent="navigateTo(reportLink + '?focus=dashboard')"
         >
-          <UIcon name="i-heroicons-squares-2x2" class="w-3.5 h-3.5" />
-          Open as dashboard
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="1.5" stroke="#fff" stroke-width="2"/><rect x="13" y="3" width="8" height="8" rx="1.5" stroke="#fff" stroke-width="2"/><rect x="3" y="13" width="8" height="8" rx="1.5" stroke="#fff" stroke-width="2"/><rect x="13" y="13" width="8" height="8" rx="1.5" stroke="#fff" stroke-width="2"/></svg>
+          Dashboard
         </button>
       </div>
     </div>
@@ -139,13 +118,56 @@ const reportIcon = computed(() => {
   return 'heroicons:chat-bubble-left-right'
 })
 
+// Dark KPI mock for dashboards/slides; light cream mock for chat.
+const isDark = computed(() => hasDashboard.value || hasSlides.value)
+
 const badgeStyle = computed(() => {
-  if (hasSlides.value) {
-    return { bg: 'bg-[#eef6f0]', text: 'text-[#3f9e6a]', label: 'Slides', cardBg: 'bg-[#F4F1EA]', iconColor: 'text-[#3f9e6a]/40' }
-  }
-  if (hasDashboard.value) {
-    return { bg: 'bg-[#F3E7DF]', text: 'text-[#C2683F]', label: 'Dashboard', cardBg: 'bg-[#F4F1EA]', iconColor: 'text-[#C2683F]/40' }
-  }
-  return { bg: 'bg-[#F4F1EA]', text: 'text-[#6b6b6b]', label: 'Chat', cardBg: 'bg-[#F4F1EA]', iconColor: 'text-[#9a958c]' }
+  if (hasSlides.value) return { label: 'Slides', cls: 'rrc-badge-slides' }
+  if (hasDashboard.value) return { label: 'Dashboard', cls: 'rrc-badge-dash' }
+  return { label: 'Chat', cls: 'rrc-badge-chat' }
 })
 </script>
+
+<style scoped>
+.rrc {
+  box-shadow: 0 8px 22px -16px rgba(60, 40, 20, .25);
+  transition: transform .2s, box-shadow .2s;
+  font-family: 'Hanken Grotesk', system-ui, sans-serif;
+}
+.rrc:hover { transform: translateY(-3px); box-shadow: 0 20px 44px -22px rgba(60, 40, 20, .32); }
+
+/* empty-state bg when a dashboard/slides report has no preview yet */
+.rrc-dark-empty { background: radial-gradient(120% 100% at 70% 0%, #2A1F18, #120D0A); }
+
+/* light chat thumbnail */
+.rrc-chat {
+  height: 100%; display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #F4EEE5, #EDE4D6);
+}
+
+/* badge */
+.rrc-badge {
+  position: absolute; left: 12px; bottom: 10px;
+  font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 6px;
+}
+.rrc-badge-dash { background: #F4E0D2; color: #A8330F; }
+.rrc-badge-slides { background: #E4F3EA; color: #3F9E6A; }
+.rrc-badge-chat { background: #FFFFFF; color: #8A7F70; }
+
+/* body */
+.rrc-title {
+  font-size: 14.5px; font-weight: 600; line-height: 1.3; color: #2A241D;
+  margin-bottom: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rrc-by { font-size: 12px; color: #9A8F80; margin-bottom: 12px; }
+
+.rrc-ghost, .rrc-prim {
+  flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  border-radius: 9px; padding: 8px; cursor: pointer;
+  font-size: 12.5px; font-weight: 600; transition: .15s; font-family: inherit;
+}
+.rrc-ghost { border: 1px solid #E4D9CA; background: #FCFAF6; color: #574E44; }
+.rrc-ghost:hover { border-color: #C9BEAF; background: #FFFFFF; }
+.rrc-prim { border: none; background: #C2541E; color: #fff; }
+.rrc-prim:hover { background: #A8330F; }
+</style>

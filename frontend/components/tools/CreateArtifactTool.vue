@@ -22,7 +22,7 @@
             'ms-2 px-1.5 py-0.5 rounded text-[10px] font-medium',
             artifactMode === 'slides'
               ? 'bg-purple-100 text-purple-700'
-              : 'bg-[#F4E5DA] text-[#A8542F]'
+              : 'bg-[#F4E5DA] text-[#A8330F]'
           ]"
         >
           {{ artifactMode === 'slides' ? $t('tools.createArtifact.slides') : $t('tools.createArtifact.dashboard') }}
@@ -40,7 +40,7 @@
         <span :class="{ 'line-clamp-1': !promptExpanded }">{{ artifactPrompt }}</span>
         <button
           v-if="artifactPrompt.length > 80"
-          class="ms-1 text-[#C2683F] hover:text-[#A8542F] text-[11px]"
+          class="ms-1 text-[#C2541E] hover:text-[#A8330F] text-[11px]"
           @click="promptExpanded = !promptExpanded"
         >
           {{ promptExpanded ? $t('tools.createArtifact.less') : $t('tools.createArtifact.more') }}
@@ -78,7 +78,7 @@
                 slide.status === 'done'
                   ? 'bg-green-100 text-green-700'
                   : slide.status === 'generating'
-                    ? 'bg-[#F4E5DA] text-[#A8542F] animate-pulse'
+                    ? 'bg-[#F4E5DA] text-[#A8330F] animate-pulse'
                     : 'bg-gray-100 text-gray-400'
               ]"
             >
@@ -125,11 +125,11 @@
         </div>
         <input
           v-model="editableTitle"
-          class="w-full px-2 py-1 text-xs border border-gray-200 rounded bg-white focus:outline-none focus:border-[#C2683F]"
+          class="w-full px-2 py-1 text-xs border border-gray-200 rounded bg-white focus:outline-none focus:border-[#C2541E]"
           :placeholder="$t('tools.createArtifact.titlePlaceholder')"
         />
         <div class="flex items-center gap-2">
-          <button class="px-2.5 py-1 text-xs font-medium text-white bg-[#C2683F] rounded hover:bg-[#A8542F] transition-colors" @click="approveConfirmation">{{ $t('tools.createArtifact.approve') }}</button>
+          <button class="px-2.5 py-1 text-xs font-medium text-white bg-[#C2541E] rounded hover:bg-[#A8330F] transition-colors" @click="approveConfirmation">{{ $t('tools.createArtifact.approve') }}</button>
           <button class="px-2.5 py-1 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded hover:bg-gray-50 transition-colors" @click="rejectConfirmation">{{ $t('tools.createArtifact.cancel') }}</button>
           <span class="text-[10px] text-gray-400">{{ $t('tools.createArtifact.autoApprovingIn', { n: confirmationCountdown }) }}</span>
         </div>
@@ -156,11 +156,11 @@
             @error="thumbnailError = true"
           />
           <template v-else>
-            <Spinner v-if="status === 'running'" class="w-4 h-4 text-[#C2683F]" />
+            <Spinner v-if="status === 'running'" class="w-4 h-4 text-[#C2541E]" />
             <Icon
               v-else
               :name="artifactMode === 'slides' ? 'heroicons:presentation-chart-bar' : 'heroicons:chart-bar-square'"
-              :class="['w-4 h-4', artifactMode === 'slides' ? 'text-slate-400' : 'text-[#C2683F]']"
+              :class="['w-4 h-4', artifactMode === 'slides' ? 'text-slate-400' : 'text-[#C2541E]']"
             />
           </template>
         </div>

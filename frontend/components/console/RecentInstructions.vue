@@ -2,12 +2,12 @@
     <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div class="p-6 border-b border-gray-50">
             <h3 class="text-lg font-semibold text-gray-900">Recent Instructions</h3>
-            <p class="text-sm text-gray-500 mt-1">Latest instruction updates - for more go to <nuxt-link to="/instructions" class="text-[#C2683F] hover:text-[#A8542F]">instructions</nuxt-link> page</p>
+            <p class="text-sm text-gray-500 mt-1">Latest instruction updates - for more go to <nuxt-link to="/instructions" class="text-[#C2541E] hover:text-[#A8330F]">instructions</nuxt-link> page</p>
         </div>
         <div class="p-0">
             <div v-if="isLoading" class="flex items-center justify-center h-40">
                 <div class="flex items-center space-x-2">
-                    <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-[#C2683F]"></div>
+                    <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-[#C2541E]"></div>
                     <span class="text-gray-600">Loading instructions...</span>
                 </div>
             </div>

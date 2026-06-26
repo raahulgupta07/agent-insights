@@ -69,9 +69,9 @@
             <div v-if="currentVisibility === 'shared'">
                 <label class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 block">{{ $t('share.shareWith') }}</label>
                 <div class="flex items-start gap-2 mb-4">
-                    <div class="flex-1 flex flex-wrap items-center gap-1.5 border border-gray-200 rounded-lg px-2.5 py-1.5 min-h-[32px] focus-within:ring-2 focus-within:ring-[#C2683F] focus-within:border-[#C2683F] bg-white">
+                    <div class="flex-1 flex flex-wrap items-center gap-1.5 border border-gray-200 rounded-lg px-2.5 py-1.5 min-h-[32px] focus-within:ring-2 focus-within:ring-[#C2541E] focus-within:border-[#C2541E] bg-white">
                         <span v-for="(user, idx) in pendingUsers" :key="user.id || user.email"
-                            class="inline-flex items-center gap-1 bg-[#F6EFEA] text-[#A8542F] text-xs px-2 py-0.5 rounded-full whitespace-nowrap">
+                            class="inline-flex items-center gap-1 bg-[#F6EFEA] text-[#A8330F] text-xs px-2 py-0.5 rounded-full whitespace-nowrap">
                             {{ user.name || user.email }}
                             <button @click="removePendingUser(idx)" class="hover:text-red-500 outline-none">
                                 <Icon name="heroicons:x-mark" class="w-3 h-3" />
@@ -104,7 +104,7 @@
                         </div>
                     </div>
                     <button @click="inviteUsers" :disabled="pendingUsers.length === 0 || isSaving"
-                        class="flex-shrink-0 px-3 h-[32px] text-xs font-medium text-white bg-[#C2683F] rounded-lg hover:bg-[#A8542F] disabled:opacity-40 disabled:cursor-not-allowed">
+                        class="flex-shrink-0 px-3 h-[32px] text-xs font-medium text-white bg-[#C2541E] rounded-lg hover:bg-[#A8330F] disabled:opacity-40 disabled:cursor-not-allowed">
                         {{ $t('share.share') }}
                     </button>
                 </div>

@@ -11,10 +11,10 @@
           <span>{{ $t('tools.listAgentExecutions.loading') }}</span>
         </span>
         <span v-else-if="isSuccess" class="flex items-center gap-1.5 text-gray-600">
-          <Icon name="heroicons-list-bullet" class="w-3 h-3 text-[#C2683F]" />
+          <Icon name="heroicons-list-bullet" class="w-3 h-3 text-[#C2541E]" />
           <span class="font-medium">{{ $t('tools.listAgentExecutions.title') }}</span>
           <span class="px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded text-[10px]">{{ executions.length }}/{{ output.total }}</span>
-          <span v-if="appliedFilter" class="px-1.5 py-0.5 bg-[#F6EFEA] text-[#C2683F] rounded text-[10px]">{{ filterLabel(appliedFilter) }}</span>
+          <span v-if="appliedFilter" class="px-1.5 py-0.5 bg-[#F6EFEA] text-[#C2541E] rounded text-[10px]">{{ filterLabel(appliedFilter) }}</span>
           <Icon
             :name="isExpanded ? 'heroicons-chevron-down' : 'heroicons-chevron-right'"
             class="w-3 h-3 text-gray-400 rtl-flip"
@@ -61,7 +61,7 @@
                 <span
                   v-for="(name, idx) in item.tool_names.slice(0, 3)"
                   :key="'t'+idx"
-                  class="px-1.5 py-0.5 bg-[#F6EFEA] text-[#C2683F] rounded text-[9px] leading-none truncate max-w-[110px] flex-shrink-0"
+                  class="px-1.5 py-0.5 bg-[#F6EFEA] text-[#C2541E] rounded text-[9px] leading-none truncate max-w-[110px] flex-shrink-0"
                 >{{ toolLabel(name) }}</span>
                 <span v-if="item.tool_names.length > 3" class="text-[9px] text-gray-400 flex-shrink-0">+{{ item.tool_names.length - 3 }}</span>
               </template>

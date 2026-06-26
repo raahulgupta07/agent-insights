@@ -81,7 +81,7 @@
             <p class="text-xs text-gray-500 mb-3">{{ $t('agentFlyout.connectToPreview') }}</p>
             <button
               @click.stop="emit('connect', agentDetails)"
-              class="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs text-[#C2683F] bg-[#F6EFEA] border border-[#E8C9B5] rounded-lg hover:bg-[#F4E5DA] transition-colors"
+              class="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs text-[#C2541E] bg-[#F6EFEA] border border-[#E8C9B5] rounded-lg hover:bg-[#F4E5DA] transition-colors"
             >
               <Icon name="heroicons-key" class="w-3.5 h-3.5" />
               {{ $t('data.connect') }}
@@ -336,7 +336,7 @@
                           <div class="flex items-center gap-1.5">
                             <span
                               class="px-1 py-0.5 text-[9px] rounded border flex-shrink-0"
-                              :class="entity.type === 'metric' ? 'text-emerald-700 border-emerald-200 bg-emerald-50' : 'text-[#A8542F] border-[#E8C9B5] bg-[#F6EFEA]'"
+                              :class="entity.type === 'metric' ? 'text-emerald-700 border-emerald-200 bg-emerald-50' : 'text-[#A8330F] border-[#E8C9B5] bg-[#F6EFEA]'"
                             >{{ (entity.type || 'entity').toUpperCase() }}</span>
                             <span class="truncate text-gray-800 font-medium">{{ entity.title || entity.slug }}</span>
                           </div>
@@ -672,7 +672,7 @@ watch(flyoutTab, async (tab) => {
 
   pre { @apply bg-gray-50 p-2 rounded-lg mb-2 overflow-x-auto text-[11px]; }
   code { @apply bg-gray-50 px-1 py-0.5 rounded text-[11px] font-mono; }
-  a { @apply text-[#C2683F] hover:text-[#A8542F] underline; }
+  a { @apply text-[#C2541E] hover:text-[#A8330F] underline; }
   blockquote { @apply border-l-4 border-gray-200 pl-3 italic my-2; }
   table { @apply w-full border-collapse mb-2; }
   table th, table td { @apply border border-gray-200 p-1 text-[11px] bg-white; }

@@ -1,7 +1,7 @@
 <template>
-  <div class="h-full w-full overflow-y-auto bg-[#FBFAF6] p-5">
+  <div class="h-full w-full overflow-y-auto bg-[#F6F1EA] p-5">
     <!-- Generating header line -->
-    <div class="flex items-center gap-2 mb-4 text-[11px] font-medium text-[#A8542F]">
+    <div class="flex items-center gap-2 mb-4 text-[11px] font-medium text-[#A8330F]">
       <span class="sk-dot inline-block w-3.5 h-3.5 rounded-full" />
       <span>{{ mode === 'slides' ? 'Generating slides…' : 'Generating dashboard…' }}</span>
       <span class="text-[#9a958c]">building {{ widgetCount }} {{ mode === 'slides' ? 'slides' : 'widgets' }}</span>
@@ -13,7 +13,7 @@
         <div
           v-for="n in 2"
           :key="'slide-' + n"
-          class="rounded-2xl border border-[#E7E5DD] bg-white p-5 shadow-sm"
+          class="rounded-2xl border border-[#E9E0D3] bg-white p-5 shadow-sm"
         >
           <div class="sk-bar h-4 w-1/3 rounded-md" />
           <div class="sk h-56 mt-4 rounded-xl" />
@@ -29,7 +29,7 @@
         <div
           v-for="n in 4"
           :key="'kpi-' + n"
-          class="rounded-xl border border-[#E7E5DD] bg-white p-3"
+          class="rounded-xl border border-[#E9E0D3] bg-white p-3"
         >
           <div class="sk-bar h-2.5 rounded" :style="{ width: 50 + (n % 3) * 8 + '%' }" />
           <div class="sk-bar h-4 mt-2 rounded" :style="{ width: 60 + (n % 2) * 15 + '%' }" />
@@ -41,7 +41,7 @@
         <div
           v-for="n in 4"
           :key="'wid-' + n"
-          class="rounded-2xl border border-[#E7E5DD] bg-white p-4 shadow-sm"
+          class="rounded-2xl border border-[#E9E0D3] bg-white p-4 shadow-sm"
         >
           <!-- header bar -->
           <div class="sk-bar h-3 rounded-md" :style="{ width: 45 + (n % 2) * 10 + '%' }" />

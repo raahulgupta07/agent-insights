@@ -13,7 +13,7 @@
           <Icon name="heroicons:arrow-path" class="w-3.5 h-3.5" />
         </button>
         <button
-          class="px-2.5 py-1.5 rounded-md bg-[#C2683F] hover:bg-[#A8542F] text-white text-xs flex items-center gap-1 transition-colors disabled:opacity-50"
+          class="px-2.5 py-1.5 rounded-md bg-[#C2541E] hover:bg-[#A8330F] text-white text-xs flex items-center gap-1 transition-colors disabled:opacity-50"
           :disabled="!normalizedSheets.length || exporting"
           @click="exportXlsx"
         >
@@ -83,7 +83,7 @@
           :key="i"
           class="sheet-tab px-3 py-1 rounded-t cursor-pointer transition-colors"
           :class="i === activeIndex
-            ? 'bg-white border border-b-0 border-gray-200 text-[#C2683F] font-medium'
+            ? 'bg-white border border-b-0 border-gray-200 text-[#C2541E] font-medium'
             : 'text-gray-500 hover:text-gray-800'"
           @click="setActive(i)"
         >

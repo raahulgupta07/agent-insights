@@ -21,17 +21,17 @@
       <template v-if="!selectedExistingId">
         <div>
           <label class="block text-xs font-medium text-gray-700 mb-1">Connection Name</label>
-          <input v-model="form.name" type="text" placeholder="e.g., Internal API" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C2683F]" />
+          <input v-model="form.name" type="text" placeholder="e.g., Internal API" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C2541E]" />
         </div>
 
         <div>
           <label class="block text-xs font-medium text-gray-700 mb-1">Base URL</label>
-          <input v-model="form.base_url" type="text" placeholder="https://api.example.com/v1" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C2683F]" />
+          <input v-model="form.base_url" type="text" placeholder="https://api.example.com/v1" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C2541E]" />
         </div>
 
         <div>
           <label class="block text-xs font-medium text-gray-700 mb-1">Authentication</label>
-          <select v-model="form.auth_type" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C2683F]">
+          <select v-model="form.auth_type" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C2541E]">
             <option value="none">No Auth</option>
             <option value="bearer">Bearer Token</option>
             <option value="api_key">API Key</option>
@@ -40,17 +40,17 @@
 
         <div v-if="form.auth_type === 'bearer'">
           <label class="block text-xs font-medium text-gray-700 mb-1">Bearer Token</label>
-          <input v-model="form.token" type="password" :placeholder="isEditMode ? '(unchanged)' : 'Enter token'" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C2683F]" />
+          <input v-model="form.token" type="password" :placeholder="isEditMode ? '(unchanged)' : 'Enter token'" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C2541E]" />
         </div>
 
         <div v-if="form.auth_type === 'api_key'" class="space-y-3">
           <div>
             <label class="block text-xs font-medium text-gray-700 mb-1">API Key</label>
-            <input v-model="form.api_key" type="password" :placeholder="isEditMode ? '(unchanged)' : 'Enter API key'" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C2683F]" />
+            <input v-model="form.api_key" type="password" :placeholder="isEditMode ? '(unchanged)' : 'Enter API key'" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C2541E]" />
           </div>
           <div>
             <label class="block text-xs font-medium text-gray-700 mb-1">Header Name</label>
-            <input v-model="form.api_key_header" type="text" placeholder="X-API-Key" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C2683F]" />
+            <input v-model="form.api_key_header" type="text" placeholder="X-API-Key" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C2541E]" />
           </div>
         </div>
 
@@ -61,14 +61,14 @@
           </label>
           <div class="space-y-1.5">
             <div v-for="(header, idx) in customHeaders" :key="idx" class="flex items-center gap-2">
-              <input v-model="header.key" type="text" placeholder="Header name" class="flex-1 border border-gray-300 rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#C2683F]" />
-              <input v-model="header.value" type="text" placeholder="Value" class="flex-1 border border-gray-300 rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#C2683F]" />
+              <input v-model="header.key" type="text" placeholder="Header name" class="flex-1 border border-gray-300 rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#C2541E]" />
+              <input v-model="header.value" type="text" placeholder="Value" class="flex-1 border border-gray-300 rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#C2541E]" />
               <button type="button" @click="customHeaders.splice(idx, 1)" class="text-gray-400 hover:text-red-500 p-0.5">
                 <UIcon name="heroicons-x-mark" class="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
-          <button type="button" @click="customHeaders.push({ key: '', value: '' })" class="mt-1.5 text-[11px] text-[#C2683F] hover:text-[#A8542F]">
+          <button type="button" @click="customHeaders.push({ key: '', value: '' })" class="mt-1.5 text-[11px] text-[#C2541E] hover:text-[#A8330F]">
             + Add header
           </button>
         </div>
@@ -92,7 +92,7 @@
     ]
   }
 ]'
-            class="w-full border border-gray-300 rounded-md px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-[#C2683F]"
+            class="w-full border border-gray-300 rounded-md px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-[#C2541E]"
           />
           <p v-if="endpointsError" class="text-xs text-red-500 mt-1">{{ endpointsError }}</p>
         </div>
@@ -103,7 +103,7 @@
       </template>
 
       <div class="flex items-center justify-between pt-2">
-        <button v-if="!selectedExistingId" type="button" @click="testConnection" :disabled="testing || !form.base_url" class="text-xs text-[#C2683F] hover:text-[#A8542F] disabled:opacity-50">
+        <button v-if="!selectedExistingId" type="button" @click="testConnection" :disabled="testing || !form.base_url" class="text-xs text-[#C2541E] hover:text-[#A8330F] disabled:opacity-50">
           <Spinner v-if="testing" class="w-3 h-3 inline me-1" />
           Test Connection
         </button>

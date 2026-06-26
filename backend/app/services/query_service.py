@@ -240,8 +240,9 @@ class QueryService:
                 loadables=loadables,
             )
             df = executor.format_df_for_widget(exec_df)
-            # Persist results on the new step
-            step.data = df
+            # Persist results on the new step (Parquet-offload large results when enabled)
+            from app.services import parquet_store
+            step.data = parquet_store.maybe_offload(df)
             step.status = "success"
         except Exception as e:
             # Mark step as error and surface message to client

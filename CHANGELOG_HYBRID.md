@@ -4,6 +4,58 @@ Hybrid feature changelog (our additions on top of the bagofwords/Dash base). New
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` followed by `-` feature bullets.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.24.0 — Per-agent Channels (two-pane) + per-agent Email/SMTP + Dockerfile build speedups  (2026-06-26)
+- **Per-agent Channels tab** (`components/studio/StudioChannels.vue`): the agent's channels move out of "Access & Channels" into their own left-rail **Channels** tab, redesigned as the org-style **two-pane picker** (platform list + detail pane) instead of a flat card. Same config method (reuses the Slack/Teams/WhatsApp/AI-Mailbox modals + Telegram/MCP) — only re-laid-out. Status dots, set-up/reconfigure/enable/disable/delete per platform. Scoped to this agent's data.
+- **Per-agent Email / SMTP tab** (NEW, `components/studio/StudioEmail.vue`): an agent can send its outbound mail (shares, scheduled results, channel/mailbox replies) from the **global default** OR its **own custom SMTP**. Mode radio; custom fields mirror org SMTP (host/port/security/user/pass/from/validate-certs) + connection test. Stored in `Studio.config['smtp']` (Fernet password), no migration.
+  - Backend: `email_client_resolver` gains a **per-agent SMTP tier** (`get_studio_smtp` + `studio_smtp` precedence in `choose_outbound`; `resolve_outbound(..., studio_id=)`) — agent custom SMTP wins over org/global. Routes `GET/PUT/POST-test /api/studios/{id}/smtp` (flag `HYBRID_AGENT_CHANNELS`, owner/editor). Wired `studio_id` through `notification_service` (dispatch + send_custom_email + _resolved_send), report-share (`report.py`), and channel replies (`email_send_service`). NULL studio / global mode = unchanged behavior.
+  - Rail split: **Access & Members** (who/model/members/connections) + **Channels** + **Email / SMTP**.
+- **Dockerfile build speedups**: dropped non-deterministic `apt-get upgrade -y` from the backend + frontend builder stages (pin to base image, cache-stable); added BuildKit cache mounts for the Vite/Nuxt transform caches on `yarn generate` → faster repeat FE rebuilds. Runtime `base` stage keeps its security upgrade.
+
+## v1.23.0 — Parquet result storage + interactive query endpoint + per-agent channels  (2026-06-26)
+- **Parquet result storage** (`backend/app/services/parquet_store.py`): large step results (≥`HYBRID_PARQUET_MIN_ROWS`=2000 rows) offload to compressed Parquet on the `ca_uploads` volume instead of inline JSON in Postgres — smaller DB, faster dashboards. Transparent hydrate on read (CSV/PDF/agent paths uncompromised). Flag `HYBRID_PARQUET_RESULTS` **default ON**. Crash-safe, fail-soft, GC via daily purge sweep. Docs: `docs/parquet-results.md`.
+- **Interactive query endpoint** `POST /steps/{id}/query`: declarative allow-listed DuckDB pushdown (filter/group/agg/sort/page) over the Parquet — returns only the slice + true total_rows. No raw SQL; cols/ops allow-listed; limit cap 5000. Frontend `useStepQuery` + dashboard routes cross-filter/sort/page through it for `source:"parquet"` steps; inline steps keep client-side path.
+- **Per-agent channels** (flag `HYBRID_AGENT_CHANNELS` default ON): each agent/studio configures its own Slack/Teams/WhatsApp/AI Mailbox/MCP/Telegram (Studio → Access & Channels), scoped to that agent's pinned data. Backend per-studio CRUD for all types (upsert, Fernet creds, audience). **Inbound routing** (phase 2): Slack/Teams/WhatsApp webhooks bind the report to the matched channel's `studio_id` → ReportService auto-scopes to that studio's sources (data isolation). Per-agent rows preferred over org-wide. NULL studio_id = unchanged org behavior.
+- **`scripts/safe-upgrade.sh`** (NEW): guarded bake — rollback-tag image, backup DB+uploads volume together, health-gate, auto-rollback on failure.
+
+## v1.22.0 — Full app warm-theme sweep (every remaining page/component)  (2026-06-26)
+- Completed the warm-palette rollout across the ENTIRE app: 32 remaining pages + 148 components + 3 layouts migrated. Zero clay residue anywhere.
+- Covers report detail/chat workspace, agents (all tabs), monitoring console, evals runs, templates/queries detail, onboarding, auth pages, excel, files, changelog, public share/embed (`c/`, `r/`).
+- Token-only migration: clay→coral (`#C2541E`/`#A8330F`), borders `#E9E0D3`, surfaces `#F4EEE5`, headers → Spectral 32px. **Zero icons/logos/logic changed.**
+
+## v1.21.0 — Settings warm-theme restyle (all 11 tabs)  (2026-06-25)
+- Migrated all Settings tabs to the warm design palette: Members/Access, LLM/Models, AI Settings, General, Channels/Integrations, Folder Sync, Audit, Identity Provider (SSO/SCIM/LDAP), SMTP, Feature Flags, Pack Analytics.
+- Recolored the settings layout (`layouts/settings.vue`) + settings-imported components (`sync/FolderSyncPanel.vue`, Email/WhatsApp/Teams/Slack integration modals).
+- Token-only migration: clay→coral (`#C2541E`/`#A8330F`), borders `#E9E0D3`, surfaces `#F4EEE5`, headers → Spectral 32px. **Zero icons/logos changed, zero functionality touched** (per request).
+
+## v1.20.0 — Nav rail (no dropdowns) + Workspace/Build/Manage page restyle  (2026-06-25)
+- **Nav rail** — replaced the top-nav dropdowns (Workspace/Build/Manage/Settings) with a contextual **left rail** (`components/nav/AppRail.vue`). Top items now route to the group's first page; the rail shows ONLY that group's items (one group at a time). Nav model extracted to shared `composables/useAppNav.ts` (single source for TopNav + AppRail). Mounted in `layouts/default.vue` non-report branch; self-hides on Home / Agent Studios / detail pages that own a rail.
+- **Studio detail tab persists in URL** (`pages/studios/[id]/index.vue`): `?tab=` query — refresh keeps the sub-tab instead of resetting to Auto-pilot.
+- **Workspace** — Templates page (`pages/templates/index.vue`) restyled to `Workspace v2` design: Spectral header, segmented Org/Global/All, gradient icon-tile cards, coral "Use template".
+- **Build** (all 5: Knowledge, Instructions, Queries, Skills, Memory) — warm palette migration (clay→coral `#C2541E`/`#A8330F`, borders `#E9E0D3`, surfaces `#F4EEE5`), Spectral 32px headers.
+- **Manage** (Connectors, Evals, Workflows) — same warm migration + Spectral headers. (Monitoring deferred — own `layout: 'monitoring'` console.)
+- Restyle only; all data/logic/permissions/tabs unchanged. Remaining Workspace views (Reports/Dashboards/Presentations/Spreadsheets/Scheduled) + Settings + Monitoring console pending.
+
+## v1.19.0 — Studio detail retheme + Open/refresh crash fix (bake)  (2026-06-25)
+- Rethemed the studio detail/workspace page (`pages/studios/[id]/index.vue`) to the warm design system: cream bg + Hanken body, coral accents (`#C2541E`/`#A8330F`), Spectral serif headings, warm borders (`#E9E0D3`).
+- **Fixed studio Open → refresh crash** (`Cannot read properties of null (reading 'name')`): teleported `FolderSyncSetupModal` + `FolderSyncCard` read `studio.name` in a separate reactive scope during the cold-load null window, before `fetchStudio` resolved — not covered by the parent `v-else-if` guard. Added `v-if="studio"` + `studio?.name || ''` on both.
+- Bakes durable everything previously shipped via ephemeral FE-sync (studio retheme, crash fix, AgentThinking widget).
+- Added `scripts/fe-sync.sh` — host `nuxt generate` + `docker cp` into `ca-app` for FE iteration without a full image rebuild (ephemeral; reverts on force-recreate).
+
+## v1.18.0 — Design system rollout: Studios, Home, Nav, Reports + Agent status widget  (2026-06-25)
+- Applied the Claude Design warm palette (cream `#F6F1EA`, ink `#1A1611`, coral `#C2541E`/`#A8330F`/`#D67037`, Spectral serif + Hanken Grotesk) across the authed app — restyle only, no functional changes.
+- **Studios** (`pages/studios/index.vue` + `components/studio/StudioCard.vue`): cream bg, Spectral 38px header, "YOUR AGENT STUDIOS" label, coral New button. Card → Studios v2 mock: dark live-activity header (gradient + grid-drift + orange blob + animated equalizer on live / dashed "awaiting first source" on draft), white overlapping icon badge, Spectral italic persona, live-stats vs draft/ready progress, coral + ghost action bar. Equalizer + Live dot keep animating under reduced-motion.
+- **Home** (`pages/index.vue`): cream bg, orange orb glow, greeting eyebrow, Spectral 46px "What should we *explore* today?", subtitle; dropped purple bottom-glow + full-logo hero. Real composer/suggestions/reports children unchanged.
+- **Top nav** (`components/nav/TopNav.vue`): cream translucent bar (blur + `#E9E0D3` border), gradient logo mark + "City Agent Insights" wordmark, warm nav links (active `#A8330F`), cream New-report pill, dark-gradient avatar. Full-width — flush left/right, no side gap. Spectral + Hanken loaded app-wide here.
+- **Reports** (`components/home/RecentReports.vue` + `RecentReportCard.vue`): scope dropdown → **segmented tab** (Main Org / My Reports). Cards restyled (badge + Chat/Dashboard buttons) keeping the **real** server thumbnail preview — no fake numbers; no-preview falls back to a mode icon.
+- **Agent status widget** (`components/agent/AgentThinking.vue`, global in `layouts/default.vue`): floating coral robot launcher → dark terminal popover typing real boot lines (`synced N sources · M tables` from `/data_sources`, `vector index warm`, `ready.`) with blinking cursor; footer = Idle + real default model from `/llm/models`. Fail-soft, counts warmed in background.
+
+## v1.17.0 — Login page redesign (Claude Design handoff)  (2026-06-25)
+- Reimplemented `pages/users/sign-in.vue` pixel-faithful to the Claude Design mock (`City Agent Insights Login.dc.html`). New warm palette (`#F6F1EA` bg, `#C2541E`/`#A8330F` accent), Spectral serif headline + Hanken Grotesk body (loaded via `useHead`), gradient logo mark, floating-label EMAIL/PASSWORD fields with a Show/Hide pill.
+- Removed the `4 sources · 11 tables · 67 columns · data 2026-06-20` stat line from the left column (per request).
+- ALL auth buttons now present: Google + Microsoft (2-col social row) and a dedicated **Enterprise Sign-in** box with **SSO / Keycloak / LDAP**. Wiring: Google → `/api/auth/google/authorize`; Microsoft/Keycloak/SSO → `signInWithProvider()` matched against the org's configured OIDC providers (regex map, fail-soft message when a provider isn't configured); LDAP → reveals + focuses the directory username/password form (LDAP authenticates through the same `/api/auth/jwt/login`).
+- Right panel replaced with an animated "agent at work" showcase: a 3-turn loop (pick data source → live progress checklist → result card with growing bar chart + delta), ported from the design's `DCLogic` state machine to Vue refs + timers, cleaned up on unmount, and disabled under `prefers-reduced-motion`. Hidden below 1024px (single-column form on mobile).
+- Version chip stays dynamic (`hybrid_version` from `/api/settings`).
+
 ## v1.16.1 — Login version chip is real (was hardcoded v2.4.0)  (2026-06-25)
 - Sign-in page chip showed a stale hardcoded `v2.4.0 · local`. Now reads the real product version from `/api/settings.hybrid_version` (= VERSION_HYBRID) and derives the env label from the host (localhost → local, else prod).
 - `/api/settings` (public, pre-auth) now returns `hybrid_version` via `changelog.current_version()` — distinct from the upstream-base `version` (PROJECT_VERSION).

@@ -1,12 +1,12 @@
 <template>
-    <div class="flex justify-center px-4 md:px-6 text-sm bg-[#FBFAF6] min-h-full">
+    <div class="flex justify-center px-4 md:px-6 text-sm bg-[#F6F1EA] min-h-full">
         <div class="w-full max-w-[1640px] py-2 text-[#1f2328]">
             <!-- Header -->
             <div class="flex items-start justify-between gap-4 mb-5">
                 <div>
                     <h1
-                        class="text-2xl font-semibold text-[#1f2328] tracking-tight flex items-center"
-                        style="font-family: ui-serif, Georgia, 'Times New Roman', serif"
+                        class="text-[32px] font-medium text-[#211B14] tracking-tight flex items-center"
+                        style="font-family: 'Spectral', ui-serif, Georgia, serif"
                     >Skills</h1>
                     <p class="mt-1.5 text-[#6b6b6b] leading-relaxed max-w-2xl">
                         Data-gated <b>Domain Packs</b> (auto-bind to a studio's columns at Auto-train) and reusable
@@ -15,7 +15,7 @@
                 </div>
                 <div class="flex items-center gap-2 shrink-0">
                     <!-- Search -->
-                    <div class="flex items-center gap-1.5 rounded-xl border border-[#E7E5DD] bg-white px-2.5 py-1.5 focus-within:border-[#C2683F]">
+                    <div class="flex items-center gap-1.5 rounded-xl border border-[#E9E0D3] bg-white px-2.5 py-1.5 focus-within:border-[#C2541E]">
                         <Icon name="heroicons:magnifying-glass" class="w-4 h-4 text-[#9a958c] shrink-0" />
                         <input
                             v-model="search"
@@ -28,7 +28,7 @@
                         </button>
                     </div>
                     <!-- Author a playbook from a completion -->
-                    <div class="flex items-center gap-1.5 rounded-xl border border-[#E7E5DD] bg-white px-2.5 py-1.5 focus-within:border-[#C2683F]">
+                    <div class="flex items-center gap-1.5 rounded-xl border border-[#E9E0D3] bg-white px-2.5 py-1.5 focus-within:border-[#C2541E]">
                         <Icon name="heroicons:bars-3-bottom-left" class="w-4 h-4 text-[#9a958c] shrink-0" />
                         <input
                             v-model="completionId"
@@ -41,13 +41,13 @@
                     </div>
                     <button
                         type="button"
-                        class="inline-flex items-center gap-1.5 rounded-lg border border-[#E7E5DD] bg-white px-3 py-2 text-sm font-medium text-[#1f2328] cursor-pointer transition-colors hover:bg-[#F4F1EA] disabled:opacity-50 disabled:cursor-not-allowed"
+                        class="inline-flex items-center gap-1.5 rounded-lg border border-[#E9E0D3] bg-white px-3 py-2 text-sm font-medium text-[#1f2328] cursor-pointer transition-colors hover:bg-[#F4EEE5] disabled:opacity-50 disabled:cursor-not-allowed"
                         :disabled="!completionId.trim() || authoring"
                         @click="authorFromCompletion"
                     >
                         <Icon
                             :name="authoring ? 'heroicons:arrow-path' : 'heroicons:sparkles'"
-                            class="w-4 h-4 text-[#C2683F]"
+                            class="w-4 h-4 text-[#C2541E]"
                             :class="{ 'animate-spin': authoring }"
                         />
                         New playbook
@@ -56,14 +56,14 @@
             </div>
 
             <!-- Author error -->
-            <div v-if="authorError" class="mb-4 rounded-xl border border-[#E7E5DD] bg-[#F3E7DF] p-3 text-xs text-[#A8542F]">
+            <div v-if="authorError" class="mb-4 rounded-xl border border-[#E9E0D3] bg-[#FBEFE4] p-3 text-xs text-[#A8330F]">
                 {{ authorError }}
             </div>
 
             <!-- ===================== Rail + grid ===================== -->
             <div class="flex gap-6 items-start">
                 <!-- LEFT RAIL — matches the studio agent sidebar -->
-                <aside class="w-52 shrink-0 sticky top-2 self-start bg-[#FBFAF6] border border-[#E7E5DD] rounded-2xl overflow-hidden">
+                <aside class="w-52 shrink-0 sticky top-2 self-start bg-[#F6F1EA] border border-[#E9E0D3] rounded-2xl overflow-hidden">
                     <nav class="px-2 py-2 flex flex-col gap-px">
                         <!-- All (ungrouped, pinned top) -->
                         <button
@@ -74,7 +74,7 @@
                             :class="selectedCategory === c.key ? 'bg-[#ECEAE1] text-[#1f2328] font-medium' : 'text-[#6b6b6b] hover:text-[#1f2328] hover:bg-[#faf8f3]'"
                             @click="selectedCategory = c.key"
                         >
-                            <Icon :name="categoryIcon(c.key)" class="w-3.5 h-3.5 shrink-0" :class="selectedCategory === c.key ? 'text-[#C2683F]' : 'text-[#9a958c] group-hover:text-[#6b6b6b]'" />
+                            <Icon :name="categoryIcon(c.key)" class="w-3.5 h-3.5 shrink-0" :class="selectedCategory === c.key ? 'text-[#C2541E]' : 'text-[#9a958c] group-hover:text-[#6b6b6b]'" />
                             <span class="flex-1 truncate">{{ c.label }}</span>
                             <span v-if="c.active" class="w-1.5 h-1.5 rounded-full bg-[#3f9e6a] shrink-0" title="has active packs"></span>
                             <span class="text-[11px] text-[#9a958c]">{{ c.count }}</span>
@@ -91,7 +91,7 @@
                                 :class="selectedCategory === c.key ? 'bg-[#ECEAE1] text-[#1f2328] font-medium' : 'text-[#6b6b6b] hover:text-[#1f2328] hover:bg-[#faf8f3]'"
                                 @click="selectedCategory = c.key"
                             >
-                                <Icon :name="categoryIcon(c.key)" class="w-3.5 h-3.5 shrink-0" :class="selectedCategory === c.key ? 'text-[#C2683F]' : 'text-[#9a958c] group-hover:text-[#6b6b6b]'" />
+                                <Icon :name="categoryIcon(c.key)" class="w-3.5 h-3.5 shrink-0" :class="selectedCategory === c.key ? 'text-[#C2541E]' : 'text-[#9a958c] group-hover:text-[#6b6b6b]'" />
                                 <span class="flex-1 truncate">{{ c.label }}</span>
                                 <span v-if="c.active" class="w-1.5 h-1.5 rounded-full bg-[#3f9e6a] shrink-0" title="has active packs"></span>
                                 <span class="text-[11px] text-[#9a958c]">{{ c.count }}</span>
@@ -102,7 +102,7 @@
                         <template v-if="selectedCategory !== 'Playbooks'">
                             <div class="px-3 pt-2 pb-0.5 text-[9px] font-semibold uppercase tracking-wider text-[#9a958c]">Data readiness</div>
                             <label v-for="t in tierFilters" :key="t.key" class="flex items-center gap-2 px-3 py-1 text-[12px] text-[#6b6b6b] cursor-pointer select-none rounded-lg hover:bg-[#faf8f3]">
-                                <input type="checkbox" v-model="t.on" class="accent-[#C2683F] w-3.5 h-3.5" />
+                                <input type="checkbox" v-model="t.on" class="accent-[#C2541E] w-3.5 h-3.5" />
                                 <span class="flex-1 truncate">{{ t.label }}</span>
                             </label>
                         </template>
@@ -119,15 +119,15 @@
 
                     <!-- ===== PLAYBOOKS view (SKILL.md) ===== -->
                     <template v-else-if="selectedCategory === 'Playbooks'">
-                        <div v-if="error" class="rounded-2xl border border-[#E7E5DD] bg-[#F3E7DF] p-4 text-sm text-[#A8542F]">
+                        <div v-if="error" class="rounded-2xl border border-[#E9E0D3] bg-[#FBEFE4] p-4 text-sm text-[#A8330F]">
                             {{ error }}
-                            <button type="button" class="ms-2 rounded-lg px-2 py-0.5 text-xs font-medium text-[#C2683F] hover:bg-white/60" @click="fetchSkills">Retry</button>
+                            <button type="button" class="ms-2 rounded-lg px-2 py-0.5 text-xs font-medium text-[#C2541E] hover:bg-white/60" @click="fetchSkills">Retry</button>
                         </div>
                         <div v-else-if="filteredPlaybooks.length === 0" class="flex flex-col items-center justify-center py-20 text-center">
-                            <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4F1EA] border border-[#E7E5DD] text-[#C2683F]">
+                            <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] text-[#C2541E]">
                                 <UIcon name="i-heroicons-document-text" class="w-6 h-6" />
                             </span>
-                            <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">No playbooks yet</h3>
+                            <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">No playbooks yet</h3>
                             <p class="mt-1 text-sm text-[#9a958c] max-w-md leading-relaxed">
                                 A playbook is authored from a solved chat ("Save as skill") or drafted from a completion ID above.
                                 It appears here as a personal draft you can review and promote.
@@ -137,21 +137,21 @@
                             <div
                                 v-for="skill in filteredPlaybooks"
                                 :key="skill.id"
-                                class="flex flex-col gap-3 rounded-2xl border border-[#E7E5DD] bg-white p-4 cursor-pointer transition hover:-translate-y-0.5 hover:shadow-md"
+                                class="flex flex-col gap-3 rounded-2xl border border-[#E9E0D3] bg-white p-4 cursor-pointer transition hover:-translate-y-0.5 hover:shadow-md"
                                 @click="openSkill(skill)"
                             >
-                                <div class="flex items-center justify-between gap-2 rounded-xl border border-[#E7E5DD] bg-[#F4F1EA] px-3 py-2">
-                                    <span class="inline-flex items-center rounded-full border border-[#E7E5DD] bg-white px-2 py-0.5 text-[11px] font-medium text-[#6b6b6b]">{{ scopeLabel(skill.scope) }}</span>
+                                <div class="flex items-center justify-between gap-2 rounded-xl border border-[#E9E0D3] bg-[#F4EEE5] px-3 py-2">
+                                    <span class="inline-flex items-center rounded-full border border-[#E9E0D3] bg-white px-2 py-0.5 text-[11px] font-medium text-[#6b6b6b]">{{ scopeLabel(skill.scope) }}</span>
                                     <span class="inline-flex items-center gap-1.5 rounded-full border border-[#d7ebde] bg-[#eef6f0] px-2 py-0.5 text-[11px] font-medium text-[#3f9e6a]">
                                         <span class="inline-block w-1.5 h-1.5 rounded-full bg-[#3f9e6a]"></span>Enabled
                                     </span>
                                 </div>
-                                <div class="flex items-center gap-2 text-[15px] font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">
-                                    <Icon name="heroicons:bolt" class="w-[17px] h-[17px] text-[#C2683F] shrink-0" />{{ skill.name }}
+                                <div class="flex items-center gap-2 text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">
+                                    <Icon name="heroicons:bolt" class="w-[17px] h-[17px] text-[#C2541E] shrink-0" />{{ skill.name }}
                                 </div>
                                 <p class="text-xs text-[#6b6b6b] leading-relaxed line-clamp-3">{{ skill.description || '—' }}</p>
-                                <div class="mt-auto pt-3 border-t border-[#E7E5DD] flex items-center gap-2">
-                                    <span v-if="skill.status" class="inline-flex items-center rounded-full border border-[#E7E5DD] bg-[#F4F1EA] px-2 py-0.5 text-[11px] font-medium text-[#6b6b6b]">{{ skill.status }}</span>
+                                <div class="mt-auto pt-3 border-t border-[#E9E0D3] flex items-center gap-2">
+                                    <span v-if="skill.status" class="inline-flex items-center rounded-full border border-[#E9E0D3] bg-[#F4EEE5] px-2 py-0.5 text-[11px] font-medium text-[#6b6b6b]">{{ skill.status }}</span>
                                     <span v-if="(skill.origin || 'manual') === 'auto'" class="inline-flex items-center gap-1 rounded-full border border-[#e7ddf3] bg-[#f3eefb] px-2 py-0.5 text-[11px] font-medium text-[#7c3aed]">
                                         <Icon name="heroicons:sparkles" class="w-3 h-3 shrink-0" />Auto-proposed
                                     </span>
@@ -164,10 +164,10 @@
                     <!-- ===== PACKS view ===== -->
                     <template v-else>
                         <div v-if="!packs.length" class="flex flex-col items-center justify-center py-20 text-center">
-                            <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4F1EA] border border-[#E7E5DD] text-[#C2683F]">
+                            <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] text-[#C2541E]">
                                 <UIcon name="i-heroicons-puzzle-piece" class="w-6 h-6" />
                             </span>
-                            <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">Domain Packs are off</h3>
+                            <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">Domain Packs are off</h3>
                             <p class="mt-1 text-sm text-[#9a958c] max-w-md leading-relaxed">Enable the <b>Domain Packs</b> feature flag (Settings → Feature Flags) to see the pack library.</p>
                         </div>
                         <div v-else-if="visiblePackGroups.length === 0" class="py-16 text-center text-sm text-[#9a958c]">
@@ -178,18 +178,18 @@
                                 <div class="flex items-center gap-2 mb-2.5">
                                     <h2 class="text-[13px] font-semibold uppercase tracking-wide text-[#6b6b6b]">{{ grp.label }}</h2>
                                     <span class="text-[11px] text-[#bcb8ae]">{{ grp.note }}</span>
-                                    <NuxtLink v-if="grp.key === categoryRail[0].key" to="/settings/pack-analytics" class="ms-auto text-xs font-medium text-[#C2683F] hover:underline">Pack analytics →</NuxtLink>
+                                    <NuxtLink v-if="grp.key === categoryRail[0].key" to="/settings/pack-analytics" class="ms-auto text-xs font-medium text-[#C2541E] hover:underline">Pack analytics →</NuxtLink>
                                     <span v-else class="ms-auto text-[11px] text-[#9a958c]">{{ grp.items.length }}</span>
                                 </div>
                                 <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
                                     <div
                                         v-for="p in grp.items"
                                         :key="p.pack_id"
-                                        class="flex flex-col gap-2 rounded-2xl border border-[#E7E5DD] bg-white p-3.5"
+                                        class="flex flex-col gap-2 rounded-2xl border border-[#E9E0D3] bg-white p-3.5"
                                     >
                                         <div class="flex items-start justify-between gap-2">
                                             <div class="flex items-center gap-1.5 min-w-0">
-                                                <Icon name="heroicons:puzzle-piece" class="w-4 h-4 text-[#C2683F] shrink-0" />
+                                                <Icon name="heroicons:puzzle-piece" class="w-4 h-4 text-[#C2541E] shrink-0" />
                                                 <span class="text-[13px] font-semibold text-[#1f2328] leading-snug">{{ p.name }}</span>
                                             </div>
                                             <span
@@ -198,7 +198,7 @@
                                             >
                                                 <span class="inline-block w-1.5 h-1.5 rounded-full bg-[#3f9e6a]"></span>{{ p.active_studios }} active
                                             </span>
-                                            <span v-else class="shrink-0 inline-flex items-center rounded-full border border-[#E7E5DD] bg-[#F4F1EA] px-2 py-0.5 text-[11px] font-medium text-[#9a958c]">dormant</span>
+                                            <span v-else class="shrink-0 inline-flex items-center rounded-full border border-[#E9E0D3] bg-[#F4EEE5] px-2 py-0.5 text-[11px] font-medium text-[#9a958c]">dormant</span>
                                         </div>
                                         <div class="flex items-center gap-1.5">
                                             <span class="text-[11px] text-[#9a958c] font-mono">{{ p.domain }}</span>
@@ -209,7 +209,7 @@
                                                 v-for="inp in p.inputs"
                                                 :key="inp.key"
                                                 class="inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium"
-                                                :class="inp.optional ? 'border-[#E7E5DD] bg-[#F4F1EA] text-[#9a958c]' : 'border-[#e6dcd2] bg-[#faf3ee] text-[#A8542F]'"
+                                                :class="inp.optional ? 'border-[#E9E0D3] bg-[#F4EEE5] text-[#9a958c]' : 'border-[#e6dcd2] bg-[#faf3ee] text-[#A8330F]'"
                                                 :title="(inp.role || '') + (inp.optional ? ' (optional)' : ' (required)') + (inp.desc ? ' — ' + inp.desc : '')"
                                             >{{ inp.key }}<span v-if="inp.optional" class="opacity-60">?</span></span>
                                         </div>
@@ -320,9 +320,9 @@ const activeTiers = computed(() => new Set(tierFilters.filter(t => t.on).map(t =
 const tierShort = (t: string) => ({ A: 'A', B: 'B', C: 'C', Org: 'Org' } as any)[t] || t
 const tierBadgeClass = (t: string) => {
     if (t === 'A') return 'border border-[#d7ebde] bg-[#eef6f0] text-[#3f9e6a]'
-    if (t === 'B') return 'border border-[#E7E5DD] bg-[#F4F1EA] text-[#9a958c]'
+    if (t === 'B') return 'border border-[#E9E0D3] bg-[#F4EEE5] text-[#9a958c]'
     if (t === 'C') return 'border border-[#e7ddf3] bg-[#f3eefb] text-[#7c3aed]'
-    return 'border border-[#e6dcd2] bg-[#faf3ee] text-[#A8542F]'
+    return 'border border-[#e6dcd2] bg-[#faf3ee] text-[#A8330F]'
 }
 
 const matchesSearch = (p: Pack) => {

@@ -80,7 +80,7 @@
                 <span
                   :class="[
                     'text-[9px] font-mono font-semibold uppercase tracking-wide',
-                    ch.type === 'create' ? 'text-green-600' : 'text-[#C2683F]'
+                    ch.type === 'create' ? 'text-green-600' : 'text-[#C2541E]'
                   ]"
                 >
                   {{ ch.type === 'create' ? 'new' : 'edit' }}

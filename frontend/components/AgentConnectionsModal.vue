@@ -118,7 +118,7 @@
                     v-for="conn in availableConnections"
                     :key="conn.id"
                     class="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50"
-                    :class="{ 'border-[#C2683F] bg-[#F6EFEA]': selectedConnectionId === conn.id }"
+                    :class="{ 'border-[#C2541E] bg-[#F6EFEA]': selectedConnectionId === conn.id }"
                 >
                     <input type="radio" name="link-conn" :value="conn.id" v-model="selectedConnectionId" class="sr-only" />
                     <DataSourceIcon :type="conn.type" class="h-5 flex-shrink-0" />
@@ -126,7 +126,7 @@
                         <div class="text-sm font-medium text-gray-900 truncate">{{ conn.name }}</div>
                         <div class="text-xs text-gray-400">{{ conn.type }}</div>
                     </div>
-                    <UIcon v-if="selectedConnectionId === conn.id" name="heroicons-check-circle-solid" class="w-4 h-4 text-[#C2683F]" />
+                    <UIcon v-if="selectedConnectionId === conn.id" name="heroicons-check-circle-solid" class="w-4 h-4 text-[#C2541E]" />
                 </label>
             </div>
 

@@ -52,7 +52,7 @@
             <button
               @click="approve"
               :disabled="approving"
-              class="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-[#C2683F] rounded-lg hover:bg-[#A8542F] disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+              class="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-[#C2541E] rounded-lg hover:bg-[#A8330F] disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
             >
               <template v-if="approving">
                 <Spinner class="h-4 w-4 me-2" />

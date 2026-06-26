@@ -9,7 +9,7 @@
             {{ $t('auth.smtpDisabled') }}
           </p>
           <div class="mt-5">
-            <NuxtLink to="/users/sign-in" class="text-[#C2683F] hover:text-[#A8542F]">
+            <NuxtLink to="/users/sign-in" class="text-[#C2541E] hover:text-[#A8330F]">
               {{ $t('auth.backToSignIn') }}
             </NuxtLink>
           </div>
@@ -27,7 +27,7 @@
               id="email"
               v-model="email"
               type="email"
-              class="border border-gray-300 rounded-lg px-4 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2683F]"
+              class="border border-gray-300 rounded-lg px-4 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2541E]"
               required
             />
           </div>
@@ -37,7 +37,7 @@
             <button
               type="submit"
               :disabled="isLoading"
-              class="px-3 py-2 text-sm font-medium text-white bg-[#C2683F] hover:bg-[#A8542F] focus:ring-4 focus:outline-none focus:ring-[#E8C9B5] rounded-lg text-center disabled:opacity-50 disabled:cursor-not-allowed"
+              class="px-3 py-2 text-sm font-medium text-white bg-[#C2541E] hover:bg-[#A8330F] focus:ring-4 focus:outline-none focus:ring-[#E8C9B5] rounded-lg text-center disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {{ isLoading ? $t('auth.sending') : $t('auth.sendResetLink') }}
             </button>
@@ -45,7 +45,7 @@
         </form>
         <div class="mt-3 block text-sm text-center">
           {{ $t('auth.rememberPassword') }}
-          <NuxtLink to="/users/sign-in" class="text-[#C2683F]">
+          <NuxtLink to="/users/sign-in" class="text-[#C2541E]">
             {{ $t('auth.signIn') }}
           </NuxtLink>
         </div>

@@ -10,7 +10,7 @@
                         :class="[
                             'px-3 py-2 text-xs font-medium border-b-2 transition-colors',
                             filterType === 'published'
-                                ? 'border-[#C2683F] text-[#C2683F]'
+                                ? 'border-[#C2541E] text-[#C2541E]'
                                 : 'border-transparent text-gray-500 hover:text-gray-700'
                         ]"
                     >
@@ -33,13 +33,13 @@
                     <!-- Batch C / P6: one-click pre-train (profile columns + optional knowledge) -->
                     <div v-if="isAdmin" class="flex items-center gap-2">
                         <label class="flex items-center gap-1 text-[11px] text-gray-500 cursor-pointer select-none" title="Auto-approve AI-suggested table/metric knowledge instead of sending it to the review queue">
-                            <input type="checkbox" v-model="autoApprove" class="accent-[#C2683F] w-3.5 h-3.5" />
+                            <input type="checkbox" v-model="autoApprove" class="accent-[#C2541E] w-3.5 h-3.5" />
                             Auto-approve
                         </label>
                         <button
                             @click="runPretrain"
                             :disabled="pretraining"
-                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-white bg-[#C2683F] hover:bg-[#A8542F] disabled:opacity-60 transition-colors"
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-white bg-[#C2541E] hover:bg-[#A8330F] disabled:opacity-60 transition-colors"
                             title="Profile every column (type, role, real values) so the agent is expert before the first question"
                         >
                             <Spinner v-if="pretraining" class="w-3.5 h-3.5" />
@@ -71,7 +71,7 @@
                             <span
                                 v-for="d in pretrainResult.dimensions"
                                 :key="d.name"
-                                class="text-[10px] px-2 py-0.5 rounded-full border border-[#E8C9B5] bg-white text-[#A8542F]"
+                                class="text-[10px] px-2 py-0.5 rounded-full border border-[#E8C9B5] bg-white text-[#A8330F]"
                                 :title="(d.values || []).join(', ')"
                             >{{ d.name }}: {{ (d.values || []).slice(0, 3).join(', ') }}<template v-if="(d.distinct || 0) > 3"> +{{ d.distinct - 3 }}</template></span>
                         </div>
@@ -114,7 +114,7 @@
                             <div class="flex items-center gap-2 mb-1">
                                 <span
                                     class="text-[10px] px-1.5 py-0.5 rounded border"
-                                    :class="item.type === 'metric' ? 'text-emerald-700 border-emerald-200 bg-emerald-50' : 'text-[#A8542F] border-[#E8C9B5] bg-[#F6EFEA]'"
+                                    :class="item.type === 'metric' ? 'text-emerald-700 border-emerald-200 bg-emerald-50' : 'text-[#A8330F] border-[#E8C9B5] bg-[#F6EFEA]'"
                                 >{{ (item.type || '').toUpperCase() }}</span>
                                 <Icon v-if="getEntityType(item) === 'global'" name="heroicons:check-badge" class="w-4 h-4 text-green-600" title="Approved" />
                                 <span v-if="getEntityType(item) === 'archived'" class="text-[10px] px-1.5 py-0.5 rounded border text-red-700 border-red-200 bg-red-50">{{ $t('queries.archivedBadge') }}</span>

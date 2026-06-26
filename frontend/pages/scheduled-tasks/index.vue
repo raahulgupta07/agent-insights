@@ -1,12 +1,12 @@
 <template>
-  <div class="flex justify-center ps-2 md:ps-4 text-sm bg-[#FBFAF6] min-h-full">
+  <div class="flex justify-center ps-2 md:ps-4 text-sm bg-[#F6F1EA] min-h-full">
     <div class="w-full max-w-7xl px-4 ps-0 py-2 text-[#1f2328]">
       <div>
         <div class="flex items-start justify-between gap-4">
           <div>
             <h1
-              class="text-2xl font-semibold text-[#1f2328] tracking-tight flex items-center"
-              style="font-family: ui-serif, Georgia, 'Times New Roman', serif"
+              class="text-[32px] font-medium text-[#211B14] tracking-tight flex items-center"
+              style="font-family: 'Spectral', ui-serif, Georgia, serif"
             >
               <GoBackChevron v-if="isExcel" />
               {{ $t('scheduled.title') }}
@@ -16,7 +16,7 @@
           <button
             @click="openNewTask"
             :disabled="creatingTask"
-            class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl bg-[#C2683F] text-white hover:bg-[#A8542F] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+            class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl bg-[#C2541E] text-white hover:bg-[#A8330F] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
           >
             <Spinner v-if="creatingTask" class="w-4 h-4 animate-spin" />
             <UIcon v-else name="i-heroicons-plus" class="w-4 h-4" />
@@ -31,7 +31,7 @@
                 v-model="searchTerm"
                 type="text"
                 :placeholder="$t('scheduled.searchPlaceholder')"
-                class="w-full ps-10 pe-4 py-2.5 bg-white text-[#1f2328] border border-[#E7E5DD] rounded-xl placeholder:text-[#9a958c] focus:outline-none focus:ring-2 focus:ring-[#C2683F]/40 focus:border-[#C2683F]"
+                class="w-full ps-10 pe-4 py-2.5 bg-white text-[#1f2328] border border-[#E9E0D3] rounded-xl placeholder:text-[#9a958c] focus:outline-none focus:ring-2 focus:ring-[#C2541E]/40 focus:border-[#C2541E]"
               />
               <UIcon
                 name="i-heroicons-magnifying-glass"
@@ -49,10 +49,10 @@
 
       <!-- Empty -->
       <div v-else-if="tasks.length === 0" class="flex flex-col items-center justify-center py-16 px-4 text-center">
-        <span class="inline-flex w-11 h-11 mb-3 items-center justify-center rounded-xl bg-[#F4F1EA] border border-[#E7E5DD] text-[#C2683F]">
+        <span class="inline-flex w-11 h-11 mb-3 items-center justify-center rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] text-[#C2541E]">
           <UIcon name="i-heroicons-clock" class="w-6 h-6" />
         </span>
-        <h3 class="text-[15px] font-semibold text-[#1f2328] mb-1" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">{{ $t('scheduled.empty') }}</h3>
+        <h3 class="text-[15px] font-semibold text-[#1f2328] mb-1" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ $t('scheduled.empty') }}</h3>
         <p class="text-sm text-[#9a958c] text-center max-w-sm">
           {{ $t('scheduled.emptyDescription') }}
         </p>
@@ -82,7 +82,7 @@
               <div class="flex items-center gap-3 mt-2">
                 <NuxtLink
                   :to="`/reports/${task.report_id}`"
-                  class="text-[11px] text-[#C2683F] hover:text-[#A8542F] flex items-center gap-1"
+                  class="text-[11px] text-[#C2541E] hover:text-[#A8330F] flex items-center gap-1"
                   @click.stop
                 >
                   <UIcon name="heroicons-chat-bubble-left-right" class="w-3 h-3" />

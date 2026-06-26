@@ -41,7 +41,7 @@
                     </button>
                 </div>
                 <div v-if="isPublished" class="mt-4 font-normal">
-                    <a :href="reportUrl" target="_blank" class="text-[#C2683F] hover:text-[#A8542F] hover:underline">
+                    <a :href="reportUrl" target="_blank" class="text-[#C2541E] hover:text-[#A8330F] hover:underline">
                         <Icon name="heroicons:arrow-top-right-on-square" />
                         {{ $t('publish.viewDashboard') }}</a>
                 </div>

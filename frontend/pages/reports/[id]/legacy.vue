@@ -89,7 +89,7 @@
                 <div class="absolute bottom-28 font-bold text-center start-0 end-0" :class="isSplitScreen ? 'w-full' : 'md:w-1/2 mx-auto'">
                     We've upgraded our AI agent!<br />
                     <span class=" text-md font-normal text-gray-500">This report is in read-only mode.</span><br />
-                    <span class="font-normal text-[#C2683F]">Please <button class="text-[#C2683F] hover:text-[#A8542F]" @click="createNewReport">start a new report</button></span>
+                    <span class="font-normal text-[#C2541E]">Please <button class="text-[#C2541E] hover:text-[#A8330F]" @click="createNewReport">start a new report</button></span>
                 </div>
             </div>
 
@@ -97,7 +97,7 @@
 
         <!-- Resizer -->
         <div v-if="isSplitScreen" 
-             class="w-1 bg-gray-200 cursor-col-resize hover:bg-[#C2683F] active:bg-[#A8542F]"
+             class="w-1 bg-gray-200 cursor-col-resize hover:bg-[#C2541E] active:bg-[#A8330F]"
              @mousedown="startResize">
         </div>
 

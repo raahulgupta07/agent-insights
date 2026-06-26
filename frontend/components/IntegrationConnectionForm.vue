@@ -4,7 +4,7 @@
       <div>
         <label class="block text-xs font-medium text-gray-700 mb-1">Connection Name</label>
         <input v-model="form.name" type="text" :placeholder="props.integrationTitle"
-               class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C2683F]" />
+               class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C2541E]" />
       </div>
 
       <div class="rounded-md border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600 space-y-1">
@@ -27,21 +27,21 @@
             :type="field.format === 'password' ? 'password' : 'text'"
             v-model="form.credentials[field.key]"
             :placeholder="isEditMode && field.format === 'password' ? 'unchanged' : (field.description || '')"
-            class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C2683F]"
+            class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C2541E]"
           />
           <textarea
             v-else-if="field.type === 'string' && field.format === 'textarea'"
             v-model="form.credentials[field.key]"
-            class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C2683F]"
+            class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C2541E]"
           />
           <UCheckbox v-else-if="field.type === 'boolean'" v-model="form.credentials[field.key]">{{ field.title }}</UCheckbox>
           <input v-else v-model="form.credentials[field.key]"
-                 class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C2683F]" />
+                 class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C2541E]" />
           <div v-if="field.description" class="text-[11px] text-gray-400 mt-0.5">{{ field.description }}</div>
         </div>
       </template>
 
-      <div class="rounded-md border border-[#E8C9B5] bg-[#F6EFEA] p-3 text-xs text-[#A8542F] flex items-start gap-2">
+      <div class="rounded-md border border-[#E8C9B5] bg-[#F6EFEA] p-3 text-xs text-[#A8330F] flex items-start gap-2">
         <UIcon name="heroicons-information-circle" class="w-4 h-4 mt-0.5" />
         <div>
           After saving, each user attaches this integration to an agent and signs in individually.
@@ -64,7 +64,7 @@
             v-model="agentName"
             type="text"
             :placeholder="props.integrationTitle"
-            class="mt-2 w-full border border-gray-300 rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[#C2683F]"
+            class="mt-2 w-full border border-gray-300 rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[#C2541E]"
           />
         </div>
       </div>

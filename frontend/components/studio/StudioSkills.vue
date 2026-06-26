@@ -3,7 +3,7 @@
         <!-- Header -->
         <div class="flex items-start justify-between mb-4">
             <div>
-                <h2 class="text-lg font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">
+                <h2 class="text-lg font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">
                     Skills
                 </h2>
                 <p class="text-xs text-[#6b6b6b] mt-0.5 max-w-2xl">
@@ -15,7 +15,7 @@
             <button
                 type="button"
                 :disabled="loading"
-                class="inline-flex items-center gap-1.5 text-xs text-[#6b6b6b] hover:text-[#1f2328] border border-[#E7E5DD] rounded-lg px-2.5 py-1.5 transition-colors"
+                class="inline-flex items-center gap-1.5 text-xs text-[#6b6b6b] hover:text-[#1f2328] border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 transition-colors"
                 @click="load"
             >
                 <Spinner v-if="loading" class="h-3.5 w-3.5" />
@@ -25,7 +25,7 @@
         </div>
 
         <!-- Empty -->
-        <div v-if="!loading && !packs.length" class="py-10 text-center border border-dashed border-[#E7E5DD] rounded-2xl">
+        <div v-if="!loading && !packs.length" class="py-10 text-center border border-dashed border-[#E9E0D3] rounded-2xl">
             <UIcon name="i-heroicons-sparkles" class="w-7 h-7 mx-auto text-[#9a958c] mb-1.5" />
             <p class="text-xs text-[#6b6b6b]">No skills bound yet. Run Auto-train to bind matching domain packs, or paste an analysis in the Teach tab.</p>
         </div>
@@ -36,7 +36,7 @@
                 v-for="p in sorted"
                 :key="p.id"
                 class="rounded-2xl border bg-white p-4 transition-colors"
-                :class="p.status === 'rejected' ? 'border-[#EFE7DF] opacity-60' : 'border-[#E7E5DD]'"
+                :class="p.status === 'rejected' ? 'border-[#EFE7DF] opacity-60' : 'border-[#E9E0D3]'"
             >
                 <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0 flex-1">
@@ -47,7 +47,7 @@
                                 <UIcon :name="statusBadge(p.status).icon" class="w-3 h-3" />
                                 {{ statusBadge(p.status).label }}
                             </span>
-                            <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-[#F4F1EA] border border-[#E7E5DD] text-[#6b6b6b]">{{ sourceLabel(p.source) }}</span>
+                            <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-[#F4EEE5] border border-[#E9E0D3] text-[#6b6b6b]">{{ sourceLabel(p.source) }}</span>
                             <span v-if="p.conf" class="text-[10px] text-[#9a958c]">bind {{ Math.round((p.conf || 0) * 100) }}%</span>
                             <span
                                 v-if="p.winrate && p.winrate.samples"
@@ -65,12 +65,12 @@
                             <code
                                 v-for="(col, key) in p.binding"
                                 :key="key"
-                                class="inline-block ms-1 mb-1 bg-[#F4F1EA] border border-[#E7E5DD] rounded px-1.5 py-0.5"
+                                class="inline-block ms-1 mb-1 bg-[#F4EEE5] border border-[#E9E0D3] rounded px-1.5 py-0.5"
                             >{{ key }} → {{ col }}</code>
                         </div>
 
                         <!-- missing (dormant) -->
-                        <div v-if="(p.missing || []).length" class="text-[11px] text-[#A8542F] mb-1">
+                        <div v-if="(p.missing || []).length" class="text-[11px] text-[#A8330F] mb-1">
                             <UIcon name="i-heroicons-exclamation-triangle" class="w-3 h-3 inline -mt-0.5" />
                             needs a column for: {{ p.missing.join(', ') }} — add it and re-train.
                         </div>
@@ -79,7 +79,7 @@
                         <button v-if="p.method_text" type="button" class="text-[11px] text-[#37618A] hover:underline" @click="p._open = !p._open">
                             {{ p._open ? 'Hide method' : 'Show method' }}
                         </button>
-                        <pre v-if="p._open && p.method_text" class="mt-1.5 text-[11px] text-[#4a4a4a] bg-[#FAF8F3] border border-[#E7E5DD] rounded-lg p-2.5 whitespace-pre-wrap leading-relaxed">{{ p.method_text }}</pre>
+                        <pre v-if="p._open && p.method_text" class="mt-1.5 text-[11px] text-[#4a4a4a] bg-[#FAF8F3] border border-[#E9E0D3] rounded-lg p-2.5 whitespace-pre-wrap leading-relaxed">{{ p.method_text }}</pre>
                     </div>
 
                     <!-- actions -->
@@ -97,7 +97,7 @@
                             v-if="p.status === 'active'"
                             type="button"
                             :disabled="p._busy"
-                            class="inline-flex items-center gap-1 text-[11px] text-[#6b6b6b] hover:text-[#1f2328] border border-[#E7E5DD] rounded-lg px-2.5 py-1 transition-colors"
+                            class="inline-flex items-center gap-1 text-[11px] text-[#6b6b6b] hover:text-[#1f2328] border border-[#E9E0D3] rounded-lg px-2.5 py-1 transition-colors"
                             @click="setStatus(p, 'pending')"
                         >
                             <UIcon name="i-heroicons-pause" class="w-3.5 h-3.5" /> Deactivate
@@ -115,7 +115,7 @@
                             v-if="p.status === 'rejected'"
                             type="button"
                             :disabled="p._busy"
-                            class="inline-flex items-center gap-1 text-[11px] text-[#6b6b6b] hover:text-[#1f2328] border border-[#E7E5DD] rounded-lg px-2.5 py-1 transition-colors"
+                            class="inline-flex items-center gap-1 text-[11px] text-[#6b6b6b] hover:text-[#1f2328] border border-[#E9E0D3] rounded-lg px-2.5 py-1 transition-colors"
                             @click="setStatus(p, 'pending')"
                         >
                             <UIcon name="i-heroicons-arrow-uturn-left" class="w-3.5 h-3.5" /> Restore
@@ -152,10 +152,10 @@ const sorted = computed(() =>
 function statusBadge(s: string) {
     switch (s) {
         case 'active': return { label: 'Active', icon: 'i-heroicons-check-circle', cls: 'border-[#CFE0CF] bg-[#EEF5EE] text-[#2f7d53]' }
-        case 'pending': return { label: 'Pending', icon: 'i-heroicons-clock', cls: 'border-[#E8C9B5] bg-[#F6EFEA] text-[#A8542F]' }
-        case 'dormant': return { label: 'Dormant', icon: 'i-heroicons-moon', cls: 'border-[#E7E5DD] bg-[#F4F1EA] text-[#6b6b6b]' }
+        case 'pending': return { label: 'Pending', icon: 'i-heroicons-clock', cls: 'border-[#E8C9B5] bg-[#F6EFEA] text-[#A8330F]' }
+        case 'dormant': return { label: 'Dormant', icon: 'i-heroicons-moon', cls: 'border-[#E9E0D3] bg-[#F4EEE5] text-[#6b6b6b]' }
         case 'rejected': return { label: 'Rejected', icon: 'i-heroicons-x-circle', cls: 'border-[#EAD4D4] bg-[#FBF2F2] text-[#A83F3F]' }
-        default: return { label: s, icon: 'i-heroicons-tag', cls: 'border-[#E7E5DD] bg-[#F4F1EA] text-[#6b6b6b]' }
+        default: return { label: s, icon: 'i-heroicons-tag', cls: 'border-[#E9E0D3] bg-[#F4EEE5] text-[#6b6b6b]' }
     }
 }
 

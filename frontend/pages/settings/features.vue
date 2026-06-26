@@ -3,12 +3,12 @@
         <!-- Header -->
         <div class="mb-6">
             <h1
-                class="text-2xl font-semibold text-[#1f2328] tracking-tight"
-                style="font-family: ui-serif, Georgia, 'Times New Roman', serif"
+                class="text-[32px] font-medium text-[#211B14] tracking-tight"
+                style="font-family: 'Spectral', ui-serif, Georgia, serif"
             >Feature Flags</h1>
             <p class="mt-2 text-[#6b6b6b] leading-relaxed max-w-2xl">
                 Turn features on or off for this org. Applies live — no restart for most.
-                Per-org overrides beat the <span class="font-mono text-xs bg-[#F4F1EA] px-1.5 py-0.5 rounded">.env</span> default.
+                Per-org overrides beat the <span class="font-mono text-xs bg-[#F4EEE5] px-1.5 py-0.5 rounded">.env</span> default.
             </p>
         </div>
 
@@ -20,7 +20,7 @@
                     v-model="search"
                     type="text"
                     placeholder="Search features…"
-                    class="w-full ps-9 pe-3 py-2 text-sm border border-[#E7E5DD] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C2683F] focus:border-[#C2683F]"
+                    class="w-full ps-9 pe-3 py-2 text-sm border border-[#E9E0D3] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C2541E] focus:border-[#C2541E]"
                 />
             </div>
             <USelectMenu
@@ -44,10 +44,10 @@
 
         <!-- Empty -->
         <div v-else-if="flags.length === 0" class="text-center py-10">
-            <div class="mx-auto w-11 h-11 rounded-xl bg-[#F4F1EA] border border-[#E7E5DD] flex items-center justify-center mb-3">
-                <Icon name="heroicons:flag" class="w-5 h-5 text-[#C2683F]" />
+            <div class="mx-auto w-11 h-11 rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] flex items-center justify-center mb-3">
+                <Icon name="heroicons:flag" class="w-5 h-5 text-[#C2541E]" />
             </div>
-            <p class="text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">No feature flags</p>
+            <p class="text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">No feature flags</p>
         </div>
 
         <!-- No search results -->
@@ -62,7 +62,7 @@
                     <h2 class="text-[11px] font-semibold text-[#9a958c] uppercase tracking-wider">{{ group.category }}</h2>
                     <span class="text-[11px] text-[#bcb8b0]">{{ group.rows.filter(r => r.effective).length }}/{{ group.rows.length }}</span>
                 </div>
-                <div class="divide-y divide-[#E7E5DD] border border-[#E7E5DD] rounded-2xl overflow-hidden">
+                <div class="divide-y divide-[#E9E0D3] border border-[#E9E0D3] rounded-2xl overflow-hidden">
                     <div
                         v-for="row in group.rows"
                         :key="row.env_name"
@@ -84,7 +84,7 @@
                                     {{ statusLabel(row.status) }}
                                 </span>
                                 <!-- Override hint -->
-                                <span v-if="row.override !== null" class="inline-flex items-center gap-1 text-[11px] text-[#C2683F]" title="This org has an explicit override that beats the .env default">
+                                <span v-if="row.override !== null" class="inline-flex items-center gap-1 text-[11px] text-[#C2541E]" title="This org has an explicit override that beats the .env default">
                                     <Icon name="heroicons:bolt" class="w-3 h-3" /> overridden
                                 </span>
                                 <span v-else class="text-[11px] text-[#9a958c]" title="Following the .env default">following default</span>
@@ -193,9 +193,9 @@ const groupedFlags = computed(() => {
 const roleChipClass = (role: string): string => {
     switch (role) {
         case 'agent': return 'bg-violet-50 text-violet-700'
-        case 'user': return 'bg-[#F6EFEA] text-[#A8542F]'
+        case 'user': return 'bg-[#F6EFEA] text-[#A8330F]'
         case 'review': return 'bg-amber-50 text-amber-700'
-        default: return 'bg-[#F4F1EA] text-[#6b6b6b]'
+        default: return 'bg-[#F4EEE5] text-[#6b6b6b]'
     }
 }
 
@@ -218,7 +218,7 @@ const statusChipClass = (s: string): string => ({
     needs_dep: 'bg-amber-50 text-amber-700',
     unstable: 'bg-red-50 text-red-600',
     daemon: 'bg-slate-100 text-slate-600',
-} as Record<string, string>)[s] || 'bg-[#F4F1EA] text-[#6b6b6b]'
+} as Record<string, string>)[s] || 'bg-[#F4EEE5] text-[#6b6b6b]'
 
 // Confirm gate for risky enables (unstable / needs setup).
 const confirmOpen = ref(false)

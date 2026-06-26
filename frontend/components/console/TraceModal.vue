@@ -32,7 +32,7 @@
                         <div class="text-[11px] uppercase tracking-wide text-gray-500 me-1">{{ $t('traceModal.aiScoring') }}</div>
                         <div
                             v-if="traceData.agent_execution.instructions_effectiveness !== null"
-                            class="inline-flex items-center px-2 py-1 rounded-full border text-xs bg-[#F6EFEA] text-[#A8542F] border-[#E8C9B5]"
+                            class="inline-flex items-center px-2 py-1 rounded-full border text-xs bg-[#F6EFEA] text-[#A8330F] border-[#E8C9B5]"
                         >
                             <span class="me-1">{{ $t('traceModal.instructions') }}</span>
                             <span class="font-semibold">{{ traceData.agent_execution.instructions_effectiveness }}/5</span>
@@ -81,7 +81,7 @@
                                 </div>
                                 <div v-else :class="[
                                 'px-3 py-2 rounded border cursor-pointer text-xs',
-                                selectedItem?.id === item.id ? 'border-[#C2683F] bg-[#F6EFEA]' : 'border-gray-200 hover:border-gray-300'
+                                selectedItem?.id === item.id ? 'border-[#C2541E] bg-[#F6EFEA]' : 'border-gray-200 hover:border-gray-300'
                             ]" @click="selectLeftItem(item)">
                                     <div class="flex items-center justify-between">
                                         <div class="font-medium text-gray-900 truncate flex items-center gap-1">
@@ -186,7 +186,7 @@
                                         <div class="flex items-center gap-3 mb-3 text-xs text-gray-600">
                                             <span class="font-medium">{{ $t('traceModal.instructionsCount', { count: instructionsSummaryItems.length }) }}</span>
                                             <span v-if="instructionsAlwaysCount" class="text-[9px] px-1.5 py-0.5 rounded bg-green-100 text-green-700">{{ $t('traceModal.alwaysCount', { count: instructionsAlwaysCount }) }}</span>
-                                            <span v-if="instructionsIntelligentCount" class="text-[9px] px-1.5 py-0.5 rounded bg-[#F4E5DA] text-[#A8542F]">{{ $t('traceModal.intelligentCount', { count: instructionsIntelligentCount }) }}</span>
+                                            <span v-if="instructionsIntelligentCount" class="text-[9px] px-1.5 py-0.5 rounded bg-[#F4E5DA] text-[#A8330F]">{{ $t('traceModal.intelligentCount', { count: instructionsIntelligentCount }) }}</span>
                                         </div>
                                         <!-- Collapsible list -->
                                         <div class="space-y-1">
@@ -197,7 +197,7 @@
                                                 <span class="font-medium flex-1 truncate">{{ ins.title || truncateText(ins.text || '', 60) }}</span>
                                                 <span v-if="ins.category" class="text-[9px] px-1.5 py-0.5 rounded bg-gray-200 text-gray-600 flex-shrink-0">{{ ins.category }}</span>
                                                 <span class="text-[9px] px-1.5 py-0.5 rounded flex-shrink-0"
-                                                      :class="ins.load_mode === 'always' ? 'bg-green-100 text-green-700' : ins.load_mode === 'intelligent' ? 'bg-[#F4E5DA] text-[#A8542F]' : 'bg-gray-100 text-gray-600'">
+                                                      :class="ins.load_mode === 'always' ? 'bg-green-100 text-green-700' : ins.load_mode === 'intelligent' ? 'bg-[#F4E5DA] text-[#A8330F]' : 'bg-gray-100 text-gray-600'">
                                                     {{ ins.load_mode || 'always' }}
                                                 </span>
                                             </div>
@@ -790,7 +790,7 @@ const getCompletionIcon = (completion: TraceCompletionData) => {
 
 const getCompletionIconClass = (completion: TraceCompletionData) => {
     if (completion.has_issue) return 'w-4 h-4 text-red-600 mr-2'
-    return completion.role === 'user' ? 'w-4 h-4 text-[#C2683F] mr-2' : 'w-4 h-4 text-gray-600 mr-2'
+    return completion.role === 'user' ? 'w-4 h-4 text-[#C2541E] mr-2' : 'w-4 h-4 text-gray-600 mr-2'
 }
 
 const getCompletionLabel = (completion: TraceCompletionData) => {
@@ -852,7 +852,7 @@ const getLeftItemIcon = (item: any) => {
 }
 
 const getLeftItemIconClass = (item: any) => {
-    if (item.kind === 'prompt') return 'w-3 h-3 text-[#C2683F]'
+    if (item.kind === 'prompt') return 'w-3 h-3 text-[#C2541E]'
     if (item.kind === 'instructions') return 'w-3 h-3 text-indigo-600'
     if (item.kind === 'final') return 'w-3 h-3 text-green-600'
     if (item.kind === 'feedback') return (item?.ref?.direction || 0) > 0 ? 'w-3 h-3 text-green-600' : 'w-3 h-3 text-red-600'

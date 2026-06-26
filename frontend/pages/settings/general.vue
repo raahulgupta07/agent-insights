@@ -16,14 +16,14 @@
                     v-model="form.organization_name"
                     :maxlength="80"
                     :placeholder="$t('settings.workspacePlaceholder')"
-                    :ui="{ base: 'w-full', rounded: 'rounded-lg', color: { white: { outline: 'bg-white border border-[#E7E5DD] focus:border-[#C2683F] focus:ring-0' } } }"
+                    :ui="{ base: 'w-full', rounded: 'rounded-lg', color: { white: { outline: 'bg-white border border-[#E9E0D3] focus:border-[#C2541E] focus:ring-0' } } }"
                 />
             </div>
             <!-- Organization Icon -->
             <div class="md:w-2/3 space-y-2">
                 <div class="text-sm font-medium text-[#1f2328]">{{ $t('settings.organizationIcon') }}</div>
                 <div class="flex items-center space-x-4">
-                    <div class="w-20 h-14 rounded-lg border border-[#E7E5DD] bg-[#F4F1EA] overflow-hidden flex items-center justify-center">
+                    <div class="w-20 h-14 rounded-lg border border-[#E9E0D3] bg-[#F4EEE5] overflow-hidden flex items-center justify-center">
                         <img v-if="form.icon_url" :src="form.icon_url" class="max-w-full max-h-full object-contain" />
                         <Icon v-else name="heroicons:building-office" class="w-6 h-6 text-[#9a958c]" />
                     </div>
@@ -32,7 +32,7 @@
                             size="sm"
                             variant="outline"
                             color="gray"
-                            class="rounded-lg border border-[#E7E5DD] text-[#1f2328] bg-white hover:bg-[#F4F1EA] transition-colors cursor-pointer"
+                            class="rounded-lg border border-[#E9E0D3] text-[#1f2328] bg-white hover:bg-[#F4EEE5] transition-colors cursor-pointer"
                             @click="selectIcon"
                         >{{ form.icon_url ? $t('settings.changeIcon') : $t('settings.uploadIconButton') }}</UButton>
                         <UButton v-if="form.icon_url" size="sm" color="red" variant="soft" @click="queueRemoveIcon">{{ $t('common.remove') }}</UButton>
@@ -42,7 +42,7 @@
                 <div class="text-xs text-[#9a958c]">{{ $t('settings.iconConstraints') }}</div>
             </div>
 
-            <div class="border-t border-[#E7E5DD] md:w-2/3"></div>
+            <div class="border-t border-[#E9E0D3] md:w-2/3"></div>
 
             <!-- AI Analyst Name -->
             <div class="md:w-2/3 space-y-2">
@@ -51,7 +51,7 @@
                     v-model="form.ai_analyst_name"
                     :maxlength="50"
                     placeholder="City Agent Insights"
-                    :ui="{ base: 'w-full', rounded: 'rounded-lg', color: { white: { outline: 'bg-white border border-[#E7E5DD] focus:border-[#C2683F] focus:ring-0' } } }"
+                    :ui="{ base: 'w-full', rounded: 'rounded-lg', color: { white: { outline: 'bg-white border border-[#E9E0D3] focus:border-[#C2541E] focus:ring-0' } } }"
                 />
             </div>
 
@@ -69,17 +69,17 @@
                     :options="localeOptions"
                     option-attribute="label"
                     value-attribute="value"
-                    :ui="{ rounded: 'rounded-lg', color: { white: { outline: 'bg-white border border-[#E7E5DD] focus:border-[#C2683F] focus:ring-0' } } }"
+                    :ui="{ rounded: 'rounded-lg', color: { white: { outline: 'bg-white border border-[#E9E0D3] focus:border-[#C2541E] focus:ring-0' } } }"
                 />
                 <div class="text-xs text-[#9a958c]">{{ $t('settings.language.description') }}</div>
             </div>
 
-            <div class="border-t border-[#E7E5DD] md:w-2/3"></div>
+            <div class="border-t border-[#E9E0D3] md:w-2/3"></div>
 
             <div class="md:w-2/3 pt-1">
                 <UButton
                     color="gray"
-                    class="rounded-xl px-4 py-2.5 bg-[#C2683F] hover:bg-[#A8542F] text-white border-0 transition-colors cursor-pointer"
+                    class="rounded-xl px-4 py-2.5 bg-[#C2541E] hover:bg-[#A8330F] text-white border-0 transition-colors cursor-pointer"
                     @click="saveAll"
                     :loading="saving"
                 >{{ $t('common.saveChanges') }}</UButton>

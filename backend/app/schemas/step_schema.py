@@ -26,10 +26,20 @@ class StepSchema(StepBase):
     class Config:
         from_attributes = True
 
-    @field_validator("data", "data_model", mode="before")
+    @field_validator("data_model", mode="before")
     @classmethod
     def _none_to_dict(cls, v):
         return v if v is not None else {}
+
+    @field_validator("data", mode="before")
+    @classmethod
+    def _hydrate_data(cls, v):
+        # Transparently load rows from Parquet when the stored value is an offload
+        # marker; otherwise pass through. Keeps all consumers unchanged.
+        if v is None:
+            return {}
+        from app.services.parquet_store import hydrate
+        return hydrate(v)
 
     @model_validator(mode="after")
     def _ensure_view(self) -> "StepSchema":
@@ -71,8 +81,16 @@ class PublicStepSchema(BaseModel):
     class Config:
         from_attributes = True
 
-    @field_validator("data", "data_model", mode="before")
+    @field_validator("data_model", mode="before")
     @classmethod
     def _none_to_dict(cls, v):
         return v if v is not None else {}
+
+    @field_validator("data", mode="before")
+    @classmethod
+    def _hydrate_data(cls, v):
+        if v is None:
+            return {}
+        from app.services.parquet_store import hydrate
+        return hydrate(v)
 

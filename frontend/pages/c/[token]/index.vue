@@ -19,7 +19,7 @@
                         : 'You don\'t have permission to view this conversation. Ask the owner to share it with you.' }}
                 </p>
                 <a v-if="accessError === 'login'" :href="`/users/sign-in?redirect=/c/${$route.params.token}`"
-                    class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#C2683F] rounded-lg hover:bg-[#A8542F]">
+                    class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#C2541E] rounded-lg hover:bg-[#A8330F]">
                     Sign in
                 </a>
                 <a v-else href="/"

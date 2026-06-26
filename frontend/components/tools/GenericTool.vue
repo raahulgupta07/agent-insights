@@ -37,7 +37,7 @@
                           {{ showFullInput[key] ? value : value.slice(0, 150) + '...' }}
                         </div>
                         <button 
-                          class="text-[10px] text-[#C2683F] hover:text-[#A8542F]"
+                          class="text-[10px] text-[#C2541E] hover:text-[#A8330F]"
                           @click.stop="toggleFullInput(key)"
                         >
                           {{ showFullInput[key] ? $t('tools.common.showLess') : $t('tools.common.showAll', { count: value.length }) }}
@@ -66,7 +66,7 @@
                         </div>
                         <button 
                           v-if="value.length > 5"
-                          class="text-[10px] text-[#C2683F] hover:text-[#A8542F]"
+                          class="text-[10px] text-[#C2541E] hover:text-[#A8330F]"
                           @click.stop="toggleFullInput(key)"
                         >
                           {{ showFullInput[key] ? $t('tools.common.showLess') : $t('tools.common.showAll', { count: value.length }) }}
@@ -79,7 +79,7 @@
                         <pre class="text-[11px] text-gray-800 whitespace-pre-wrap break-words bg-gray-50 rounded px-2 py-1 overflow-x-auto max-h-32" :class="{ 'max-h-none': showFullInput[key] }">{{ formatObject(value, showFullInput[key]) }}</pre>
                         <button 
                           v-if="JSON.stringify(value).length > 200"
-                          class="text-[10px] text-[#C2683F] hover:text-[#A8542F]"
+                          class="text-[10px] text-[#C2541E] hover:text-[#A8330F]"
                           @click.stop="toggleFullInput(key)"
                         >
                           {{ showFullInput[key] ? $t('tools.common.collapse') : $t('tools.common.expand') }}
@@ -132,7 +132,7 @@
                 </div>
                 <button 
                   v-if="outputData.length > 300"
-                  class="text-[10px] text-[#C2683F] hover:text-[#A8542F] mt-1"
+                  class="text-[10px] text-[#C2541E] hover:text-[#A8330F] mt-1"
                   @click.stop="showFullOutput = !showFullOutput"
                 >
                   {{ showFullOutput ? $t('tools.common.showLess') : $t('tools.common.showAll', { count: outputData.length }) }}
@@ -153,7 +153,7 @@
                   <!-- Full JSON (collapsible) -->
                   <div>
                     <button 
-                      class="text-[10px] text-[#C2683F] hover:text-[#A8542F] flex items-center gap-1"
+                      class="text-[10px] text-[#C2541E] hover:text-[#A8330F] flex items-center gap-1"
                       @click.stop="showFullOutput = !showFullOutput"
                     >
                       <Icon :name="showFullOutput ? 'heroicons-chevron-down' : 'heroicons-chevron-right'" class="w-3 h-3 rtl-flip" />

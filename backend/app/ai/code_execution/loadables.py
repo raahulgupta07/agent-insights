@@ -135,7 +135,8 @@ class LoadablesResolver:
             return None
         items: List[StepItem] = []
         for step in steps:
-            data = step.data if isinstance(step.data, dict) else {}
+            from app.services.parquet_store import hydrate as _hydrate_parquet
+            data = _hydrate_parquet(step.data) if isinstance(step.data, dict) else {}
             columns = [
                 c.get("field")
                 for c in (data.get("columns") or [])
@@ -193,7 +194,8 @@ class LoadablesResolver:
                         f"Available steps: {sorted({s.title for s in steps if s.title})}"
                     )
                     continue
-                result["steps"][key] = grid_to_df(step.data)
+                from app.services.parquet_store import hydrate as _hydrate_parquet
+                result["steps"][key] = grid_to_df(_hydrate_parquet(step.data))
 
         for ref in entity_refs or []:
             key = str(ref)

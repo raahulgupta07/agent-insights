@@ -179,6 +179,9 @@ class EmailSendService:
                 db=db,
                 organization_id=org_id,
                 purpose="analyst",
+                # Per-agent override: if this report's agent has its own SMTP,
+                # the reply sends from that agent's sender identity.
+                studio_id=getattr(report, "studio_id", None),
                 message_id=message_id,
                 in_reply_to=in_reply_to,
                 references=references,

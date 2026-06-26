@@ -3,8 +3,11 @@ FROM ubuntu:24.04 AS backend-builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# No `apt-get upgrade -y` in builder stages: pin to the base image's package
+# set for deterministic, cache-stable builds (upgrade re-downloads whatever
+# changed upstream on every cache bust). Security patches land via the runtime
+# `base` stage's upgrade + scheduled base-image rebuilds.
 RUN apt-get update && \
-    apt-get upgrade -y && \
     apt-get install -y --no-install-recommends \
       python3 \
       python3-pip \
@@ -54,9 +57,9 @@ FROM ubuntu:24.04 AS frontend-builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install Node.js 22 and prepare environment
+# Install Node.js 22 and prepare environment (no `apt-get upgrade -y` — builder
+# stages pin to the base image package set; see backend-builder note above).
 RUN apt-get update && \
-    apt-get upgrade -y && \
     apt-get install -y --no-install-recommends curl ca-certificates gnupg && \
     mkdir -p /etc/apt/keyrings && \
     curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
@@ -94,7 +97,16 @@ COPY ./vendor/js-libs/ /app/frontend/public/libs/
 # FastAPI serves directly in production (see backend/app/core/spa.py).
 # This replaces the previous `yarn build` + Node runtime pattern.
 # Raise Node heap: the default (~2GB) OOMs (exit 134/SIGABRT) on this build.
-RUN NODE_OPTIONS=--max-old-space-size=6144 yarn generate
+#
+# BuildKit cache mounts keep the Vite/Nuxt transform caches across rebuilds, so
+# a code change re-compiles only what changed instead of a cold full build —
+# biggest single FE-rebuild speedup. `node_modules/.cache` holds the nuxt+vite
+# persistent caches; `.vite` is the dep-prebundle cache. NOT caching `.nuxt`
+# itself (build intermediate) — it can go stale and produce phantom modules.
+# `sharing=locked`: one `generate` writes these, no concurrent writers.
+RUN --mount=type=cache,target=/app/frontend/node_modules/.cache,sharing=locked \
+    --mount=type=cache,target=/app/frontend/node_modules/.vite,sharing=locked \
+    NODE_OPTIONS=--max-old-space-size=6144 yarn generate
 
 # -----------------------------------------------------------------------------
 # Runtime base — folded IN from the old external `cityagent-base:dev` image so a

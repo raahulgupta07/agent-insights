@@ -17,9 +17,9 @@
                         @click="selectOption(option)"
                         class="flex items-center gap-3 px-3 py-2 border border-gray-200 rounded-md hover:bg-gray-50 cursor-pointer"
                     >
-                        <Icon v-if="option.type === 'new_provider'" name="heroicons:plus-circle" class="w-5 h-5 text-[#C2683F]" />
+                        <Icon v-if="option.type === 'new_provider'" name="heroicons:plus-circle" class="w-5 h-5 text-[#C2541E]" />
                         <LLMProviderIcon v-else :icon="true" :provider="option.type" class="w-6 h-6" />
-                        <span class="text-sm" :class="option.type === 'new_provider' ? 'text-[#C2683F]' : 'text-gray-800'">{{ option.name }}</span>
+                        <span class="text-sm" :class="option.type === 'new_provider' ? 'text-[#C2541E]' : 'text-gray-800'">{{ option.name }}</span>
                     </div>
                 </div>
 
@@ -44,7 +44,7 @@
                                 v-model="selectedProvider.credentials.api_key"
                                 type="text"
                                 placeholder="Keep blank to use stored key"
-                                class="mt-2 border border-gray-300 rounded-lg px-4 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2683F]"
+                                class="mt-2 border border-gray-300 rounded-lg px-4 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2541E]"
                             />
                         </div>
                         <div class="" v-if="selectedProvider?.provider_type === 'azure' || selectedProvider?.type === 'azure'">
@@ -55,7 +55,7 @@
                                 v-model="selectedProvider.credentials.endpoint_url" 
                                 type="text" 
                                 placeholder="e.g. https://<resource>.openai.azure.com"
-                                class="mt-2 border border-gray-300 rounded-lg px-4 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2683F]" 
+                                class="mt-2 border border-gray-300 rounded-lg px-4 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2541E]" 
                             />
                         </div>
                         <div class="" v-if="selectedProvider?.provider_type === 'custom' || selectedProvider?.type === 'custom'">
@@ -66,7 +66,7 @@
                                 v-model="selectedProvider.credentials.base_url"
                                 type="text"
                                 placeholder="http://localhost:11434/v1"
-                                class="mt-2 border border-gray-300 rounded-lg px-4 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2683F]"
+                                class="mt-2 border border-gray-300 rounded-lg px-4 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2541E]"
                             />
                             <p class="text-xs text-gray-500 mt-1">OpenAI-compatible endpoint (Ollama, Groq, Together AI, LM Studio, vLLM, etc.)</p>
                             <div class="flex items-center gap-2 mt-3">
@@ -82,18 +82,18 @@
                                     v-model="selectedProvider.credentials.region"
                                     type="text"
                                     placeholder="e.g. us-east-1"
-                                    class="mt-2 border border-gray-300 rounded-lg px-4 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2683F]"
+                                    class="mt-2 border border-gray-300 rounded-lg px-4 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2541E]"
                                 />
                             </div>
                             <div>
                                 <label class="text-sm font-medium text-gray-700 mb-2">Authentication</label>
                                 <div class="flex gap-2 mt-2">
                                     <button type="button" @click="selectedProvider.credentials.auth_mode = 'iam'"
-                                        :class="['px-3 py-1.5 text-sm rounded-lg border cursor-pointer', (!selectedProvider.credentials.auth_mode || selectedProvider.credentials.auth_mode === 'iam') ? 'border-[#C2683F] bg-[#F6EFEA] text-[#A8542F]' : 'border-gray-300 text-gray-600 hover:bg-gray-50']">
+                                        :class="['px-3 py-1.5 text-sm rounded-lg border cursor-pointer', (!selectedProvider.credentials.auth_mode || selectedProvider.credentials.auth_mode === 'iam') ? 'border-[#C2541E] bg-[#F6EFEA] text-[#A8330F]' : 'border-gray-300 text-gray-600 hover:bg-gray-50']">
                                         IAM (from environment)
                                     </button>
                                     <button type="button" @click="selectedProvider.credentials.auth_mode = 'access_keys'"
-                                        :class="['px-3 py-1.5 text-sm rounded-lg border cursor-pointer', selectedProvider.credentials.auth_mode === 'access_keys' ? 'border-[#C2683F] bg-[#F6EFEA] text-[#A8542F]' : 'border-gray-300 text-gray-600 hover:bg-gray-50']">
+                                        :class="['px-3 py-1.5 text-sm rounded-lg border cursor-pointer', selectedProvider.credentials.auth_mode === 'access_keys' ? 'border-[#C2541E] bg-[#F6EFEA] text-[#A8330F]' : 'border-gray-300 text-gray-600 hover:bg-gray-50']">
                                         Access Keys
                                     </button>
                                 </div>
@@ -103,18 +103,18 @@
                                 <div>
                                     <label class="text-sm font-medium text-gray-700 mb-2">AWS Access Key ID <span class="text-red-500">*</span></label>
                                     <input v-model="selectedProvider.credentials.aws_access_key_id" type="text" placeholder="Keep blank to use stored key"
-                                        class="mt-2 border border-gray-300 rounded-lg px-4 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2683F]" />
+                                        class="mt-2 border border-gray-300 rounded-lg px-4 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2541E]" />
                                 </div>
                                 <div>
                                     <label class="text-sm font-medium text-gray-700 mb-2">AWS Secret Access Key <span class="text-red-500">*</span></label>
                                     <input v-model="selectedProvider.credentials.aws_secret_access_key" type="password" placeholder="Keep blank to use stored key"
-                                        class="mt-2 border border-gray-300 rounded-lg px-4 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2683F]" />
+                                        class="mt-2 border border-gray-300 rounded-lg px-4 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2541E]" />
                                 </div>
                             </template>
                         </template>
                         <div class="" v-if="selectedProvider?.provider_type === 'openai' || selectedProvider?.type === 'openai'">
                             <div class="mt-1">
-                                <button type="button" @click="toggleBaseUrl" class="text-xs text-[#C2683F] hover:underline">
+                                <button type="button" @click="toggleBaseUrl" class="text-xs text-[#C2541E] hover:underline">
                                     {{ showBaseUrl ? 'Use default base URL' : 'Set custom base URL' }}
                                 </button>
                             </div>
@@ -126,7 +126,7 @@
                                     v-model="selectedProvider.credentials.base_url" 
                                     type="text" 
                                     placeholder="e.g. https://my-openai-proxy.example.com/v1"
-                                    class="mt-2 border border-gray-300 rounded-lg px-4 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2683F]" 
+                                    class="mt-2 border border-gray-300 rounded-lg px-4 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2541E]" 
                                 />
                             </div>
                         </div>
@@ -192,7 +192,7 @@
                                             v-model="customModel.model_id" 
                                             type="text" 
                                             placeholder="Model ID"
-                                            class="text-sm border border-gray-300 rounded px-2 py-1 w-full focus:outline-none focus:border-[#C2683F]"
+                                            class="text-sm border border-gray-300 rounded px-2 py-1 w-full focus:outline-none focus:border-[#C2541E]"
                                         />
                                     </div>
                                     <button 
@@ -209,7 +209,7 @@
                                     <button 
                                         type="button"
                                         @click="addExistingProviderCustomModel"
-                                        class="text-sm text-[#C2683F] hover:text-[#A8542F] underline flex items-center gap-1"
+                                        class="text-sm text-[#C2541E] hover:text-[#A8330F] underline flex items-center gap-1"
                                     >
                                         <Icon name="heroicons:plus-circle" class="w-4 h-4" />
                                         Add Custom Model
@@ -251,7 +251,7 @@
                                     :key="provider.type" 
                                     class="bg-white hover:border-[#E8C9B5] border border-gray-200 rounded-lg flex items-center justify-center py-4 transition-colors"
                                     type="button"
-                                    :class="{ '!border-[#C2683F] border-2': providerForm.provider_type === provider.type }"
+                                    :class="{ '!border-[#C2541E] border-2': providerForm.provider_type === provider.type }"
                                 >
                                     <!-- Custom provider: show icon + text inline -->
                                     <template v-if="provider.type === 'custom'">
@@ -271,13 +271,13 @@
                                 <label class="text-sm font-medium text-gray-700 mb-2">Name</label>
                                 <input v-model="providerForm.name" type="text" required 
                                     :placeholder="`Provider Name (e.g. ${providerForm.provider_type} production)`"
-                                    class="border border-gray-300 rounded-lg px-4 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2683F]" />
+                                    class="border border-gray-300 rounded-lg px-4 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2541E]" />
                             </div>
                             <div v-for="(field, index) in credentialFieldsForNewProvider" :key="field.key">
                                 <label class="text-sm font-medium text-gray-700 mb-2 mt-2">{{ field.title }}</label>
                                 <input v-model="providerForm.credentials[field.key]" type="text" :required="!!field.required"
                                     :placeholder="getFieldPlaceholder(field)"
-                                    class="border border-gray-300 rounded-lg px-4 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2683F]" />
+                                    class="border border-gray-300 rounded-lg px-4 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2541E]" />
                             </div>
                             <!-- Bedrock: auth info for new provider -->
                             <template v-if="providerForm.provider_type === 'bedrock'">
@@ -285,11 +285,11 @@
                                     <label class="text-sm font-medium text-gray-700 mb-2">Authentication</label>
                                     <div class="flex gap-2 mt-2">
                                         <button type="button" @click="providerForm.credentials.auth_mode = 'iam'"
-                                            :class="['px-3 py-1.5 text-sm rounded-lg border cursor-pointer', (!providerForm.credentials.auth_mode || providerForm.credentials.auth_mode === 'iam') ? 'border-[#C2683F] bg-[#F6EFEA] text-[#A8542F]' : 'border-gray-300 text-gray-600 hover:bg-gray-50']">
+                                            :class="['px-3 py-1.5 text-sm rounded-lg border cursor-pointer', (!providerForm.credentials.auth_mode || providerForm.credentials.auth_mode === 'iam') ? 'border-[#C2541E] bg-[#F6EFEA] text-[#A8330F]' : 'border-gray-300 text-gray-600 hover:bg-gray-50']">
                                             IAM (from environment)
                                         </button>
                                         <button type="button" @click="providerForm.credentials.auth_mode = 'access_keys'"
-                                            :class="['px-3 py-1.5 text-sm rounded-lg border cursor-pointer', providerForm.credentials.auth_mode === 'access_keys' ? 'border-[#C2683F] bg-[#F6EFEA] text-[#A8542F]' : 'border-gray-300 text-gray-600 hover:bg-gray-50']">
+                                            :class="['px-3 py-1.5 text-sm rounded-lg border cursor-pointer', providerForm.credentials.auth_mode === 'access_keys' ? 'border-[#C2541E] bg-[#F6EFEA] text-[#A8330F]' : 'border-gray-300 text-gray-600 hover:bg-gray-50']">
                                             Access Keys
                                         </button>
                                     </div>
@@ -299,12 +299,12 @@
                                     <div>
                                         <label class="text-sm font-medium text-gray-700 mb-2">AWS Access Key ID <span class="text-red-500">*</span></label>
                                         <input v-model="providerForm.credentials.aws_access_key_id" type="text" placeholder="AKIA..."
-                                            class="border border-gray-300 rounded-lg px-4 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2683F]" />
+                                            class="border border-gray-300 rounded-lg px-4 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2541E]" />
                                     </div>
                                     <div>
                                         <label class="text-sm font-medium text-gray-700 mb-2">AWS Secret Access Key <span class="text-red-500">*</span></label>
                                         <input v-model="providerForm.credentials.aws_secret_access_key" type="password" placeholder="Enter secret access key"
-                                            class="border border-gray-300 rounded-lg px-4 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2683F]" />
+                                            class="border border-gray-300 rounded-lg px-4 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2541E]" />
                                     </div>
                                 </template>
                             </template>
@@ -313,14 +313,14 @@
                                 <label class="text-sm text-gray-700">Verify SSL</label>
                             </div>
                             <div v-if="providerForm.provider_type === 'openai'" class="mt-1">
-                                <button type="button" @click="toggleBaseUrlNewProvider" class="text-xs text-[#C2683F] hover:underline">
+                                <button type="button" @click="toggleBaseUrlNewProvider" class="text-xs text-[#C2541E] hover:underline">
                                     {{ showBaseUrlNew ? 'Use default base URL' : 'Set custom base URL' }}
                                 </button>
                                 <div v-if="showBaseUrlNew" class="mt-2">
                                     <label class="text-sm font-medium text-gray-700 mb-2">Base URL (optional)</label>
                                     <input v-model="providerForm.credentials.base_url" type="text"
                                         placeholder="e.g. https://my-openai-proxy.example.com/v1"
-                                        class="border border-gray-300 rounded-lg px-4 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2683F]" />
+                                        class="border border-gray-300 rounded-lg px-4 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2541E]" />
                                 </div>
                             </div>
                             <!-- Azure: Responses API opt-in gates web search -->
@@ -376,7 +376,7 @@
                                             v-model="customModel.model_id" 
                                             type="text" 
                                             placeholder="Model ID"
-                                            class="text-sm border border-gray-300 rounded px-2 py-1 w-full focus:outline-none focus:border-[#C2683F]"
+                                            class="text-sm border border-gray-300 rounded px-2 py-1 w-full focus:outline-none focus:border-[#C2541E]"
                                         />
                                     </div>
                                     <button 
@@ -393,7 +393,7 @@
                                     <button 
                                         type="button"
                                         @click="addCustomModel"
-                                        class="text-sm text-[#C2683F] hover:text-[#A8542F] underline flex items-center gap-1"
+                                        class="text-sm text-[#C2541E] hover:text-[#A8330F] underline flex items-center gap-1"
                                     >
                                         <Icon name="heroicons:plus-circle" class="w-4 h-4" />
                                         Add Custom Model
@@ -428,7 +428,7 @@
                         <UButton 
                             type="submit" 
                             :label="selectedProvider?.type === 'new_provider' ? 'Save Provider' : 'Update Provider'"  
-                            class="!bg-[#C2683F] hover:!bg-[#A8542F] !text-white"
+                            class="!bg-[#C2541E] hover:!bg-[#A8330F] !text-white"
                             @click="selectedProvider?.type === 'new_provider' ? createProvider() : updateProvider()"
                         />
                     </div>

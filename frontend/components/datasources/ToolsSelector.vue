@@ -100,7 +100,7 @@
             v-model="searchQuery"
             type="text"
             placeholder="Filter tools..."
-            class="border border-gray-200 rounded px-2 py-1 w-full max-w-xs h-7 text-xs focus:outline-none focus:border-[#C2683F]"
+            class="border border-gray-200 rounded px-2 py-1 w-full max-w-xs h-7 text-xs focus:outline-none focus:border-[#C2541E]"
           />
         </div>
 
@@ -129,14 +129,14 @@
                 />
                 <code class="text-[13px] text-gray-800 font-medium whitespace-nowrap">{{ tool.name }}</code>
                 <span v-if="!tool.is_enabled" class="text-[9px] px-1 py-0.5 rounded bg-gray-100 text-gray-400">off</span>
-                <span v-if="!tool.has_overlay" class="text-[9px] px-1 py-0.5 rounded bg-[#F6EFEA] text-[#C2683F]" title="Inherits connection default">default</span>
+                <span v-if="!tool.has_overlay" class="text-[9px] px-1 py-0.5 rounded bg-[#F6EFEA] text-[#C2541E]" title="Inherits connection default">default</span>
               </button>
               <span class="text-[11px] text-gray-400 truncate min-w-0">{{ tool.description }}</span>
               <div v-if="canUpdate" class="flex items-center gap-1 ms-auto flex-shrink-0">
                 <select
                   :value="tool.policy"
                   @change="(e: Event) => setToolPolicy(conn.id, tool.id, (e.target as HTMLSelectElement).value)"
-                  class="text-[10px] border border-gray-200 rounded px-1 py-0.5 bg-white text-gray-600 focus:outline-none focus:border-[#C2683F]"
+                  class="text-[10px] border border-gray-200 rounded px-1 py-0.5 bg-white text-gray-600 focus:outline-none focus:border-[#C2541E]"
                   title="Tool policy"
                 >
                   <option value="allow">allow</option>
@@ -163,7 +163,7 @@
                     :key="pname"
                     class="flex items-baseline gap-2 text-xs"
                   >
-                    <code class="text-[11px] text-[#A8542F] bg-[#F6EFEA] px-1 py-0.5 rounded">{{ pname }}</code>
+                    <code class="text-[11px] text-[#A8330F] bg-[#F6EFEA] px-1 py-0.5 rounded">{{ pname }}</code>
                     <span class="text-gray-400">{{ prop.type || 'any' }}</span>
                     <span v-if="(tool.input_schema.required || []).includes(pname)" class="text-[9px] text-red-400">required</span>
                     <span v-if="prop.description" class="text-gray-500 truncate">— {{ prop.description }}</span>
@@ -181,7 +181,7 @@
         <!-- Empty tools -->
         <div v-else class="px-4 py-6 text-xs text-gray-400 text-center">
           {{ searchQuery ? 'No matching tools' : 'No tools discovered yet.' }}
-          <button v-if="!searchQuery && canUpdate" @click="refreshTools(conn.id)" class="text-[#C2683F] hover:underline ms-1">Refresh</button>
+          <button v-if="!searchQuery && canUpdate" @click="refreshTools(conn.id)" class="text-[#C2541E] hover:underline ms-1">Refresh</button>
         </div>
       </div>
     </div>

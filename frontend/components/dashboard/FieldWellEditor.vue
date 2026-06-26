@@ -4,9 +4,9 @@
       <!-- backdrop -->
       <div class="absolute inset-0 bg-black/30" @click="$emit('close')" />
       <!-- panel -->
-      <div class="relative w-[440px] max-w-[92vw] max-h-[85vh] overflow-y-auto bg-white border border-[#E7E5DD] rounded-2xl shadow-lg">
-        <div class="flex items-center justify-between px-4 py-3 border-b border-[#E7E5DD]">
-          <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, serif;">Build chart — fields</h3>
+      <div class="relative w-[440px] max-w-[92vw] max-h-[85vh] overflow-y-auto bg-white border border-[#E9E0D3] rounded-2xl shadow-lg">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-[#E9E0D3]">
+          <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif;">Build chart — fields</h3>
           <button class="text-[#9a958c] hover:text-[#1f2328] cursor-pointer" @click="$emit('close')">
             <Icon name="heroicons:x-mark" class="w-4 h-4" />
           </button>
@@ -23,8 +23,8 @@
                   :key="ct.value"
                   class="text-xs px-2.5 py-1.5 rounded-lg border transition-colors cursor-pointer flex items-center gap-1"
                   :class="chartType === ct.value
-                    ? 'border-[#C2683F] bg-[#F4E5DA] text-[#C2683F] font-semibold'
-                    : 'border-[#E7E5DD] text-[#6b6b6b] hover:bg-[#F4F1EA]'"
+                    ? 'border-[#C2541E] bg-[#F4E5DA] text-[#C2541E] font-semibold'
+                    : 'border-[#E9E0D3] text-[#6b6b6b] hover:bg-[#F4EEE5]'"
                   @click="chartType = ct.value"
                 >
                   <Icon :name="ct.icon" class="w-3.5 h-3.5" />{{ ct.label }}
@@ -35,7 +35,7 @@
             <!-- X / category -->
             <div class="flex items-center gap-2">
               <span class="text-xs text-[#6b6b6b] w-24">Category (X)</span>
-              <select v-model="xField" class="flex-1 text-xs border border-[#E7E5DD] rounded-md px-1.5 py-1.5 bg-white">
+              <select v-model="xField" class="flex-1 text-xs border border-[#E9E0D3] rounded-md px-1.5 py-1.5 bg-white">
                 <option value="">— auto —</option>
                 <option v-for="c in columns" :key="'x'+c" :value="c">{{ c }}</option>
               </select>
@@ -44,7 +44,7 @@
             <!-- Measure (Y) -->
             <div class="flex items-center gap-2">
               <span class="text-xs text-[#6b6b6b] w-24">Measure (Y)</span>
-              <select v-model="yField" class="flex-1 text-xs border border-[#E7E5DD] rounded-md px-1.5 py-1.5 bg-white">
+              <select v-model="yField" class="flex-1 text-xs border border-[#E9E0D3] rounded-md px-1.5 py-1.5 bg-white">
                 <option value="">— auto —</option>
                 <option v-for="c in columns" :key="'y'+c" :value="c">{{ c }}</option>
               </select>
@@ -53,7 +53,7 @@
             <!-- Aggregation -->
             <div class="flex items-center gap-2">
               <span class="text-xs text-[#6b6b6b] w-24">Aggregation</span>
-              <select v-model="aggregation" class="flex-1 text-xs border border-[#E7E5DD] rounded-md px-1.5 py-1.5 bg-white">
+              <select v-model="aggregation" class="flex-1 text-xs border border-[#E9E0D3] rounded-md px-1.5 py-1.5 bg-white">
                 <option v-for="a in AGGS" :key="a.value" :value="a.value">{{ a.label }}</option>
               </select>
             </div>
@@ -61,7 +61,7 @@
             <!-- Group / series (not for pie) -->
             <div v-if="chartType !== 'pie_chart'" class="flex items-center gap-2">
               <span class="text-xs text-[#6b6b6b] w-24">Split by (series)</span>
-              <select v-model="groupByField" class="flex-1 text-xs border border-[#E7E5DD] rounded-md px-1.5 py-1.5 bg-white">
+              <select v-model="groupByField" class="flex-1 text-xs border border-[#E9E0D3] rounded-md px-1.5 py-1.5 bg-white">
                 <option value="">— none —</option>
                 <option v-for="c in columns" :key="'g'+c" :value="c">{{ c }}</option>
               </select>
@@ -73,7 +73,7 @@
           <p v-else class="text-xs text-[#9a958c] italic">Field builder is available for bar / line / area / pie / scatter charts.</p>
         </div>
 
-        <div class="flex items-center justify-between gap-2 px-4 py-3 border-t border-[#E7E5DD]">
+        <div class="flex items-center justify-between gap-2 px-4 py-3 border-t border-[#E9E0D3]">
           <button
             v-if="kind === 'chart'"
             class="text-[11px] font-medium text-[#9a958c] hover:text-[#6b6b6b] cursor-pointer"
@@ -82,12 +82,12 @@
           <span v-else />
           <div class="flex items-center gap-2">
             <button
-              class="text-sm font-medium px-3 py-2 rounded-lg border border-[#E7E5DD] text-[#6b6b6b] hover:bg-[#F4F1EA] transition-colors cursor-pointer"
+              class="text-sm font-medium px-3 py-2 rounded-lg border border-[#E9E0D3] text-[#6b6b6b] hover:bg-[#F4EEE5] transition-colors cursor-pointer"
               @click="$emit('close')"
             >Cancel</button>
             <button
               v-if="kind === 'chart'"
-              class="text-sm font-medium px-4 py-2.5 rounded-xl bg-[#C2683F] text-white hover:bg-[#A8542F] transition-colors cursor-pointer"
+              class="text-sm font-medium px-4 py-2.5 rounded-xl bg-[#C2541E] text-white hover:bg-[#A8330F] transition-colors cursor-pointer"
               @click="apply"
             >Apply</button>
           </div>

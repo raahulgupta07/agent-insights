@@ -1,11 +1,11 @@
 <template>
-    <div class="flex justify-center ps-2 md:ps-4 text-sm bg-[#FBFAF6] min-h-full">
+    <div class="flex justify-center ps-2 md:ps-4 text-sm bg-[#F6F1EA] min-h-full">
         <div class="w-full max-w-7xl px-4 ps-0 py-2">
             <div class="flex items-start justify-between gap-4">
                 <div>
                     <h1
-                        class="text-2xl font-semibold text-[#1f2328] tracking-tight flex items-center"
-                        style="font-family: ui-serif, Georgia, 'Times New Roman', serif"
+                        class="text-[32px] font-medium text-[#211B14] tracking-tight flex items-center"
+                        style="font-family: 'Spectral', ui-serif, Georgia, serif"
                     >
                         {{ $t('nav.presentations') }}
                     </h1>
@@ -14,7 +14,7 @@
                     </p>
                 </div>
                 <button
-                    class="mt-1 shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-[#E7E5DD] text-[#1f2328] hover:bg-[#F4F1EA] transition-colors"
+                    class="mt-1 shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-[#E9E0D3] text-[#1f2328] hover:bg-[#F4EEE5] transition-colors"
                     :disabled="loading"
                     @click="fetchPresentations"
                 >
@@ -29,14 +29,14 @@
                     <div
                         v-for="n in 4"
                         :key="n"
-                        class="bg-white border border-[#E7E5DD] rounded-2xl h-56 animate-pulse"
+                        class="bg-white border border-[#E9E0D3] rounded-2xl h-56 animate-pulse"
                     />
                 </div>
 
                 <!-- Error -->
                 <div
                     v-else-if="error"
-                    class="bg-white border border-[#E7E5DD] rounded-2xl py-12 text-center text-[#A8542F]"
+                    class="bg-white border border-[#E9E0D3] rounded-2xl py-12 text-center text-[#A8330F]"
                 >
                     {{ error }}
                 </div>
@@ -44,15 +44,15 @@
                 <!-- Empty -->
                 <div
                     v-else-if="!presentations.length"
-                    class="bg-white border border-[#E7E5DD] rounded-2xl"
+                    class="bg-white border border-[#E9E0D3] rounded-2xl"
                 >
                     <div class="py-12 flex flex-col items-center text-center">
-                        <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-[#F4F1EA] border border-[#E7E5DD]">
-                            <Icon name="heroicons:presentation-chart-line" class="h-6 w-6 text-[#C2683F]" />
+                        <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-[#F4EEE5] border border-[#E9E0D3]">
+                            <Icon name="heroicons:presentation-chart-line" class="h-6 w-6 text-[#C2541E]" />
                         </div>
                         <h3
                             class="mt-3 text-base font-semibold text-[#1f2328]"
-                            style="font-family: ui-serif, Georgia, 'Times New Roman', serif"
+                            style="font-family: 'Spectral', ui-serif, Georgia, serif"
                         >
                             No presentations yet
                         </h3>
@@ -60,7 +60,7 @@
                             Open any report → Slides tab → generate a deck. It will appear here.
                         </p>
                         <button
-                            class="mt-4 inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-[#C2683F] text-white hover:bg-[#A8542F] transition-colors"
+                            class="mt-4 inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-[#C2541E] text-white hover:bg-[#A8330F] transition-colors"
                             @click="navigateTo('/reports')"
                         >
                             Browse reports
@@ -73,11 +73,11 @@
                     <div
                         v-for="p in presentations"
                         :key="p.id"
-                        class="group bg-white border border-[#E7E5DD] rounded-2xl overflow-hidden hover:border-[#C2683F] transition-colors flex flex-col"
+                        class="group bg-white border border-[#E9E0D3] rounded-2xl overflow-hidden hover:border-[#C2541E] transition-colors flex flex-col"
                     >
                         <!-- Thumb (click → open split view) -->
                         <div
-                            class="aspect-video bg-[#F4F1EA] border-b border-[#E7E5DD] flex items-center justify-center overflow-hidden cursor-pointer"
+                            class="aspect-video bg-[#F4EEE5] border-b border-[#E9E0D3] flex items-center justify-center overflow-hidden cursor-pointer"
                             @click="openSlides(p)"
                         >
                             <img
@@ -86,7 +86,7 @@
                                 class="w-full h-full object-cover"
                                 alt=""
                             />
-                            <Icon v-else name="heroicons:presentation-chart-line" class="h-8 w-8 text-[#C2683F]/50" />
+                            <Icon v-else name="heroicons:presentation-chart-line" class="h-8 w-8 text-[#C2541E]/50" />
                         </div>
                         <!-- Body -->
                         <div class="p-3 flex flex-col gap-1.5 flex-1">
@@ -102,7 +102,7 @@
                             <div class="flex items-center gap-2 pt-0.5">
                                 <span
                                     v-if="slideCount(p) === 0"
-                                    class="text-[11px] px-1.5 py-0.5 rounded bg-[#F4F1EA] text-[#9a958c]"
+                                    class="text-[11px] px-1.5 py-0.5 rounded bg-[#F4EEE5] text-[#9a958c]"
                                     title="This deck has no slides yet — open it to generate some."
                                 >
                                     No slides yet
@@ -112,15 +112,15 @@
                                 </span>
                                 <span
                                     v-if="p.status === 'failed'"
-                                    class="text-[10px] px-1.5 py-0.5 rounded bg-[#F4D7CB] text-[#A8542F]"
+                                    class="text-[10px] px-1.5 py-0.5 rounded bg-[#F4D7CB] text-[#A8330F]"
                                 >failed</span>
                                 <span
                                     v-else-if="p.status === 'pending'"
-                                    class="text-[10px] px-1.5 py-0.5 rounded bg-[#F4F1EA] text-[#9a958c]"
+                                    class="text-[10px] px-1.5 py-0.5 rounded bg-[#F4EEE5] text-[#9a958c]"
                                 >generating</span>
                                 <button
                                     v-if="p.pptx_ready"
-                                    class="ms-auto inline-flex items-center gap-1 text-[11px] font-medium text-[#9a958c] hover:text-[#C2683F]"
+                                    class="ms-auto inline-flex items-center gap-1 text-[11px] font-medium text-[#9a958c] hover:text-[#C2541E]"
                                     :disabled="downloading === p.id"
                                     @click.stop="downloadPptx(p)"
                                 >
@@ -131,7 +131,7 @@
                             <!-- Two actions: Open (split) + Open in chat -->
                             <div class="mt-auto pt-2 grid grid-cols-2 gap-2">
                                 <button
-                                    class="inline-flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg bg-[#C2683F] text-white hover:bg-[#A8542F] transition-colors"
+                                    class="inline-flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg bg-[#C2541E] text-white hover:bg-[#A8330F] transition-colors"
                                     :title="slideCount(p) === 0
                                         ? 'Open the slide workspace — generate & edit slides with chat'
                                         : 'Open the slide workspace — view & edit slides with chat'"
@@ -141,7 +141,7 @@
                                     {{ slideCount(p) === 0 ? 'Open & generate' : 'Open' }}
                                 </button>
                                 <button
-                                    class="inline-flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg border border-[#E7E5DD] text-[#1f2328] hover:bg-[#F4F1EA] transition-colors"
+                                    class="inline-flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg border border-[#E9E0D3] text-[#1f2328] hover:bg-[#F4EEE5] transition-colors"
                                     title="Open the underlying conversation"
                                     @click.stop="openInChat(p)"
                                 >

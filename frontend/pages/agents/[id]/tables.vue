@@ -72,7 +72,7 @@
             <!-- Schema indexing in progress -->
             <div
                 v-if="anyIndexing"
-                class="mb-3 flex items-center gap-2 rounded-md border border-[#E8C9B5] bg-[#F6EFEA] px-3 py-2 text-xs text-[#A8542F]"
+                class="mb-3 flex items-center gap-2 rounded-md border border-[#E8C9B5] bg-[#F6EFEA] px-3 py-2 text-xs text-[#A8330F]"
             >
                 <UIcon name="heroicons-arrow-path" class="w-4 h-4 animate-spin" />
                 <span>{{ t('agentPage.tables.schemaRefreshing') }}</span>

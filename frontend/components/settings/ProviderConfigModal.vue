@@ -10,7 +10,7 @@
         @keydown.esc.window="$emit('close')"
       >
         <!-- Header -->
-        <div class="flex items-center justify-between px-5 py-4 border-b border-[#E7E5DD] flex-shrink-0">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-[#E9E0D3] flex-shrink-0">
           <h3 class="text-sm font-semibold text-gray-900">{{ title }}</h3>
           <button
             type="button"

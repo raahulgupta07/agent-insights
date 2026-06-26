@@ -294,6 +294,11 @@ async def notify_report(
         message=payload.message,
         report_id=str(report.id),
         locale=_locale_from_org(organization),
+        db=db,
+        organization_id=str(organization.id),
+        # Per-agent override: a studio-bound report shares from its agent's
+        # custom SMTP when configured (else org/global).
+        studio_id=getattr(report, "studio_id", None),
     )
 
     # Audit log

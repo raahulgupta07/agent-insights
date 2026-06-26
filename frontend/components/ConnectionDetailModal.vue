@@ -102,7 +102,7 @@
           <select
             :value="autoReindexInterval"
             :disabled="savingAutoReindex"
-            class="text-xs border border-gray-200 rounded-md px-2 py-1 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#C2683F] disabled:opacity-50"
+            class="text-xs border border-gray-200 rounded-md px-2 py-1 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#C2541E] disabled:opacity-50"
             @change="onChangeInterval(($event.target as HTMLSelectElement).value)"
           >
             <option v-for="opt in intervalOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
@@ -135,7 +135,7 @@
             :disabled="switchingIdentity"
             :class="['inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs rounded-lg border disabled:opacity-60',
                      queryIdentity === 'service_account'
-                       ? 'bg-[#F6EFEA] border-[#E8C9B5] text-[#A8542F]'
+                       ? 'bg-[#F6EFEA] border-[#E8C9B5] text-[#A8330F]'
                        : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50']"
           >
             <UIcon name="heroicons-shield-check" class="w-3.5 h-3.5" />
@@ -146,7 +146,7 @@
             :disabled="switchingIdentity"
             :class="['inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs rounded-lg border disabled:opacity-60',
                      queryIdentity === 'self'
-                       ? 'bg-[#F6EFEA] border-[#E8C9B5] text-[#A8542F]'
+                       ? 'bg-[#F6EFEA] border-[#E8C9B5] text-[#A8330F]'
                        : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50']"
           >
             <UIcon name="heroicons-user" class="w-3.5 h-3.5" />

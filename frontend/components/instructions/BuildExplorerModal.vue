@@ -55,7 +55,7 @@
                                 >
                                     <Icon name="heroicons:funnel" class="w-4 h-4 text-gray-400 flex-shrink-0" />
                                     <span class="truncate flex-1 font-medium">All data sources</span>
-                                    <Icon v-if="dsFilterId === null" name="heroicons:check" class="w-3 h-3 text-[#C2683F]" />
+                                    <Icon v-if="dsFilterId === null" name="heroicons:check" class="w-3 h-3 text-[#C2541E]" />
                                 </button>
                                 <button
                                     v-for="d in agentList"
@@ -65,7 +65,7 @@
                                 >
                                     <DataSourceIcon :type="(d as any).type || (d as any).connections?.[0]?.type" class="h-4 flex-shrink-0" />
                                     <span class="truncate flex-1 font-medium">{{ (d as any).name }}</span>
-                                    <Icon v-if="dsFilterId === d.id" name="heroicons:check" class="w-3 h-3 text-[#C2683F]" />
+                                    <Icon v-if="dsFilterId === d.id" name="heroicons:check" class="w-3 h-3 text-[#C2541E]" />
                                 </button>
                             </div>
                         </Transition>
@@ -89,7 +89,7 @@
                             :key="build.id"
                             @click="selectBuild(build)"
                             class="w-full px-3 py-2 text-start border-b border-gray-100 hover:bg-white transition-colors"
-                            :class="{ 'bg-white border-s-2 border-s-[#C2683F]': selectedBuild?.id === build.id }"
+                            :class="{ 'bg-white border-s-2 border-s-[#C2541E]': selectedBuild?.id === build.id }"
                         >
                             <div class="flex items-center justify-between">
                                 <div class="flex items-center gap-1.5 min-w-0">
@@ -355,7 +355,7 @@
                                                     :class="[
                                                         'text-[9px] font-mono font-semibold uppercase tracking-wide shrink-0',
                                                         item.change_type === 'added' ? 'text-green-600' :
-                                                        item.change_type === 'modified' ? 'text-[#C2683F]' : 'text-red-600'
+                                                        item.change_type === 'modified' ? 'text-[#C2541E]' : 'text-red-600'
                                                     ]"
                                                 >
                                                     {{ item.change_type === 'added' ? 'new' : item.change_type === 'modified' ? 'edit' : 'del' }}
@@ -385,7 +385,7 @@
                                         <button
                                             v-if="isBuildEditable && item.change_type !== 'removed'"
                                             @click.stop="openEditInstruction(item)"
-                                            class="shrink-0 flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-medium text-[#C2683F] hover:text-[#A8542F] hover:bg-[#F3E7DF] rounded transition-colors"
+                                            class="shrink-0 flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-medium text-[#C2541E] hover:text-[#A8330F] hover:bg-[#FBEFE4] rounded transition-colors"
                                             title="Edit instruction"
                                         >
                                             <UIcon name="i-heroicons-pencil" class="w-3 h-3" />
@@ -455,7 +455,7 @@
                                 <div v-if="!loadingTestSuites && testSuites.length === 0" class="text-center py-3">
                                     <p class="text-xs text-gray-500">
                                         No test cases have been found, create in
-                                        <NuxtLink to="/evals" class="text-[#C2683F] hover:text-[#A8542F] hover:underline">/evals</NuxtLink>
+                                        <NuxtLink to="/evals" class="text-[#C2541E] hover:text-[#A8330F] hover:underline">/evals</NuxtLink>
                                     </p>
                                 </div>
 
@@ -497,7 +497,7 @@
                                     <div v-if="selectedSuiteId && !hasTestCases && !loadingTestSuites" class="text-center py-2">
                                         <p class="text-xs text-gray-500">
                                             No test cases have been found, create in
-                                            <NuxtLink to="/evals" class="text-[#C2683F] hover:text-[#A8542F] hover:underline">/evals</NuxtLink>
+                                            <NuxtLink to="/evals" class="text-[#C2541E] hover:text-[#A8330F] hover:underline">/evals</NuxtLink>
                                         </p>
                                     </div>
 
@@ -505,7 +505,7 @@
                                     <div v-if="activeTestRun" class="bg-white border border-gray-200 rounded-lg p-3 space-y-2">
                                         <div class="flex items-center justify-between">
                                             <div class="flex items-center gap-2">
-                                                <Spinner v-if="activeTestRun.status === 'in_progress'" class="w-3.5 h-3.5 text-[#C2683F]" />
+                                                <Spinner v-if="activeTestRun.status === 'in_progress'" class="w-3.5 h-3.5 text-[#C2541E]" />
                                                 <UIcon 
                                                     v-else-if="activeTestRun.status === 'success'" 
                                                     name="i-heroicons-check-circle" 
@@ -523,7 +523,7 @@
                                             <span 
                                                 class="text-[9px] px-1.5 py-0.5 rounded-full"
                                                 :class="{
-                                                    'bg-[#F3E7DF] text-[#A8542F]': activeTestRun.status === 'in_progress',
+                                                    'bg-[#FBEFE4] text-[#A8330F]': activeTestRun.status === 'in_progress',
                                                     'bg-green-100 text-green-700': activeTestRun.status === 'success',
                                                     'bg-red-100 text-red-700': activeTestRun.status === 'error' || activeTestRun.status === 'fail'
                                                 }"
@@ -543,7 +543,7 @@
                                             <span class="inline-flex items-center px-1.5 py-0.5 rounded border bg-red-50 text-red-700 border-red-200">
                                                 Fail: {{ testResultsSummary.failed }}
                                             </span>
-                                            <span v-if="testResultsSummary.inProgress > 0" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border bg-[#F3E7DF] text-[#A8542F] border-[#E2B79B]">
+                                            <span v-if="testResultsSummary.inProgress > 0" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border bg-[#FBEFE4] text-[#A8330F] border-[#E2B79B]">
                                                 <Spinner class="w-2.5 h-2.5" />
                                                 Running: {{ testResultsSummary.inProgress }}
                                             </span>
@@ -552,7 +552,7 @@
                                         <!-- Progress bar -->
                                         <div v-if="activeTestRun.status === 'in_progress'" class="w-full bg-gray-100 rounded-full h-1.5">
                                             <div 
-                                                class="bg-[#C2683F] h-1.5 rounded-full transition-all duration-300"
+                                                class="bg-[#C2541E] h-1.5 rounded-full transition-all duration-300"
                                                 :style="{ width: `${testResultsSummary.progressPercent}%` }"
                                             />
                                         </div>
@@ -564,7 +564,7 @@
                                             </span>
                                             <NuxtLink 
                                                 :to="`/evals/runs/${activeTestRun.id}`" 
-                                                class="text-[10px] text-[#C2683F] hover:underline flex items-center gap-0.5"
+                                                class="text-[10px] text-[#C2541E] hover:underline flex items-center gap-0.5"
                                             >
                                                 View details
                                                 <UIcon name="i-heroicons-arrow-top-right-on-square" class="w-2.5 h-2.5" />
@@ -593,7 +593,7 @@
                                                     <span class="text-gray-400">{{ formatTimeAgo(run.created_at) }}</span>
                                                     <NuxtLink 
                                                         :to="`/evals/runs/${run.id}`" 
-                                                        class="text-[#C2683F] hover:underline"
+                                                        class="text-[#C2541E] hover:underline"
                                                     >
                                                         View
                                                     </NuxtLink>

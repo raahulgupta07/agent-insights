@@ -13,7 +13,7 @@
               id="password"
               v-model="password"
               type="password"
-              class="border border-gray-300 rounded-lg px-4 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2683F]"
+              class="border border-gray-300 rounded-lg px-4 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2541E]"
               required
               minlength="6"
             />
@@ -24,7 +24,7 @@
               id="confirmPassword"
               v-model="confirmPassword"
               type="password"
-              class="border border-gray-300 rounded-lg px-4 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2683F]"
+              class="border border-gray-300 rounded-lg px-4 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2541E]"
               required
               minlength="6"
             />
@@ -34,7 +34,7 @@
             <button
               type="submit"
               :disabled="isLoading || !isValid"
-              class="px-3 py-2 text-sm font-medium text-white bg-[#C2683F] hover:bg-[#A8542F] focus:ring-4 focus:outline-none focus:ring-[#E8C9B5] rounded-lg text-center disabled:opacity-50 disabled:cursor-not-allowed"
+              class="px-3 py-2 text-sm font-medium text-white bg-[#C2541E] hover:bg-[#A8330F] focus:ring-4 focus:outline-none focus:ring-[#E8C9B5] rounded-lg text-center disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {{ isLoading ? $t('auth.resetting') : $t('auth.resetPasswordButton') }}
             </button>
@@ -42,7 +42,7 @@
         </form>
         <div class="mt-3 block text-sm text-center">
           {{ $t('auth.rememberPassword') }}
-          <NuxtLink to="/users/sign-in" class="text-[#C2683F]">
+          <NuxtLink to="/users/sign-in" class="text-[#C2541E]">
             {{ $t('auth.signIn') }}
           </NuxtLink>
         </div>
@@ -54,7 +54,7 @@
           <p class="mt-3 text-sm text-gray-700">
             {{ $t('auth.resetSuccessMessage') }}
           </p>
-          <NuxtLink to="/users/sign-in" class="text-[#C2683F] mt-4 block text-center text-sm hover:underline">
+          <NuxtLink to="/users/sign-in" class="text-[#C2541E] mt-4 block text-center text-sm hover:underline">
             {{ $t('auth.signIn') }}
           </NuxtLink>
         </div>

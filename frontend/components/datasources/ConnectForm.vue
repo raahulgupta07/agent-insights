@@ -2,7 +2,7 @@
   <div class="w-full">
     <div v-if="selectedType" class="lg:flex lg:items-stretch lg:gap-0 bg-white rounded-lg overflow-hidden lg:max-h-[78vh]">
       <!-- LEFT: form (scrolls independently on wide screens) -->
-      <div class="flex-1 min-w-0 p-4 lg:border-e lg:border-[#E7E5DD] lg:overflow-y-auto lg:min-h-0">
+      <div class="flex-1 min-w-0 p-4 lg:border-e lg:border-[#E9E0D3] lg:overflow-y-auto lg:min-h-0">
       <div v-if="!hideHeader" class="flex items-center gap-2 mb-3">
         <DataSourceIcon :type="selectedType" class="h-5" />
         <span class="text-sm text-gray-800">{{ selectedTitle }}</span>
@@ -11,7 +11,7 @@
       <form @submit.prevent="onSubmit" class="space-y-3">
         <div v-if="props.allowNameEdit !== false" class="p-3 rounded border">
           <label class="text-sm font-medium text-gray-700 mb-1 block">Connection Name</label>
-          <input v-model="name" type="text" placeholder="e.g., 'Sales DB', 'Production'" class="border border-gray-300 rounded-lg px-3 py-1.5 w-full text-sm focus:outline-none focus:border-[#C2683F]" />
+          <input v-model="name" type="text" placeholder="e.g., 'Sales DB', 'Production'" class="border border-gray-300 rounded-lg px-3 py-1.5 w-full text-sm focus:outline-none focus:border-[#C2541E]" />
         </div>
 
         <div v-if="fields.config" class="p-3 rounded border">
@@ -21,21 +21,21 @@
               <label :for="field.field_name" class="text-xs text-gray-700">{{ field.title || field.field_name }}</label>
               <span v-if="field.description" class="text-xs text-gray-400 ms-3">{{ field.description }}</span>
             </div>
-            <input v-if="field.type === 'string' && uiType(field) !== 'textarea' && uiType(field) !== 'password'" type="text" v-model="formData.config[field.field_name]" :id="field.field_name" class="block w-full px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:border-[#C2683F] text-sm" :placeholder="field.title || field.field_name" />
-            <input v-else-if="field.type === 'integer' || field.type === 'number' || uiType(field) === 'number'" type="number" v-model.number="formData.config[field.field_name]" :id="field.field_name" class="block w-full px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:border-[#C2683F] text-sm" :placeholder="field.title || field.field_name" :min="field.minimum" :max="field.maximum" />
+            <input v-if="field.type === 'string' && uiType(field) !== 'textarea' && uiType(field) !== 'password'" type="text" v-model="formData.config[field.field_name]" :id="field.field_name" class="block w-full px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:border-[#C2541E] text-sm" :placeholder="field.title || field.field_name" />
+            <input v-else-if="field.type === 'integer' || field.type === 'number' || uiType(field) === 'number'" type="number" v-model.number="formData.config[field.field_name]" :id="field.field_name" class="block w-full px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:border-[#C2541E] text-sm" :placeholder="field.title || field.field_name" :min="field.minimum" :max="field.maximum" />
             <UToggle v-else-if="field.type === 'boolean' || uiType(field) === 'boolean' || uiType(field) === 'toggle'" v-model="formData.config[field.field_name]" size="xs" color="primary" />
-            <textarea v-else-if="uiType(field) === 'textarea'" v-model="formData.config[field.field_name]" :id="field.field_name" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#C2683F] focus:border-[#C2683F] sm:text-sm" :placeholder="field.title || field.field_name" rows="3" />
-            <input v-else-if="uiType(field) === 'password' || field.type === 'password'" type="password" v-model="formData.config[field.field_name]" :id="field.field_name" class="block w-full px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:border-[#C2683F] text-sm" :placeholder="field.title || field.field_name" />
+            <textarea v-else-if="uiType(field) === 'textarea'" v-model="formData.config[field.field_name]" :id="field.field_name" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#C2541E] focus:border-[#C2541E] sm:text-sm" :placeholder="field.title || field.field_name" rows="3" />
+            <input v-else-if="uiType(field) === 'password' || field.type === 'password'" type="password" v-model="formData.config[field.field_name]" :id="field.field_name" class="block w-full px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:border-[#C2541E] text-sm" :placeholder="field.title || field.field_name" />
             <div v-else-if="uiType(field) === 'keyvalue'" class="space-y-1.5">
               <div v-for="(row, idx) in (kvRowsMap[field.field_name] || [])" :key="idx" class="flex items-center gap-2">
-                <input type="text" v-model="row.k" @input="kvSync(field.field_name)" placeholder="Parameter" class="block w-1/2 px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:border-[#C2683F] text-sm" />
+                <input type="text" v-model="row.k" @input="kvSync(field.field_name)" placeholder="Parameter" class="block w-1/2 px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:border-[#C2541E] text-sm" />
                 <span class="text-gray-400 text-sm">=</span>
-                <input type="text" v-model="row.v" @input="kvSync(field.field_name)" placeholder="Value" class="block w-1/2 px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:border-[#C2683F] text-sm" />
+                <input type="text" v-model="row.v" @input="kvSync(field.field_name)" placeholder="Value" class="block w-1/2 px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:border-[#C2541E] text-sm" />
                 <button type="button" @click="kvRemove(field.field_name, idx)" class="text-gray-400 hover:text-red-500 text-sm px-1" title="Remove parameter">✕</button>
               </div>
-              <button type="button" @click="kvAdd(field.field_name)" class="text-xs text-[#C2683F] hover:text-[#A8542F] font-medium">+ Add parameter</button>
+              <button type="button" @click="kvAdd(field.field_name)" class="text-xs text-[#C2541E] hover:text-[#A8330F] font-medium">+ Add parameter</button>
             </div>
-            <input v-else type="text" v-model="formData.config[field.field_name]" :id="field.field_name" class="block w-full px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:border-[#C2683F] text-sm" :placeholder="field.title || field.field_name" />
+            <input v-else type="text" v-model="formData.config[field.field_name]" :id="field.field_name" class="block w-full px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:border-[#C2541E] text-sm" :placeholder="field.title || field.field_name" />
           </div>
         </div>
 
@@ -48,7 +48,7 @@
                 v-if="credentialsLocked"
                 type="button"
                 @click="unlockCredentials"
-                class="text-xs text-[#C2683F] hover:text-[#A8542F] font-medium"
+                class="text-xs text-[#C2541E] hover:text-[#A8330F] font-medium"
               >
                 Change
               </button>
@@ -80,10 +80,10 @@
             <template v-if="showSystemCredentialFields" v-for="field in coreCredentialFields" :key="field.field_name">
               <div class="mb-2" @change="clearTestResult()" @mouseenter="highlightField = field.field_name" @mouseleave="highlightField = null">
                 <label :for="field.field_name" class="block text-xs text-gray-700 mb-1">{{ field.title || field.field_name }}</label>
-                <input v-if="uiType(field) === 'string'" type="text" v-model="formData.credentials[field.field_name]" :id="field.field_name" class="block w-full px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:border-[#C2683F] text-sm" :placeholder="field.title || field.field_name" />
+                <input v-if="uiType(field) === 'string'" type="text" v-model="formData.credentials[field.field_name]" :id="field.field_name" class="block w-full px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:border-[#C2541E] text-sm" :placeholder="field.title || field.field_name" />
                 <UToggle v-else-if="field.type === 'boolean' || uiType(field) === 'boolean' || uiType(field) === 'toggle'" v-model="formData.credentials[field.field_name]" size="xs" color="primary" />
-                <textarea v-else-if="uiType(field) === 'textarea'" v-model="formData.credentials[field.field_name]" :id="field.field_name" class="block w-full px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:border-[#C2683F] text-sm" :placeholder="field.title || field.field_name" rows="3" />
-                <input v-else-if="uiType(field) === 'password' || field.type === 'password'" type="password" v-model="formData.credentials[field.field_name]" :id="field.field_name" class="block w-full px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:border-[#C2683F] text-sm" :placeholder="field.title || field.field_name" />
+                <textarea v-else-if="uiType(field) === 'textarea'" v-model="formData.credentials[field.field_name]" :id="field.field_name" class="block w-full px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:border-[#C2541E] text-sm" :placeholder="field.title || field.field_name" rows="3" />
+                <input v-else-if="uiType(field) === 'password' || field.type === 'password'" type="password" v-model="formData.credentials[field.field_name]" :id="field.field_name" class="block w-full px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:border-[#C2541E] text-sm" :placeholder="field.title || field.field_name" />
               </div>
             </template>
           </template>
@@ -101,8 +101,8 @@
               <template v-for="field in oauthCredentialFields" :key="field.field_name">
                 <div class="mb-2" @change="clearTestResult()">
                   <label :for="field.field_name" class="block text-xs text-gray-700 mb-1">{{ field.title || field.field_name }}</label>
-                  <input v-if="uiType(field) === 'string'" type="text" v-model="formData.credentials[field.field_name]" :id="field.field_name" class="block w-full px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:border-[#C2683F] text-sm" :placeholder="field.title || field.field_name" />
-                  <input v-else-if="uiType(field) === 'password' || field.type === 'password'" type="password" v-model="formData.credentials[field.field_name]" :id="field.field_name" class="block w-full px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:border-[#C2683F] text-sm" :placeholder="field.title || field.field_name" />
+                  <input v-if="uiType(field) === 'string'" type="text" v-model="formData.credentials[field.field_name]" :id="field.field_name" class="block w-full px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:border-[#C2541E] text-sm" :placeholder="field.title || field.field_name" />
+                  <input v-else-if="uiType(field) === 'password' || field.type === 'password'" type="password" v-model="formData.credentials[field.field_name]" :id="field.field_name" class="block w-full px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:border-[#C2541E] text-sm" :placeholder="field.title || field.field_name" />
                 </div>
               </template>
             </div>
@@ -125,7 +125,7 @@
               type="button"
               @click="downloadSetupGuide"
               :disabled="exportingGuide"
-              class="inline-flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg border border-[#E7E5DD] text-[#1f2328] bg-white hover:bg-[#F4F1EA] transition-colors cursor-pointer disabled:opacity-65 disabled:cursor-default me-auto"
+              class="inline-flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg border border-[#E9E0D3] text-[#1f2328] bg-white hover:bg-[#F4EEE5] transition-colors cursor-pointer disabled:opacity-65 disabled:cursor-default me-auto"
             >
               <UIcon name="i-heroicons-arrow-down-tray" class="w-4 h-4" />
               <span>{{ exportingGuide ? 'Preparing…' : 'Download setup guide (Word)' }}</span>
@@ -143,7 +143,7 @@
             </UTooltip>
 
             <UTooltip :text="!connectionTestPassed ? 'Pass the connection test first' : ''">
-              <button type="submit" :disabled="submitting || !connectionTestPassed" class="bg-[#C2683F] hover:bg-[#A8542F] text-white text-xs font-medium py-1.5 px-3 rounded disabled:opacity-50">
+              <button type="submit" :disabled="submitting || !connectionTestPassed" class="bg-[#C2541E] hover:bg-[#A8330F] text-white text-xs font-medium py-1.5 px-3 rounded disabled:opacity-50">
                 <span v-if="submitting">Saving...</span>
                 <span v-else>Save and Continue</span>
               </button>
@@ -155,7 +155,7 @@
 
       <!-- RIGHT: how-to-get-each-value docs panel. Always visible — stacks under
            the form on narrow modals, side column on wide. -->
-      <div class="w-full border-t border-[#E7E5DD] lg:border-t-0 lg:w-[40%] lg:max-w-[460px] lg:shrink-0 lg:overflow-y-auto lg:min-h-0">
+      <div class="w-full border-t border-[#E9E0D3] lg:border-t-0 lg:w-[40%] lg:max-w-[460px] lg:shrink-0 lg:overflow-y-auto lg:min-h-0">
         <ConnectorDocsPanel
           :connector-type="selectedType"
           :connector-label="selectedTitle"

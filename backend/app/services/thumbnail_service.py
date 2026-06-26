@@ -210,12 +210,14 @@ class ThumbnailService:
                         )
                         step = step_result.scalar_one_or_none()
 
+                    from app.services.parquet_store import hydrate as _hydrate_parquet
+                    _sd = _hydrate_parquet(step.data) if step and step.data else {}
                     viz_data.append({
                         "id": str(viz.id),
                         "title": viz.title or query.title or "Untitled",
                         "view": viz.view or {},
-                        "rows": step.data.get("rows", []) if step and step.data else [],
-                        "columns": step.data.get("columns", []) if step and step.data else [],
+                        "rows": _sd.get("rows", []),
+                        "columns": _sd.get("columns", []),
                         "dataModel": step.data_model or {} if step else {},
                     })
 

@@ -80,14 +80,14 @@
           :class="[
             'px-4 py-2 text-xs font-medium border-b-2 -mb-px transition-colors flex items-center gap-1.5',
             activeTab === tab.id
-              ? 'border-[#C2683F] text-[#C2683F]'
+              ? 'border-[#C2541E] text-[#C2541E]'
               : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
           ]"
         >
           {{ tab.label }}
           <span
             v-if="tab.id === 'review' && pendingCount > 0"
-            class="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-[#F4E5DA] text-[#A8542F] text-[10px] font-semibold"
+            class="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-[#F4E5DA] text-[#A8330F] text-[10px] font-semibold"
           >{{ pendingCount }}</span>
         </button>
       </div>
@@ -128,7 +128,7 @@
         'mb-4 rounded-md border px-3 py-2 text-xs flex items-start gap-2',
         suggestError
           ? 'border-red-100 bg-red-50 text-red-700'
-          : 'border-[#E8C9B5] bg-[#F6EFEA] text-[#A8542F]'
+          : 'border-[#E8C9B5] bg-[#F6EFEA] text-[#A8330F]'
       ]"
     >
       <Icon

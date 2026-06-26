@@ -8,17 +8,17 @@
       <div class="px-10 py-6  border border-gray-200 rounded-xl shadow-sm bg-white">
         <form @submit.prevent='submit' v-if="authMode !== 'sso_only'">
           <div class="field block mt-3">
-            <input :placeholder="$t('auth.name')" id='name' v-model='name' class="border border-gray-300 rounded-lg px-4 py-2 w-full h-10 text-sm focus:outline-none focus:border-[#C2683F]"/>
+            <input :placeholder="$t('auth.name')" id='name' v-model='name' class="border border-gray-300 rounded-lg px-4 py-2 w-full h-10 text-sm focus:outline-none focus:border-[#C2541E]"/>
           </div>
           <div class="field mt-3">
-            <input :placeholder="$t('auth.email')" id='email' v-model='email' class="border border-gray-300 rounded-lg px-4 py-2 w-full h-10 text-sm focus:outline-none focus:border-[#C2683F]"/>
+            <input :placeholder="$t('auth.email')" id='email' v-model='email' class="border border-gray-300 rounded-lg px-4 py-2 w-full h-10 text-sm focus:outline-none focus:border-[#C2541E]"/>
           </div>
           <div class="field mt-3">
-            <input type='password' :placeholder="$t('auth.password')" id='password' v-model='password' class="border border-gray-300 rounded-lg px-4 py-2 w-full h-10 text-sm focus:outline-none focus:border-[#C2683F]"/>
+            <input type='password' :placeholder="$t('auth.password')" id='password' v-model='password' class="border border-gray-300 rounded-lg px-4 py-2 w-full h-10 text-sm focus:outline-none focus:border-[#C2541E]"/>
           </div>
           <p v-if="error_message" v-html="error_message" class="mt-1 text-red-500 text-sm whitespace-pre-line"></p>
           <div class="field mt-3">
-            <button type='submit' :disabled="isSubmitting" class="px-3 py-2.5 mb-4 text-sm font-medium text-white rounded-lg text-center w-full flex items-center justify-center disabled:bg-gray-400 disabled:cursor-not-allowed bg-[#C2683F] hover:bg-[#A8542F] focus:ring-4 focus:outline-none focus:ring-[#E8C9B5] dark:bg-[#C2683F] dark:hover:bg-[#A8542F] dark:focus:ring-[#E8C9B5]">
+            <button type='submit' :disabled="isSubmitting" class="px-3 py-2.5 mb-4 text-sm font-medium text-white rounded-lg text-center w-full flex items-center justify-center disabled:bg-gray-400 disabled:cursor-not-allowed bg-[#C2541E] hover:bg-[#A8330F] focus:ring-4 focus:outline-none focus:ring-[#E8C9B5] dark:bg-[#C2541E] dark:hover:bg-[#A8330F] dark:focus:ring-[#E8C9B5]">
               <template v-if="isSubmitting">
                 <Spinner class="h-5 w-5 me-2" />
                 {{ $t('auth.signingUp') }}
@@ -70,7 +70,7 @@
         </div>
       <div class="mt-3 block text-sm" v-if="authMode !== 'sso_only'">
         {{ $t('auth.alreadyHaveAccount') }}
-        <NuxtLink to="/users/sign-in" class="text-[#C2683F] hover:text-[#A8542F]">
+        <NuxtLink to="/users/sign-in" class="text-[#C2541E] hover:text-[#A8330F]">
           {{ $t('auth.signIn') }}
         </NuxtLink>
       </div>
@@ -79,8 +79,8 @@
 
       <div class="mt-3 block text-xs border-t border-gray-100 pt-3">
         {{ $t('auth.termsPrefix') }}
-        <a href="https://bagofwords.com/terms" target="_blank" class="text-[#C2683F]">{{ $t('auth.termsOfService') }}</a> {{ $t('common.and') }}
-        <a href="https://bagofwords.com/privacy" target="_blank" class="text-[#C2683F]">{{ $t('auth.privacyPolicy') }}</a>
+        <a href="https://bagofwords.com/terms" target="_blank" class="text-[#C2541E]">{{ $t('auth.termsOfService') }}</a> {{ $t('common.and') }}
+        <a href="https://bagofwords.com/privacy" target="_blank" class="text-[#C2541E]">{{ $t('auth.privacyPolicy') }}</a>
       </div>
     </div>
   </div>

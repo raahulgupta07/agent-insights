@@ -1,5 +1,5 @@
 <template>
-    <div class="flex justify-center px-4 md:px-6 text-sm bg-[#FBFAF6] min-h-full">
+    <div class="flex justify-center px-4 md:px-6 text-sm bg-[#F6F1EA] min-h-full">
         <div class="w-full max-w-7xl py-2 text-[#1f2328]">
             <!-- Full page loading spinner -->
             <div v-if="loading" class="flex flex-col items-center justify-center py-20">
@@ -14,8 +14,8 @@
                     <div class="flex items-start justify-between gap-4">
                         <div>
                             <h1
-                                class="text-2xl font-semibold text-[#1f2328] tracking-tight flex items-center gap-2"
-                                style="font-family: ui-serif, Georgia, 'Times New Roman', serif"
+                                class="text-[32px] font-medium text-[#211B14] tracking-tight flex items-center gap-2"
+                                style="font-family: 'Spectral', ui-serif, Georgia, serif"
                             >
                                 <GoBackChevron v-if="isExcel" />
                                 {{ $t('data.agentsTitle') }}
@@ -35,7 +35,7 @@
                             </UTooltip>
                             <button
                                 v-if="canCreateDataSource && connections.length > 0"
-                                class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl bg-[#C2683F] text-white hover:bg-[#A8542F] disabled:opacity-50 whitespace-nowrap transition-colors"
+                                class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl bg-[#C2541E] text-white hover:bg-[#A8330F] disabled:opacity-50 whitespace-nowrap transition-colors"
                                 @click="navigateTo('/agents/new')"
                             >
                                 <UIcon name="i-heroicons-plus" class="w-4 h-4" />
@@ -51,7 +51,7 @@
                                 v-model="searchQuery"
                                 type="text"
                                 :placeholder="$t('data.searchAgents')"
-                                class="w-full ps-10 pe-4 py-2.5 bg-white border border-[#E7E5DD] rounded-xl text-[#1f2328] placeholder:text-[#9a958c] focus:outline-none focus:ring-2 focus:ring-[#C2683F]/40 focus:border-[#C2683F]"
+                                class="w-full ps-10 pe-4 py-2.5 bg-white border border-[#E9E0D3] rounded-xl text-[#1f2328] placeholder:text-[#9a958c] focus:outline-none focus:ring-2 focus:ring-[#C2541E]/40 focus:border-[#C2541E]"
                             />
                             <UIcon
                                 name="i-heroicons-magnifying-glass"
@@ -69,12 +69,12 @@
                                 :key="`demo-${demo.id}`"
                                 @click="installDemo(demo.id)"
                                 :disabled="installingDemo === demo.id"
-                                class="inline-flex items-center gap-2 px-3 py-1.5 text-xs text-[#6b6b6b] rounded-full border border-[#E7E5DD] bg-white hover:bg-[#F4F1EA] hover:border-[#C2683F]/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                class="inline-flex items-center gap-2 px-3 py-1.5 text-xs text-[#6b6b6b] rounded-full border border-[#E9E0D3] bg-white hover:bg-[#F4EEE5] hover:border-[#C2541E]/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 <Spinner v-if="installingDemo === demo.id" class="h-3 w-3" />
                                 <DataSourceIcon v-else class="h-4" :type="demo.type" />
                                 {{ demo.name }}
-                                <span class="text-[9px] font-medium uppercase tracking-wide text-[#C2683F] bg-[#F4F1EA] border border-[#E7E5DD] px-1.5 py-0.5 rounded">{{ $t('data.sampleTag') }}</span>
+                                <span class="text-[9px] font-medium uppercase tracking-wide text-[#C2541E] bg-[#F4EEE5] border border-[#E9E0D3] px-1.5 py-0.5 rounded">{{ $t('data.sampleTag') }}</span>
                             </button>
                         </div>
                     </div>
@@ -84,14 +84,14 @@
                         <div
                             v-for="ds in filteredAgents"
                             :key="ds.id"
-                            class="block h-full p-5 rounded-2xl border border-[#E7E5DD] bg-white transition-all duration-200 group"
-                            :class="userHasAccess(ds) ? 'cursor-pointer hover:-translate-y-0.5 hover:shadow-md hover:border-[#C2683F]/30' : 'opacity-75'"
+                            class="block h-full p-5 rounded-2xl border border-[#E9E0D3] bg-white transition-all duration-200 group"
+                            :class="userHasAccess(ds) ? 'cursor-pointer hover:-translate-y-0.5 hover:shadow-md hover:border-[#C2541E]/30' : 'opacity-75'"
                         >
                             <component :is="userHasAccess(ds) ? NuxtLink : 'div'" :to="userHasAccess(ds) ? `/agents/${ds.id}` : undefined" class="block">
                                 <!-- Top row: clay icon tile + connection status pill -->
                                 <div class="flex items-start justify-between gap-2 mb-3">
-                                    <div class="w-10 h-10 rounded-xl bg-[#F4F1EA] border border-[#E7E5DD] flex items-center justify-center">
-                                        <UIcon name="i-heroicons-circle-stack" class="w-5 h-5 text-[#C2683F]" />
+                                    <div class="w-10 h-10 rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] flex items-center justify-center">
+                                        <UIcon name="i-heroicons-circle-stack" class="w-5 h-5 text-[#C2541E]" />
                                     </div>
                                     <div
                                         v-if="userHasAccess(ds)"
@@ -102,7 +102,7 @@
                                     </div>
                                     <div
                                         v-else
-                                        class="inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] font-medium rounded-full text-[#6b6b6b] bg-[#F4F1EA] border border-[#E7E5DD]"
+                                        class="inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] font-medium rounded-full text-[#6b6b6b] bg-[#F4EEE5] border border-[#E9E0D3]"
                                     >
                                         <span class="w-1.5 h-1.5 rounded-full bg-[#9a958c]"></span>
                                         {{ $t('data.disconnected') }}
@@ -113,10 +113,10 @@
                                 <div class="flex items-center gap-1.5 mb-1">
                                     <span
                                         class="text-[#1f2328] text-base leading-tight"
-                                        style="font-family: ui-serif, Georgia, 'Times New Roman', serif"
+                                        style="font-family: 'Spectral', ui-serif, Georgia, serif"
                                     >{{ ds.name }}</span>
                                     <UTooltip v-if="ds.admin_only" :text="$t('data.adminOnlyHint')">
-                                        <span class="text-[9px] font-medium uppercase tracking-wide text-[#C2683F] bg-[#F4F1EA] border border-[#E7E5DD] px-1.5 py-0.5 rounded">{{ $t('data.adminOnlyTag') }}</span>
+                                        <span class="text-[9px] font-medium uppercase tracking-wide text-[#C2541E] bg-[#F4EEE5] border border-[#E9E0D3] px-1.5 py-0.5 rounded">{{ $t('data.adminOnlyTag') }}</span>
                                     </UTooltip>
                                     <UTooltip v-if="ds.publish_status && ds.publish_status !== 'published'" :text="publishStatusDescription(ds.publish_status)">
                                         <span :class="['text-[9px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded border', publishStatusBadgeClass(ds.publish_status)]">{{ publishStatusLabel(ds.publish_status) }}</span>
@@ -132,7 +132,7 @@
                                 </p>
 
                                 <!-- Footer: connector icon(s) + counts on ONE line (de-duped) -->
-                                <div class="mt-3 pt-3 border-t border-[#E7E5DD] flex items-center gap-2 text-[11px] text-[#9a958c]">
+                                <div class="mt-3 pt-3 border-t border-[#E9E0D3] flex items-center gap-2 text-[11px] text-[#9a958c]">
                                     <UTooltip v-for="conn in (ds.connections || []).slice(0, 3)" :key="conn.id" :text="conn.name">
                                         <DataSourceIcon class="h-3.5" :type="conn.type" />
                                     </UTooltip>
@@ -146,7 +146,7 @@
                                 v-if="needsUserConnection(ds)"
                                 @click.stop="openCredentialsModal(ds)"
                                 :disabled="connectingId === ds.id"
-                                class="mt-3 w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-[#C2683F] hover:bg-[#A8542F] rounded-xl transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                                class="mt-3 w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-xl transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                             >
                                 <Spinner v-if="connectingId === ds.id" class="w-3.5 h-3.5" />
                                 <UIcon v-else name="heroicons-key" class="w-3.5 h-3.5" />
@@ -156,7 +156,7 @@
                                  principal) credentials — no personal sign-in needed. -->
                             <div
                                 v-else-if="usesServiceAccount(ds)"
-                                class="mt-3 w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs text-[#6b6b6b] bg-[#F4F1EA] border border-[#E7E5DD] rounded-xl"
+                                class="mt-3 w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs text-[#6b6b6b] bg-[#F4EEE5] border border-[#E9E0D3] rounded-xl"
                             >
                                 <UIcon name="heroicons-shield-check" class="w-3.5 h-3.5" />
                                 Service account
@@ -167,24 +167,24 @@
                         <button
                             v-if="canCreateDataSource && connections.length > 0"
                             @click="navigateTo('/agents/new')"
-                            class="flex flex-col items-start p-5 rounded-2xl border border-dashed border-[#E7E5DD] bg-transparent text-start transition-all duration-200 hover:-translate-y-0.5 hover:border-[#C2683F]/40 hover:bg-white cursor-pointer"
+                            class="flex flex-col items-start p-5 rounded-2xl border border-dashed border-[#E9E0D3] bg-transparent text-start transition-all duration-200 hover:-translate-y-0.5 hover:border-[#C2541E]/40 hover:bg-white cursor-pointer"
                         >
-                            <div class="w-10 h-10 mb-3 rounded-xl bg-[#F4F1EA] border border-[#E7E5DD] flex items-center justify-center">
-                                <UIcon name="i-heroicons-plus" class="w-5 h-5 text-[#C2683F]" />
+                            <div class="w-10 h-10 mb-3 rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] flex items-center justify-center">
+                                <UIcon name="i-heroicons-plus" class="w-5 h-5 text-[#C2541E]" />
                             </div>
                             <span
                                 class="text-[#1f2328] text-base leading-tight"
-                                style="font-family: ui-serif, Georgia, 'Times New Roman', serif"
+                                style="font-family: 'Spectral', ui-serif, Georgia, serif"
                             >{{ $t('data.createAgent') }}</span>
                         </button>
                     </div>
 
                     <!-- Empty state for search with no results -->
-                    <div v-else-if="searchQuery.trim()" class="py-12 text-center border border-dashed border-[#E7E5DD] rounded-2xl">
-                        <div class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4F1EA] border border-[#E7E5DD] text-[#C2683F]">
+                    <div v-else-if="searchQuery.trim()" class="py-12 text-center border border-dashed border-[#E9E0D3] rounded-2xl">
+                        <div class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] text-[#C2541E]">
                             <UIcon name="i-heroicons-magnifying-glass" class="w-6 h-6" />
                         </div>
-                        <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">{{ $t('data.noAgentsFound') }}</h3>
+                        <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ $t('data.noAgentsFound') }}</h3>
                         <p class="mt-1 text-sm text-[#9a958c]">{{ $t('data.noAgentsHint') }}</p>
                     </div>
                 </div>
@@ -194,12 +194,12 @@
                     <div class="flex items-center justify-between mb-1">
                         <h1
                             class="text-xl text-[#1f2328]"
-                            style="font-family: ui-serif, Georgia, 'Times New Roman', serif"
+                            style="font-family: 'Spectral', ui-serif, Georgia, serif"
                         >{{ $t('data.connectionsTitle') }}</h1>
                         <button
                             v-if="canCreateDataSource"
                             @click="selectedDataSourceType = undefined; showAddConnectionModal = true"
-                            class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-xl bg-white border border-[#E7E5DD] text-[#1f2328] hover:bg-[#F4F1EA] hover:border-[#C2683F]/40 transition-colors"
+                            class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-xl bg-white border border-[#E9E0D3] text-[#1f2328] hover:bg-[#F4EEE5] hover:border-[#C2541E]/40 transition-colors"
                         >
                             <UIcon name="heroicons-plus" class="w-3 h-3 me-1" />
                             {{ $t('data.addConnection') }}
@@ -213,7 +213,7 @@
                             v-for="conn in connections"
                             :key="conn.id"
                             @click="openConnectionDetail(conn)"
-                            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-full border border-[#E7E5DD] bg-white text-[#6b6b6b] hover:bg-[#F4F1EA] hover:border-[#C2683F]/40 transition-all"
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-full border border-[#E9E0D3] bg-white text-[#6b6b6b] hover:bg-[#F4EEE5] hover:border-[#C2541E]/40 transition-all"
                         >
                             <DataSourceIcon class="h-3.5" :type="conn.type" />
                             <span>{{ conn.name }}</span>

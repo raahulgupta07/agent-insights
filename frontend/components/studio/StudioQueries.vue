@@ -2,7 +2,7 @@
   <div>
     <!-- Header -->
     <div class="mb-4">
-      <h2 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">{{ headerMeta.title }}</h2>
+      <h2 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ headerMeta.title }}</h2>
       <p class="text-xs text-[#6b6b6b] mt-0.5">
         {{ headerMeta.subtitle }}
       </p>
@@ -29,7 +29,7 @@
           :class="[
             'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors',
             String(s.agent_id) === activeSourceId
-              ? 'border-[#E8C9B5] bg-[#F6EFEA] text-[#A8542F]'
+              ? 'border-[#E8C9B5] bg-[#F6EFEA] text-[#A8330F]'
               : 'border-gray-200 bg-white text-gray-600 hover:text-gray-800 hover:border-gray-300'
           ]"
         >

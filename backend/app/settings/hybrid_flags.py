@@ -47,6 +47,18 @@ def _bool(name: str, default: bool = False) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _int(name: str, default: int) -> int:
+    """Read an integer config knob from env (flags are bool-only; numeric knobs
+    read env directly). Falls back to ``default`` on missing/invalid."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw.strip())
+    except (ValueError, AttributeError):
+        return default
+
+
 def set_override(env_name: str, value: "bool | None") -> None:
     """Set or clear a per-process flag override.
 
@@ -110,7 +122,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_AGENT_TEMPLATES": {"label": "Agent Templates", "role": "user", "category": "Agents & Access", "status": "stable"},
     "HYBRID_FOLDER_SYNC": {"label": "Folder Sync (desktop auto-ingest)", "role": "user", "category": "Agents & Access", "status": "stable"},
     "HYBRID_AGENT_ACL": {"label": "Per-Agent Access Control", "role": "user", "category": "Agents & Access", "status": "stable"},
-    "HYBRID_AGENT_CHANNELS": {"label": "Agent Channels (Telegram)", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "Verify-page not built; reply is sync (slow agents may time out)."},
+    "HYBRID_AGENT_CHANNELS": {"label": "Agent Channels", "role": "user", "category": "Agents & Access", "status": "beta", "note": "Per-agent channels (Slack/Teams/WhatsApp/AI Mailbox/MCP/Telegram) scoped to that agent's pinned data. Config in Studio → Access & Channels. Inbound routing for Slack/Teams/WhatsApp is phase 2 (Telegram routing live)."},
     "HYBRID_QUOTAS": {"label": "Per-Org Quotas", "role": "agent", "category": "Agents & Access", "status": "stable"},
     "HYBRID_DOMAIN_PACKS": {"label": "Domain Packs (Skills)", "role": "agent", "category": "Agents & Access", "status": "stable"},
     "HYBRID_PACK_ROUTER": {"label": "Pack Router", "role": "agent", "category": "Agents & Access", "status": "stable"},
@@ -134,6 +146,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_QUERY_CACHE": {"label": "Reasoning Cache (proven SQL)", "role": "agent", "category": "Learning", "status": "stable"},
     "HYBRID_QUERY_LEARNING": {"label": "Live Query Learning", "role": "review", "category": "Learning", "status": "stable"},
     "HYBRID_RESULT_CACHE": {"label": "Result Cache", "role": "agent", "category": "Learning", "status": "stable", "note": "Uses Redis."},
+    "HYBRID_PARQUET_RESULTS": {"label": "Parquet Result Storage", "role": "agent", "category": "Advanced", "status": "stable", "note": "ON by default. Large step results stored as compressed Parquet on disk instead of inline JSON; smaller DB, faster dashboards. Threshold: HYBRID_PARQUET_MIN_ROWS (default 2000)."},
     "HYBRID_ANSWER_CACHE": {"label": "Answer Cache (Tier-0)", "role": "agent", "category": "Learning", "status": "stable", "note": "Uses Redis."},
     "HYBRID_CODE_BANK": {"label": "Code Bank (proven snippets)", "role": "agent", "category": "Learning", "status": "stable"},
     "HYBRID_AGENT_MEMORY": {"label": "Agent Memory", "role": "review", "category": "Learning", "status": "stable"},
@@ -581,6 +594,19 @@ class HybridFlags:
         return _bool("HYBRID_RESULT_CACHE", True)
 
     @property
+    def PARQUET_RESULTS(self) -> bool:
+        # Store large step result sets as compressed Parquet files on disk instead
+        # of inline JSON in Postgres. Shrinks the DB + speeds dashboard loads; rows
+        # are hydrated transparently on read. Small results stay inline. Default ON.
+        return _bool("HYBRID_PARQUET_RESULTS", True)
+
+    @property
+    def PARQUET_MIN_ROWS(self) -> int:
+        # Row-count threshold: results with >= this many rows go to Parquet; smaller
+        # results stay inline JSON (Parquet's footer overhead isn't worth it). Env knob.
+        return _int("HYBRID_PARQUET_MIN_ROWS", 2000)
+
+    @property
     def QUERY_LEARNING(self) -> bool:
         # Task 8: live query-learning. When a create_data step SUCCEEDS, persist its
         # working SQL/approach to the query library tagged with the question (review-
@@ -684,6 +710,7 @@ class HybridFlags:
             "EVAL_SCHEDULE_ENABLED": self.EVAL_SCHEDULE_ENABLED,
             "DOC_KNOWLEDGE": self.DOC_KNOWLEDGE,
             "RESULT_CACHE": self.RESULT_CACHE,
+            "PARQUET_RESULTS": self.PARQUET_RESULTS,
             "QUERY_LEARNING": self.QUERY_LEARNING,
             "MERGE_SAME_SCHEMA": self.MERGE_SAME_SCHEMA,
             "SMART_HEADER": self.SMART_HEADER,

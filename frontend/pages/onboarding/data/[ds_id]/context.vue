@@ -74,7 +74,7 @@
                     :key="page"
                     @click="currentPage = page"
                     class="w-6 h-6 text-xs rounded-full transition-colors"
-                    :class="currentPage === page ? 'bg-[#C2683F] text-white' : 'text-gray-500 hover:bg-gray-100'"
+                    :class="currentPage === page ? 'bg-[#C2541E] text-white' : 'text-gray-500 hover:bg-gray-100'"
                   >
                     {{ page }}
                   </button>
@@ -112,7 +112,7 @@
               @click="showGitModal = true"
             >
               <div class="flex items-center gap-3">
-                <GitBranchIcon class="w-5 h-5 text-[#C2683F] shrink-0" />
+                <GitBranchIcon class="w-5 h-5 text-[#C2541E] shrink-0" />
                 <div class="flex-1">
                   <div class="flex items-center gap-2">
                     <h3 class="text-sm font-semibold text-gray-900">{{ $t('onboarding.context.integrateGit') }}</h3>
@@ -155,7 +155,7 @@
               <button
                 @click="handleSave"
                 :disabled="saving"
-                class="bg-[#C2683F] hover:bg-[#A8542F] text-white text-xs font-medium py-1.5 px-3 rounded disabled:opacity-50"
+                class="bg-[#C2541E] hover:bg-[#A8330F] text-white text-xs font-medium py-1.5 px-3 rounded disabled:opacity-50"
               >
                 <span v-if="saving">{{ $t('onboarding.context.saving') }}</span>
                 <span v-else>{{ $t('onboarding.context.save') }}</span>

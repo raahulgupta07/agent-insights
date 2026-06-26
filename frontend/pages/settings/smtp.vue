@@ -6,7 +6,7 @@
       the global SMTP configured in <code>dash-config</code>.
     </p>
 
-    <div class="bg-[#F6EFEA] border border-[#E8C9B5] rounded-lg p-3 my-3 text-xs text-[#A8542F] md:w-2/3">
+    <div class="bg-[#F6EFEA] border border-[#E8C9B5] rounded-lg p-3 my-3 text-xs text-[#A8330F] md:w-2/3">
       <strong>SMTP Server vs AI Mailbox.</strong> This SMTP server only sends
       <em>system</em> notifications. It is <em>not</em> used by the AI analyst —
       the analyst's replies and answers always come from the separate
@@ -21,31 +21,31 @@
       <div class="grid grid-cols-2 gap-3 mb-3">
         <div>
           <label class="block text-sm font-medium text-[#1f2328] mb-1">From name</label>
-          <input v-model="form.from_name" type="text" class="w-full border border-[#E7E5DD] rounded-lg px-2 py-1" placeholder="Acme" />
+          <input v-model="form.from_name" type="text" class="w-full border border-[#E9E0D3] rounded-lg px-2 py-1" placeholder="Acme" />
         </div>
         <div>
           <label class="block text-sm font-medium text-[#1f2328] mb-1">From address</label>
-          <input v-model="form.from_address" type="email" class="w-full border border-[#E7E5DD] rounded-lg px-2 py-1" placeholder="noreply@acme.com" />
+          <input v-model="form.from_address" type="email" class="w-full border border-[#E9E0D3] rounded-lg px-2 py-1" placeholder="noreply@acme.com" />
         </div>
       </div>
       <div class="grid grid-cols-2 gap-3 mb-3">
         <div>
           <label class="block text-sm font-medium text-[#1f2328] mb-1">Host</label>
-          <input v-model="form.host" type="text" class="w-full border border-[#E7E5DD] rounded-lg px-2 py-1" placeholder="smtp.acme.com" />
+          <input v-model="form.host" type="text" class="w-full border border-[#E9E0D3] rounded-lg px-2 py-1" placeholder="smtp.acme.com" />
         </div>
         <div>
           <label class="block text-sm font-medium text-[#1f2328] mb-1">Port</label>
-          <input v-model.number="form.port" type="number" class="w-full border border-[#E7E5DD] rounded-lg px-2 py-1" />
+          <input v-model.number="form.port" type="number" class="w-full border border-[#E9E0D3] rounded-lg px-2 py-1" />
         </div>
       </div>
       <div class="grid grid-cols-2 gap-3 mb-1">
         <div>
           <label class="block text-sm font-medium text-[#1f2328] mb-1">Username <span class="text-[#9a958c] font-normal">(optional)</span></label>
-          <input v-model="form.username" type="text" class="w-full border border-[#E7E5DD] rounded-lg px-2 py-1" />
+          <input v-model="form.username" type="text" class="w-full border border-[#E9E0D3] rounded-lg px-2 py-1" />
         </div>
         <div>
           <label class="block text-sm font-medium text-[#1f2328] mb-1">Password <span class="text-[#9a958c] font-normal">(optional)</span></label>
-          <input v-model="form.password" type="password" class="w-full border border-[#E7E5DD] rounded-lg px-2 py-1"
+          <input v-model="form.password" type="password" class="w-full border border-[#E9E0D3] rounded-lg px-2 py-1"
             :placeholder="passwordSet ? '•••••••• (unchanged)' : ''" />
           <p v-if="passwordSet" class="text-xs text-[#9a958c] mt-1">Leave blank to keep the saved password.</p>
         </div>
@@ -53,7 +53,7 @@
       <p class="text-xs text-[#9a958c] mb-3">Leave username &amp; password empty for an open relay that doesn't require authentication.</p>
       <div class="mb-3">
         <label class="block text-sm font-medium text-[#1f2328] mb-1">Security</label>
-        <select v-model="form.security" class="w-full border border-[#E7E5DD] rounded-lg px-2 py-1">
+        <select v-model="form.security" class="w-full border border-[#E9E0D3] rounded-lg px-2 py-1">
           <option value="starttls">STARTTLS (587)</option>
           <option value="ssl">SSL/TLS (465)</option>
           <option value="none">None</option>
@@ -67,10 +67,10 @@
 
       <div class="flex items-center gap-2">
         <button type="button" v-if="form.host" :disabled="testing" @click="test"
-          class="rounded-lg px-3 py-2 text-sm font-medium border border-[#E7E5DD] text-[#1f2328] bg-white hover:bg-[#F4F1EA] transition-colors cursor-pointer disabled:opacity-65 disabled:cursor-default">
+          class="rounded-lg px-3 py-2 text-sm font-medium border border-[#E9E0D3] text-[#1f2328] bg-white hover:bg-[#F4EEE5] transition-colors cursor-pointer disabled:opacity-65 disabled:cursor-default">
           {{ testing ? 'Testing…' : 'Test connection' }}
         </button>
-        <button type="submit" :disabled="saving" class="rounded-xl px-4 py-2.5 text-sm font-medium bg-[#C2683F] hover:bg-[#A8542F] text-white transition-colors cursor-pointer disabled:opacity-65 disabled:cursor-default">
+        <button type="submit" :disabled="saving" class="rounded-xl px-4 py-2.5 text-sm font-medium bg-[#C2541E] hover:bg-[#A8330F] text-white transition-colors cursor-pointer disabled:opacity-65 disabled:cursor-default">
           {{ saving ? 'Saving…' : 'Save' }}
         </button>
       </div>

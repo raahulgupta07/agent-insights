@@ -7,7 +7,7 @@
         <div class="p-0">
             <div v-if="isLoading" class="flex items-center justify-center h-40">
                 <div class="flex items-center space-x-2">
-                    <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-[#C2683F]"></div>
+                    <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-[#C2541E]"></div>
                     <span class="text-gray-600">Loading users...</span>
                 </div>
             </div>
@@ -25,7 +25,7 @@
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="flex items-center">
                                     <div class="flex-shrink-0 h-8 w-8">
-                                        <div class="h-8 w-8 rounded-full bg-gradient-to-r from-[#C2683F] to-purple-500 flex items-center justify-center">
+                                        <div class="h-8 w-8 rounded-full bg-gradient-to-r from-[#C2541E] to-purple-500 flex items-center justify-center">
                                             <span class="text-white text-sm font-medium">{{ user.name.charAt(0) }}</span>
                                         </div>
                                     </div>

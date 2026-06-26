@@ -71,7 +71,7 @@
           </USelectMenu>
           <button
             type="button"
-            class="mt-2 inline-flex items-center gap-1.5 text-xs text-[#C2683F] hover:text-[#A8542F]"
+            class="mt-2 inline-flex items-center gap-1.5 text-xs text-[#C2541E] hover:text-[#A8330F]"
             :disabled="creatingFromConnection"
             @click="showAddConnectionModal = true"
           >

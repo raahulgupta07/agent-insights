@@ -1,22 +1,20 @@
 <template>
-    <div class="flex justify-center ps-2 md:ps-4 text-sm h-full bg-[#FBFAF6]">
-        <div class="w-full max-w-7xl px-4 ps-0 py-2 h-full">
+    <div class="studios-root flex justify-center text-sm min-h-full bg-[#F6F1EA] text-[#1A1611]">
+        <div class="w-full max-w-[1340px] px-8 py-9">
             <!-- Header -->
-            <div class="flex items-start justify-between mb-6">
-                <div>
-                    <h1 class="text-2xl font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">{{ $t('studio.title') }}</h1>
-                    <p class="mt-2 text-[#6b6b6b] max-w-2xl leading-relaxed">{{ $t('studio.subtitle') }}</p>
+            <div class="flex items-start justify-between gap-6 mb-[30px]">
+                <div class="max-w-[620px]">
+                    <h1 class="studios-h1">{{ $t('studio.title') }}</h1>
+                    <p class="mt-3 text-[16px] leading-relaxed text-[#6E6356]">{{ $t('studio.subtitle') }}</p>
                 </div>
-                <UButton
+                <button
                     v-if="!disabled"
-                    color="white"
-                    size="xs"
-                    icon="i-heroicons-plus"
-                    class="bg-[#C2683F] hover:bg-[#A8542F] text-white font-semibold border-0 cursor-pointer transition-colors"
+                    class="studios-new shrink-0"
                     @click="openCreate"
                 >
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>
                     {{ $t('studio.newStudio') }}
-                </UButton>
+                </button>
             </div>
 
             <!-- Disabled (flag off) -->
@@ -43,18 +41,18 @@
             <template v-else>
                 <!-- Your Studios -->
                 <section class="mb-8">
-                    <h2 class="text-[11px] font-semibold text-[#9a958c] uppercase tracking-wider mb-3">{{ $t('studio.yourStudios') }}</h2>
+                    <p class="text-[12px] font-bold tracking-[.1em] text-[#A89C8C] mb-4">{{ $t('studio.yourStudios').toUpperCase() }}</p>
 
                     <!-- Empty state: a single zero-state card with one primary action.
                          The ghost "add another" tile only appears once studios exist (v-else). -->
                     <div v-if="ownStudios.length === 0">
-                        <div class="py-14 px-6 text-center bg-white border border-[#E7E5DD] rounded-2xl">
-                            <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4F1EA] border border-[#E7E5DD] text-[#C2683F]">
+                        <div class="py-14 px-6 text-center bg-white border border-[#E9E0D3] rounded-2xl">
+                            <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] text-[#C2541E]">
                                 <UIcon name="i-heroicons-film" class="w-6 h-6" />
                             </span>
                             <p class="text-sm text-[#1f2328] font-medium mb-1">{{ $t('studio.empty') }}</p>
                             <p class="text-xs text-[#9a958c] mb-4 max-w-md mx-auto leading-relaxed">{{ $t('studio.emptyHint') }}</p>
-                            <UButton color="white" size="xs" icon="i-heroicons-plus" class="bg-[#C2683F] hover:bg-[#A8542F] text-white font-semibold border-0 cursor-pointer transition-colors" @click="openCreate">
+                            <UButton color="white" size="xs" icon="i-heroicons-plus" class="bg-[#C2541E] hover:bg-[#A8330F] text-white font-semibold border-0 cursor-pointer transition-colors" @click="openCreate">
                                 {{ $t('studio.newStudio') }}
                             </UButton>
                         </div>
@@ -62,7 +60,7 @@
 
                     <!-- One add affordance only (top-right primary). Ghost dashed card removed
                          to avoid the duplicate "New Agent Studio" buttons. -->
-                    <div v-else class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                    <div v-else class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-[18px]">
                         <StudioCard
                             v-for="s in ownStudios"
                             :key="s.id"
@@ -76,8 +74,8 @@
 
                 <!-- Shared with you -->
                 <section v-if="sharedStudios.length > 0">
-                    <h2 class="text-[11px] font-semibold text-[#9a958c] uppercase tracking-wider mb-3">{{ $t('studio.sharedWithYou') }}</h2>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                    <p class="text-[12px] font-bold tracking-[.1em] text-[#A89C8C] mb-4">{{ $t('studio.sharedWithYou').toUpperCase() }}</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-[18px]">
                         <StudioCard
                             v-for="s in sharedStudios"
                             :key="s.id"
@@ -94,7 +92,7 @@
             <UModal v-model="showCreate" :ui="{ width: 'sm:max-w-lg' }">
                 <div class="p-6">
                     <div class="flex items-center justify-between mb-1">
-                        <h2 class="text-lg font-medium text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">{{ $t('studio.createTitle') }}</h2>
+                        <h2 class="text-lg font-medium text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ $t('studio.createTitle') }}</h2>
                         <button @click="showCreate = false" class="text-[#9a958c] hover:text-[#1f2328] cursor-pointer">
                             <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
                         </button>
@@ -110,9 +108,9 @@
                             <label class="block text-xs font-medium text-[#1f2328] mb-1">{{ $t('studio.description') }}</label>
                             <UTextarea v-model="form.description" :placeholder="$t('studio.descriptionPlaceholder')" :rows="2" size="sm" />
                         </div>
-                        <div class="flex items-start gap-2 rounded-xl bg-[#F3E7DF] border border-[#E7E5DD] px-3 py-2">
-                            <UIcon name="i-heroicons-sparkles" class="w-3.5 h-3.5 text-[#C2683F] mt-0.5 shrink-0" />
-                            <p class="text-[11px] text-[#C2683F] leading-snug">{{ $t('studio.autoConfigHint') }}</p>
+                        <div class="flex items-start gap-2 rounded-xl bg-[#FBEFE4] border border-[#E9E0D3] px-3 py-2">
+                            <UIcon name="i-heroicons-sparkles" class="w-3.5 h-3.5 text-[#C2541E] mt-0.5 shrink-0" />
+                            <p class="text-[11px] text-[#C2541E] leading-snug">{{ $t('studio.autoConfigHint') }}</p>
                         </div>
                         <div>
                             <label class="block text-xs font-medium text-[#1f2328] mb-2">{{ $t('studio.shareScope') }}</label>
@@ -121,9 +119,9 @@
                                     v-for="opt in scopeOptions"
                                     :key="opt.value"
                                     class="flex items-start gap-2 cursor-pointer rounded-xl border p-2.5 transition-colors"
-                                    :class="form.share_scope === opt.value ? 'border-[#C2683F] bg-[#F3E7DF]/60' : 'border-[#E7E5DD] hover:border-[#d8d4ca]'"
+                                    :class="form.share_scope === opt.value ? 'border-[#C2541E] bg-[#FBEFE4]/60' : 'border-[#E9E0D3] hover:border-[#d8d4ca]'"
                                 >
-                                    <input type="radio" :value="opt.value" v-model="form.share_scope" class="mt-0.5 text-[#C2683F] focus:ring-[#C2683F]" />
+                                    <input type="radio" :value="opt.value" v-model="form.share_scope" class="mt-0.5 text-[#C2541E] focus:ring-[#C2541E]" />
                                     <span>
                                         <span class="block text-xs font-medium text-[#1f2328]">{{ opt.label }}</span>
                                         <span class="block text-[11px] text-[#6b6b6b]">{{ opt.hint }}</span>
@@ -142,7 +140,7 @@
                         <UButton
                             color="white"
                             size="sm"
-                            class="bg-[#C2683F] hover:bg-[#A8542F] text-white font-semibold border-0 cursor-pointer transition-colors disabled:opacity-50"
+                            class="bg-[#C2541E] hover:bg-[#A8330F] text-white font-semibold border-0 cursor-pointer transition-colors disabled:opacity-50"
                             :loading="creating"
                             :disabled="!form.name.trim()"
                             @click="createStudio"
@@ -161,6 +159,15 @@ import StudioCard from '~/components/studio/StudioCard.vue'
 import Spinner from '~/components/Spinner.vue'
 
 definePageMeta({ auth: true, layout: 'default' })
+
+// Design fonts (Spectral serif headings + Hanken Grotesk body).
+useHead({
+    link: [
+        { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
+        { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' },
+        { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Hanken+Grotesk:wght@400;500;600;700&display=swap' },
+    ],
+})
 
 interface Studio {
     id: string
@@ -342,3 +349,20 @@ const createStudio = async () => {
 
 onMounted(fetchStudios)
 </script>
+
+<style scoped>
+.studios-root { font-family: 'Hanken Grotesk', system-ui, sans-serif; }
+.studios-h1 {
+    font-family: 'Spectral', 'Spectral', ui-serif, Georgia, serif;
+    font-weight: 500; font-size: 38px; letter-spacing: -.02em;
+    margin: 0; color: #211B14; line-height: 1.1;
+}
+.studios-new {
+    display: flex; align-items: center; gap: 9px;
+    border: none; background: #C2541E; color: #fff;
+    border-radius: 12px; padding: 12px 18px; cursor: pointer;
+    font-family: inherit; font-size: 14.5px; font-weight: 600;
+    transition: background .15s; box-shadow: 0 10px 24px -12px rgba(168, 51, 15, .7);
+}
+.studios-new:hover { background: #A8330F; }
+</style>

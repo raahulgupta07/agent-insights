@@ -31,7 +31,7 @@
                         v-model="domainInput"
                         type="text"
                         :placeholder="$t('signupPolicy.domainPlaceholder')"
-                        class="flex-1 text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C2683F] focus:border-[#C2683F]"
+                        class="flex-1 text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C2541E] focus:border-[#C2541E]"
                         @keydown.enter.prevent="addDomain"
                         @keydown.,.prevent="addDomain"
                     />
@@ -72,7 +72,7 @@
                     v-else
                     v-model="form.auto_invite_role"
                     type="text"
-                    class="w-60 text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C2683F] focus:border-[#C2683F]"
+                    class="w-60 text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C2541E] focus:border-[#C2541E]"
                 />
                 <p class="mt-2 text-xs text-gray-500">
                     {{ $t('signupPolicy.roleHint') }}

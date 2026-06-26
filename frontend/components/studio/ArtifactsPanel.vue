@@ -15,7 +15,7 @@
                 type="button"
                 class="px-3 py-1.5 text-xs font-medium -mb-px border-b-2 transition-colors"
                 :class="activeKind === k.value
-                    ? 'border-[#C2683F] text-[#C2683F]'
+                    ? 'border-[#C2541E] text-[#C2541E]'
                     : 'border-transparent text-gray-500 hover:text-gray-800'"
                 @click="activeKind = k.value"
             >

@@ -1,24 +1,20 @@
 <template>
   <div v-if="!isLoading && hasAnyReports" class="mt-12">
-    <div class="flex items-center justify-between mb-4">
-      <USelectMenu
-        v-model="viewMode"
-        :options="availableOptions"
-        value-attribute="value"
-        option-attribute="label"
-        size="md"
-        :ui="{
-          trigger: 'ring-0 shadow-none bg-transparent hover:bg-gray-50 font-medium text-gray-900',
-          width: 'w-72'
-        }"
-      >
-        <template #default>
-          <span class="text-base font-medium text-gray-900">{{ selectedLabel }}</span>
-          <UIcon name="i-heroicons-chevron-down-20-solid" class="w-5 h-5 text-gray-400 ms-1" />
-        </template>
-      </USelectMenu>
-      <NuxtLink to="/reports" class="text-sm text-[#C2683F] hover:text-[#A8542F] hover:underline">
-        View All Reports
+    <div class="flex items-center justify-between mb-[18px]">
+      <!-- Segmented tab toggle (design): one filled pill for the active scope. -->
+      <div class="rr-tabs">
+        <button
+          v-for="opt in availableOptions"
+          :key="opt.value"
+          class="rr-tab"
+          :class="{ 'rr-tab-active': viewMode === opt.value }"
+          @click="viewMode = opt.value"
+        >
+          {{ opt.label }}
+        </button>
+      </div>
+      <NuxtLink to="/reports" class="rr-viewall">
+        View All Reports →
       </NuxtLink>
     </div>
 
@@ -147,3 +143,25 @@ onMounted(() => {
   fetchReports()
 })
 </script>
+
+<style scoped>
+.rr-tabs {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #EFE7DA; border-radius: 11px; padding: 4px;
+  font-family: 'Hanken Grotesk', system-ui, sans-serif;
+}
+.rr-tab {
+  border: none; cursor: pointer; background: transparent;
+  font-family: inherit; font-size: 14px; font-weight: 600;
+  padding: 8px 15px; border-radius: 8px; color: #7A7062; transition: .15s;
+}
+.rr-tab-active {
+  background: #FFFFFF; color: #A8330F;
+  box-shadow: 0 2px 6px -2px rgba(60, 40, 20, .2);
+}
+.rr-viewall {
+  font-size: 14px; font-weight: 600; color: #C2541E;
+  text-decoration: none; transition: color .15s;
+}
+.rr-viewall:hover { color: #A8330F; }
+</style>

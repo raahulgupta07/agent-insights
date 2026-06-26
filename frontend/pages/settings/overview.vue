@@ -11,7 +11,7 @@ definePageMeta({
             <div>
                 <h1
                     class="text-2xl font-semibold tracking-tight text-[#1f2328]"
-                    style="font-family: ui-serif, Georgia, 'Times New Roman', serif"
+                    style="font-family: 'Spectral', ui-serif, Georgia, serif"
                 >Console Overview</h1>
             </div>
         </div>

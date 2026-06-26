@@ -27,7 +27,7 @@
                             :value="opt.value"
                             v-model="scope"
                             :disabled="!canManage"
-                            class="mt-0.5 text-[#C2683F] focus:ring-[#C2683F]"
+                            class="mt-0.5 text-[#C2541E] focus:ring-[#C2541E]"
                         />
                         <span>
                             <span class="block text-xs font-medium text-gray-800">{{ opt.label }}</span>
@@ -47,7 +47,7 @@
                     </div>
                     <button
                         v-if="canManage"
-                        class="mt-1.5 text-[11px] text-[#C2683F] hover:text-[#A8542F]"
+                        class="mt-1.5 text-[11px] text-[#C2541E] hover:text-[#A8330F]"
                         @click="saveScope(true)"
                     >
                         {{ $t('studio.regenerateLink') }}

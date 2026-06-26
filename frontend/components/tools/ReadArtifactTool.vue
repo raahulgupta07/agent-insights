@@ -4,7 +4,7 @@
     <div class="flex items-center text-xs text-gray-500 cursor-pointer hover:text-gray-700" @click="toggleCollapsed">
       <Icon :name="isCollapsed ? 'heroicons-chevron-right' : 'heroicons-chevron-down'" class="w-3 h-3 me-1.5 text-gray-400 rtl-flip" />
       <Spinner v-if="status === 'running'" class="w-3 h-3 me-1.5 text-gray-400" />
-      <Icon v-else-if="status === 'success'" name="heroicons-document-text" class="w-3 h-3 me-1.5 text-[#C2683F]" />
+      <Icon v-else-if="status === 'success'" name="heroicons-document-text" class="w-3 h-3 me-1.5 text-[#C2541E]" />
       <Icon v-else-if="status === 'stopped'" name="heroicons-stop-circle" class="w-3 h-3 me-1.5 text-gray-400" />
       <Icon v-else-if="status === 'error'" name="heroicons-exclamation-circle" class="w-3 h-3 me-1.5 text-amber-500" />
 
@@ -21,7 +21,7 @@
           'ms-2 px-1.5 py-0.5 rounded text-[10px] font-medium',
           artifactMode === 'slides'
             ? 'bg-purple-100 text-purple-700'
-            : 'bg-[#F4E5DA] text-[#A8542F]'
+            : 'bg-[#F4E5DA] text-[#A8330F]'
         ]"
       >
         {{ artifactMode === 'slides' ? 'Slides' : 'Dashboard' }}
@@ -53,7 +53,7 @@
               :name="artifactMode === 'slides' ? 'heroicons:presentation-chart-bar' : 'heroicons:chart-bar-square'"
               :class="[
                 'w-4 h-4',
-                artifactMode === 'slides' ? 'text-slate-400' : 'text-[#C2683F]'
+                artifactMode === 'slides' ? 'text-slate-400' : 'text-[#C2541E]'
               ]"
             />
           </div>

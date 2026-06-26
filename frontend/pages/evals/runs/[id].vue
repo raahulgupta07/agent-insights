@@ -4,7 +4,7 @@
       <div class="mt-6">
 
         <!-- Run header -->
-         <NuxtLink :to="'/evals'" class="text-[#C2683F] hover:text-[#A8542F] text-sm hover:underline ms-2 mt-2" >
+         <NuxtLink :to="'/evals'" class="text-[#C2541E] hover:text-[#A8330F] text-sm hover:underline ms-2 mt-2" >
           <Icon name="heroicons-arrow-left" class="w-4 h-4" />
           {{ $t('evals.run.back') }}
         </NuxtLink>
@@ -95,7 +95,7 @@
                             v-if="row.result.report_id"
                             :to="`/reports/${row.result.report_id}`"
                             target="_blank"
-                            class="ms-2 text-[#C2683F] hover:text-[#A8542F] hover:underline text-[10px]"
+                            class="ms-2 text-[#C2541E] hover:text-[#A8330F] hover:underline text-[10px]"
                           >
                             {{ $t('evals.run.openReport') }}
                           </NuxtLink>
@@ -807,7 +807,7 @@ const cmpSymbol = (op?: string) => {
 }
 const badgeClassesFor = (catKey: string): string => {
   const map: Record<string, string> = {
-    'tool:create_data': 'bg-[#F6EFEA] text-[#A8542F] border-[#E8C9B5]',
+    'tool:create_data': 'bg-[#F6EFEA] text-[#A8330F] border-[#E8C9B5]',
     'tool:clarify': 'bg-amber-50 text-amber-700 border-amber-100',
     'tool:describe_table': 'bg-teal-50 text-teal-700 border-teal-100',
     'metadata': 'bg-slate-50 text-slate-700 border-slate-100',
@@ -874,7 +874,7 @@ const completionStatus = (resultId: string): { key: string, text: string, classN
     else if (logs.some(l => l.event === 'completion.finished')) key = 'finished'
     else if (logs.some(l => l.event === 'completion.started')) key = 'running'
     const classMap: Record<string, string> = {
-      running: 'bg-[#F4E5DA] text-[#A8542F]',
+      running: 'bg-[#F4E5DA] text-[#A8330F]',
       finished: 'bg-green-100 text-green-800',
       error: 'bg-red-100 text-red-800',
       none: 'bg-gray-100 text-gray-800',

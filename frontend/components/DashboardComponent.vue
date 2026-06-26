@@ -9,8 +9,8 @@
                     aria-label="Version history"
                     :title="'Version history'"
                     @click="toggleVersionPanel"
-                    class="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-[#E7E5DD] bg-white text-[#6b6b6b] hover:bg-[#F4F1EA] transition-colors cursor-pointer"
-                    :class="{ 'bg-[#F3E7DF] border-[#E8C9B5] text-[#A8542F]': showVersionPanel }"
+                    class="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-[#E9E0D3] bg-white text-[#6b6b6b] hover:bg-[#F4EEE5] transition-colors cursor-pointer"
+                    :class="{ 'bg-[#FBEFE4] border-[#E8C9B5] text-[#A8330F]': showVersionPanel }"
                 >
                     <UIcon name="i-heroicons-clock" class="w-4 h-4" />
                     <span v-if="activeVersionNumber" class="text-[11px] font-semibold">v{{ activeVersionNumber }}</span>
@@ -19,10 +19,10 @@
                 <!-- Version history dropdown / timeline -->
                 <div
                     v-if="showVersionPanel"
-                    class="absolute top-10 left-0 w-[340px] bg-white border border-[#E7E5DD] rounded-2xl z-[60] overflow-hidden"
+                    class="absolute top-10 left-0 w-[340px] bg-white border border-[#E9E0D3] rounded-2xl z-[60] overflow-hidden"
                     style="box-shadow: 0 18px 50px -20px rgba(0,0,0,.3)"
                 >
-                    <div class="flex items-center gap-2 px-3.5 py-2.5 border-b border-[#E7E5DD] text-xs font-semibold text-[#1f2328]">
+                    <div class="flex items-center gap-2 px-3.5 py-2.5 border-b border-[#E9E0D3] text-xs font-semibold text-[#1f2328]">
                         <UIcon name="i-heroicons-clock" class="w-4 h-4 text-[#9a958c]" />
                         Version history
                         <span class="ms-auto text-[11px] font-medium text-[#9a958c]">
@@ -45,8 +45,8 @@
                             :class="{ 'bg-[#F6EFEA]': v.is_active }"
                         >
                             <div class="flex flex-col items-center flex-none pt-1">
-                                <span class="w-2.5 h-2.5 rounded-full" :class="v.is_active ? 'bg-[#C2683F]' : 'bg-[#E7E5DD]'"></span>
-                                <span v-if="i < versions.length - 1" class="w-0.5 flex-1 bg-[#F4F1EA] my-0.5"></span>
+                                <span class="w-2.5 h-2.5 rounded-full" :class="v.is_active ? 'bg-[#C2541E]' : 'bg-[#E9E0D3]'"></span>
+                                <span v-if="i < versions.length - 1" class="w-0.5 flex-1 bg-[#F4EEE5] my-0.5"></span>
                             </div>
                             <div class="min-w-0 flex-1">
                                 <div class="text-[12.5px] font-semibold text-[#1f2328] flex items-center gap-1.5 flex-wrap">
@@ -66,20 +66,20 @@
                                 <div class="flex gap-1.5 mt-2">
                                     <button
                                         type="button"
-                                        class="text-[11px] font-semibold px-2 py-[3px] rounded-md border border-[#E7E5DD] bg-white text-[#6b6b6b] hover:bg-[#F4F1EA] transition-colors cursor-pointer"
+                                        class="text-[11px] font-semibold px-2 py-[3px] rounded-md border border-[#E9E0D3] bg-white text-[#6b6b6b] hover:bg-[#F4EEE5] transition-colors cursor-pointer"
                                         @click="viewVersion(v)"
                                     >View</button>
                                     <button
                                         v-if="!v.is_active"
                                         type="button"
-                                        class="text-[11px] font-semibold px-2 py-[3px] rounded-md border border-[#E8C9B5] bg-[#F3E7DF] text-[#A8542F] hover:bg-[#E8C9B5] transition-colors cursor-pointer disabled:opacity-65 disabled:cursor-default"
+                                        class="text-[11px] font-semibold px-2 py-[3px] rounded-md border border-[#E8C9B5] bg-[#FBEFE4] text-[#A8330F] hover:bg-[#E8C9B5] transition-colors cursor-pointer disabled:opacity-65 disabled:cursor-default"
                                         :disabled="versionBusy"
                                         @click="restoreVersion(v)"
                                     >Restore</button>
                                     <button
                                         v-if="i < versions.length - 1"
                                         type="button"
-                                        class="text-[11px] font-semibold px-2 py-[3px] rounded-md border border-[#E7E5DD] bg-white text-[#6b6b6b] hover:bg-[#F4F1EA] transition-colors cursor-pointer"
+                                        class="text-[11px] font-semibold px-2 py-[3px] rounded-md border border-[#E9E0D3] bg-white text-[#6b6b6b] hover:bg-[#F4EEE5] transition-colors cursor-pointer"
                                         @click="compareVersions(v, versions[i + 1])"
                                     >Compare</button>
                                 </div>
@@ -87,7 +87,7 @@
                                 <!-- Inline lightweight diff -->
                                 <div
                                     v-if="compareResult && compareResult.aId === v.id"
-                                    class="mt-2 rounded-lg border border-[#E7E5DD] bg-[#FBFAF6] px-2.5 py-2 text-[11px]"
+                                    class="mt-2 rounded-lg border border-[#E9E0D3] bg-[#F6F1EA] px-2.5 py-2 text-[11px]"
                                 >
                                     <div class="font-semibold text-[#1f2328] mb-1">
                                         v{{ compareResult.aVer }} vs v{{ compareResult.bVer }}
@@ -150,7 +150,7 @@
                 <span>{{ versionBanner }}</span>
                 <button
                     type="button"
-                    class="ms-auto text-[11px] font-semibold text-[#A8542F] hover:underline cursor-pointer"
+                    class="ms-auto text-[11px] font-semibold text-[#A8330F] hover:underline cursor-pointer"
                     @click="openVersionHistory"
                 >View history</button>
                 <button
@@ -168,14 +168,14 @@
                     <button
                         v-for="bm in bookmarks" :key="bm.id"
                         class="group inline-flex items-center gap-1 text-[12px] rounded-full border px-2.5 py-1 cursor-pointer transition-colors"
-                        :class="activeBookmarkId === bm.id ? 'border-[#C2683F] bg-[#F4E5DA] text-[#A8542F] font-semibold' : 'border-[#E7E5DD] text-[#6b6b6b] hover:bg-[#F4F1EA]'"
+                        :class="activeBookmarkId === bm.id ? 'border-[#C2541E] bg-[#F4E5DA] text-[#A8330F] font-semibold' : 'border-[#E9E0D3] text-[#6b6b6b] hover:bg-[#F4EEE5]'"
                         @click="applyBookmark(bm)"
                     >
                         {{ bm.name }}
                         <span class="opacity-0 group-hover:opacity-70 hover:!opacity-100 transition-opacity" @click.stop="deleteBookmark(bm.id)">✕</span>
                     </button>
                     <button
-                        class="inline-flex items-center gap-1 text-[12px] text-[#C2683F] border border-dashed border-[#E8C9B5] rounded-full px-2.5 py-1 hover:bg-[#F4F1EA] cursor-pointer transition-colors"
+                        class="inline-flex items-center gap-1 text-[12px] text-[#C2541E] border border-dashed border-[#E8C9B5] rounded-full px-2.5 py-1 hover:bg-[#F4EEE5] cursor-pointer transition-colors"
                         title="Save the current cross-filter + theme as a named view"
                         @click="saveBookmark"
                     >
@@ -185,7 +185,7 @@
                 <div class="ms-auto">
                     <UDropdown :items="exportMenuItems" :popper="{ placement: 'bottom-end' }">
                         <button
-                            class="inline-flex items-center gap-1 text-[12px] text-[#6b6b6b] border border-[#E7E5DD] rounded-lg px-2.5 py-1.5 hover:bg-[#F4F1EA] cursor-pointer transition-colors disabled:opacity-60"
+                            class="inline-flex items-center gap-1 text-[12px] text-[#6b6b6b] border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 hover:bg-[#F4EEE5] cursor-pointer transition-colors disabled:opacity-60"
                             :disabled="isExporting"
                         >
                             <Icon :name="isExporting ? 'heroicons:arrow-path' : 'heroicons:arrow-down-tray'" :class="['w-3.5 h-3.5', isExporting ? 'animate-spin' : '']" />
@@ -199,11 +199,11 @@
             <div v-if="crossFilters.length" class="flex items-center flex-wrap gap-2 px-3 py-2 mb-1">
                 <span class="text-[11px] font-medium text-[#9a958c]">Cross-filter:</span>
                 <span v-for="f in crossFilters" :key="f.column + ':' + f.value"
-                      class="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#A8542F] bg-[#F3E7DF] border border-[#E8C9B5] rounded-full px-2.5 py-1">
+                      class="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#A8330F] bg-[#FBEFE4] border border-[#E8C9B5] rounded-full px-2.5 py-1">
                     {{ f.label || f.column }} = {{ f.value }}
                     <button type="button" class="opacity-70 hover:opacity-100" @click="removeCrossFilter(f.column, f.value)">✕</button>
                 </span>
-                <button type="button" class="text-[12px] text-[#9a958c] underline hover:text-[#A8542F]" @click="clearCrossFilters">clear all</button>
+                <button type="button" class="text-[12px] text-[#9a958c] underline hover:text-[#A8330F]" @click="clearCrossFilters">clear all</button>
             </div>
 
             <!-- Gridstack Container -->
@@ -389,6 +389,8 @@
     import { GridStack } from 'gridstack';
     import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch, defineAsyncComponent, provide, readonly } from 'vue';
     import { useMyFetch } from '~/composables/useMyFetch';
+    import { useStepQuery } from '~/composables/useStepQuery';
+    import type { StepQuerySpec } from '~/composables/useStepQuery';
     import Toolbar from '@/components/dashboard/Toolbar.vue';
     import WidgetFrame from '@/components/dashboard/WidgetFrame.vue';
     import WidgetControls from '@/components/dashboard/WidgetControls.vue';
@@ -509,10 +511,10 @@ import { themes } from '@/components/dashboard/themes'
 
     function sourceBadgeClass(src: string): string {
         switch ((src || 'manual')) {
-            case 'chat': return 'text-[#A8542F] bg-[#F3E7DF] border-[#E8C9B5]';
+            case 'chat': return 'text-[#A8330F] bg-[#FBEFE4] border-[#E8C9B5]';
             case 'autopilot': return 'text-[#3f9e6a] bg-[#eef6f0] border-[#d7ebde]';
-            case 'restore': return 'text-[#6b6b6b] bg-[#F4F1EA] border-[#E7E5DD]';
-            default: return 'text-[#9a958c] bg-[#F4F1EA] border-[#E7E5DD]';   // manual
+            case 'restore': return 'text-[#6b6b6b] bg-[#F4EEE5] border-[#E9E0D3]';
+            default: return 'text-[#9a958c] bg-[#F4EEE5] border-[#E9E0D3]';   // manual
         }
     }
 
@@ -1177,7 +1179,87 @@ import { themes } from '@/components/dashboard/themes'
         if (filtered.length === rows.length) return widget;
         return { ...widget, last_step: { ...widget.last_step, data: { ...widget.last_step.data, rows: filtered } } };
     }
+    // ---- Server-side query path for large (Parquet-backed) steps ----------------
+    // DORMANT by default: this branch only activates when a step's data carries the
+    // EXACT signal `widget.last_step.data.source === 'parquet'`. For normal inline
+    // steps (no `source`, or `source === 'inline'`) the code below is never reached
+    // and the existing client-side filtering path is used unchanged.
+    const { queryStep } = useStepQuery();
+    // Reactive cache of server-returned results, keyed by `${stepId}|${specJSON}`.
+    const parquetCache = ref<Record<string, { rows: any[]; columns: any[]; total_rows: number }>>({});
+    const parquetVersion = ref(0);          // bumped when a server result lands → re-render
+    const _parquetInFlight = new Set<string>();
+
+    // A step is server-backed (rows not shipped) only on this exact signal.
+    function isParquetStep(widget: any): boolean {
+        return widget?.last_step?.data?.source === 'parquet';
+    }
+
+    // Map the current crossFilters state → the endpoint's filter shape.
+    function buildServerSpec(): StepQuerySpec {
+        const filters = (crossFilters.value || []).map(f => ({
+            col: f.column,
+            op: '=',
+            val: f.value,
+        }));
+        return { filters };
+    }
+
+    // Render-time accessor for a parquet-backed widget. Returns the widget with
+    // server-fetched rows when available; kicks off the fetch (once per spec) and
+    // returns the original widget meanwhile. A landed result bumps parquetVersion
+    // so the dashboard re-renders with the new rows.
+    function applyServerQueryToWidget(widget: any): any {
+        // depend on these so a new cross-filter / a landed result re-evaluates
+        const _cv = crossVersion.value;
+        const _pv = parquetVersion.value;
+
+        const stepId = widget?.last_step?.id;
+        if (!stepId) return widget;
+
+        const spec = buildServerSpec();
+        const key = `${stepId}|${JSON.stringify(spec)}`;
+        const cached = parquetCache.value[key];
+        if (cached) {
+            return {
+                ...widget,
+                last_step: {
+                    ...widget.last_step,
+                    data: {
+                        ...widget.last_step.data,
+                        rows: cached.rows,
+                        columns: cached.columns?.length ? cached.columns : widget.last_step.data.columns,
+                        total_rows: cached.total_rows,
+                    },
+                },
+            };
+        }
+
+        // Not cached yet → fetch once (fail-soft) and bump version on success.
+        if (!_parquetInFlight.has(key)) {
+            _parquetInFlight.add(key);
+            queryStep(stepId, spec)
+                .then((res) => {
+                    if (res) {
+                        parquetCache.value = {
+                            ...parquetCache.value,
+                            [key]: { rows: res.rows, columns: res.columns, total_rows: res.total_rows },
+                        };
+                        parquetVersion.value++;
+                    }
+                })
+                .finally(() => { _parquetInFlight.delete(key); });
+        }
+        // Meanwhile render the widget as-is (rows may be empty for a parquet step).
+        return widget;
+    }
+
     function getFilteredWidgetData(widget: any): any {
+        // Guarded server-side path — ONLY for steps explicitly flagged parquet.
+        if (isParquetStep(widget) && widget?.isVisualization) {
+            return applyServerQueryToWidget(widget);
+        }
+        // Default (inline) path — unchanged.
         return applyCrossToWidget(applyVizFilters(widget));
     }
 

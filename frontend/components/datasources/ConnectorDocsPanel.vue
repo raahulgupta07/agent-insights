@@ -1,10 +1,10 @@
 <template>
-  <div class="h-full overflow-y-auto bg-[#FBFAF6] px-5 py-5 text-sm">
+  <div class="h-full overflow-y-auto bg-[#F6F1EA] px-5 py-5 text-sm">
     <!-- Header -->
     <div class="flex items-center gap-2 mb-1">
-      <UIcon name="i-heroicons-book-open" class="w-4 h-4 text-[#C2683F]" />
+      <UIcon name="i-heroicons-book-open" class="w-4 h-4 text-[#C2541E]" />
       <h3 class="text-[15px] font-semibold text-[#1f2328]"
-          style="font-family: ui-serif, Georgia, 'Times New Roman', serif">How to get each value</h3>
+          style="font-family: 'Spectral', ui-serif, Georgia, serif">How to get each value</h3>
     </div>
     <p class="text-xs text-[#6b6b6b] leading-relaxed mb-4">{{ doc.overview }}</p>
 
@@ -15,7 +15,7 @@
       <ul class="space-y-1">
         <li v-for="(p, i) in doc.prerequisites" :key="i"
             class="text-xs text-[#6b6b6b] leading-snug flex gap-1.5">
-          <span class="text-[#C2683F] mt-0.5">•</span><span>{{ p }}</span>
+          <span class="text-[#C2541E] mt-0.5">•</span><span>{{ p }}</span>
         </li>
       </ul>
     </div>
@@ -28,7 +28,7 @@
       class="rounded-xl border bg-white px-3 py-3 mb-2.5 transition-all"
       :class="highlightField === card.name
         ? 'border-[#E8C9B5] shadow-[0_8px_22px_-14px_rgba(194,104,63,.5)]'
-        : 'border-[#E7E5DD]'"
+        : 'border-[#E9E0D3]'"
       @mouseenter="$emit('hover-field', card.name)"
       @mouseleave="$emit('hover-field', null)"
     >
@@ -37,13 +37,13 @@
         <span v-if="card.fd.required !== false"
               class="text-[9px] font-bold text-[#b4453a] bg-[#fbeeec] border border-[#f0cdc9] rounded-full px-1.5 leading-[14px]">REQUIRED</span>
         <span v-else
-              class="text-[9px] font-bold text-[#9a958c] bg-[#F4F1EA] border border-[#E7E5DD] rounded-full px-1.5 leading-[14px]">OPTIONAL</span>
+              class="text-[9px] font-bold text-[#9a958c] bg-[#F4EEE5] border border-[#E9E0D3] rounded-full px-1.5 leading-[14px]">OPTIONAL</span>
       </div>
 
       <p v-if="card.fd.what" class="text-xs text-[#6b6b6b] leading-snug mt-1.5">{{ card.fd.what }}</p>
 
       <div v-if="card.fd.where"
-           class="text-[11px] text-[#A8542F] bg-[#F3E7DF] border border-[#E8C9B5] rounded-md px-2 py-1.5 mt-2 leading-relaxed">
+           class="text-[11px] text-[#A8330F] bg-[#FBEFE4] border border-[#E8C9B5] rounded-md px-2 py-1.5 mt-2 leading-relaxed">
         {{ card.fd.where }}
       </div>
 
@@ -52,7 +52,7 @@
       </ol>
 
       <code v-if="card.fd.example"
-            class="inline-block mt-2 text-[11px] text-[#1f2328] bg-[#F4F1EA] border border-[#E7E5DD] rounded px-2 py-0.5"
+            class="inline-block mt-2 text-[11px] text-[#1f2328] bg-[#F4EEE5] border border-[#E9E0D3] rounded px-2 py-0.5"
             style="font-family: ui-monospace, Menlo, monospace">{{ card.fd.example }}</code>
 
       <div v-if="card.fd.gotcha"
@@ -63,7 +63,7 @@
 
     <!-- Friendly note when truly nothing to document -->
     <div v-if="!cards.length"
-         class="rounded-xl border border-[#E7E5DD] bg-white px-3 py-4 text-center text-xs text-[#9a958c]">
+         class="rounded-xl border border-[#E9E0D3] bg-white px-3 py-4 text-center text-xs text-[#9a958c]">
       Fill in the connection fields on the left. No extra guidance is available for this connector yet.
     </div>
 
@@ -82,7 +82,7 @@
     </div>
 
     <a v-if="doc.docsUrl" :href="doc.docsUrl" target="_blank" rel="noopener"
-       class="inline-flex items-center gap-1 mt-3 text-xs font-medium text-[#C2683F] hover:text-[#A8542F]">
+       class="inline-flex items-center gap-1 mt-3 text-xs font-medium text-[#C2541E] hover:text-[#A8330F]">
       <UIcon name="i-heroicons-arrow-top-right-on-square" class="w-3.5 h-3.5" />
       Official documentation
     </a>

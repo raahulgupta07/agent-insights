@@ -34,7 +34,7 @@
                     </button>
                 </div>
                 <div class="mt-4 font-normal">
-                    <a :href="shareUrl" target="_blank" class="text-[#C2683F] hover:underline">
+                    <a :href="shareUrl" target="_blank" class="text-[#C2541E] hover:underline">
                         <Icon name="heroicons:arrow-top-right-on-square" />
                         View shared conversation</a>
                 </div>

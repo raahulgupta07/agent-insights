@@ -416,8 +416,79 @@ Versioned feature feed surfaced as a 🔔 bell popover in TopNav (before profile
   (explicit import, between New-Report and profile). RULE: every shipped feature bumps
   `VERSION_HYBRID` + adds a `CHANGELOG_HYBRID.md` entry.
 
-**Current state (2026-06-25):** image `cityagent-analytics:dev` on `:3007`, branch `main`,
-mig head **`agentchan1`**, `VERSION_HYBRID`=**1.15.0**.
+**Current state (2026-06-26):** image `cityagent-analytics:dev` on `:3007`, branch `main`,
+mig head **`agentchan1`**, `VERSION_HYBRID`=**1.24.0** (BAKED + live, healthy, users=2). v1.22
+= full warm-theme sweep (every page + 148 comps). **v1.23.0 BAKED** = Parquet result storage +
+interactive query endpoint (flag `HYBRID_PARQUET_RESULTS` **default ON**) — large step results
+(≥`HYBRID_PARQUET_MIN_ROWS`=2000 rows) offload to compressed Parquet on `ca_uploads`; dashboards
+push filter/sort/agg to DuckDB via `POST /steps/{id}/query` (allow-listed, no raw SQL). See
+`docs/parquet-results.md`. `scripts/safe-upgrade.sh` = guarded bake (backup DB+uploads, health-gate,
+auto-rollback).
+
+**v1.24.0 Per-agent Channels + Email/SMTP + Docker build speedups (BAKED + live):**
+- **Channels** + **Email / SMTP** are now their OWN left-rail tabs in the Studio MANAGE group
+  (split from the old combined "Access & Channels"): rail = Settings · Access & Members · Channels ·
+  Email / SMTP · Members & Share.
+- **Channels tab** (`components/studio/StudioChannels.vue`) — org-style **two-pane picker**
+  (platform list + detail pane, status dots, set-up/reconfigure/enable/disable/delete). Reuses the
+  existing Slack/Teams/WhatsApp/AI-Mailbox config modals + Telegram/MCP inline; same config method,
+  org layout. Channels code REMOVED from `StudioAccess.vue` (now "Access & Members" = who/model/
+  members/connections only).
+- **Email / SMTP tab** (`components/studio/StudioEmail.vue`) — per-agent outbound mail: mode radio
+  **global default** (inherit, zero-config) OR **custom SMTP for this agent**. Custom fields mirror
+  org SMTP (host/port/security/user/pass/from/validate-certs) + connection test. Stored in
+  `Studio.config['smtp']` (Fernet `password_enc`, no migration; `mode` key gates it).
+  - Backend resolver `email_client_resolver.py`: new **per-agent SMTP tier** wins over org/global —
+    `get_studio_smtp(db, studio_id)` (only when `mode=='custom'`+host), `_studio_smtp_resolved`,
+    `choose_outbound(..., studio_smtp=)`, `resolve_outbound(..., studio_id=)`. `studio_id` threaded
+    through `notification_service` (dispatch + send_custom_email + _resolved_send), report-share
+    (`report.py`, now passes db+org+studio_id → org-SMTP now applies to shares too), and channel
+    replies (`email_send_service.py`, `studio_id=report.studio_id`). NULL studio / global mode =
+    byte-identical old behavior.
+  - Routes `GET/PUT/POST-test /api/studios/{id}/smtp` in `external_platform.py` (flag
+    `HYBRID_AGENT_CHANNELS`, owner/editor via `_require_channel_manager`). `StudioSmtpSchema`/
+    `StudioSmtpUpdate` mirror `OrgSmtp*`. Verified live: precedence=studio_smtp, routes registered.
+- **Dockerfile speedups** — dropped non-deterministic `apt-get upgrade -y` from backend +
+  frontend builder stages (pin to base image = cache-stable; runtime `base` keeps its security
+  upgrade); added BuildKit cache mounts on `yarn generate`
+  (`node_modules/.cache` + `node_modules/.vite`, `sharing=locked`) → warm vite cache makes repeat
+  FE rebuilds much faster (v1.24 FE rebuild hit "exporting layers" in seconds vs cold ~4min).
+  NOT caching `.nuxt` (stale-module risk). Bake = slow only because `nuxt generate` is inherently
+  minutes on first/cold; backend-only changes skip it (FE stage cache-hits).
+
+**v1.20 Nav rail + v1.21 Settings restyle (BAKED):** killed the top-nav **dropdowns**
+(Workspace/Build/Manage/Settings). Top items now route directly to the group's first page; a contextual
+**left rail** (`components/nav/AppRail.vue`) shows ONLY the active group's items (one group at a time, like
+the Skills sub-rail). Nav model extracted to shared composable `composables/useAppNav.ts` (single source for
+TopNav + AppRail — `visibleGroups`/`activeGroup`/`isRouteActive`/`firstHref`/`showMcpModal`; module-level
+singleton refs OK since SPA/`nuxt generate`). AppRail mounted in `layouts/default.vue` non-report branch
+(`<div class="flex"><AppRail/><div class="flex-1 overflow-y-auto"><slot/></div></div>`); self-hides when
+`activeGroup` is null (Home, Agent Studios [direct, excluded], detail pages w/ own rail). Studio-detail tabs
+persist in URL (`?tab=`). **Warm-theme restyle (token-only migration, NO icon/logo/logic changes — applied
+via per-file perl: `#C2683F`→`#C2541E`, `#A8542F`→`#A8330F`, `#E7E5DD`→`#E9E0D3`, `bg-[#FBFAF6]`→`bg-[#F6F1EA]`,
+`bg-[#F4F1EA]`→`bg-[#F4EEE5]`, `bg-[#F3E7DF]`→`bg-[#FBEFE4]`, `ui-serif,Georgia[,'Times New Roman'],serif`
+→`'Spectral',...`, h1 `text-2xl font-semibold text-[#1f2328]`→`text-[32px] font-medium text-[#211B14]`):**
+Workspace Templates (full design rewrite); Build×5 (Knowledge/Instructions[ConsoleInstructions]/Queries/Skills/Memory);
+Manage×3 (Connectors/Evals/Workflows); Settings×11 + `layouts/settings.vue` + FolderSyncPanel + Email/WhatsApp/Teams/Slack
+integration modals. DESIGN MOCKS at `~/Downloads/login-screen-redesign-request/project/*.dc.html`
+(Studios/Home/Workspace/Build/Manage/Settings v2). Pending: Workspace Reports/Dashboards/Presentations/Spreadsheets/Scheduled
++ Monitoring (own `layout: 'monitoring'` console, sits outside AppRail).
+LANDMINE: pages with their OWN sub-rail (Skills category rail, Knowledge) show TWO rails (group rail + page rail) — acceptable.
+LANDMINE: stack runs on **`docker-compose.build.yaml`** (ca-app/ca-postgres/ca-redis, vol `ca_postgres_data`).
+NEVER recreate via plain `docker-compose.yaml` — different project (dash-* names, vol `postgres_data`) = fresh empty DB.
+
+**v1.17–1.18 Claude Design rollout (FE restyle, BAKED, see DEVLOG):** warm palette app-wide
+(bg `#F6F1EA`, accent `#C2541E`/`#A8330F`, Spectral + Hanken via `useHead` from TopNav). Login
+(v1.17) + Studios/Home/Nav/Reports + new floating **AgentThinking** status widget
+(`components/agent/AgentThinking.vue`, global in `layouts/default.vue`, REAL counts from
+`/data_sources`+`/llm/models`, no fakes) (v1.18). TopNav now full-width (no `max-w` centering).
+Report scope = segmented tab; report cards keep REAL `thumbnail_url` preview. Studio **detail** page
+also rethemed warm. **FIXED studio-Open crash** (`reading 'name' of null` on REFRESH): teleported
+`FolderSyncSetupModal`/`FolderSyncCard` read `studio.name` in a separate reactive scope during the
+cold-load null window → `v-if="studio"` + `studio?.name`. LANDMINE: teleported modal/popover props
+that read a fetched ref are NOT covered by the parent's `v-else-if="data"` guard — `?.`-guard them.
+New `scripts/fe-sync.sh` = host `nuxt generate` + `docker cp`→ca-app dist (no rebuild, EPHEMERAL).
+Local admin reset to `admin@cityagent.io`/`Admin12345` (fastapi-users = **argon2id**, not bcrypt).
 
 **v1.13–1.15 (2026-06-25):**
 - **v1.13.0** super-admin DIRECT user create (no invite): `POST /api/organizations/{id}/members/create-user`

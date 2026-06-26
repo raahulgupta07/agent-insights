@@ -40,7 +40,7 @@
                 <div v-if="f.path" class="text-[11px]"><span class="text-gray-400">Path:</span> {{ f.path }}</div>
                 <div v-if="f.mime_type" class="text-[11px]"><span class="text-gray-400">Type:</span> {{ f.mime_type }}</div>
                 <div v-if="f.modified_at" class="text-[11px]"><span class="text-gray-400">Modified:</span> {{ f.modified_at }}</div>
-                <a v-if="f.web_url" :href="f.web_url" target="_blank" rel="noopener" class="text-[11px] text-[#C2683F] hover:underline inline-flex items-center gap-1">
+                <a v-if="f.web_url" :href="f.web_url" target="_blank" rel="noopener" class="text-[11px] text-[#C2541E] hover:underline inline-flex items-center gap-1">
                   Open <Icon name="heroicons-arrow-top-right-on-square" class="w-3 h-3" />
                 </a>
               </div>

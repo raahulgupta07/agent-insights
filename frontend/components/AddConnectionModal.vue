@@ -152,7 +152,7 @@
           </span>
           <span
             v-else
-            class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded border bg-[#F6EFEA] text-[#A8542F] border-[#E8C9B5]"
+            class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded border bg-[#F6EFEA] text-[#A8330F] border-[#E8C9B5]"
           >
             <Spinner class="w-3 h-3" />
             Indexing

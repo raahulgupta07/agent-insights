@@ -50,12 +50,12 @@
             :class="[
               'flex flex-col items-center justify-center gap-2 border rounded-lg py-3 px-2 transition',
               authType === opt.value
-                ? 'border-[#C2683F] ring-1 ring-[#C2683F] bg-[#F6EFEA]'
+                ? 'border-[#C2541E] ring-1 ring-[#C2541E] bg-[#F6EFEA]'
                 : 'border-gray-200 hover:border-gray-300 bg-white',
             ]">
             <img v-if="opt.img" :src="opt.img" :alt="opt.label" class="w-6 h-6" />
             <UIcon v-else :name="opt.icon!" class="w-6 h-6 text-gray-600" />
-            <span :class="['text-xs font-medium text-center leading-tight', authType === opt.value ? 'text-[#A8542F]' : 'text-gray-700']">{{ opt.label }}</span>
+            <span :class="['text-xs font-medium text-center leading-tight', authType === opt.value ? 'text-[#A8330F]' : 'text-gray-700']">{{ opt.label }}</span>
           </button>
         </div>
 
@@ -146,6 +146,25 @@
           <label class="flex items-center gap-2 mb-4 cursor-pointer">
             <UToggle v-model="requireAuthPass" color="primary" /><span class="text-sm">Require DMARC/DKIM pass (recommended)</span>
           </label>
+
+          <!-- Per-agent audience (only when scoped to a studio) -->
+          <div v-if="props.studioId" class="mb-4">
+            <label class="block text-sm font-medium mb-2 text-[#1f2328]">Who can use this channel</label>
+            <div class="space-y-2">
+              <label
+                v-for="opt in audienceOptions"
+                :key="opt.value"
+                class="flex items-start gap-2 rounded-lg border p-2.5 cursor-pointer transition-colors"
+                :class="audience === opt.value ? 'border-[#E8C9B5] bg-[#F6EFEA]' : 'border-[#E9E0D3] hover:border-[#dcd9cf]'"
+              >
+                <input type="radio" :value="opt.value" v-model="audience" class="mt-0.5 text-[#C2541E] focus:ring-[#C2541E]" />
+                <span>
+                  <span class="block text-xs font-medium text-[#1f2328]">{{ opt.label }}</span>
+                  <span class="block text-[11px] text-gray-500">{{ opt.hint }}</span>
+                </span>
+              </label>
+            </div>
+          </div>
         </div>
 
         <div class="flex items-center gap-2">
@@ -153,7 +172,7 @@
             class="border border-gray-300 text-gray-700 text-sm px-3 py-1.5 rounded-md hover:bg-gray-50 disabled:opacity-50">
             {{ testingForm ? 'Testing…' : 'Test connection' }}
           </button>
-          <button type="submit" :disabled="submitting" class="bg-[#C2683F] hover:bg-[#A8542F] text-white text-sm px-3 py-1.5 rounded-md disabled:opacity-50">
+          <button type="submit" :disabled="submitting" class="bg-[#C2541E] hover:bg-[#A8330F] text-white text-sm px-3 py-1.5 rounded-md disabled:opacity-50">
             {{ submitting ? 'Connecting…' : 'Connect' }}
           </button>
         </div>
@@ -217,9 +236,17 @@ const props = defineProps<{
   integrationData?: any
   analystName?: string
   prefillDomains?: string[]
+  studioId?: string
 }>()
 const emit = defineEmits(['close', 'updated'])
 const toast = useToast()
+
+// Per-agent audience (only used when studioId is set)
+const audience = ref<'members' | 'anyone'>('members')
+const audienceOptions = [
+  { value: 'members', label: 'Org members only', hint: 'Only members of your organization can use this channel.' },
+  { value: 'anyone', label: 'Anyone', hint: 'Anyone who reaches the mailbox can ask questions.' },
+]
 
 const cfg = computed(() => props.integrationData?.platform_config || null)
 
@@ -344,7 +371,12 @@ async function testForm() {
 async function connect() {
   submitting.value = true
   try {
-    const res = await useMyFetch('/api/settings/integrations/email', { method: 'POST', body: buildBody() })
+    const body = buildBody()
+    const url = props.studioId
+      ? `/api/studios/${props.studioId}/channels/email`
+      : '/api/settings/integrations/email'
+    if (props.studioId) body.audience = audience.value
+    const res = await useMyFetch(url, { method: 'POST', body })
     if (res.status.value === 'success') {
       toast.add({ title: 'Email connected', description: 'Email integration successful', color: 'green' })
       emit('updated'); emit('close')

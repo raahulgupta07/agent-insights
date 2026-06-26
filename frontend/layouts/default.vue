@@ -4,7 +4,7 @@
     <div v-if="showGlobalOnboardingBanner" class="fixed top-0 start-0 end-0 z-[1000]">
       <div
         @click="router.push(showGlobalOnboardingBannerLink)"
-        class="text-center cursor-pointer text-white text-sm bg-[#C2683F] hover:bg-[#A8542F] py-2 flex items-center justify-center shadow-md"
+        class="text-center cursor-pointer text-white text-sm bg-[#C2541E] hover:bg-[#A8330F] py-2 flex items-center justify-center shadow-md"
       >
         <UIcon name="i-heroicons-rocket-launch" class="h-5 me-2" />
         <span>{{ showGlobalOnboardingBannerText }}</span>
@@ -30,21 +30,30 @@
             <slot />
           </div>
         </div>
-        <!-- Every other page: one scroll container under the bar. -->
-        <div v-else class="h-full overflow-y-auto">
-          <slot />
+        <!-- Every other page: contextual left rail (AppRail, self-hides when the
+             route has no active nav group) + one scroll container for content. -->
+        <div v-else class="flex h-full overflow-hidden">
+          <AppRail />
+          <div class="flex-1 min-w-0 h-full overflow-y-auto">
+            <slot />
+          </div>
         </div>
       </div>
     </div>
 
     <!-- Global ⌘K / Ctrl+K command palette -->
     <CommandPalette />
+
+    <!-- Floating City Agent status widget (bottom-right) -->
+    <AgentThinking />
   </div>
 </template>
 
 <script setup lang="ts">
   import TopNav from '~/components/nav/TopNav.vue'
+  import AppRail from '~/components/nav/AppRail.vue'
   import ChatHistoryRail from '~/components/nav/ChatHistoryRail.vue'
+  import AgentThinking from '~/components/agent/AgentThinking.vue'
   import { useCan } from '~/composables/usePermissions'
 
   const route = useRoute()

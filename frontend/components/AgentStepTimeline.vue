@@ -43,7 +43,7 @@ function nodeClass(s: AgentStep): string {
   if (s.status === 'done') return 'bg-[#3F7A4F] border-[#3F7A4F]'
   if (s.status === 'warn') return 'bg-[#B5822F] border-[#B5822F]'
   // run
-  return 'bg-[#C2683F] border-[#C2683F] step-pulse'
+  return 'bg-[#C2541E] border-[#C2541E] step-pulse'
 }
 
 function badgeClass(s: AgentStep): string {
@@ -67,7 +67,7 @@ function badgeClass(s: AgentStep): string {
     >
       <span
         v-if="isRunning"
-        class="w-3.5 h-3.5 rounded-full border-2 border-[#E8C9B5] border-t-[#C2683F] animate-spin flex-none"
+        class="w-3.5 h-3.5 rounded-full border-2 border-[#E8C9B5] border-t-[#C2541E] animate-spin flex-none"
       />
       <Icon v-else name="heroicons:check-circle" class="w-4 h-4 text-[#3F7A4F] flex-none" />
       <span class="serif">{{ pillLabel }}</span>

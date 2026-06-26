@@ -36,7 +36,7 @@
               <Icon
                 :name="inst.isEdit ? 'heroicons-pencil' : 'heroicons-plus-circle'"
                 class="w-3 h-3 shrink-0"
-                :class="inst.isEdit ? 'text-[#C2683F]' : 'text-green-500'"
+                :class="inst.isEdit ? 'text-[#C2541E]' : 'text-green-500'"
               />
               <span class="text-xs text-gray-700 truncate">{{ inst.title }}</span>
             </div>

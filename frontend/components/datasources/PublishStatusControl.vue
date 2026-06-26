@@ -28,7 +28,7 @@
                         <UIcon
                             v-if="item.value === status"
                             name="heroicons-check"
-                            class="w-3.5 h-3.5 text-[#C2683F]"
+                            class="w-3.5 h-3.5 text-[#C2541E]"
                         />
                     </div>
                     <div class="text-[11px] text-gray-500 whitespace-normal">{{ item.description }}</div>

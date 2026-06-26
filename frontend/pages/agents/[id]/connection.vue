@@ -181,7 +181,7 @@
                         v-for="conn in availableConnections"
                         :key="conn.id"
                         class="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50"
-                        :class="{ 'border-[#C2683F] bg-[#F6EFEA]': selectedConnectionId === conn.id }"
+                        :class="{ 'border-[#C2541E] bg-[#F6EFEA]': selectedConnectionId === conn.id }"
                     >
                         <input
                             type="radio"
@@ -198,7 +198,7 @@
                         <UIcon
                             v-if="selectedConnectionId === conn.id"
                             name="heroicons-check-circle-solid"
-                            class="w-5 h-5 text-[#C2683F]"
+                            class="w-5 h-5 text-[#C2541E]"
                         />
                     </label>
                 </div>

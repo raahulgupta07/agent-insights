@@ -231,7 +231,7 @@ function typeLabel(t: ProposalType): string {
 
 function typeClass(t: ProposalType): string {
   switch (t) {
-    case 'semantic': return 'bg-[#F6EFEA] text-[#A8542F]'
+    case 'semantic': return 'bg-[#F6EFEA] text-[#A8330F]'
     case 'metric': return 'bg-purple-50 text-purple-700'
     case 'query': return 'bg-indigo-50 text-indigo-700'
     default: return 'bg-gray-100 text-gray-600'

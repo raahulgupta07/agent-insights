@@ -11,14 +11,14 @@
           :key="t.key"
           class="px-2 py-1 rounded-md text-xs border transition-colors"
           :class="theme === t.key
-            ? 'border-[#C2683F] text-[#C2683F]'
+            ? 'border-[#C2541E] text-[#C2541E]'
             : 'border-gray-200 text-gray-500 hover:text-gray-700'"
           @click="theme = t.key"
         >
           {{ t.label }}
         </button>
         <button
-          class="ml-2 px-2.5 py-1.5 rounded-md bg-[#C2683F] hover:bg-[#A8542F] text-white text-xs flex items-center gap-1 transition-colors disabled:opacity-50"
+          class="ml-2 px-2.5 py-1.5 rounded-md bg-[#C2541E] hover:bg-[#A8330F] text-white text-xs flex items-center gap-1 transition-colors disabled:opacity-50"
           :disabled="!slides.length || exporting"
           @click="exportPptx"
         >
@@ -62,7 +62,7 @@
           </div>
         </div>
         <button
-          class="w-full rounded-md border border-dashed border-gray-300 py-2 text-[11px] text-gray-400 hover:border-[#C2683F] hover:text-[#C2683F] transition-colors"
+          class="w-full rounded-md border border-dashed border-gray-300 py-2 text-[11px] text-gray-400 hover:border-[#C2541E] hover:text-[#C2541E] transition-colors"
           @click="addSlide"
         >
           + Add slide
@@ -154,7 +154,7 @@ const visualizationList = computed(() =>
 
 const themeClass = computed(() => `theme-${theme.value}`)
 
-const barColor = computed(() => (theme.value === 'dark' ? '#e9c4ac' : '#C2683F'))
+const barColor = computed(() => (theme.value === 'dark' ? '#e9c4ac' : '#C2541E'))
 
 // Per-theme background fill for the exported pptx (hex without '#').
 const themeBg: Record<ThemeKey, string> = {
@@ -254,9 +254,9 @@ async function exportPptx() {
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-.slide-thumb.thumb-active { outline: 2px solid #C2683F; outline-offset: 1px; }
+.slide-thumb.thumb-active { outline: 2px solid #C2541E; outline-offset: 1px; }
 
 .theme-clay { background: linear-gradient(135deg, #FBF7F4, #F3E7DF); color: #3b2a20; }
 .theme-dark { background: linear-gradient(135deg, #1f2430, #2c3444); color: #f3f4f6; }
-.theme-edit { background: #ffffff; color: #1f2937; border-left: 6px solid #C2683F; }
+.theme-edit { background: #ffffff; color: #1f2937; border-left: 6px solid #C2541E; }
 </style>

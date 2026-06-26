@@ -10,7 +10,7 @@
       <div class="relative flex items-center gap-2">
         <div class="relative flex-1">
           <UIcon name="heroicons:magnifying-glass" class="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input v-model="resourceSearch" type="text" :placeholder="viewMode === 'files' ? 'Search files...' : 'Search resources...'" class="border border-gray-300 rounded-lg ps-9 pe-3 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2683F]" />
+          <input v-model="resourceSearch" type="text" :placeholder="viewMode === 'files' ? 'Search files...' : 'Search resources...'" class="border border-gray-300 rounded-lg ps-9 pe-3 py-2 w-full h-9 text-sm focus:outline-none focus:border-[#C2541E]" />
         </div>
         <button
           ref="filterButtonRef"
@@ -43,7 +43,7 @@
               @click="setSelectedFilter('selected')"
             >
               <span>Selected</span>
-              <UIcon v-if="filters.selectedState === 'selected'" name="heroicons-check" class="w-4 h-4 text-[#C2683F]" />
+              <UIcon v-if="filters.selectedState === 'selected'" name="heroicons-check" class="w-4 h-4 text-[#C2541E]" />
             </button>
             <button
               type="button"
@@ -51,7 +51,7 @@
               @click="setSelectedFilter('unselected')"
             >
               <span>Unselected</span>
-              <UIcon v-if="filters.selectedState === 'unselected'" name="heroicons-check" class="w-4 h-4 text-[#C2683F]" />
+              <UIcon v-if="filters.selectedState === 'unselected'" name="heroicons-check" class="w-4 h-4 text-[#C2541E]" />
             </button>
           </div>
         </div>
@@ -68,7 +68,7 @@
               @click="setSort('name')"
             >
               <span>Name</span>
-              <UIcon v-if="sort.key === 'name'" name="heroicons-check" class="w-4 h-4 text-[#C2683F]" />
+              <UIcon v-if="sort.key === 'name'" name="heroicons-check" class="w-4 h-4 text-[#C2541E]" />
             </button>
             <button
               type="button"
@@ -76,7 +76,7 @@
               @click="setSort('type')"
             >
               <span>Type</span>
-              <UIcon v-if="sort.key === 'type'" name="heroicons-check" class="w-4 h-4 text-[#C2683F]" />
+              <UIcon v-if="sort.key === 'type'" name="heroicons-check" class="w-4 h-4 text-[#C2541E]" />
             </button>
           </div>
         </div>
@@ -194,7 +194,7 @@
     </div>
 
     <div v-if="showSave && canUpdate && totalResources > 0" class="mt-3 flex justify-end">
-      <button @click="onSave" :disabled="saving" class="bg-[#C2683F] hover:bg-[#A8542F] text-white text-xs font-medium py-1.5 px-3 rounded disabled:opacity-50">
+      <button @click="onSave" :disabled="saving" class="bg-[#C2541E] hover:bg-[#A8330F] text-white text-xs font-medium py-1.5 px-3 rounded disabled:opacity-50">
         <span v-if="saving">Saving...</span>
         <span v-else>{{ saveLabel }}</span>
       </button>

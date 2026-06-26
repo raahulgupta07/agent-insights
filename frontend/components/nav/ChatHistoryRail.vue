@@ -1,7 +1,7 @@
 <template>
   <!-- Lives inside the fixed shell's bounded zone → just fill its height. -->
   <aside
-    class="shrink-0 h-full border-e border-gray-200/80 bg-[#FBFAF6] flex flex-col transition-[width] duration-150"
+    class="shrink-0 h-full border-e border-gray-200/80 bg-[#F6F1EA] flex flex-col transition-[width] duration-150"
     :class="collapsed ? 'w-12' : 'w-64'"
   >
     <!-- ===== Collapsed: icon-only rail ===== -->
@@ -10,7 +10,7 @@
         <button
           @click="createNewReport"
           :disabled="creatingReport"
-          class="flex items-center justify-center w-8 h-8 rounded-md text-white bg-[#C2683F] hover:bg-[#A8542F] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          class="flex items-center justify-center w-8 h-8 rounded-md text-white bg-[#C2541E] hover:bg-[#A8330F] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           title="New report"
         >
           <Spinner v-if="creatingReport" class="animate-spin w-[18px] h-[18px]" />
@@ -33,7 +33,7 @@
         <button
           @click="createNewReport"
           :disabled="creatingReport"
-          class="flex-1 flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-[13px] font-medium text-white bg-[#C2683F] hover:bg-[#A8542F] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          class="flex-1 flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-[13px] font-medium text-white bg-[#C2541E] hover:bg-[#A8330F] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           <span class="flex items-center justify-center w-[18px] h-[18px]">
             <Spinner v-if="creatingReport" class="animate-spin" />
@@ -61,7 +61,7 @@
             v-model="searchTerm"
             type="text"
             placeholder="Search"
-            class="w-full ps-8 pe-2 py-1.5 text-[13px] rounded-md border border-gray-200 bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#C2683F] focus:border-[#C2683F] transition-colors"
+            class="w-full ps-8 pe-2 py-1.5 text-[13px] rounded-md border border-gray-200 bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#C2541E] focus:border-[#C2541E] transition-colors"
           />
         </div>
       </div>
@@ -100,7 +100,7 @@
                     :ref="el => registerRenameInput(row.id, el)"
                     v-model="renameDraft"
                     type="text"
-                    class="flex-1 min-w-0 px-2 py-1 text-[13px] rounded border border-[#C2683F] focus:outline-none focus:ring-1 focus:ring-[#C2683F]"
+                    class="flex-1 min-w-0 px-2 py-1 text-[13px] rounded border border-[#C2541E] focus:outline-none focus:ring-1 focus:ring-[#C2541E]"
                     @keydown.enter.prevent="commitRename(row)"
                     @keydown.esc.prevent="cancelRename"
                     @blur="commitRename(row)"

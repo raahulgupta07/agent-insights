@@ -40,7 +40,7 @@
                 <p class="text-xs text-gray-400 mb-3">Recipients will receive an email with results after each scheduled run.</p>
 
                 <!-- Recipient input -->
-                <div class="flex flex-wrap items-center gap-1.5 border border-gray-200 rounded-md px-2 py-1.5 min-h-[38px] focus-within:ring-1 focus-within:ring-[#C2683F] focus-within:border-[#C2683F] bg-white">
+                <div class="flex flex-wrap items-center gap-1.5 border border-gray-200 rounded-md px-2 py-1.5 min-h-[38px] focus-within:ring-1 focus-within:ring-[#C2541E] focus-within:border-[#C2541E] bg-white">
                     <span v-for="(sub, idx) in subscribers" :key="idx"
                         class="inline-flex items-center gap-1 bg-gray-100 text-gray-700 text-xs px-2 py-0.5 rounded-full">
                         {{ sub.type === 'user' ? getMemberName(sub.id) : sub.address }}
@@ -83,7 +83,7 @@
                     <button
                         @click="scheduleReport"
                         :disabled="isSaving"
-                        class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-[#C2683F] border border-transparent rounded-md hover:bg-[#A8542F] disabled:opacity-40"
+                        class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-[#C2541E] border border-transparent rounded-md hover:bg-[#A8330F] disabled:opacity-40"
                     >
                         <Spinner v-if="isSaving" class="w-3.5 h-3.5" />
                         Schedule

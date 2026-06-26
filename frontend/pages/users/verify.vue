@@ -19,7 +19,7 @@
                         {{ $t('auth.verifyDisabled') }}
                     </p>
                     <div class="mt-5">
-                        <NuxtLink to="/users/sign-in" class="text-[#C2683F] hover:text-[#A8542F]">
+                        <NuxtLink to="/users/sign-in" class="text-[#C2541E] hover:text-[#A8330F]">
                             {{ $t('auth.backToSignIn') }}
                         </NuxtLink>
                     </div>

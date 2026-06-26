@@ -67,7 +67,7 @@
                                         <span class="text-[13px]">Auto</span>
                                         <span class="ms-2 text-[11px] text-gray-400">picks for you</span>
                                     </div>
-                                    <Icon v-if="!internalSelectedStudioId" name="heroicons-check" class="w-4 h-4 text-[#C2683F] flex-shrink-0" />
+                                    <Icon v-if="!internalSelectedStudioId" name="heroicons-check" class="w-4 h-4 text-[#C2541E] flex-shrink-0" />
                                 </div>
                                 <div class="my-1 border-t border-gray-100" />
                             </template>
@@ -89,7 +89,7 @@
                                         <span class="text-sm leading-none">{{ s.avatar || '🎬' }}</span>
                                         <span class="ms-2 text-[13px] truncate">{{ s.name }}</span>
                                     </div>
-                                    <Icon v-if="internalSelectedStudioId === s.id" name="heroicons-check" class="w-4 h-4 text-[#C2683F] flex-shrink-0" />
+                                    <Icon v-if="internalSelectedStudioId === s.id" name="heroicons-check" class="w-4 h-4 text-[#C2541E] flex-shrink-0" />
                                 </div>
                                 <NuxtLink
                                     v-if="STUDIOS_ONLY"
@@ -121,7 +121,7 @@
                                         <Icon name="heroicons-bolt" class="h-4 w-4 text-gray-500 me-2" />
                                         <span class="text-[13px]">Auto</span>
                                     </div>
-                                    <Icon v-if="isAutoMode" name="heroicons-check" class="w-4 h-4 text-[#C2683F]" />
+                                    <Icon v-if="isAutoMode" name="heroicons-check" class="w-4 h-4 text-[#C2541E]" />
                                 </div>
                                 <div class="my-1 border-t border-gray-100" />
                                 <div
@@ -147,7 +147,7 @@
                                             class="ms-2 flex-shrink-0 text-[10px] text-gray-400 border border-gray-200 rounded px-1 py-0.5"
                                         >Service account</span>
                                     </div>
-                                    <Icon v-if="!isAutoMode && isSelected(ds)" name="heroicons-check" class="w-4 h-4 text-[#C2683F] flex-shrink-0" />
+                                    <Icon v-if="!isAutoMode && isSelected(ds)" name="heroicons-check" class="w-4 h-4 text-[#C2541E] flex-shrink-0" />
                                 </div>
                             </template>
 
@@ -169,7 +169,7 @@
                                     <button
                                         type="button"
                                         :disabled="connectingId === ds.id"
-                                        class="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 text-[11px] text-[#C2683F] bg-[#F6EFEA] border border-[#E8C9B5] rounded-md hover:bg-[#F4E5DA] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                                        class="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 text-[11px] text-[#C2541E] bg-[#F6EFEA] border border-[#E8C9B5] rounded-md hover:bg-[#F4E5DA] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                                         @click.stop="openCredentialsModal(ds)"
                                     >
                                         <Spinner v-if="connectingId === ds.id" class="w-3 h-3" />

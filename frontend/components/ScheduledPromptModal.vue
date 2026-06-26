@@ -8,7 +8,7 @@
                         <NuxtLink
                             v-if="isEditing && reportId"
                             :to="`/reports/${reportId}`"
-                            class="mt-0.5 inline-flex items-center gap-1 text-[11px] text-[#C2683F] hover:text-[#A8542F]"
+                            class="mt-0.5 inline-flex items-center gap-1 text-[11px] text-[#C2541E] hover:text-[#A8330F]"
                             @click="isOpen = false"
                         >
                             <Icon name="heroicons:chat-bubble-left-right" class="w-3 h-3" />
@@ -91,7 +91,7 @@
                                 :aria-pressed="recurDays.includes(d.value)"
                                 class="flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-medium border transition-colors"
                                 :class="recurDays.includes(d.value)
-                                    ? 'bg-[#C2683F] text-white border-[#C2683F]'
+                                    ? 'bg-[#C2541E] text-white border-[#C2541E]'
                                     : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'"
                             >
                                 {{ d.short }}
@@ -113,7 +113,7 @@
                 <button
                     @click="isActive = !isActive"
                     class="relative inline-flex h-4 w-7 items-center rounded-full transition-colors"
-                    :class="isActive ? 'bg-[#C2683F]' : 'bg-gray-300'"
+                    :class="isActive ? 'bg-[#C2541E]' : 'bg-gray-300'"
                 >
                     <span class="inline-block h-3 w-3 rounded-full bg-white transition-transform" :class="isActive ? 'translate-x-3.5' : 'translate-x-0.5'" />
                 </button>
@@ -131,7 +131,7 @@
                 <p v-if="promptMentionsEmail" class="text-[11px] text-amber-600 mt-1 ms-6">
                     {{ $t('scheduledPrompt.promptSendsEmailHint') }}
                 </p>
-                <div v-if="sendSummaryEmail" class="flex flex-wrap items-center gap-1 border border-gray-200 rounded px-2 py-1 min-h-[30px] mt-2 ms-6 focus-within:ring-1 focus-within:ring-[#C2683F] focus-within:border-[#C2683F] bg-white">
+                <div v-if="sendSummaryEmail" class="flex flex-wrap items-center gap-1 border border-gray-200 rounded px-2 py-1 min-h-[30px] mt-2 ms-6 focus-within:ring-1 focus-within:ring-[#C2541E] focus-within:border-[#C2541E] bg-white">
                     <span v-for="(sub, idx) in subscribers" :key="idx"
                         class="inline-flex items-center gap-0.5 bg-gray-100 text-gray-600 text-[11px] px-1.5 py-0.5 rounded-full">
                         {{ sub.type === 'user' ? getMemberName(sub.id) : sub.address }}

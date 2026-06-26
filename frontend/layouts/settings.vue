@@ -4,7 +4,7 @@
              Each /settings/* tab is its own standalone page (nav lives in the
              top-bar "Settings ▾" dropdown). Title + subtitle come from the
              active tab so every page reads like Monitoring/Queries/etc. -->
-        <div class="flex justify-center px-4 md:px-6 text-sm bg-[#FBFAF6] min-h-full">
+        <div class="flex justify-center px-4 md:px-6 text-sm bg-[#F6F1EA] min-h-full">
             <div class="w-full max-w-7xl py-2 text-[#1f2328]">
                 <!-- Page heading (per-tab) -->
                 <div class="mb-6 pt-2">
@@ -18,7 +18,7 @@
                 </div>
 
                 <!-- Page content -->
-                <div class="bg-white border border-[#E7E5DD] rounded-2xl p-6 md:p-8">
+                <div class="bg-white border border-[#E9E0D3] rounded-2xl p-6 md:p-8">
                     <slot />
                 </div>
             </div>

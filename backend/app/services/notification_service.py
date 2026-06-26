@@ -55,11 +55,13 @@ class NotificationService:
         locale: Optional[str] = None,
         db=None,
         organization_id: Optional[str] = None,
+        studio_id: Optional[str] = None,
     ) -> NotifyResponse:
         """Send notifications across multiple channels. Failures in one channel don't block others.
 
         When ``db`` + ``organization_id`` are supplied, email goes out via the
-        org's **system** transport (Org SMTP → global), not the AI mailbox.
+        org's **system** transport (Org SMTP → global), not the AI mailbox. When
+        ``studio_id`` names an agent with a custom SMTP, that server wins.
         """
         dispatched: list[ChannelResult] = []
         errors: list[ChannelResult] = []
@@ -74,6 +76,7 @@ class NotificationService:
             "locale": _valid_locale(locale),
             "db": db,
             "organization_id": organization_id,
+            "studio_id": studio_id,
         }
 
         for channel in channels:
@@ -120,6 +123,7 @@ class NotificationService:
         db=None,
         organization_id: Optional[str] = None,
         purpose: str = "system",
+        studio_id: Optional[str] = None,
         message_id: Optional[str] = None,
         in_reply_to: Optional[str] = None,
         references: Optional[list] = None,
@@ -128,8 +132,8 @@ class NotificationService:
 
         ``purpose="analyst"`` → the AI mailbox; ``purpose="system"`` → org SMTP
         (``OrganizationSettings.config.smtp``) → global ``settings.email_client``.
-        Backward compatible: no org SMTP → global; org SMTP set → used even when
-        the global client is empty.
+        When ``studio_id`` names an agent with a custom SMTP, that server wins
+        (per-agent override). Backward compatible: no studio/org SMTP → global.
 
         ``message_id`` / ``in_reply_to`` / ``references`` thread the message so a
         reply can be re-attached to a report (SMTP-config path only).
@@ -139,7 +143,9 @@ class NotificationService:
             try:
                 from app.services.email_client_resolver import resolve_outbound
 
-                resolved = await resolve_outbound(db, organization_id, purpose=purpose)
+                resolved = await resolve_outbound(
+                    db, organization_id, purpose=purpose, studio_id=studio_id
+                )
             except Exception as e:  # noqa: BLE001
                 logger.warning("Email resolution failed, using global client: %s", e)
                 resolved = None
@@ -261,6 +267,7 @@ class NotificationService:
                             recipients, subject, html,
                             subtype="html", attachments=attachments or None,
                             db=send_db, organization_id=organization_id, purpose="system",
+                            studio_id=context.get("studio_id"),
                         )
                 else:
                     await self._resolved_send(
@@ -295,6 +302,7 @@ class NotificationService:
         db=None,
         organization_id: Optional[str] = None,
         purpose: str = "system",
+        studio_id: Optional[str] = None,
         message_id: Optional[str] = None,
         in_reply_to: Optional[str] = None,
         references: Optional[list] = None,
@@ -332,6 +340,7 @@ class NotificationService:
                     db=db,
                     organization_id=organization_id,
                     purpose=purpose,
+                    studio_id=studio_id,
                     message_id=message_id,
                     in_reply_to=in_reply_to,
                     references=references,

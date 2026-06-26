@@ -7,7 +7,7 @@
                         v-model="searchQuery"
                         type="text"
                         :placeholder="$t('quotaPolicies.searchPlaceholder')"
-                        class="w-full ps-10 pe-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#C2683F] focus:border-[#C2683F]"
+                        class="w-full ps-10 pe-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#C2541E] focus:border-[#C2541E]"
                     />
                     <UIcon
                         name="i-heroicons-magnifying-glass"
@@ -200,7 +200,7 @@
                                 <label class="block text-xs font-medium text-gray-500 mb-1">{{ $t('quotaPolicies.connection') }}</label>
                                 <select
                                     v-model="overrideConnection"
-                                    class="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-[#C2683F] focus:outline-none focus:ring-2 focus:ring-[#C2683F]"
+                                    class="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-[#C2541E] focus:outline-none focus:ring-2 focus:ring-[#C2541E]"
                                 >
                                     <option :value="null" disabled>{{ $t('quotaPolicies.selectConnection') }}</option>
                                     <option

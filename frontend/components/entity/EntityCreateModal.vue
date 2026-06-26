@@ -15,7 +15,7 @@
           <div class="flex-1 overflow-auto">
             <div class="bg-white rounded-lg p-3">
               <!-- Info message for non-admins (suggestions) -->
-              <div v-if="!canCreateEntities && canSuggestEntities" class="mb-4 p-3 bg-[#F6EFEA] border border-[#E8C9B5] rounded-lg text-xs text-[#A8542F]">
+              <div v-if="!canCreateEntities && canSuggestEntities" class="mb-4 p-3 bg-[#F6EFEA] border border-[#E8C9B5] rounded-lg text-xs text-[#A8330F]">
                 <div class="font-medium mb-1">{{ $t('entityCreate.suggestHeading') }}</div>
                 <div>{{ $t('entityCreate.suggestBody') }}</div>
               </div>
@@ -40,7 +40,7 @@
             <button class="bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-xs hover:bg-gray-50" @click="open = false">{{ $t('entityCreate.cancel') }}</button>
             <button
               class="text-white text-xs font-medium py-1.5 px-3 rounded-lg disabled:opacity-50"
-              :class="canCreateEntities ? 'bg-[#C2683F] hover:bg-[#A8542F]' : 'bg-amber-500 hover:bg-amber-600'"
+              :class="canCreateEntities ? 'bg-[#C2541E] hover:bg-[#A8330F]' : 'bg-amber-500 hover:bg-amber-600'"
               :disabled="saving || !canSave"
               @click="onSave"
             >

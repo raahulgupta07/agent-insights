@@ -10,34 +10,34 @@
         <p class="text-xs text-[#6b6b6b] mt-0.5">Let members sign in with Google, Microsoft, or any OIDC provider.</p>
       </div>
 
-      <div class="border border-[#E7E5DD] rounded-2xl overflow-hidden bg-white">
+      <div class="border border-[#E9E0D3] rounded-2xl overflow-hidden bg-white">
 
         <!-- Google row -->
-        <div class="flex items-center gap-3 px-5 py-3.5 border-b border-[#E7E5DD]">
-          <span class="w-6 h-6 rounded-md border border-[#E7E5DD] bg-[#F4F1EA] flex items-center justify-center text-xs font-bold text-[#6b6b6b] flex-shrink-0">G</span>
+        <div class="flex items-center gap-3 px-5 py-3.5 border-b border-[#E9E0D3]">
+          <span class="w-6 h-6 rounded-md border border-[#E9E0D3] bg-[#F4EEE5] flex items-center justify-center text-xs font-bold text-[#6b6b6b] flex-shrink-0">G</span>
           <span class="text-sm font-medium text-[#1f2328] flex-1">Google</span>
           <span
             class="text-[11px] font-medium px-2 py-0.5 rounded-full"
-            :class="ssoGoogle.enabled ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-[#F4F1EA] text-[#6b6b6b] border border-[#E7E5DD]'"
+            :class="ssoGoogle.enabled ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-[#F4EEE5] text-[#6b6b6b] border border-[#E9E0D3]'"
           >{{ ssoGoogle.enabled ? 'Enabled' : 'Disabled' }}</span>
           <button
             type="button"
-            class="px-3 py-2 text-xs border border-[#E7E5DD] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4F1EA] transition-colors cursor-pointer"
+            class="px-3 py-2 text-xs border border-[#E9E0D3] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4EEE5] transition-colors cursor-pointer"
             @click="openModal('google')"
           >Configure</button>
         </div>
 
         <!-- Microsoft row -->
-        <div class="flex items-center gap-3 px-5 py-3.5 border-b border-[#E7E5DD]">
-          <span class="w-6 h-6 rounded-md border border-[#E7E5DD] bg-[#F4F1EA] flex items-center justify-center text-xs font-bold text-[#6b6b6b] flex-shrink-0">▦</span>
+        <div class="flex items-center gap-3 px-5 py-3.5 border-b border-[#E9E0D3]">
+          <span class="w-6 h-6 rounded-md border border-[#E9E0D3] bg-[#F4EEE5] flex items-center justify-center text-xs font-bold text-[#6b6b6b] flex-shrink-0">▦</span>
           <span class="text-sm font-medium text-[#1f2328] flex-1">Microsoft / Entra</span>
           <span
             class="text-[11px] font-medium px-2 py-0.5 rounded-full"
-            :class="ssoMicrosoft.enabled ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-[#F4F1EA] text-[#6b6b6b] border border-[#E7E5DD]'"
+            :class="ssoMicrosoft.enabled ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-[#F4EEE5] text-[#6b6b6b] border border-[#E9E0D3]'"
           >{{ ssoMicrosoft.enabled ? 'Enabled' : 'Disabled' }}</span>
           <button
             type="button"
-            class="px-3 py-2 text-xs border border-[#E7E5DD] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4F1EA] transition-colors cursor-pointer"
+            class="px-3 py-2 text-xs border border-[#E9E0D3] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4EEE5] transition-colors cursor-pointer"
             @click="openModal('microsoft')"
           >Configure</button>
         </div>
@@ -46,17 +46,17 @@
         <div
           v-for="(provider, idx) in oidcProviders"
           :key="provider.name || idx"
-          class="flex items-center gap-3 px-5 py-3.5 border-b border-[#E7E5DD]"
+          class="flex items-center gap-3 px-5 py-3.5 border-b border-[#E9E0D3]"
         >
-          <span class="w-6 h-6 rounded-md border border-[#E7E5DD] bg-[#F4F1EA] flex items-center justify-center text-[10px] font-bold text-[#6b6b6b] flex-shrink-0">OIDC</span>
+          <span class="w-6 h-6 rounded-md border border-[#E9E0D3] bg-[#F4EEE5] flex items-center justify-center text-[10px] font-bold text-[#6b6b6b] flex-shrink-0">OIDC</span>
           <span class="text-sm font-medium text-[#1f2328] flex-1">{{ provider.label || provider.name || 'Unnamed provider' }}</span>
           <span
             class="text-[11px] font-medium px-2 py-0.5 rounded-full"
-            :class="provider.enabled ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-[#F4F1EA] text-[#6b6b6b] border border-[#E7E5DD]'"
+            :class="provider.enabled ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-[#F4EEE5] text-[#6b6b6b] border border-[#E9E0D3]'"
           >{{ provider.enabled ? 'Enabled' : 'Disabled' }}</span>
           <button
             type="button"
-            class="px-3 py-2 text-xs border border-[#E7E5DD] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4F1EA] transition-colors cursor-pointer"
+            class="px-3 py-2 text-xs border border-[#E9E0D3] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4EEE5] transition-colors cursor-pointer"
             @click="openModal('oidc', idx)"
           >Configure</button>
           <button
@@ -67,10 +67,10 @@
         </div>
 
         <!-- Add OIDC provider -->
-        <div class="px-5 py-3.5 border-b border-[#E7E5DD]">
+        <div class="px-5 py-3.5 border-b border-[#E9E0D3]">
           <button
             type="button"
-            class="flex items-center gap-2 text-xs text-[#C2683F] font-medium border border-dashed border-[#E7E5DD] rounded-xl px-4 py-2.5 hover:border-[#C2683F] hover:bg-[#F3E7DF] transition-colors"
+            class="flex items-center gap-2 text-xs text-[#C2541E] font-medium border border-dashed border-[#E9E0D3] rounded-xl px-4 py-2.5 hover:border-[#C2541E] hover:bg-[#FBEFE4] transition-colors"
             @click="addOidcProvider"
           >
             <span>+</span>
@@ -80,7 +80,7 @@
         </div>
 
         <!-- Auth mode -->
-        <div class="px-5 py-3.5 border-b border-[#E7E5DD]">
+        <div class="px-5 py-3.5 border-b border-[#E9E0D3]">
           <div class="flex items-center gap-6 flex-wrap">
             <span class="text-xs text-[#6b6b6b] w-20 flex-shrink-0">Auth mode</span>
             <label
@@ -90,11 +90,11 @@
             >
               <span
                 class="w-3.5 h-3.5 rounded-full border flex-shrink-0 relative"
-                :class="ssoAuthMode === opt.value ? 'border-[#C2683F]' : 'border-[#E7E5DD]'"
+                :class="ssoAuthMode === opt.value ? 'border-[#C2541E]' : 'border-[#E9E0D3]'"
               >
                 <span
                   v-if="ssoAuthMode === opt.value"
-                  class="absolute inset-[3px] rounded-full bg-[#C2683F]"
+                  class="absolute inset-[3px] rounded-full bg-[#C2541E]"
                 ></span>
               </span>
               <input
@@ -118,7 +118,7 @@
               <button
                 type="button"
                 class="relative w-9 h-5 rounded-full transition-colors focus:outline-none flex-shrink-0"
-                :class="signupEnabled ? 'bg-[#C2683F]' : 'bg-[#E7E5DD]'"
+                :class="signupEnabled ? 'bg-[#C2541E]' : 'bg-[#E9E0D3]'"
                 @click="handleSignupToggle"
               >
                 <span
@@ -145,7 +145,7 @@
 
       <!-- Enterprise Gate for SCIM -->
       <template v-if="!hasFeature('scim')">
-        <div class="rounded-lg border border-[#E7E5DD] p-4 bg-[#F4F1EA]">
+        <div class="rounded-lg border border-[#E9E0D3] p-4 bg-[#F4EEE5]">
           <p class="text-xs text-[#6b6b6b] mb-2">
             {{ $t('settings.identityProvider.enterpriseScim') }}
           </p>
@@ -153,7 +153,7 @@
             href="https://docs.bagofwords.com/enterprise"
             target="_blank"
             rel="noopener noreferrer"
-            class="text-xs text-[#C2683F] hover:text-[#A8542F]"
+            class="text-xs text-[#C2541E] hover:text-[#A8330F]"
           >
             {{ $t('settings.identityProvider.learnMore') }}
           </a>
@@ -162,17 +162,17 @@
 
       <template v-else>
         <!-- SCIM row -->
-        <div class="border border-[#E7E5DD] rounded-2xl overflow-hidden bg-white">
+        <div class="border border-[#E9E0D3] rounded-2xl overflow-hidden bg-white">
           <div class="flex items-center gap-3 px-5 py-3.5">
-            <span class="w-6 h-6 rounded-md border border-[#E7E5DD] bg-[#F4F1EA] flex items-center justify-center text-[10px] font-bold text-[#6b6b6b] flex-shrink-0">&#x21C4;</span>
+            <span class="w-6 h-6 rounded-md border border-[#E9E0D3] bg-[#F4EEE5] flex items-center justify-center text-[10px] font-bold text-[#6b6b6b] flex-shrink-0">&#x21C4;</span>
             <span class="text-sm font-medium text-[#1f2328] flex-1">SCIM Provisioning</span>
             <span
               class="text-[11px] font-medium px-2 py-0.5 rounded-full"
-              :class="tokens.length > 0 ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-[#F4F1EA] text-[#6b6b6b] border border-[#E7E5DD]'"
+              :class="tokens.length > 0 ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-[#F4EEE5] text-[#6b6b6b] border border-[#E9E0D3]'"
             >{{ tokens.length > 0 ? 'Active' : 'Not configured' }}</span>
             <button
               type="button"
-              class="px-3 py-2 text-xs border border-[#E7E5DD] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4F1EA] transition-colors cursor-pointer"
+              class="px-3 py-2 text-xs border border-[#E9E0D3] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4EEE5] transition-colors cursor-pointer"
               @click="openModal('scim')"
             >Configure</button>
           </div>
@@ -191,7 +191,7 @@
 
       <!-- Enterprise Gate for LDAP -->
       <template v-if="!hasFeature('ldap')">
-        <div class="rounded-lg border border-[#E7E5DD] p-4 bg-[#F4F1EA]">
+        <div class="rounded-lg border border-[#E9E0D3] p-4 bg-[#F4EEE5]">
           <p class="text-xs text-[#6b6b6b] mb-2">
             {{ $t('settings.identityProvider.enterpriseLdap') }}
           </p>
@@ -199,7 +199,7 @@
             href="https://docs.bagofwords.com/enterprise"
             target="_blank"
             rel="noopener noreferrer"
-            class="text-xs text-[#C2683F] hover:text-[#A8542F]"
+            class="text-xs text-[#C2541E] hover:text-[#A8330F]"
           >
             {{ $t('settings.identityProvider.learnMore') }}
           </a>
@@ -207,18 +207,18 @@
       </template>
 
       <template v-else>
-        <div class="border border-[#E7E5DD] rounded-2xl overflow-hidden bg-white">
+        <div class="border border-[#E9E0D3] rounded-2xl overflow-hidden bg-white">
           <!-- LDAP row -->
-          <div class="flex items-center gap-3 px-5 py-3.5" :class="ldapStatus?.ldap_configured ? 'border-b border-[#E7E5DD]' : ''">
-            <span class="w-6 h-6 rounded-md border border-[#E7E5DD] bg-[#F4F1EA] flex items-center justify-center text-[10px] font-bold text-[#6b6b6b] flex-shrink-0">&#x1F5C4;</span>
+          <div class="flex items-center gap-3 px-5 py-3.5" :class="ldapStatus?.ldap_configured ? 'border-b border-[#E9E0D3]' : ''">
+            <span class="w-6 h-6 rounded-md border border-[#E9E0D3] bg-[#F4EEE5] flex items-center justify-center text-[10px] font-bold text-[#6b6b6b] flex-shrink-0">&#x1F5C4;</span>
             <span class="text-sm font-medium text-[#1f2328] flex-1">LDAP Directory Sync</span>
             <span
               class="text-[11px] font-medium px-2 py-0.5 rounded-full"
-              :class="ldapForm.enabled && ldapStatus?.ldap_configured ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-[#F4F1EA] text-[#6b6b6b] border border-[#E7E5DD]'"
+              :class="ldapForm.enabled && ldapStatus?.ldap_configured ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-[#F4EEE5] text-[#6b6b6b] border border-[#E9E0D3]'"
             >{{ ldapForm.enabled && ldapStatus?.ldap_configured ? 'Enabled' : 'Not configured' }}</span>
             <button
               type="button"
-              class="px-3 py-2 text-xs border border-[#E7E5DD] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4F1EA] transition-colors cursor-pointer"
+              class="px-3 py-2 text-xs border border-[#E9E0D3] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4EEE5] transition-colors cursor-pointer"
               @click="openModal('ldap')"
             >Configure</button>
           </div>
@@ -227,13 +227,13 @@
           <template v-if="ldapStatus?.ldap_configured">
 
             <!-- Connection status -->
-            <div class="p-5 border-b border-[#E7E5DD]">
+            <div class="p-5 border-b border-[#E9E0D3]">
               <div class="flex items-center justify-between">
                 <div>
                   <div class="flex items-center gap-2">
                     <div
                       class="w-2 h-2 rounded-full"
-                      :class="ldapTestResult?.connected ? 'bg-green-500' : (ldapTestResult ? 'bg-red-500' : 'bg-[#E7E5DD]')"
+                      :class="ldapTestResult?.connected ? 'bg-green-500' : (ldapTestResult ? 'bg-red-500' : 'bg-[#E9E0D3]')"
                     ></div>
                     <span class="text-xs font-medium text-[#6b6b6b]">
                       {{ ldapTestResult?.connected ? $t('settings.identityProvider.statusConnected') : (ldapTestResult ? $t('settings.identityProvider.statusFailed') : $t('settings.identityProvider.statusNotTested')) }}
@@ -250,7 +250,7 @@
                   </p>
                 </div>
                 <button
-                  class="px-3 py-2 text-xs text-[#1f2328] bg-white border border-[#E7E5DD] rounded-lg hover:bg-[#F4F1EA] transition-colors cursor-pointer"
+                  class="px-3 py-2 text-xs text-[#1f2328] bg-white border border-[#E9E0D3] rounded-lg hover:bg-[#F4EEE5] transition-colors cursor-pointer"
                   :disabled="ldapLoading"
                   @click="handleTestConnection"
                 >
@@ -260,7 +260,7 @@
             </div>
 
             <!-- Last sync info -->
-            <div v-if="ldapStatus?.last_sync" class="p-5 border-b border-[#E7E5DD]">
+            <div v-if="ldapStatus?.last_sync" class="p-5 border-b border-[#E9E0D3]">
               <div class="flex items-center justify-between">
                 <div>
                   <span class="text-xs font-medium text-[#6b6b6b]">{{ $t('settings.identityProvider.lastSync') }}</span>
@@ -285,14 +285,14 @@
             <div class="p-5">
               <div class="flex items-center gap-2 flex-wrap">
                 <button
-                  class="px-3 py-2.5 text-xs text-white bg-[#C2683F] hover:bg-[#A8542F] rounded-xl transition-colors cursor-pointer disabled:opacity-65"
+                  class="px-3 py-2.5 text-xs text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-xl transition-colors cursor-pointer disabled:opacity-65"
                   :disabled="ldapLoading"
                   @click="handleSync"
                 >
                   {{ ldapLoading ? $t('settings.identityProvider.syncing') : $t('settings.identityProvider.syncNow') }}
                 </button>
                 <button
-                  class="px-3 py-2 text-xs text-[#1f2328] bg-white border border-[#E7E5DD] rounded-lg hover:bg-[#F4F1EA] transition-colors cursor-pointer disabled:opacity-65"
+                  class="px-3 py-2 text-xs text-[#1f2328] bg-white border border-[#E9E0D3] rounded-lg hover:bg-[#F4EEE5] transition-colors cursor-pointer disabled:opacity-65"
                   :disabled="ldapLoading"
                   @click="handlePreview"
                 >
@@ -318,8 +318,8 @@
 
               <!-- Preview results -->
               <div v-if="ldapPreview" class="mt-3">
-                <div class="rounded-lg border border-[#E7E5DD] overflow-hidden">
-                  <div class="bg-[#F4F1EA] px-3 py-2 border-b border-[#E7E5DD]">
+                <div class="rounded-lg border border-[#E9E0D3] overflow-hidden">
+                  <div class="bg-[#F4EEE5] px-3 py-2 border-b border-[#E9E0D3]">
                     <span class="text-xs font-medium text-[#6b6b6b]">{{ $t('settings.identityProvider.preview') }} </span>
                     <span class="text-xs text-[#6b6b6b]">
                       {{ $t('settings.identityProvider.previewSummary', {
@@ -335,11 +335,11 @@
                       v-for="(group, idx) in ldapPreview.groups"
                       :key="group.dn"
                       class="flex items-center px-3 py-2 text-xs"
-                      :class="{ 'border-t border-[#E7E5DD]': idx > 0 }"
+                      :class="{ 'border-t border-[#E9E0D3]': idx > 0 }"
                     >
                       <span class="flex-1 text-[#6b6b6b] truncate" :title="group.dn">{{ group.name }}</span>
                       <span class="w-20 text-[#9a958c] text-[11px]">{{ $t('settings.identityProvider.memberCount', { n: group.member_count }) }}</span>
-                      <span class="w-24 text-[11px]" :class="group.exists_in_app ? 'text-[#9a958c]' : 'text-[#C2683F]'">
+                      <span class="w-24 text-[11px]" :class="group.exists_in_app ? 'text-[#9a958c]' : 'text-[#C2541E]'">
                         {{ group.exists_in_app ? $t('settings.identityProvider.groupExists') : $t('settings.identityProvider.groupNew') }}
                       </span>
                       <span v-if="group.members_to_add" class="text-[11px] text-green-600 me-2">+{{ group.members_to_add }}</span>
@@ -370,10 +370,10 @@
     <!-- Google Modal -->
     <SettingsProviderConfigModal :model-value="activeModal === 'google'" title="Configure Google SSO" @close="closeModal">
       <!-- Redirect URI -->
-      <div class="mb-4 rounded-xl border border-[#E7E5DD] bg-[#faf8f3] px-3 py-2.5">
+      <div class="mb-4 rounded-xl border border-[#E9E0D3] bg-[#faf8f3] px-3 py-2.5">
         <div class="flex items-center justify-between mb-1">
           <span class="text-xs font-medium text-[#6b6b6b]">Redirect URI</span>
-          <button type="button" class="text-[11px] text-[#C2683F] hover:text-[#A8542F] font-medium" @click="copyToClipboard(googleRedirectUri, 'google-redirect')">
+          <button type="button" class="text-[11px] text-[#C2541E] hover:text-[#A8330F] font-medium" @click="copyToClipboard(googleRedirectUri, 'google-redirect')">
             {{ copied === 'google-redirect' ? 'Copied!' : 'Copy' }}
           </button>
         </div>
@@ -387,7 +387,7 @@
           <button
             type="button"
             class="relative w-9 h-5 rounded-full transition-colors focus:outline-none flex-shrink-0"
-            :class="ssoGoogle.enabled ? 'bg-[#C2683F]' : 'bg-[#E7E5DD]'"
+            :class="ssoGoogle.enabled ? 'bg-[#C2541E]' : 'bg-[#E9E0D3]'"
             @click="ssoGoogle.enabled = !ssoGoogle.enabled"
           >
             <span
@@ -405,14 +405,14 @@
           v-model="ssoGoogle.client_id"
           type="text"
           placeholder="1234-abc.apps.googleusercontent.com"
-          class="w-full border border-[#E7E5DD] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2683F]"
+          class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
         />
         <span class="text-xs text-[#6b6b6b]">Client secret</span>
         <input
           v-model="ssoGoogle.client_secret"
           type="password"
           :placeholder="ssoGoogle.client_secret_set ? 'configured' : 'paste secret…'"
-          class="w-full border border-[#E7E5DD] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2683F]"
+          class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
         />
         <span class="col-start-2 text-[11px] text-[#9a958c]">Encrypted at rest (Fernet). Write-only — never echoed back.</span>
       </div>
@@ -422,30 +422,30 @@
       </div>
 
       <!-- Modal footer -->
-      <div class="flex items-center gap-2 mt-5 pt-4 border-t border-[#E7E5DD]">
+      <div class="flex items-center gap-2 mt-5 pt-4 border-t border-[#E9E0D3]">
         <button
           type="button"
-          class="px-3 py-2 text-xs border border-[#E7E5DD] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4F1EA] transition-colors cursor-pointer disabled:opacity-65"
+          class="px-3 py-2 text-xs border border-[#E9E0D3] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4EEE5] transition-colors cursor-pointer disabled:opacity-65"
           :disabled="ssoGoogleTesting"
           @click="handleTestGoogle"
         >{{ ssoGoogleTesting ? 'Testing…' : 'Test' }}</button>
         <button
           type="button"
-          class="px-4 py-2.5 text-xs bg-[#C2683F] hover:bg-[#A8542F] text-white rounded-xl font-semibold transition-colors cursor-pointer disabled:opacity-65"
+          class="px-4 py-2.5 text-xs bg-[#C2541E] hover:bg-[#A8330F] text-white rounded-xl font-semibold transition-colors cursor-pointer disabled:opacity-65"
           :disabled="ssoGoogleSaving"
           @click="handleSaveGoogleAndClose"
         >{{ ssoGoogleSaving ? 'Saving…' : 'Save' }}</button>
-        <button type="button" class="ms-auto px-3 py-2 text-xs border border-[#E7E5DD] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4F1EA] transition-colors cursor-pointer" @click="closeModal">Cancel</button>
+        <button type="button" class="ms-auto px-3 py-2 text-xs border border-[#E9E0D3] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4EEE5] transition-colors cursor-pointer" @click="closeModal">Cancel</button>
       </div>
     </SettingsProviderConfigModal>
 
     <!-- Microsoft Modal -->
     <SettingsProviderConfigModal :model-value="activeModal === 'microsoft'" title="Configure Microsoft / Entra SSO" @close="closeModal">
       <!-- Redirect URI -->
-      <div class="mb-4 rounded-xl border border-[#E7E5DD] bg-[#faf8f3] px-3 py-2.5">
+      <div class="mb-4 rounded-xl border border-[#E9E0D3] bg-[#faf8f3] px-3 py-2.5">
         <div class="flex items-center justify-between mb-1">
           <span class="text-xs font-medium text-[#6b6b6b]">Redirect URI</span>
-          <button type="button" class="text-[11px] text-[#C2683F] hover:text-[#A8542F] font-medium" @click="copyToClipboard(microsoftRedirectUri, 'ms-redirect')">
+          <button type="button" class="text-[11px] text-[#C2541E] hover:text-[#A8330F] font-medium" @click="copyToClipboard(microsoftRedirectUri, 'ms-redirect')">
             {{ copied === 'ms-redirect' ? 'Copied!' : 'Copy' }}
           </button>
         </div>
@@ -459,7 +459,7 @@
           <button
             type="button"
             class="relative w-9 h-5 rounded-full transition-colors focus:outline-none flex-shrink-0"
-            :class="ssoMicrosoft.enabled ? 'bg-[#C2683F]' : 'bg-[#E7E5DD]'"
+            :class="ssoMicrosoft.enabled ? 'bg-[#C2541E]' : 'bg-[#E9E0D3]'"
             @click="ssoMicrosoft.enabled = !ssoMicrosoft.enabled"
           >
             <span
@@ -477,25 +477,25 @@
           v-model="ssoMicrosoft.tenant_id"
           type="text"
           placeholder="00000000-0000-0000-0000-000000000000"
-          class="w-full border border-[#E7E5DD] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2683F]"
+          class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
         />
         <span class="text-xs text-[#6b6b6b]">Client ID</span>
         <input
           v-model="ssoMicrosoft.client_id"
           type="text"
           placeholder="application (client) id"
-          class="w-full border border-[#E7E5DD] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2683F]"
+          class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
         />
         <span class="text-xs text-[#6b6b6b]">Client secret</span>
         <input
           v-model="ssoMicrosoft.client_secret"
           type="password"
           :placeholder="ssoMicrosoft.client_secret_set ? 'configured' : 'paste secret…'"
-          class="w-full border border-[#E7E5DD] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2683F]"
+          class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
         />
         <span class="col-start-2 text-[11px] text-[#9a958c]">Encrypted at rest (Fernet). Write-only — never echoed back.</span>
         <label class="col-span-2 flex items-center gap-2 cursor-pointer mt-1">
-          <input v-model="ssoMicrosoft.sync_groups" type="checkbox" class="accent-[#C2683F] w-3.5 h-3.5" />
+          <input v-model="ssoMicrosoft.sync_groups" type="checkbox" class="accent-[#C2541E] w-3.5 h-3.5" />
           <span class="text-xs text-[#6b6b6b]">Sync groups from Entra (Microsoft Graph) — maps Entra groups to Dash Groups</span>
         </label>
       </div>
@@ -509,20 +509,20 @@
       </div>
 
       <!-- Modal footer -->
-      <div class="flex items-center gap-2 mt-5 pt-4 border-t border-[#E7E5DD]">
+      <div class="flex items-center gap-2 mt-5 pt-4 border-t border-[#E9E0D3]">
         <button
           type="button"
-          class="px-3 py-2 text-xs border border-[#E7E5DD] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4F1EA] transition-colors cursor-pointer disabled:opacity-65"
+          class="px-3 py-2 text-xs border border-[#E9E0D3] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4EEE5] transition-colors cursor-pointer disabled:opacity-65"
           :disabled="ssoMicrosoftTesting"
           @click="handleTestMicrosoft"
         >{{ ssoMicrosoftTesting ? 'Testing…' : 'Test' }}</button>
         <button
           type="button"
-          class="px-4 py-2.5 text-xs bg-[#C2683F] hover:bg-[#A8542F] text-white rounded-xl font-semibold transition-colors cursor-pointer disabled:opacity-65"
+          class="px-4 py-2.5 text-xs bg-[#C2541E] hover:bg-[#A8330F] text-white rounded-xl font-semibold transition-colors cursor-pointer disabled:opacity-65"
           :disabled="ssoMicrosoftSaving"
           @click="handleSaveMicrosoftAndClose"
         >{{ ssoMicrosoftSaving ? 'Saving…' : 'Save' }}</button>
-        <button type="button" class="ms-auto px-3 py-2 text-xs border border-[#E7E5DD] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4F1EA] transition-colors cursor-pointer" @click="closeModal">Cancel</button>
+        <button type="button" class="ms-auto px-3 py-2 text-xs border border-[#E9E0D3] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4EEE5] transition-colors cursor-pointer" @click="closeModal">Cancel</button>
       </div>
     </SettingsProviderConfigModal>
 
@@ -530,10 +530,10 @@
     <SettingsProviderConfigModal :model-value="activeModal === 'oidc'" :title="activeOidcIdx !== null && oidcProviders[activeOidcIdx] ? `Configure ${oidcProviders[activeOidcIdx].label || oidcProviders[activeOidcIdx].name || 'OIDC Provider'}` : 'Configure OIDC Provider'" @close="closeModal">
       <template v-if="activeOidcIdx !== null && oidcProviders[activeOidcIdx]">
         <!-- Redirect URI -->
-        <div class="mb-4 rounded-xl border border-[#E7E5DD] bg-[#faf8f3] px-3 py-2.5">
+        <div class="mb-4 rounded-xl border border-[#E9E0D3] bg-[#faf8f3] px-3 py-2.5">
           <div class="flex items-center justify-between mb-1">
             <span class="text-xs font-medium text-[#6b6b6b]">Redirect URI</span>
-            <button type="button" class="text-[11px] text-[#C2683F] hover:text-[#A8542F] font-medium" @click="copyToClipboard(oidcRedirectUri(oidcProviders[activeOidcIdx].name), 'oidc-redirect')">
+            <button type="button" class="text-[11px] text-[#C2541E] hover:text-[#A8330F] font-medium" @click="copyToClipboard(oidcRedirectUri(oidcProviders[activeOidcIdx].name), 'oidc-redirect')">
               {{ copied === 'oidc-redirect' ? 'Copied!' : 'Copy' }}
             </button>
           </div>
@@ -547,7 +547,7 @@
             <button
               type="button"
               class="relative w-9 h-5 rounded-full transition-colors focus:outline-none flex-shrink-0"
-              :class="oidcProviders[activeOidcIdx].enabled ? 'bg-[#C2683F]' : 'bg-[#E7E5DD]'"
+              :class="oidcProviders[activeOidcIdx].enabled ? 'bg-[#C2541E]' : 'bg-[#E9E0D3]'"
               @click="oidcProviders[activeOidcIdx].enabled = !oidcProviders[activeOidcIdx].enabled"
             >
               <span
@@ -565,64 +565,64 @@
             v-model="oidcProviders[activeOidcIdx].name"
             type="text"
             placeholder="e.g. okta"
-            class="w-full border border-[#E7E5DD] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2683F]"
+            class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
           />
           <span class="text-xs text-[#6b6b6b]">Label</span>
           <input
             v-model="oidcProviders[activeOidcIdx].label"
             type="text"
             placeholder="e.g. Okta"
-            class="w-full border border-[#E7E5DD] rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-[#C2683F]"
+            class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-[#C2541E]"
           />
           <span class="text-xs text-[#6b6b6b]">Issuer URL</span>
           <input
             v-model="oidcProviders[activeOidcIdx].issuer"
             type="text"
             placeholder="https://your-idp.example.com"
-            class="w-full border border-[#E7E5DD] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2683F]"
+            class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
           />
           <span class="text-xs text-[#6b6b6b]">Client ID</span>
           <input
             v-model="oidcProviders[activeOidcIdx].client_id"
             type="text"
-            class="w-full border border-[#E7E5DD] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2683F]"
+            class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
           />
           <span class="text-xs text-[#6b6b6b]">Client secret</span>
           <input
             v-model="oidcProviders[activeOidcIdx].client_secret"
             type="password"
             :placeholder="oidcProviders[activeOidcIdx].client_secret_set ? 'configured' : 'paste secret…'"
-            class="w-full border border-[#E7E5DD] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2683F]"
+            class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
           />
           <span class="text-xs text-[#6b6b6b]">Scopes (csv)</span>
           <input
             v-model="oidcProviders[activeOidcIdx].scopesCsv"
             type="text"
             placeholder="openid,profile,email"
-            class="w-full border border-[#E7E5DD] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2683F]"
+            class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
           />
           <span class="text-xs text-[#6b6b6b]">Group claim</span>
           <input
             v-model="oidcProviders[activeOidcIdx].group_claim"
             type="text"
             placeholder="groups"
-            class="w-full border border-[#E7E5DD] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2683F]"
+            class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
           />
           <label class="col-span-2 flex items-center gap-2 cursor-pointer mt-1">
-            <input v-model="oidcProviders[activeOidcIdx].sync_groups" type="checkbox" class="accent-[#C2683F] w-3.5 h-3.5" />
+            <input v-model="oidcProviders[activeOidcIdx].sync_groups" type="checkbox" class="accent-[#C2541E] w-3.5 h-3.5" />
             <span class="text-xs text-[#6b6b6b]">Sync groups from this provider</span>
           </label>
         </div>
 
         <!-- Modal footer -->
-        <div class="flex items-center gap-2 mt-5 pt-4 border-t border-[#E7E5DD]">
+        <div class="flex items-center gap-2 mt-5 pt-4 border-t border-[#E9E0D3]">
           <button
             type="button"
-            class="px-4 py-2.5 text-xs bg-[#C2683F] hover:bg-[#A8542F] text-white rounded-xl font-semibold transition-colors cursor-pointer disabled:opacity-65"
+            class="px-4 py-2.5 text-xs bg-[#C2541E] hover:bg-[#A8330F] text-white rounded-xl font-semibold transition-colors cursor-pointer disabled:opacity-65"
             :disabled="ssoOidcSaving"
             @click="handleSaveOidcAndClose"
           >{{ ssoOidcSaving ? 'Saving…' : 'Save' }}</button>
-          <button type="button" class="ms-auto px-3 py-2 text-xs border border-[#E7E5DD] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4F1EA] transition-colors cursor-pointer" @click="closeModal">Cancel</button>
+          <button type="button" class="ms-auto px-3 py-2 text-xs border border-[#E9E0D3] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4EEE5] transition-colors cursor-pointer" @click="closeModal">Cancel</button>
         </div>
       </template>
     </SettingsProviderConfigModal>
@@ -630,14 +630,14 @@
     <!-- SCIM Modal -->
     <SettingsProviderConfigModal :model-value="activeModal === 'scim'" title="Configure SCIM Provisioning" @close="closeModal">
       <!-- SCIM Endpoint URL -->
-      <div class="mb-4 rounded-lg border border-[#E7E5DD] p-3">
+      <div class="mb-4 rounded-lg border border-[#E9E0D3] p-3">
         <label class="block text-xs font-medium text-[#6b6b6b] mb-1">{{ $t('settings.identityProvider.scimBaseUrl') }}</label>
         <div class="flex items-center gap-2">
-          <code class="flex-1 text-xs bg-[#F4F1EA] px-2 py-1.5 rounded-lg border border-[#E7E5DD] text-[#6b6b6b] font-mono">
+          <code class="flex-1 text-xs bg-[#F4EEE5] px-2 py-1.5 rounded-lg border border-[#E9E0D3] text-[#6b6b6b] font-mono">
             {{ scimBaseUrl }}
           </code>
           <button
-            class="px-3 py-2 text-xs text-[#1f2328] bg-white border border-[#E7E5DD] rounded-lg hover:bg-[#F4F1EA] transition-colors cursor-pointer"
+            class="px-3 py-2 text-xs text-[#1f2328] bg-white border border-[#E9E0D3] rounded-lg hover:bg-[#F4EEE5] transition-colors cursor-pointer"
             @click="copyToClipboard(scimBaseUrl)"
           >
             {{ copied === 'url' ? $t('settings.identityProvider.copied') : $t('settings.identityProvider.copy') }}
@@ -650,7 +650,7 @@
       <div class="mb-3 flex items-center justify-between">
         <label class="text-xs font-medium text-[#6b6b6b]">{{ $t('settings.identityProvider.bearerTokens') }}</label>
         <button
-          class="px-3 py-2.5 text-xs text-white bg-[#C2683F] hover:bg-[#A8542F] rounded-xl transition-colors cursor-pointer"
+          class="px-3 py-2.5 text-xs text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-xl transition-colors cursor-pointer"
           @click="showCreateModal = true"
         >
           {{ $t('settings.identityProvider.generateToken') }}
@@ -659,7 +659,7 @@
 
       <!-- Loading State -->
       <div v-if="scimLoading" class="py-8 text-center">
-        <div class="inline-block w-4 h-4 border-2 border-[#E7E5DD] border-t-[#9a958c] rounded-full animate-spin"></div>
+        <div class="inline-block w-4 h-4 border-2 border-[#E9E0D3] border-t-[#9a958c] rounded-full animate-spin"></div>
       </div>
 
       <!-- Error State -->
@@ -668,13 +668,13 @@
       </div>
 
       <!-- Tokens List -->
-      <div v-else class="border border-[#E7E5DD] rounded-lg overflow-hidden">
+      <div v-else class="border border-[#E9E0D3] rounded-lg overflow-hidden">
         <template v-if="tokens.length > 0">
           <div
             v-for="(token, idx) in tokens"
             :key="token.id"
             class="flex items-center px-3 py-2.5 text-xs"
-            :class="{ 'border-t border-[#E7E5DD]': idx > 0 }"
+            :class="{ 'border-t border-[#E9E0D3]': idx > 0 }"
           >
             <span class="w-36 flex-shrink-0 text-[#6b6b6b] font-medium truncate">{{ token.name }}</span>
             <span class="w-36 flex-shrink-0 text-[#9a958c] font-mono text-[11px]">{{ token.token_prefix }}...</span>
@@ -706,8 +706,8 @@
       </div>
 
       <!-- Modal footer -->
-      <div class="flex justify-end mt-5 pt-4 border-t border-[#E7E5DD]">
-        <button type="button" class="px-3 py-2 text-xs border border-[#E7E5DD] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4F1EA] transition-colors cursor-pointer" @click="closeModal">Close</button>
+      <div class="flex justify-end mt-5 pt-4 border-t border-[#E9E0D3]">
+        <button type="button" class="px-3 py-2 text-xs border border-[#E9E0D3] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4EEE5] transition-colors cursor-pointer" @click="closeModal">Close</button>
       </div>
     </SettingsProviderConfigModal>
 
@@ -720,7 +720,7 @@
           <button
             type="button"
             class="relative w-9 h-5 rounded-full transition-colors focus:outline-none flex-shrink-0"
-            :class="ldapForm.enabled ? 'bg-[#C2683F]' : 'bg-[#E7E5DD]'"
+            :class="ldapForm.enabled ? 'bg-[#C2541E]' : 'bg-[#E9E0D3]'"
             @click="ldapForm.enabled = !ldapForm.enabled"
           >
             <span
@@ -739,21 +739,21 @@
           v-model="ldapForm.url"
           type="text"
           placeholder="ldaps://ad.corp.com:636"
-          class="w-full border border-[#E7E5DD] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2683F]"
+          class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
         />
         <span class="text-xs text-[#6b6b6b]">Bind DN</span>
         <input
           v-model="ldapForm.bind_dn"
           type="text"
           placeholder="cn=svc,ou=Services,dc=corp,dc=com"
-          class="w-full border border-[#E7E5DD] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2683F]"
+          class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
         />
         <span class="text-xs text-[#6b6b6b]">Bind password</span>
         <input
           v-model="ldapForm.bind_password"
           type="password"
           :placeholder="ldapForm.bind_password_set ? 'configured' : 'paste bind password…'"
-          class="w-full border border-[#E7E5DD] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2683F]"
+          class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
         />
         <span class="col-start-2 text-[11px] text-[#9a958c]">Encrypted at rest. Write-only.</span>
         <span class="text-xs text-[#6b6b6b]">Base DN</span>
@@ -761,19 +761,19 @@
           v-model="ldapForm.base_dn"
           type="text"
           placeholder="dc=corp,dc=com"
-          class="w-full border border-[#E7E5DD] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2683F]"
+          class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
         />
 
         <!-- Advanced collapsible -->
         <details class="col-span-2 mt-1">
-          <summary class="cursor-pointer text-xs text-[#C2683F] font-medium list-none py-1 select-none">
+          <summary class="cursor-pointer text-xs text-[#C2541E] font-medium list-none py-1 select-none">
             <span class="inline-flex items-center gap-1">
               <span>{{ ldapAdvOpen ? '▾' : '▸' }}</span>
               Advanced (search bases · filters · attributes · member format)
             </span>
           </summary>
           <div
-            class="grid grid-cols-[140px_1fr] gap-x-4 gap-y-2.5 items-center mt-2 bg-[#faf8f3] border border-[#E7E5DD] rounded-xl p-4"
+            class="grid grid-cols-[140px_1fr] gap-x-4 gap-y-2.5 items-center mt-2 bg-[#faf8f3] border border-[#E9E0D3] rounded-xl p-4"
             @toggle.capture="ldapAdvOpen = !ldapAdvOpen"
           >
             <span class="text-xs text-[#6b6b6b]">User search base</span>
@@ -781,54 +781,54 @@
               v-model="ldapForm.user_search_base"
               type="text"
               placeholder="ou=Users,dc=corp,dc=com"
-              class="w-full border border-[#E7E5DD] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2683F]"
+              class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
             />
             <span class="text-xs text-[#6b6b6b]">Group search base</span>
             <input
               v-model="ldapForm.group_search_base"
               type="text"
               placeholder="ou=Groups,dc=corp,dc=com"
-              class="w-full border border-[#E7E5DD] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2683F]"
+              class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
             />
             <span class="text-xs text-[#6b6b6b]">User filter</span>
             <input
               v-model="ldapForm.user_search_filter"
               type="text"
               placeholder="(objectClass=person)"
-              class="w-full border border-[#E7E5DD] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2683F]"
+              class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
             />
             <span class="text-xs text-[#6b6b6b]">Group filter</span>
             <input
               v-model="ldapForm.group_search_filter"
               type="text"
               placeholder="(objectClass=group)"
-              class="w-full border border-[#E7E5DD] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2683F]"
+              class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
             />
             <span class="text-xs text-[#6b6b6b]">Email attr</span>
             <input
               v-model="ldapForm.user_email_attribute"
               type="text"
               placeholder="mail"
-              class="w-full border border-[#E7E5DD] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2683F]"
+              class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
             />
             <span class="text-xs text-[#6b6b6b]">Name attr</span>
             <input
               v-model="ldapForm.user_name_attribute"
               type="text"
               placeholder="cn"
-              class="w-full border border-[#E7E5DD] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2683F]"
+              class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
             />
             <span class="text-xs text-[#6b6b6b]">Group name attr</span>
             <input
               v-model="ldapForm.group_name_attribute"
               type="text"
               placeholder="cn"
-              class="w-full border border-[#E7E5DD] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2683F]"
+              class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
             />
             <span class="text-xs text-[#6b6b6b]">Member attr</span>
             <select
               v-model="ldapForm.group_member_attribute"
-              class="w-full border border-[#E7E5DD] rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-[#C2683F]"
+              class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-[#C2541E]"
             >
               <option value="member">member (AD / RFC 2256)</option>
               <option value="memberUid">memberUid (OpenLDAP posixGroup)</option>
@@ -836,7 +836,7 @@
             <span class="text-xs text-[#6b6b6b]">Member format</span>
             <select
               v-model="ldapForm.group_member_format"
-              class="w-full border border-[#E7E5DD] rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-[#C2683F]"
+              class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-[#C2541E]"
             >
               <option value="dn">DN (full distinguished name)</option>
               <option value="uid">UID (username only)</option>
@@ -848,12 +848,12 @@
                 type="number"
                 min="5"
                 max="1440"
-                class="w-24 border border-[#E7E5DD] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2683F]"
+                class="w-24 border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
               />
               <span class="text-xs text-[#9a958c]">minutes</span>
             </div>
             <label class="col-span-2 flex items-center gap-2 cursor-pointer mt-1">
-              <input v-model="ldapForm.auto_provision_users" type="checkbox" class="accent-[#C2683F] w-3.5 h-3.5" />
+              <input v-model="ldapForm.auto_provision_users" type="checkbox" class="accent-[#C2541E] w-3.5 h-3.5" />
               <span class="text-xs text-[#6b6b6b]">Auto-provision users on first login</span>
             </label>
           </div>
@@ -878,20 +878,20 @@
       </div>
 
       <!-- Modal footer -->
-      <div class="flex items-center gap-2 mt-5 pt-4 border-t border-[#E7E5DD]">
+      <div class="flex items-center gap-2 mt-5 pt-4 border-t border-[#E9E0D3]">
         <button
           type="button"
-          class="px-3 py-2 text-xs border border-[#E7E5DD] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4F1EA] transition-colors cursor-pointer disabled:opacity-65"
+          class="px-3 py-2 text-xs border border-[#E9E0D3] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4EEE5] transition-colors cursor-pointer disabled:opacity-65"
           :disabled="ldapFormTesting"
           @click="handleLdapTestNew"
         >{{ ldapFormTesting ? 'Testing…' : 'Test connection' }}</button>
         <button
           type="button"
-          class="px-4 py-2.5 text-xs bg-[#C2683F] hover:bg-[#A8542F] text-white rounded-xl font-semibold transition-colors cursor-pointer disabled:opacity-65"
+          class="px-4 py-2.5 text-xs bg-[#C2541E] hover:bg-[#A8330F] text-white rounded-xl font-semibold transition-colors cursor-pointer disabled:opacity-65"
           :disabled="ldapFormSaving"
           @click="handleLdapSaveAndClose"
         >{{ ldapFormSaving ? 'Saving…' : 'Save' }}</button>
-        <button type="button" class="ms-auto px-3 py-2 text-xs border border-[#E7E5DD] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4F1EA] transition-colors cursor-pointer" @click="closeModal">Cancel</button>
+        <button type="button" class="ms-auto px-3 py-2 text-xs border border-[#E9E0D3] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4EEE5] transition-colors cursor-pointer" @click="closeModal">Cancel</button>
       </div>
     </SettingsProviderConfigModal>
 
@@ -911,14 +911,14 @@
               v-model="newTokenName"
               type="text"
               :placeholder="$t('settings.identityProvider.namePlaceholder')"
-              class="w-full px-2 py-1.5 text-xs border border-[#E7E5DD] rounded-lg focus:outline-none focus:border-[#C2683F]"
+              class="w-full px-2 py-1.5 text-xs border border-[#E9E0D3] rounded-lg focus:outline-none focus:border-[#C2541E]"
               @keydown.enter="handleCreateToken"
             />
           </div>
           <div class="flex justify-end gap-2">
-            <button class="px-3 py-2 text-xs border border-[#E7E5DD] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4F1EA] transition-colors cursor-pointer" @click="dismissCreateModal">{{ $t('settings.identityProvider.cancel') }}</button>
+            <button class="px-3 py-2 text-xs border border-[#E9E0D3] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4EEE5] transition-colors cursor-pointer" @click="dismissCreateModal">{{ $t('settings.identityProvider.cancel') }}</button>
             <button
-              class="px-4 py-2.5 text-xs text-white bg-[#C2683F] hover:bg-[#A8542F] rounded-xl transition-colors cursor-pointer disabled:opacity-65"
+              class="px-4 py-2.5 text-xs text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-xl transition-colors cursor-pointer disabled:opacity-65"
               :disabled="!newTokenName.trim() || creating"
               @click="handleCreateToken"
             >
@@ -937,18 +937,18 @@
             </div>
           </div>
           <div class="flex items-center gap-2 mb-3">
-            <code class="flex-1 text-[11px] bg-[#F4F1EA] px-2 py-1.5 rounded-lg border border-[#E7E5DD] text-[#6b6b6b] font-mono truncate">
+            <code class="flex-1 text-[11px] bg-[#F4EEE5] px-2 py-1.5 rounded-lg border border-[#E9E0D3] text-[#6b6b6b] font-mono truncate">
               {{ createdToken }}
             </code>
             <button
-              class="px-3 py-2 text-xs text-[#1f2328] bg-white border border-[#E7E5DD] rounded-lg hover:bg-[#F4F1EA] transition-colors cursor-pointer flex-shrink-0"
+              class="px-3 py-2 text-xs text-[#1f2328] bg-white border border-[#E9E0D3] rounded-lg hover:bg-[#F4EEE5] transition-colors cursor-pointer flex-shrink-0"
               @click="copyToClipboard(createdToken!, 'token')"
             >
               {{ copied === 'token' ? $t('settings.identityProvider.copied') : $t('settings.identityProvider.copy') }}
             </button>
           </div>
           <div class="flex justify-end">
-            <button class="px-4 py-2.5 text-xs text-white bg-[#C2683F] hover:bg-[#A8542F] rounded-xl transition-colors cursor-pointer" @click="dismissCreateModal">{{ $t('settings.identityProvider.done') }}</button>
+            <button class="px-4 py-2.5 text-xs text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-xl transition-colors cursor-pointer" @click="dismissCreateModal">{{ $t('settings.identityProvider.done') }}</button>
           </div>
         </template>
       </div>
@@ -962,7 +962,7 @@
           {{ $t('settings.identityProvider.revokeWarning', { name: tokenToRevoke.name }) }}
         </p>
         <div class="flex justify-end gap-2">
-          <button class="px-3 py-2 text-xs border border-[#E7E5DD] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4F1EA] transition-colors cursor-pointer" @click="tokenToRevoke = null">{{ $t('settings.identityProvider.cancel') }}</button>
+          <button class="px-3 py-2 text-xs border border-[#E9E0D3] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4EEE5] transition-colors cursor-pointer" @click="tokenToRevoke = null">{{ $t('settings.identityProvider.cancel') }}</button>
           <button class="px-3 py-2 text-xs text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors cursor-pointer" @click="handleRevoke">{{ $t('settings.identityProvider.revoke') }}</button>
         </div>
       </div>

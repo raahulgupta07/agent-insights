@@ -6,12 +6,12 @@
                 :key="item.key + '-' + idx"
                 @click="emitContent(item.value)"
                 :class="[
-                    'group relative flex flex-col items-start gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3.5 text-left transition-all duration-300 ease-out hover:border-[#C2683F]/40 hover:bg-[#FBF7F4] hover:shadow-sm',
+                    'group relative flex flex-col items-start gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3.5 text-left transition-all duration-300 ease-out hover:border-[#C2541E]/40 hover:bg-[#FBF7F4] hover:shadow-sm',
                     (fadingIndex === idx) ? 'swap-out' : 'swap-in'
                 ]">
                 <span class="flex items-center gap-1.5">
-                    <UIcon :name="item.cat.icon" class="h-4 w-4 text-[#C2683F]" />
-                    <span class="text-[10px] font-semibold uppercase tracking-wide text-[#C2683F]/80">{{ item.cat.label }}</span>
+                    <UIcon :name="item.cat.icon" class="h-4 w-4 text-[#C2541E]" />
+                    <span class="text-[10px] font-semibold uppercase tracking-wide text-[#C2541E]/80">{{ item.cat.label }}</span>
                 </span>
                 <span class="text-[13px] leading-snug font-medium text-gray-800 line-clamp-2">{{ item.label }}</span>
             </button>
@@ -19,7 +19,7 @@
         <div v-if="pool.length > VISIBLE_COUNT" class="mt-3 flex justify-center">
             <button
                 @click="repopulateInitial"
-                class="inline-flex items-center gap-1 text-[11px] font-medium text-gray-400 hover:text-[#C2683F] transition-colors">
+                class="inline-flex items-center gap-1 text-[11px] font-medium text-gray-400 hover:text-[#C2541E] transition-colors">
                 <UIcon name="i-heroicons-arrow-path" class="h-3.5 w-3.5" />
                 shuffle
             </button>

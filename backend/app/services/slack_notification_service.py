@@ -34,7 +34,11 @@ MIN_ROWS_TO_SEND = 10
 def _step_row_count(step: 'Step') -> int:
     """Return the number of data rows on a step, or 0 if unavailable."""
     try:
-        rows = (step.data or {}).get('rows')
+        d = step.data or {}
+        info = d.get('info') if isinstance(d.get('info'), dict) else {}
+        if isinstance(info.get('total_rows'), int):
+            return info['total_rows']
+        rows = d.get('rows')
         return len(rows) if rows else 0
     except Exception:
         return 0
@@ -192,15 +196,17 @@ def _format_markdown_table(data: dict, title: str, max_rows: int = 20) -> str:
 async def _handle_table_step_dm(adapter, external_user_id: str, step: 'Step', thread_ts: str = None, channel_id: str = None, platform_type: str = None):
     """Handles sending table data, optionally in a thread."""
     title = step.title or "Table Data"
+    from app.services.parquet_store import hydrate as _hydrate_parquet
+    _sd = _hydrate_parquet(step.data)
 
     # Teams: send as markdown table text (Bot Connector doesn't support data: URLs for file uploads)
     if platform_type == "teams":
-        md_table = _format_markdown_table(step.data, title)
+        md_table = _format_markdown_table(_sd, title)
         if md_table:
             return await adapter.send_dm_in_thread(external_user_id, md_table, thread_ts, channel_id=channel_id)
         return False
 
-    file_path = df_to_csv(step.data)
+    file_path = df_to_csv(_sd)
     if not file_path:
         return False
 
@@ -221,7 +227,8 @@ async def _handle_chart_step_dm(adapter, external_user_id: str, step: 'Step', th
         msg = f"**{title}**\n_Chart visualization is available in the web report._"
         return await adapter.send_dm_in_thread(external_user_id, msg, thread_ts, channel_id=channel_id)
 
-    file_path = create_plot(step.data_model, step.data, title)
+    from app.services.parquet_store import hydrate as _hydrate_parquet
+    file_path = create_plot(step.data_model, _hydrate_parquet(step.data), title)
 
     if not file_path:
         return False
@@ -302,8 +309,10 @@ async def send_step_result_to_slack(step_id: str, external_user_id: str | None =
             if data_type == "table":
                 success = await _handle_table_step_dm(adapter, external_user_id, step, thread_ts, channel_id, platform_type=platform_type)
             elif data_type == "count":
-                if step.data and 'rows' in step.data and step.data['rows'] and 'columns' in step.data and step.data['columns']:
-                    count_value = step.data['rows'][0].get(step.data['columns'][0].get('field', ''))
+                from app.services.parquet_store import hydrate as _hydrate_parquet
+                _sd = _hydrate_parquet(step.data) if step.data else {}
+                if _sd and _sd.get('rows') and _sd.get('columns'):
+                    count_value = _sd['rows'][0].get(_sd['columns'][0].get('field', ''))
                     message = f"**{step.title or 'Count'}**: {count_value}" if platform_type == "teams" else f"*{step.title or 'Count'}*: {count_value}"
                     success = await adapter.send_dm_in_thread(external_user_id, message, thread_ts, channel_id=channel_id)
                 else:

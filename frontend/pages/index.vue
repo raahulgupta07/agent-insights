@@ -1,7 +1,7 @@
 <template>
   <!-- Excel compact mode -->
   <div v-if="isExcel" class="flex flex-col h-screen bg-white">
-    <div class="flex items-center justify-between p-3 border-b border-[#E7E5DD]">
+    <div class="flex items-center justify-between p-3 border-b border-[#E9E0D3]">
       <NuxtLink to="/">
         <img :src="orgIconUrl || '/assets/logo-128.png'" alt="Dash" class="h-8 max-w-[120px] object-contain cursor-pointer" />
       </NuxtLink>
@@ -23,7 +23,7 @@
     </div>
     <div class="flex-1 flex flex-col justify-center px-3">
       <div class="ps-4">
-        <h2 class="text-2xl font-semibold tracking-tight text-[#1f2328] text-start" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">{{ orgAIAnalystName || $t('home.title') }}</h2>
+        <h2 class="text-2xl font-semibold tracking-tight text-[#1f2328] text-start" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ orgAIAnalystName || $t('home.title') }}</h2>
         <p class="text-base text-[#6b6b6b] text-start mt-1">
           {{ $t('home.subtitle') }}
         </p>
@@ -41,7 +41,7 @@
   </div>
 
   <!-- Normal mode -->
-  <div v-else class="flex flex-col min-h-screen bg-white relative">
+  <div v-else class="home-root flex flex-col min-h-screen bg-[#F6F1EA] relative">
 
     <!-- Add background div with grid -->
     <div class="absolute inset-0 pointer-events-none"
@@ -91,13 +91,14 @@
           <span class="flex items-center">{{ $t('home.setupComplete') }}</span>
         </div>
       </div>
-      <!-- Full City Agent Insights logo (icon + wordmark in one image) replaces the old icon + text. -->
-      <img src="/assets/cityagent-dash-logo.png" alt="City Agent Insights" class="max-h-32 max-w-[480px] object-contain mx-auto" />
-      <div class="w-full mx-auto mt-2 space-x-3 space-y-3 bg-red-100">
+      <!-- Design hero: greeting eyebrow + Spectral headline + subtitle (replaces the big logo;
+           the nav already carries the wordmark). -->
+      <div class="home-hero relative">
+        <div class="home-orb" />
+        <p class="home-eyebrow">{{ greeting }}{{ userFirstName ? ', ' + userFirstName : '' }}</p>
+        <h1 class="home-h1">What should we <span class="home-h1-em">explore</span> today?</h1>
+        <p class="home-sub">{{ $t('home.subtitle') }}</p>
       </div>
-      <p class="text-lg mt-5 font-light text-[#6b6b6b]">
-          {{ $t('home.subtitle') }}
-      </p>
       <div class="w-full md:w-4/5 mx-auto mt-10 rounded-lg relative z-10">
           <PromptBoxV2
               :textareaContent="textareaContent"
@@ -122,7 +123,7 @@
     <!-- Existing content -->
     <div v-if="!isLoading" class="flex flex-col p-4 flex-grow md:w-1/3 md:mx-auto relative z-10">
 
-      <div class="flex cursor-pointer flex-col text-sm w-full text-start mt-4 p-2 bg-white rounded-lg border border-[#E7E5DD] hover:shadow-md hover:border-[#E8C9B5]"
+      <div class="flex cursor-pointer flex-col text-sm w-full text-start mt-4 p-2 bg-white rounded-lg border border-[#E9E0D3] hover:shadow-md hover:border-[#E8C9B5]"
         v-if="false"
         @click="router.push('/settings/models')"
       >
@@ -144,7 +145,7 @@
 
         <div
         @click="router.push('/agents')"
-        class="flex hidden cursor-pointer flex-col text-sm w-full text-start mt-4 p-2 bg-white rounded-lg border border-[#E7E5DD] hover:shadow-md hover:border-[#E8C9B5]">
+        class="flex hidden cursor-pointer flex-col text-sm w-full text-start mt-4 p-2 bg-white rounded-lg border border-[#E9E0D3] hover:shadow-md hover:border-[#E8C9B5]">
             <div class="flex">
 
                 <div class="w-4/5 pe-4">
@@ -173,7 +174,6 @@
 
 
 
-    <div class="gradient-glow"></div>
   </div>
 
   <McpModal v-model="showMcpModal" />
@@ -244,6 +244,29 @@ definePageMeta({
   layout: 'default',
   auth: true,
   permissions: ['view_reports']
+})
+
+// Design fonts (Spectral serif heading + Hanken Grotesk body).
+useHead({
+  link: [
+    { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
+    { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' },
+    { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Hanken+Grotesk:wght@400;500;600;700&display=swap' },
+  ],
+})
+
+// Time-of-day greeting (matches the design's eyebrow line).
+const greeting = computed(() => {
+  const h = new Date().getHours()
+  if (h < 5) return 'Working late'
+  if (h < 12) return 'Good morning'
+  if (h < 17) return 'Good afternoon'
+  if (h < 22) return 'Good evening'
+  return 'Working late'
+})
+const userFirstName = computed(() => {
+  const n = ((currentUser.value as any)?.name || '').trim()
+  return n ? n.split(/\s+/)[0] : ''
 })
 
 const textContent = ref('')
@@ -401,6 +424,34 @@ await signOut({
 </script>
 
 <style scoped>
+.home-root { font-family: 'Hanken Grotesk', system-ui, sans-serif; }
+.home-hero { text-align: center; padding: 8px 0 6px; }
+.home-orb {
+  position: absolute; top: -28px; left: 50%; transform: translateX(-50%);
+  width: 520px; max-width: 90%; height: 260px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(214, 112, 55, .16), transparent 68%);
+  filter: blur(26px); pointer-events: none; animation: home-orb 9s ease-in-out infinite;
+}
+.home-eyebrow {
+  position: relative; margin: 0 0 12px;
+  font-size: 13px; font-weight: 600; letter-spacing: .12em;
+  color: #B07A4E; text-transform: uppercase;
+}
+.home-h1 {
+  position: relative; margin: 0 0 14px;
+  font-family: 'Spectral', 'Spectral', ui-serif, Georgia, serif; font-weight: 500;
+  font-size: 46px; line-height: 1.1; letter-spacing: -.02em; color: #211B14;
+}
+.home-h1-em { font-style: italic; color: #A8330F; }
+.home-sub {
+  position: relative; margin: 0 auto;
+  font-size: 16.5px; color: #6E6356; max-width: 480px;
+}
+@keyframes home-orb {
+  0%, 100% { transform: translateX(-50%) translateY(0) scale(1); opacity: .55; }
+  50% { transform: translateX(-50%) translateY(-22px) scale(1.15); opacity: .8; }
+}
+@media (prefers-reduced-motion: reduce) { .home-orb { animation: none !important; } }
 .gradient-glow {
     background-image: linear-gradient(45deg, #BE93C5, #7BC6CC, #DBE6F6);
     border-radius: 9999px;

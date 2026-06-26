@@ -18,7 +18,7 @@
                 <div class="text-xs font-medium text-gray-900">
                   {{ ds.info.name }} <span class="text-gray-500">({{ ds.info.type }})</span>
                   <!-- Usage tracking indicator -->
-                  <span v-if="ds._usage_meta" class="ms-2 text-[9px] px-1 py-0.5 rounded bg-[#F4E5DA] text-[#A8542F]">
+                  <span v-if="ds._usage_meta" class="ms-2 text-[9px] px-1 py-0.5 rounded bg-[#F4E5DA] text-[#A8330F]">
                     {{ (ds.tables || []).length }} of {{ ds._usage_meta.tables_total }} tables
                   </span>
                 </div>
@@ -166,7 +166,7 @@
       >
         <Icon :name="expandedSections.has('instructions') ? 'heroicons-chevron-down' : 'heroicons-chevron-right'" class="w-3 h-3 me-1 rtl-flip" />
         Instructions
-        <span v-if="instructionsItems.length" class="ms-2 text-[10px] px-1.5 py-0.5 rounded-full bg-[#F4E5DA] text-[#A8542F]">
+        <span v-if="instructionsItems.length" class="ms-2 text-[10px] px-1.5 py-0.5 rounded-full bg-[#F4E5DA] text-[#A8330F]">
           {{ instructionsItems.length }}
         </span>
       </div>
@@ -210,7 +210,7 @@
                       <!-- Expand button for full content -->
                       <button 
                         v-if="(ins.text || ins.content || '').length > 80"
-                        class="text-[10px] text-[#C2683F] hover:text-[#A8542F] mt-0.5 text-start"
+                        class="text-[10px] text-[#C2541E] hover:text-[#A8330F] mt-0.5 text-start"
                         @click="toggleSection('instruction:'+(ins.id || ins.key))"
                       >
                         {{ expandedSections.has('instruction:'+(ins.id || ins.key)) ? 'show less' : 'show more' }}
@@ -258,7 +258,7 @@
                   <td class="px-3 py-2">
                     <span 
                       class="text-[9px] px-1.5 py-0.5 rounded"
-                      :class="ins.load_mode === 'always' ? 'bg-[#F4E5DA] text-[#A8542F]' : ins.load_mode === 'intelligent' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'"
+                      :class="ins.load_mode === 'always' ? 'bg-[#F4E5DA] text-[#A8330F]' : ins.load_mode === 'intelligent' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'"
                     >
                       {{ ins.load_mode || 'always' }}
                     </span>
@@ -289,7 +289,7 @@
                     <div class="text-xs text-gray-900">{{ truncateText(ins.content || '', 80) }}</div>
                     <button 
                       v-if="(ins.content || '').length > 80"
-                      class="text-[10px] text-[#C2683F] hover:text-[#A8542F] mt-0.5"
+                      class="text-[10px] text-[#C2541E] hover:text-[#A8330F] mt-0.5"
                       @click="toggleSection('instruction:'+ins.key)"
                     >
                       {{ expandedSections.has('instruction:'+ins.key) ? 'show less' : 'show more' }}
@@ -930,7 +930,7 @@ function formatMetricsList(metrics: Record<string, any>): Array<{ key: string, l
     if (k === 'score') return 'text-gray-700'
     if (k === 'success') return 'text-green-600'
     if (k === 'failure' || k === 'feedback_negative') return 'text-red-600'
-    if (k === 'success_rate') return 'text-[#C2683F]'
+    if (k === 'success_rate') return 'text-[#C2541E]'
     if (k === 'usage' || k === 'feedback_positive') return 'text-gray-600'
     return 'text-gray-700'
   }

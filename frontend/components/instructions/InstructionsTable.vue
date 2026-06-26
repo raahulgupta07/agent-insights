@@ -60,7 +60,7 @@
                                 v-for="instruction in instructions" 
                                 :key="instruction.id"
                                 class="hover:bg-gray-50 transition-colors cursor-pointer"
-                                :class="{ 'bg-[#F3E7DF]': selectable && selectedIds?.has(instruction.id) }"
+                                :class="{ 'bg-[#FBEFE4]': selectable && selectedIds?.has(instruction.id) }"
                                 @click="handleRowClick(instruction, $event)"
                             >
                                 <!-- Checkbox -->
@@ -99,7 +99,7 @@
                                             v-if="instruction.text && instruction.text.length > 150"
                                             @click.stop="toggleExpand(instruction.id)"
                                             :class="compact ? 'text-[9px]' : 'text-[10px]'"
-                                            class="text-[#C2683F] hover:text-[#A8542F] mt-0.5 font-medium"
+                                            class="text-[#C2541E] hover:text-[#A8330F] mt-0.5 font-medium"
                                         >
                                             {{ expandedRows.has(instruction.id) ? 'less' : 'more' }}
                                         </button>
@@ -129,7 +129,7 @@
                                                     class="w-5 h-5"
                                                     :class="{
                                                         'text-amber-500': helpers.getSourceType(instruction) === 'ai',
-                                                        'text-[#C2683F]': helpers.getSourceType(instruction) === 'user'
+                                                        'text-[#C2541E]': helpers.getSourceType(instruction) === 'user'
                                                     }"
                                                 />
                                             </template>

@@ -37,7 +37,7 @@
               </div>
               <span v-if="item.category" class="ms-1.5 text-[9px] px-1 py-0.5 rounded bg-gray-100 text-gray-500 flex-shrink-0">{{ item.category }}</span>
               <span v-if="item.load_mode" class="ms-1 text-[9px] px-1 py-0.5 rounded flex-shrink-0"
-                :class="item.load_mode === 'always' ? 'bg-[#F6EFEA] text-[#C2683F]' : 'bg-gray-100 text-gray-500'">
+                :class="item.load_mode === 'always' ? 'bg-[#F6EFEA] text-[#C2541E]' : 'bg-gray-100 text-gray-500'">
                 {{ item.load_mode }}
               </span>
             </div>
@@ -49,7 +49,7 @@
                   <MDC :value="item.text || ''" class="markdown-content" />
                 </div>
                 <button
-                  class="text-[10px] text-[#C2683F] hover:text-[#A8542F] inline-flex items-center gap-0.5"
+                  class="text-[10px] text-[#C2541E] hover:text-[#A8330F] inline-flex items-center gap-0.5"
                   @click="emit('openInstruction', item.id)"
                 >
                   <Icon name="heroicons:arrow-top-right-on-square" class="w-3 h-3" />

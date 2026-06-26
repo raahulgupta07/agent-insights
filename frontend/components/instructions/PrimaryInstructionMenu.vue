@@ -30,7 +30,7 @@
                 <template v-if="canTrain">
                     <div class="my-1 border-t border-gray-100"></div>
                     <button type="button" @click.stop="onStartTraining" class="menu-item">
-                        <UIcon name="heroicons-academic-cap" class="w-4 h-4 text-[#C2683F]" />
+                        <UIcon name="heroicons-academic-cap" class="w-4 h-4 text-[#C2541E]" />
                         <span>Start a training session</span>
                     </button>
                     <div class="px-3 pb-1.5 pt-0.5 text-[10px] leading-tight text-gray-400">
@@ -52,7 +52,7 @@
                             v-model="search"
                             type="text"
                             placeholder="Search instructions…"
-                            class="w-full h-8 ps-7 pe-2 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-[#C2683F]/40"
+                            class="w-full h-8 ps-7 pe-2 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-[#C2541E]/40"
                             @input="onSearchInput"
                             @click.stop
                         />
@@ -69,11 +69,11 @@
                         :disabled="inst.id === currentInstructionId"
                         @click.stop="select(inst)"
                         class="w-full text-start px-3 py-2 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        :class="inst.id === currentInstructionId ? 'bg-[#F3E7DF]/50' : ''"
+                        :class="inst.id === currentInstructionId ? 'bg-[#FBEFE4]/50' : ''"
                     >
                         <div class="flex items-center gap-1.5">
                             <span class="text-xs font-medium text-gray-800 truncate">{{ inst.title || 'Untitled instruction' }}</span>
-                            <span v-if="inst.id === currentInstructionId" class="text-[9px] px-1 py-0.5 bg-[#F3E7DF] text-[#A8542F] rounded shrink-0">Current</span>
+                            <span v-if="inst.id === currentInstructionId" class="text-[9px] px-1 py-0.5 bg-[#FBEFE4] text-[#A8330F] rounded shrink-0">Current</span>
                         </div>
                         <div class="text-[11px] text-gray-500 line-clamp-2 mt-0.5">{{ inst.text }}</div>
                     </button>

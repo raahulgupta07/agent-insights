@@ -1,18 +1,18 @@
 <template>
     <NuxtLayout name="default">
-        <div class="flex justify-center px-4 md:px-6 text-sm bg-[#FBFAF6] min-h-full">
+        <div class="flex justify-center px-4 md:px-6 text-sm bg-[#F6F1EA] min-h-full">
             <div class="w-full max-w-7xl py-2">
                 <div>
                     <h1
-                        class="text-2xl font-semibold text-[#1f2328] tracking-tight"
-                        style="font-family: ui-serif, Georgia, 'Times New Roman', serif"
+                        class="text-[32px] font-medium text-[#211B14] tracking-tight"
+                        style="font-family: 'Spectral', ui-serif, Georgia, serif"
                     >
                         {{ $t('monitoring.title') }}
                     </h1>
                     <p class="mt-2 text-[#6b6b6b] leading-relaxed max-w-2xl">{{ $t('monitoring.overview.subtitle') }}</p>
 
                     <!-- Tabs navigation -->
-                    <div class="border-b border-[#E7E5DD] mt-5">
+                    <div class="border-b border-[#E9E0D3] mt-5">
                         <nav class="-mb-px flex space-x-6">
                             <NuxtLink
                                 v-for="tab in visibleTabs"
@@ -20,8 +20,8 @@
                                 :to="`/monitoring/${tab.name}`"
                                 :class="[
                                     isTabActive(tab.name)
-                                        ? 'border-[#C2683F] text-[#1f2328]'
-                                        : 'border-transparent text-[#6b6b6b] hover:border-[#E7E5DD] hover:text-[#1f2328]',
+                                        ? 'border-[#C2541E] text-[#1f2328]'
+                                        : 'border-transparent text-[#6b6b6b] hover:border-[#E9E0D3] hover:text-[#1f2328]',
                                     'whitespace-nowrap border-b-2 py-2 px-1 text-sm font-medium flex items-center space-x-2'
                                 ]"
                             >

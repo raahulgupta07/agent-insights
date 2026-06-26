@@ -3,12 +3,12 @@
   <div v-if="modelValue" class="fixed inset-0 z-50 flex items-center justify-center p-5" style="background:rgba(30,25,20,.45)" @click.self="close">
     <div class="bg-white rounded-[18px] w-[760px] max-w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
       <!-- header -->
-      <div class="flex items-center gap-3 px-6 py-4 border-b border-[#E7E5DD]">
-        <div class="w-10 h-10 rounded-[10px] bg-[#FBF4EF] text-[#C2683F] flex items-center justify-center flex-none">
+      <div class="flex items-center gap-3 px-6 py-4 border-b border-[#E9E0D3]">
+        <div class="w-10 h-10 rounded-[10px] bg-[#FBF4EF] text-[#C2541E] flex items-center justify-center flex-none">
           <UIcon name="i-heroicons-square-3-stack-3d" class="w-5 h-5" />
         </div>
         <div class="min-w-0">
-          <h2 class="text-[17px] font-semibold text-[#1f2328] truncate" style="font-family:ui-serif,Georgia,serif">Use “{{ tpl?.name || templateName || 'template' }}”</h2>
+          <h2 class="text-[17px] font-semibold text-[#1f2328] truncate" style="font-family:'Spectral', ui-serif, Georgia, serif">Use “{{ tpl?.name || templateName || 'template' }}”</h2>
           <div class="text-[12px] text-[#9a958c] truncate">{{ tpl?.version ? 'v'+tpl.version : '' }}<span v-if="tpl?.author"> · by {{ tpl.author }}</span></div>
         </div>
         <button class="ml-auto text-[#9a958c] hover:text-[#6b6b6b] text-xl leading-none" @click="close">✕</button>
@@ -18,7 +18,7 @@
       <div class="flex gap-1.5 px-6 pt-3.5">
         <div v-for="s in visibleSteps" :key="s.key" class="flex-1 flex flex-col gap-1.5 items-center">
           <div class="w-full h-1 rounded" :class="stepClass(s.key)"></div>
-          <div class="text-[11px] font-bold" :class="stepIdx(s.key) === activeIdx ? 'text-[#C2683F]' : stepIdx(s.key) < activeIdx ? 'text-[#2f9e6f]' : 'text-[#9a958c]'">{{ s.label }}</div>
+          <div class="text-[11px] font-bold" :class="stepIdx(s.key) === activeIdx ? 'text-[#C2541E]' : stepIdx(s.key) < activeIdx ? 'text-[#2f9e6f]' : 'text-[#9a958c]'">{{ s.label }}</div>
         </div>
       </div>
 
@@ -30,16 +30,16 @@
           <div v-if="loadingTpl" class="text-sm text-[#6b6b6b] py-6 text-center">Loading…</div>
           <template v-else>
             <div v-for="f in previewFeatures" :key="f.label" class="flex gap-2.5 py-2 border-b border-dashed border-[#eee] last:border-0 items-start">
-              <div class="w-[22px] h-[22px] rounded-[7px] bg-[#FBF4EF] text-[#C2683F] flex items-center justify-center text-xs flex-none">{{ f.glyph }}</div>
+              <div class="w-[22px] h-[22px] rounded-[7px] bg-[#FBF4EF] text-[#C2541E] flex items-center justify-center text-xs flex-none">{{ f.glyph }}</div>
               <div><b class="text-[13px]">{{ f.label }}</b><div class="text-[#6b6b6b] text-[12px]">{{ f.desc }}</div></div>
             </div>
             <div v-if="requiresColumns.length" class="mt-3.5 rounded-[10px] border border-[#E8C9B5] bg-[#FBF4EF] px-3 py-2.5">
-              <div class="text-[11px] font-bold text-[#C2683F] uppercase mb-1.5">Needs these columns in your data</div>
+              <div class="text-[11px] font-bold text-[#C2541E] uppercase mb-1.5">Needs these columns in your data</div>
               <div class="flex flex-wrap gap-1.5">
-                <span v-for="r in requiresColumns" :key="r.as" class="text-[11px] font-medium px-2 py-1 rounded-full bg-white text-[#C2683F] border border-[#E8C9B5]">{{ r.role }} · {{ r.as }}</span>
+                <span v-for="r in requiresColumns" :key="r.as" class="text-[11px] font-medium px-2 py-1 rounded-full bg-white text-[#C2541E] border border-[#E8C9B5]">{{ r.role }} · {{ r.as }}</span>
               </div>
             </div>
-            <div v-else class="mt-3.5 text-[12px] text-[#555] bg-[#faf8f4] border-l-[3px] border-[#C2683F] rounded-r-lg px-3 py-2.5">
+            <div v-else class="mt-3.5 text-[12px] text-[#555] bg-[#faf8f4] border-l-[3px] border-[#C2541E] rounded-r-lg px-3 py-2.5">
               This template has no required columns — it'll seed rules &amp; skills you can use on any data.
             </div>
           </template>
@@ -48,46 +48,46 @@
         <!-- 2 PICK DATA (3-way) -->
         <div v-else-if="step === 'data'">
           <p class="text-[#6b6b6b] mt-0 text-[13px]">Where's the data for this agent?</p>
-          <label class="flex items-center gap-3 border rounded-[10px] px-3.5 py-3 my-2 cursor-pointer" :class="mode==='existing' ? 'border-[#C2683F] bg-[#FBF4EF]' : 'border-[#E7E5DD]'" @click="mode='existing'">
-            <span class="w-[18px] h-[18px] rounded-full border-2 flex-none" :class="mode==='existing' ? 'border-[#C2683F] bg-[#C2683F] shadow-[inset_0_0_0_3px_#fff]' : 'border-[#ccc]'"></span>
+          <label class="flex items-center gap-3 border rounded-[10px] px-3.5 py-3 my-2 cursor-pointer" :class="mode==='existing' ? 'border-[#C2541E] bg-[#FBF4EF]' : 'border-[#E9E0D3]'" @click="mode='existing'">
+            <span class="w-[18px] h-[18px] rounded-full border-2 flex-none" :class="mode==='existing' ? 'border-[#C2541E] bg-[#C2541E] shadow-[inset_0_0_0_3px_#fff]' : 'border-[#ccc]'"></span>
             <div><b class="text-[13px]">Use an existing source</b><div class="text-[12px] text-[#9a958c]">Bind to data you've already connected.</div></div>
           </label>
           <div v-if="mode==='existing'" class="ml-9 mb-2 max-h-[180px] overflow-auto">
             <div v-if="loadingDs" class="text-[12px] text-[#9a958c] py-2">Loading sources…</div>
             <div v-else-if="!dataSources.length" class="text-[12px] text-[#9a958c] py-2">No sources yet — connect new or skip.</div>
-            <label v-for="ds in dataSources" :key="ds.id" class="flex items-center gap-2.5 border rounded-lg px-3 py-2 my-1 cursor-pointer text-[13px]" :class="selectedDs===ds.id ? 'border-[#C2683F] bg-[#FBF4EF]' : 'border-[#E7E5DD]'" @click="selectDs(ds.id)">
-              <span class="w-[15px] h-[15px] rounded-full border-2 flex-none" :class="selectedDs===ds.id ? 'border-[#C2683F] bg-[#C2683F] shadow-[inset_0_0_0_2px_#fff]' : 'border-[#ccc]'"></span>
+            <label v-for="ds in dataSources" :key="ds.id" class="flex items-center gap-2.5 border rounded-lg px-3 py-2 my-1 cursor-pointer text-[13px]" :class="selectedDs===ds.id ? 'border-[#C2541E] bg-[#FBF4EF]' : 'border-[#E9E0D3]'" @click="selectDs(ds.id)">
+              <span class="w-[15px] h-[15px] rounded-full border-2 flex-none" :class="selectedDs===ds.id ? 'border-[#C2541E] bg-[#C2541E] shadow-[inset_0_0_0_2px_#fff]' : 'border-[#ccc]'"></span>
               <UIcon name="i-heroicons-circle-stack" class="w-4 h-4 text-[#9a958c]" /> {{ ds.name || ds.id }}
             </label>
           </div>
-          <label class="flex items-center gap-3 border rounded-[10px] px-3.5 py-3 my-2 cursor-pointer" :class="mode==='connect' ? 'border-[#C2683F] bg-[#FBF4EF]' : 'border-[#E7E5DD]'" @click="mode='connect'">
-            <span class="w-[18px] h-[18px] rounded-full border-2 flex-none" :class="mode==='connect' ? 'border-[#C2683F] bg-[#C2683F] shadow-[inset_0_0_0_3px_#fff]' : 'border-[#ccc]'"></span>
+          <label class="flex items-center gap-3 border rounded-[10px] px-3.5 py-3 my-2 cursor-pointer" :class="mode==='connect' ? 'border-[#C2541E] bg-[#FBF4EF]' : 'border-[#E9E0D3]'" @click="mode='connect'">
+            <span class="w-[18px] h-[18px] rounded-full border-2 flex-none" :class="mode==='connect' ? 'border-[#C2541E] bg-[#C2541E] shadow-[inset_0_0_0_3px_#fff]' : 'border-[#ccc]'"></span>
             <div><b class="text-[13px]">Connect / upload new data</b><div class="text-[12px] text-[#9a958c]">Build the agent now, then connect a source or upload a file.</div></div>
           </label>
-          <label class="flex items-center gap-3 border rounded-[10px] px-3.5 py-3 my-2 cursor-pointer" :class="mode==='skip' ? 'border-[#C2683F] bg-[#FBF4EF]' : 'border-[#E7E5DD]'" @click="mode='skip'">
-            <span class="w-[18px] h-[18px] rounded-full border-2 flex-none" :class="mode==='skip' ? 'border-[#C2683F] bg-[#C2683F] shadow-[inset_0_0_0_3px_#fff]' : 'border-[#ccc]'"></span>
+          <label class="flex items-center gap-3 border rounded-[10px] px-3.5 py-3 my-2 cursor-pointer" :class="mode==='skip' ? 'border-[#C2541E] bg-[#FBF4EF]' : 'border-[#E9E0D3]'" @click="mode='skip'">
+            <span class="w-[18px] h-[18px] rounded-full border-2 flex-none" :class="mode==='skip' ? 'border-[#C2541E] bg-[#C2541E] shadow-[inset_0_0_0_3px_#fff]' : 'border-[#ccc]'"></span>
             <div><b class="text-[13px]">Skip for now — add data later</b><div class="text-[12px] text-[#9a958c]">Loads the playbook; bind columns when data arrives.</div></div>
           </label>
         </div>
 
         <!-- 3 MAP COLUMNS -->
         <div v-else-if="step === 'map'">
-          <p class="text-[#6b6b6b] mt-0 text-[13px]">We auto-matched your columns. Fix anything marked <span class="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#FBF4EF] text-[#C2683F]">needs you</span>.</p>
+          <p class="text-[#6b6b6b] mt-0 text-[13px]">We auto-matched your columns. Fix anything marked <span class="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#FBF4EF] text-[#C2541E]">needs you</span>.</p>
           <div v-if="loadingBind" class="text-sm text-[#6b6b6b] py-6 text-center">Matching…</div>
           <template v-else>
             <div v-for="r in requiresColumns" :key="r.as" class="grid grid-cols-[1fr_26px_1fr] gap-2 items-center my-2">
-              <div class="border border-[#E8C9B5] bg-[#FBF4EF] rounded-[9px] px-3 py-2"><div class="text-[10px] text-[#C2683F] font-bold uppercase">{{ r.role }}</div>{{ r.as }}</div>
-              <div class="text-[#C2683F] text-center font-bold">→</div>
+              <div class="border border-[#E8C9B5] bg-[#FBF4EF] rounded-[9px] px-3 py-2"><div class="text-[10px] text-[#C2541E] font-bold uppercase">{{ r.role }}</div>{{ r.as }}</div>
+              <div class="text-[#C2541E] text-center font-bold">→</div>
               <div class="flex items-center gap-2">
-                <select v-model="columnMap[r.as]" class="flex-1 border rounded-[9px] px-2.5 py-2 text-[13px] bg-white" :class="columnMap[r.as] ? 'border-[#E7E5DD]' : 'border-[#C2683F]'">
+                <select v-model="columnMap[r.as]" class="flex-1 border rounded-[9px] px-2.5 py-2 text-[13px] bg-white" :class="columnMap[r.as] ? 'border-[#E9E0D3]' : 'border-[#C2541E]'">
                   <option value="">— choose —</option>
                   <option v-for="c in columnOptions" :key="c" :value="c">{{ c }}</option>
                 </select>
                 <span v-if="columnMap[r.as]" class="text-[11px] font-medium px-2 py-1 rounded-full bg-[#eaf6f0] text-[#2f9e6f] flex-none">{{ autoMatched.includes(r.as) ? 'auto' : 'set' }}</span>
-                <span v-else class="text-[11px] font-medium px-2 py-1 rounded-full bg-[#FBF4EF] text-[#C2683F] flex-none">needs you</span>
+                <span v-else class="text-[11px] font-medium px-2 py-1 rounded-full bg-[#FBF4EF] text-[#C2541E] flex-none">needs you</span>
               </div>
             </div>
-            <div class="mt-3 text-[12px] text-[#555] bg-[#faf8f4] border-l-[3px] border-[#C2683F] rounded-r-lg px-3 py-2.5">Rules, metrics &amp; examples get rewritten with your columns. Unmapped ones stay flagged so nothing breaks silently.</div>
+            <div class="mt-3 text-[12px] text-[#555] bg-[#faf8f4] border-l-[3px] border-[#C2541E] rounded-r-lg px-3 py-2.5">Rules, metrics &amp; examples get rewritten with your columns. Unmapped ones stay flagged so nothing breaks silently.</div>
           </template>
         </div>
 
@@ -95,13 +95,13 @@
         <div v-else-if="step === 'review'">
           <p class="text-[#6b6b6b] mt-0 text-[13px]">Name your agent. Everything lands <b>pending</b> for your approval — never auto-applied.</p>
           <label class="text-[11px] font-bold text-[#9a958c]">AGENT NAME</label>
-          <input v-model="agentName" class="w-full border border-[#E7E5DD] rounded-[9px] px-3 py-2.5 text-[13px] mt-1.5 mb-3.5" placeholder="My agent" />
+          <input v-model="agentName" class="w-full border border-[#E9E0D3] rounded-[9px] px-3 py-2.5 text-[13px] mt-1.5 mb-3.5" placeholder="My agent" />
           <div v-for="f in previewFeatures" :key="f.label" class="flex gap-2.5 py-1.5 items-center text-[13px]">
-            <div class="w-[22px] h-[22px] rounded-[7px] bg-[#FBF4EF] text-[#C2683F] flex items-center justify-center text-xs flex-none">{{ f.glyph }}</div>
+            <div class="w-[22px] h-[22px] rounded-[7px] bg-[#FBF4EF] text-[#C2541E] flex items-center justify-center text-xs flex-none">{{ f.glyph }}</div>
             <div>{{ f.label }} <span class="text-[#9a958c]">→ pending</span></div>
           </div>
           <div class="flex gap-2.5 py-1.5 items-center text-[13px]">
-            <div class="w-[22px] h-[22px] rounded-[7px] bg-[#FBF4EF] text-[#C2683F] flex items-center justify-center text-xs flex-none">🗄</div>
+            <div class="w-[22px] h-[22px] rounded-[7px] bg-[#FBF4EF] text-[#C2541E] flex items-center justify-center text-xs flex-none">🗄</div>
             <div>{{ mode==='existing' && selectedDs ? 'Data source linked' : 'No data yet — add it after (bind later)' }}</div>
           </div>
         </div>
@@ -109,12 +109,12 @@
         <!-- 5 BUILD / SUCCESS -->
         <div v-else-if="step === 'done'" class="text-center py-5">
           <div v-if="building" class="py-8">
-            <Spinner class="h-8 w-8 mx-auto text-[#C2683F]" />
+            <Spinner class="h-8 w-8 mx-auto text-[#C2541E]" />
             <p class="text-[#6b6b6b] mt-3">Building your agent…</p>
           </div>
           <template v-else-if="builtStudioId">
             <div class="w-16 h-16 rounded-full bg-[#eaf6f0] text-[#2f9e6f] flex items-center justify-center text-3xl mx-auto mb-3.5">✓</div>
-            <h2 class="text-lg font-semibold" style="font-family:ui-serif,Georgia,serif">Your agent is ready</h2>
+            <h2 class="text-lg font-semibold" style="font-family:'Spectral', ui-serif, Georgia, serif">Your agent is ready</h2>
             <p class="text-[#6b6b6b] max-w-[420px] mx-auto mt-1.5 text-[13px]">
               “{{ agentName }}” was created.
               <template v-if="mode==='existing' && selectedDs">Approve the pending items, then train.</template>
@@ -126,12 +126,12 @@
       </div>
 
       <!-- footer -->
-      <div class="flex items-center gap-2.5 px-6 py-3.5 border-t border-[#E7E5DD]">
-        <button v-if="step !== 'preview' && step !== 'done'" class="text-[13px] font-medium text-[#6b6b6b] bg-white border border-[#E7E5DD] rounded-lg px-3.5 py-2 hover:bg-[#faf8f3]" @click="prev">← Back</button>
+      <div class="flex items-center gap-2.5 px-6 py-3.5 border-t border-[#E9E0D3]">
+        <button v-if="step !== 'preview' && step !== 'done'" class="text-[13px] font-medium text-[#6b6b6b] bg-white border border-[#E9E0D3] rounded-lg px-3.5 py-2 hover:bg-[#faf8f3]" @click="prev">← Back</button>
         <span class="flex-1"></span>
         <span class="text-[12px] text-[#9a958c]">Step {{ activeIdx + 1 }} of {{ visibleSteps.length }}</span>
         <button
-          class="text-[13px] font-semibold text-white bg-[#C2683F] hover:bg-[#A8542F] rounded-lg px-4 py-2 disabled:opacity-50"
+          class="text-[13px] font-semibold text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-lg px-4 py-2 disabled:opacity-50"
           :disabled="building || (step==='map' && !allMapped)"
           @click="nextOrBuild"
         >{{ ctaLabel }}</button>
@@ -183,7 +183,7 @@ const activeIdx = computed(() => visibleSteps.value.findIndex(s => s.key === ste
 const stepIdx = (k: string) => visibleSteps.value.findIndex(s => s.key === k)
 function stepClass(k: string) {
   const i = stepIdx(k)
-  if (i === activeIdx.value) return 'bg-[#C2683F]'
+  if (i === activeIdx.value) return 'bg-[#C2541E]'
   if (i < activeIdx.value) return 'bg-[#2f9e6f]'
   return 'bg-[#f1efe9]'
 }

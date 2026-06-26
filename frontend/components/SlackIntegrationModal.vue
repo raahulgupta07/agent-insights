@@ -12,8 +12,8 @@
 
         <!-- Usage Notes -->
         <div class="bg-[#F6EFEA] border border-[#E8C9B5] rounded-lg p-4 mb-4">
-          <h3 class="text-sm font-medium text-[#A8542F] mb-2">Usage Notes</h3>
-          <ul class="text-sm text-[#A8542F] space-y-1 list-disc list-inside">
+          <h3 class="text-sm font-medium text-[#A8330F] mb-2">Usage Notes</h3>
+          <ul class="text-sm text-[#A8330F] space-y-1 list-disc list-inside">
             <li>Only registered users can message or @mention the bot</li>
             <li>In channels/group chats, only <strong>public</strong> data sources are queried</li>
             <li>In private DMs, <strong>public + private</strong> data sources (that the user has access to) are queried</li>
@@ -97,7 +97,26 @@
               </span>
             </label>
           </div>
-          <button type="submit" class="bg-[#C2683F] hover:bg-[#A8542F] text-white text-sm px-3 py-1.5 rounded-md">Connect</button>
+
+          <!-- Per-agent audience (only when scoped to a studio) -->
+          <div v-if="props.studioId" class="mb-4">
+            <label class="block text-sm font-medium mb-2 text-[#1f2328]">Who can use this channel</label>
+            <div class="space-y-2">
+              <label
+                v-for="opt in audienceOptions"
+                :key="opt.value"
+                class="flex items-start gap-2 rounded-lg border p-2.5 cursor-pointer transition-colors"
+                :class="audience === opt.value ? 'border-[#E8C9B5] bg-[#F6EFEA]' : 'border-[#E9E0D3] hover:border-[#dcd9cf]'"
+              >
+                <input type="radio" :value="opt.value" v-model="audience" class="mt-0.5 text-[#C2541E] focus:ring-[#C2541E]" />
+                <span>
+                  <span class="block text-xs font-medium text-[#1f2328]">{{ opt.label }}</span>
+                  <span class="block text-[11px] text-gray-500">{{ opt.hint }}</span>
+                </span>
+              </label>
+            </div>
+          </div>
+          <button type="submit" class="bg-[#C2541E] hover:bg-[#A8330F] text-white text-sm px-3 py-1.5 rounded-md">Connect</button>
         </form>
       </div>
       <button class="absolute top-2 end-2 text-gray-400 hover:text-gray-600" @click="$emit('close')">✕</button>
@@ -109,12 +128,19 @@
   const props = defineProps<{
     integrated: boolean
     integrationData?: any
+    studioId?: string
   }>()
   const emit = defineEmits(['close', 'updated'])
   const toast = useToast()
 
   const botToken = ref('')
   const signingSecret = ref('')
+  // Per-agent audience (only used when studioId is set)
+  const audience = ref<'members' | 'anyone'>('members')
+  const audienceOptions = [
+    { value: 'members', label: 'Org members only', hint: 'Only members of your organization can use this channel.' },
+    { value: 'anyone', label: 'Anyone', hint: 'Anyone who reaches the bot can chat with it.' },
+  ]
   // Default ON for new connections; reflects stored config for existing ones.
   const autoLinkByEmail = ref<boolean>(
     props.integrationData?.platform_config?.auto_link_by_email ?? true
@@ -165,13 +191,20 @@
   }
   
   async function connect() {
-      const res = await useMyFetch('/api/settings/integrations/slack', {
+      const body: any = {
+        bot_token: botToken.value,
+        signing_secret: signingSecret.value,
+        auto_link_by_email: autoLinkByEmail.value,
+      }
+      // Per-agent scope: post to the studio endpoint + include the audience.
+      // Org scope (no studioId) keeps the exact original behavior.
+      const url = props.studioId
+        ? `/api/studios/${props.studioId}/channels/slack`
+        : '/api/settings/integrations/slack'
+      if (props.studioId) body.audience = audience.value
+      const res = await useMyFetch(url, {
         method: 'POST',
-        body: {
-          bot_token: botToken.value,
-          signing_secret: signingSecret.value,
-          auto_link_by_email: autoLinkByEmail.value,
-        }
+        body,
       })
       if (res.status.value === 'success') {
         toast.add({

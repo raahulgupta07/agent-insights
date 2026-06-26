@@ -18,9 +18,9 @@
 
       <!-- Answer (latest agent text answer) -->
       <section v-if="hasAnswer">
-        <div class="rounded-xl border border-[#E7E5DD] bg-white shadow-sm px-4 py-3.5">
+        <div class="rounded-xl border border-[#E9E0D3] bg-white shadow-sm px-4 py-3.5">
           <div class="flex items-center gap-2 mb-2">
-            <span class="inline-flex items-center text-[10px] font-semibold uppercase tracking-wide text-[#A8542F] bg-[#F6EFEA] px-2 py-0.5 rounded">Answer</span>
+            <span class="inline-flex items-center text-[10px] font-semibold uppercase tracking-wide text-[#A8330F] bg-[#F6EFEA] px-2 py-0.5 rounded">Answer</span>
           </div>
           <div class="markdown-content text-[13px] text-[#33373c] leading-relaxed">
             <MarkdownRender :content="props.latestAnswer || ''" :final="true" :render-code-blocks-as-pre="true" />
@@ -48,11 +48,11 @@
             class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-white border border-gray-100 shadow-sm hover:shadow cursor-pointer transition-all"
             @click="emit('openArtifact', { artifactId: art.id })"
           >
-            <Icon name="heroicons:squares-plus" class="w-4 h-4 flex-shrink-0 text-[#C2683F]" />
+            <Icon name="heroicons:squares-plus" class="w-4 h-4 flex-shrink-0 text-[#C2541E]" />
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-1.5">
                 <span class="text-sm text-gray-700 truncate">{{ art.title || 'Untitled' }}</span>
-                <span v-if="art.id === artifactList[0]?.id" class="inline-flex items-center text-[10px] font-medium text-[#A8542F] bg-[#F6EFEA] px-1.5 py-0.5 rounded">Default</span>
+                <span v-if="art.id === artifactList[0]?.id" class="inline-flex items-center text-[10px] font-medium text-[#A8330F] bg-[#F6EFEA] px-1.5 py-0.5 rounded">Default</span>
               </div>
               <div v-if="art.mode" class="text-[11px] text-gray-400 mt-0.5">{{ art.mode }}</div>
             </div>
@@ -92,7 +92,7 @@
           >
             <Icon
               name="heroicons-cube"
-              class="w-4 h-4 flex-shrink-0 text-[#C2683F]"
+              class="w-4 h-4 flex-shrink-0 text-[#C2541E]"
             />
             <div class="flex-1 min-w-0">
               <div class="text-sm text-gray-700 truncate">{{ inst.title || 'Untitled instruction' }}</div>
@@ -133,7 +133,7 @@
               <div class="text-sm text-gray-700 truncate">{{ w.name }}</div>
               <div class="flex items-center gap-2 mt-0.5">
                 <span class="text-[11px] text-gray-400">{{ w.source }} · {{ w.auth_mode }}</span>
-                <span v-if="w.classify_enabled" class="inline-flex items-center gap-1 text-[11px] text-[#C2683F]">
+                <span v-if="w.classify_enabled" class="inline-flex items-center gap-1 text-[11px] text-[#C2541E]">
                   <Icon name="heroicons-sparkles" class="w-3 h-3" /> AI
                 </span>
               </div>

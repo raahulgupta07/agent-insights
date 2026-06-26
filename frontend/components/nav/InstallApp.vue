@@ -6,7 +6,7 @@
     type="button"
     @click="install"
     :disabled="installing"
-    class="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-medium text-[#C2683F] border border-[#E8C9B5] bg-[#FBF4EF] hover:bg-[#F4E5DA] disabled:opacity-50 transition-colors shrink-0"
+    class="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-medium text-[#C2541E] border border-[#E8C9B5] bg-[#FBF4EF] hover:bg-[#F4E5DA] disabled:opacity-50 transition-colors shrink-0"
     title="Install CityAgent as a desktop app"
   >
     <UIcon name="i-heroicons-arrow-down-tray" class="w-4 h-4" />

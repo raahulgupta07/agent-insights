@@ -37,7 +37,7 @@
                                         <span class="text-[10px] text-gray-500">{{ $t('instructionModal.by', { name: inst.createdByName }) }}</span>
                                         <button
                                             @click="expandedInstructionId = inst.id"
-                                            class="text-[10px] text-[#C2683F] hover:text-[#A8542F] hover:underline"
+                                            class="text-[10px] text-[#C2541E] hover:text-[#A8330F] hover:underline"
                                         >
                                             {{ $t('instructionModal.readMore') }}
                                         </button>
@@ -56,7 +56,7 @@
                                         <span class="text-[10px] text-gray-500">{{ $t('instructionModal.by', { name: inst.createdByName }) }}</span>
                                         <button
                                             @click="expandedInstructionId = null"
-                                            class="text-[10px] text-[#C2683F] hover:text-[#A8542F] hover:underline"
+                                            class="text-[10px] text-[#C2541E] hover:text-[#A8330F] hover:underline"
                                         >
                                             {{ $t('instructionModal.showLess') }}
                                         </button>
@@ -74,7 +74,7 @@
                     <div class="flex items-center gap-2">
                         <h3 class="text-sm font-medium text-gray-900">{{ $t('instructionModal.impact') }}</h3>
                         <UTooltip :text="impactTotalCount ? $t('instructionModal.impactTooltip', { matched: impactMatchedCount, total: impactTotalCount }) : $t('instructionModal.impactTooltipEmpty')">
-                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#F4E5DA] text-[#A8542F]">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#F4E5DA] text-[#A8330F]">
                                 {{ Math.round(impactScore * 100) }}%
                             </span>
                         </UTooltip>

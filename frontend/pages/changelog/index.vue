@@ -1,12 +1,12 @@
 <template>
-  <div class="flex justify-center px-4 md:px-6 text-sm bg-[#FBFAF6] min-h-full">
+  <div class="flex justify-center px-4 md:px-6 text-sm bg-[#F6F1EA] min-h-full">
     <div class="w-full max-w-3xl py-2">
       <!-- Header -->
       <div class="flex items-start justify-between gap-4 mb-6">
         <div>
           <h1
             class="text-2xl font-semibold tracking-tight text-[#1f2328]"
-            style="font-family: ui-serif, Georgia, 'Times New Roman', serif"
+            style="font-family: 'Spectral', ui-serif, Georgia, serif"
           >What's new</h1>
           <p class="mt-2 text-[#6b6b6b] leading-relaxed max-w-2xl">
             Releases and improvements to CityAgent Analytics.
@@ -14,7 +14,7 @@
         </div>
         <span
           v-if="current"
-          class="flex-none inline-flex items-center gap-1.5 text-[11px] font-mono text-[#1f2328] bg-white border border-[#E7E5DD] rounded-lg px-2.5 py-1.5"
+          class="flex-none inline-flex items-center gap-1.5 text-[11px] font-mono text-[#1f2328] bg-white border border-[#E9E0D3] rounded-lg px-2.5 py-1.5"
         >
           v{{ current }}
           <span class="text-[#cfcabf]">·</span>
@@ -26,7 +26,7 @@
       <!-- Loading -->
       <div
         v-if="loading"
-        class="rounded-lg border border-[#E7E5DD] bg-white px-6 py-10 text-center text-sm text-[#6b6b6b]"
+        class="rounded-lg border border-[#E9E0D3] bg-white px-6 py-10 text-center text-sm text-[#6b6b6b]"
       >Loading…</div>
 
       <!-- Entries -->
@@ -38,10 +38,10 @@
         >
           <div class="flex items-start justify-between gap-3 mb-2">
             <div>
-              <div class="text-[11px] font-mono text-[#C2683F]">v{{ e.version }}</div>
+              <div class="text-[11px] font-mono text-[#C2541E]">v{{ e.version }}</div>
               <h2
                 class="text-[15px] font-semibold text-[#1f2328]"
-                style="font-family: ui-serif, Georgia, 'Times New Roman', serif"
+                style="font-family: 'Spectral', ui-serif, Georgia, serif"
               >{{ e.title }}</h2>
             </div>
             <span class="flex-none text-xs text-[#9a958c] pt-1">{{ e.date }}</span>
@@ -52,7 +52,7 @@
               :key="fi"
               class="flex items-start gap-2 text-[13px] text-[#444] leading-snug"
             >
-              <span class="mt-1.5 w-1 h-1 rounded-full flex-none" style="background:#C2683F" />
+              <span class="mt-1.5 w-1 h-1 rounded-full flex-none" style="background:#C2541E" />
               <span>{{ f }}</span>
             </li>
           </ul>
@@ -62,7 +62,7 @@
       <!-- Empty -->
       <div
         v-else
-        class="rounded-lg border border-[#E7E5DD] bg-white px-6 py-12 text-center text-sm text-[#9a958c]"
+        class="rounded-lg border border-[#E9E0D3] bg-white px-6 py-12 text-center text-sm text-[#9a958c]"
       >No changelog entries yet.</div>
     </div>
   </div>

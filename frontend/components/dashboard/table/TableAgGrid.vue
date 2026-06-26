@@ -49,14 +49,14 @@ const agGridStyles = computed(() => {
   // Extract primary color from palette (handle both string and gradient objects)
   const primaryColor = (() => {
     const palette = tokens.value.palette
-    if (!palette || !palette[0]) return '#C2683F'
+    if (!palette || !palette[0]) return '#C2541E'
     
     const firstColor = palette[0]
     if (typeof firstColor === 'string') return firstColor
     if (typeof firstColor === 'object' && firstColor && 'colorStops' in firstColor) {
-      return (firstColor as any).colorStops?.[0]?.color || '#C2683F'
+      return (firstColor as any).colorStops?.[0]?.color || '#C2541E'
     }
-    return '#C2683F'
+    return '#C2541E'
   })()
 
   return {
@@ -117,7 +117,7 @@ const resolveDataBarSpec = (cols: any[], rowsData: any[]) => {
     }
     if (!Number.isFinite(min) || !Number.isFinite(max)) return null
 
-    const color = typeof db.color === 'string' && db.color ? db.color : '#C2683F'
+    const color = typeof db.color === 'string' && db.color ? db.color : '#C2541E'
     return { field: target, min, max, color }
   } catch {
     return null

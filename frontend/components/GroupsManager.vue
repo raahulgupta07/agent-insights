@@ -8,7 +8,7 @@
                         v-model="searchQuery"
                         type="text"
                         :placeholder="$t('groupsManager.searchPlaceholder')"
-                        class="w-full ps-10 pe-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#C2683F] focus:border-[#C2683F]"
+                        class="w-full ps-10 pe-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#C2541E] focus:border-[#C2541E]"
                     />
                     <UIcon
                         name="i-heroicons-magnifying-glass"
@@ -103,7 +103,7 @@
                                 <td class="px-4 py-2 whitespace-nowrap">
                                     <button
                                         @click="openMembersModal(group)"
-                                        class="text-[#C2683F] hover:text-[#A8542F] text-sm font-medium"
+                                        class="text-[#C2541E] hover:text-[#A8330F] text-sm font-medium"
                                     >
                                         {{ group.member_count === 1 ? $t('groupsManager.memberSingular', { n: group.member_count }) : $t('groupsManager.memberPlural', { n: group.member_count }) }}
                                     </button>

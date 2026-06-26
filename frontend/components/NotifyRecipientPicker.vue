@@ -3,7 +3,7 @@
         <label class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 block">Send via email</label>
 
         <!-- Recipient input -->
-        <div class="flex flex-wrap items-center gap-1.5 border border-gray-200 rounded-lg px-2.5 py-1.5 min-h-[34px] focus-within:ring-1 focus-within:ring-[#C2683F] focus-within:border-[#C2683F] bg-white">
+        <div class="flex flex-wrap items-center gap-1.5 border border-gray-200 rounded-lg px-2.5 py-1.5 min-h-[34px] focus-within:ring-1 focus-within:ring-[#C2541E] focus-within:border-[#C2541E] bg-white">
             <span v-for="(email, idx) in recipients" :key="email"
                 class="inline-flex items-center gap-1 bg-gray-100 text-gray-700 text-xs px-2 py-0.5 rounded-full">
                 {{ email }}
@@ -36,7 +36,7 @@
 
         <!-- Optional message -->
         <input v-model="message" type="text" placeholder="Add a note (optional)"
-            class="mt-2 w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-[#C2683F] focus:border-[#C2683F]" />
+            class="mt-2 w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-[#C2541E] focus:border-[#C2541E]" />
 
         <!-- Send button -->
         <div class="flex items-center justify-between mt-3">
@@ -45,7 +45,7 @@
             </span>
             <span v-else></span>
             <button @click="send" :disabled="recipients.length === 0 || isSending"
-                class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-white bg-[#C2683F] rounded-lg hover:bg-[#A8542F] disabled:opacity-40 disabled:cursor-not-allowed">
+                class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-white bg-[#C2541E] rounded-lg hover:bg-[#A8330F] disabled:opacity-40 disabled:cursor-not-allowed">
                 <Spinner v-if="isSending" class="w-3 h-3" />
                 <Icon v-else name="heroicons:paper-airplane" class="w-3 h-3" />
                 Send

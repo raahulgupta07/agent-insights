@@ -92,7 +92,7 @@ async def teams_webhook(
 
         # Route to manager
         result = await platform_manager.handle_incoming_message(
-            db, "teams", platform.organization_id, activity
+            db, "teams", platform.organization_id, activity, platform=platform
         )
 
         return {"ok": True, "result": result}
@@ -108,14 +108,21 @@ async def find_platform_by_tenant_id(db: AsyncSession, tenant_id: str) -> Extern
     """Find platform by Teams tenant ID"""
     from sqlalchemy import select
 
-    stmt = select(ExternalPlatform).where(
-        ExternalPlatform.platform_type == "teams"
+    # Prefer per-agent (studio-bound) rows over org-wide (studio_id NOT NULL first).
+    stmt = (
+        select(ExternalPlatform)
+        .where(
+            ExternalPlatform.platform_type == "teams",
+            ExternalPlatform.is_active.is_(True),
+            ExternalPlatform.deleted_at.is_(None),
+        )
+        .order_by(ExternalPlatform.studio_id.is_(None).asc())
     )
     result = await db.execute(stmt)
     platforms = result.scalars().all()
 
     for platform in platforms:
-        config = platform.platform_config
+        config = platform.platform_config or {}
         if config.get("tenant_id") == tenant_id:
             return platform
 
@@ -123,12 +130,18 @@ async def find_platform_by_tenant_id(db: AsyncSession, tenant_id: str) -> Extern
 
 
 async def find_any_teams_platform(db: AsyncSession) -> ExternalPlatform:
-    """Fallback: find any active Teams platform (for Web Chat / Emulator testing)"""
+    """Fallback: find any active Teams platform (for Web Chat / Emulator testing).
+    Prefers a per-agent (studio-bound) row over the org-wide one."""
     from sqlalchemy import select
 
-    stmt = select(ExternalPlatform).where(
-        ExternalPlatform.platform_type == "teams",
-        ExternalPlatform.is_active == True,
+    stmt = (
+        select(ExternalPlatform)
+        .where(
+            ExternalPlatform.platform_type == "teams",
+            ExternalPlatform.is_active == True,
+            ExternalPlatform.deleted_at.is_(None),
+        )
+        .order_by(ExternalPlatform.studio_id.is_(None).asc())
     )
     result = await db.execute(stmt)
     return result.scalars().first()

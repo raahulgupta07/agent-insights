@@ -3,7 +3,7 @@
         <!-- Header -->
         <div class="flex items-start justify-between mb-4">
             <div>
-                <h2 class="text-lg font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">
+                <h2 class="text-lg font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">
                     Teach the agent
                 </h2>
                 <p class="text-xs text-[#6b6b6b] mt-0.5 max-w-2xl">
@@ -15,7 +15,7 @@
         </div>
 
         <!-- Paste box -->
-        <div class="rounded-2xl border border-[#E7E5DD] bg-white p-4 mb-4">
+        <div class="rounded-2xl border border-[#E9E0D3] bg-white p-4 mb-4">
             <UTextarea
                 v-model="pasteText"
                 :rows="9"
@@ -30,7 +30,7 @@
                     v-if="canEdit"
                     type="button"
                     :disabled="classifying || pasteText.trim().length < 12"
-                    class="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-[#C2683F] hover:bg-[#A8542F] rounded-lg px-3.5 py-1.5 transition-colors disabled:opacity-50"
+                    class="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-lg px-3.5 py-1.5 transition-colors disabled:opacity-50"
                     @click="teach"
                 >
                     <Spinner v-if="classifying" class="h-3.5 w-3.5" />
@@ -41,7 +41,7 @@
         </div>
 
         <!-- Empty / no-spans note -->
-        <div v-if="ran && !spans.length" class="py-10 text-center border border-dashed border-[#E7E5DD] rounded-2xl">
+        <div v-if="ran && !spans.length" class="py-10 text-center border border-dashed border-[#E9E0D3] rounded-2xl">
             <UIcon name="i-heroicons-light-bulb" class="w-7 h-7 mx-auto text-[#9a958c] mb-1.5" />
             <p class="text-xs text-[#6b6b6b]">Nothing teachable detected. Try pasting more detail — a method, a rule, or a fact.</p>
         </div>
@@ -59,7 +59,7 @@
                 v-for="(sp, i) in spans"
                 :key="i"
                 class="rounded-2xl border bg-white p-4 transition-colors"
-                :class="sp._include === false ? 'border-[#EFE7DF] opacity-55' : 'border-[#E7E5DD]'"
+                :class="sp._include === false ? 'border-[#EFE7DF] opacity-55' : 'border-[#E9E0D3]'"
             >
                 <div class="flex items-start gap-3">
                     <!-- include toggle -->
@@ -67,7 +67,7 @@
                         type="checkbox"
                         v-model="sp._include"
                         :disabled="!canEdit"
-                        class="mt-1 h-4 w-4 rounded border-[#d8d4c8] text-[#C2683F] focus:ring-[#C2683F] shrink-0"
+                        class="mt-1 h-4 w-4 rounded border-[#d8d4c8] text-[#C2541E] focus:ring-[#C2541E] shrink-0"
                     />
                     <div class="min-w-0 flex-1">
                         <!-- type badge + becomes -->
@@ -84,7 +84,7 @@
                             <span
                                 v-if="sp.type === 'SKILL'"
                                 class="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
-                                :class="sp.bind && sp.bind.bound ? 'bg-[#E4F1EA] text-[#2f7d53]' : 'bg-[#FBEFE4] text-[#A8542F]'"
+                                :class="sp.bind && sp.bind.bound ? 'bg-[#E4F1EA] text-[#2f7d53]' : 'bg-[#FBEFE4] text-[#A8330F]'"
                             >
                                 {{ sp.bind && sp.bind.bound
                                     ? `binds ${Math.round((sp.bind.overall_conf || 0) * 100)}%`
@@ -96,7 +96,7 @@
                         <input
                             v-model="sp.title"
                             :disabled="!canEdit"
-                            class="w-full text-sm font-medium text-[#1f2328] bg-transparent border-0 border-b border-transparent focus:border-[#E7E5DD] focus:ring-0 px-0 py-0.5 mb-1.5"
+                            class="w-full text-sm font-medium text-[#1f2328] bg-transparent border-0 border-b border-transparent focus:border-[#E9E0D3] focus:ring-0 px-0 py-0.5 mb-1.5"
                             placeholder="Title"
                         />
                         <!-- editable content -->
@@ -115,10 +115,10 @@
                                 <code
                                     v-for="(col, key) in sp.bind.binding"
                                     :key="key"
-                                    class="inline-block ms-1 mb-1 bg-[#F4F1EA] border border-[#E7E5DD] rounded px-1.5 py-0.5"
+                                    class="inline-block ms-1 mb-1 bg-[#F4EEE5] border border-[#E9E0D3] rounded px-1.5 py-0.5"
                                 >{{ key }} → {{ col }}</code>
                             </template>
-                            <span v-if="sp.bind.missing && sp.bind.missing.length" class="text-[#A8542F]">
+                            <span v-if="sp.bind.missing && sp.bind.missing.length" class="text-[#A8330F]">
                                 · needs: {{ sp.bind.missing.join(', ') }}
                             </span>
                         </div>
@@ -129,7 +129,7 @@
             <!-- Footer: train toggle + approve -->
             <div v-if="canEdit" class="flex items-center justify-end gap-3 pt-1">
                 <label class="inline-flex items-center gap-1.5 text-[11px] text-[#6b6b6b] cursor-pointer select-none">
-                    <input type="checkbox" v-model="trainAfter" class="h-3.5 w-3.5 rounded border-[#d8d4c8] text-[#C2683F] focus:ring-[#C2683F]" />
+                    <input type="checkbox" v-model="trainAfter" class="h-3.5 w-3.5 rounded border-[#d8d4c8] text-[#C2541E] focus:ring-[#C2541E]" />
                     Re-train studio after saving
                 </label>
                 <button
@@ -168,7 +168,7 @@ function textRows(s?: string) {
 function badge(type: string) {
     switch (type) {
         case 'SKILL':
-            return { label: 'Skill', icon: 'i-heroicons-sparkles', cls: 'border-[#E8C9B5] bg-[#F6EFEA] text-[#A8542F]' }
+            return { label: 'Skill', icon: 'i-heroicons-sparkles', cls: 'border-[#E8C9B5] bg-[#F6EFEA] text-[#A8330F]' }
         case 'INSTRUCTION':
             return { label: 'Instruction', icon: 'i-heroicons-clipboard-document-list', cls: 'border-[#C9D8E8] bg-[#EEF4FA] text-[#37618A]' }
         case 'DATA_RULE':
@@ -176,7 +176,7 @@ function badge(type: string) {
         case 'KNOWLEDGE':
             return { label: 'Knowledge', icon: 'i-heroicons-book-open', cls: 'border-[#CFE0CF] bg-[#EEF5EE] text-[#3f7d53]' }
         default:
-            return { label: type, icon: 'i-heroicons-tag', cls: 'border-[#E7E5DD] bg-[#F4F1EA] text-[#6b6b6b]' }
+            return { label: type, icon: 'i-heroicons-tag', cls: 'border-[#E9E0D3] bg-[#F4EEE5] text-[#6b6b6b]' }
     }
 }
 

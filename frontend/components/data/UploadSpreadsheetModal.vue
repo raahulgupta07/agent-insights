@@ -6,7 +6,7 @@
         <div>
           <h2
             class="text-lg font-semibold text-[#1f2328] tracking-tight"
-            style="font-family: ui-serif, Georgia, 'Times New Roman', serif"
+            style="font-family: 'Spectral', ui-serif, Georgia, serif"
           >Upload File / Spreadsheet</h2>
           <p class="mt-1 text-sm text-[#6b6b6b] leading-relaxed">
             Turn a local file into a Data Agent. <span class="text-[#9a958c]">.xlsx · .xls · .csv</span>
@@ -14,22 +14,22 @@
         </div>
         <button
           @click="close"
-          class="text-[#9a958c] hover:text-[#1f2328] hover:bg-[#F4F1EA] rounded-lg p-1.5 transition-colors shrink-0"
+          class="text-[#9a958c] hover:text-[#1f2328] hover:bg-[#F4EEE5] rounded-lg p-1.5 transition-colors shrink-0"
           aria-label="Close"
         >
           <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
         </button>
       </div>
 
-      <hr class="my-4 border-[#E7E5DD]" />
+      <hr class="my-4 border-[#E9E0D3]" />
 
       <!-- BATCH: uploading many files at once -->
       <div v-if="batching" class="py-8 text-center">
-        <Spinner class="h-6 w-6 mx-auto mb-3 text-[#C2683F]" />
+        <Spinner class="h-6 w-6 mx-auto mb-3 text-[#C2541E]" />
         <p class="text-sm font-medium text-[#1f2328]">Uploading {{ batchDone }} / {{ batchTotal }} files…</p>
         <p class="text-xs text-[#9a958c] mt-1">Each becomes its own source and auto-pins. All sheets included.</p>
         <div class="w-full h-1.5 bg-[#F0EEE6] rounded-full mt-3 overflow-hidden">
-          <div class="h-full bg-[#C2683F] transition-all" :style="{ width: `${batchTotal ? Math.round(100*batchDone/batchTotal) : 0}%` }"></div>
+          <div class="h-full bg-[#C2541E] transition-all" :style="{ width: `${batchTotal ? Math.round(100*batchDone/batchTotal) : 0}%` }"></div>
         </div>
       </div>
 
@@ -62,16 +62,16 @@
           :class="[
             'cursor-pointer rounded-2xl border-2 border-dashed transition-all',
             isDragging
-              ? 'border-[#C2683F] bg-[#F6EFEA]'
-              : 'border-[#E8C9B5] hover:border-[#C2683F] hover:bg-[#F6EFEA]'
+              ? 'border-[#C2541E] bg-[#F6EFEA]'
+              : 'border-[#E8C9B5] hover:border-[#C2541E] hover:bg-[#F6EFEA]'
           ]"
         >
           <div class="flex flex-col items-center justify-center py-12 px-4 text-center">
             <UIcon
               name="i-heroicons-cloud-arrow-up"
-              :class="['w-12 h-12 transition-colors', isDragging ? 'text-[#C2683F]' : 'text-[#A8542F]']"
+              :class="['w-12 h-12 transition-colors', isDragging ? 'text-[#C2541E]' : 'text-[#A8330F]']"
             />
-            <span class="mt-3 text-sm font-medium text-[#C2683F]">
+            <span class="mt-3 text-sm font-medium text-[#C2541E]">
               {{ isDragging ? 'Drop the file here' : 'Click or drag a file to upload' }}
             </span>
             <span class="mt-1 text-xs text-[#9a958c]">
@@ -84,13 +84,13 @@
         <button
           type="button"
           @click="$refs.folderInput.click()"
-          class="mt-3 w-full inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#E8C9B5] bg-white px-3 py-2 text-xs font-semibold text-[#C2683F] hover:bg-[#F6EFEA] transition-colors"
+          class="mt-3 w-full inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#E8C9B5] bg-white px-3 py-2 text-xs font-semibold text-[#C2541E] hover:bg-[#F6EFEA] transition-colors"
         >
           <UIcon name="i-heroicons-folder-arrow-down" class="w-4 h-4" />
           Upload a whole folder
         </button>
         <p class="mt-1.5 text-[11px] text-[#9a958c] text-center">
-          Picks every spreadsheet &amp; CSV in the folder — one data agent each. For continuous auto-sync, use <span class="text-[#C2683F]">Sync a folder ⟳</span>.
+          Picks every spreadsheet &amp; CSV in the folder — one data agent each. For continuous auto-sync, use <span class="text-[#C2541E]">Sync a folder ⟳</span>.
         </p>
 
         <p v-if="error" class="mt-3 flex items-start gap-1.5 text-xs text-red-600">
@@ -102,10 +102,10 @@
       <!-- STEP 2: file chosen -->
       <div v-else class="space-y-4">
         <!-- File chip -->
-        <div class="flex items-center justify-between gap-3 rounded-xl border border-[#E7E5DD] bg-[#F4F1EA] px-3 py-2.5">
+        <div class="flex items-center justify-between gap-3 rounded-xl border border-[#E9E0D3] bg-[#F4EEE5] px-3 py-2.5">
           <div class="flex items-center gap-2.5 min-w-0">
-            <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white border border-[#E7E5DD] shrink-0">
-              <Spinner v-if="uploading" class="w-4 h-4 text-[#C2683F]" />
+            <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white border border-[#E9E0D3] shrink-0">
+              <Spinner v-if="uploading" class="w-4 h-4 text-[#C2541E]" />
               <UIcon v-else-if="uploadError" name="i-heroicons-x-circle" class="w-4 h-4 text-red-500" />
               <UIcon v-else name="i-heroicons-document-check" class="w-4 h-4 text-[#3f9e6a]" />
             </span>
@@ -145,8 +145,8 @@
                 :class="[
                   'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors',
                   selectedSheets.includes(s)
-                    ? 'border-[#C2683F] bg-[#F6EFEA] text-[#A8542F] font-medium'
-                    : 'border-[#E7E5DD] bg-white text-[#6b6b6b] hover:border-[#E8C9B5]'
+                    ? 'border-[#C2541E] bg-[#F6EFEA] text-[#A8330F] font-medium'
+                    : 'border-[#E9E0D3] bg-white text-[#6b6b6b] hover:border-[#E8C9B5]'
                 ]"
               >
                 <UIcon
@@ -166,19 +166,19 @@
                 {{ activeShape[0] }} rows · {{ activeShape[1] }} cols
               </span>
             </div>
-            <div class="overflow-auto rounded-xl border border-[#E7E5DD] max-h-56">
+            <div class="overflow-auto rounded-xl border border-[#E9E0D3] max-h-56">
               <table class="min-w-full text-xs">
-                <thead class="bg-[#F4F1EA] sticky top-0">
+                <thead class="bg-[#F4EEE5] sticky top-0">
                   <tr>
                     <th
                       v-for="(h, ci) in previewHeaders"
                       :key="ci"
-                      class="px-2.5 py-1.5 text-start font-medium text-[#6b6b6b] whitespace-nowrap border-b border-[#E7E5DD]"
+                      class="px-2.5 py-1.5 text-start font-medium text-[#6b6b6b] whitespace-nowrap border-b border-[#E9E0D3]"
                     >{{ cellText(h) }}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="(row, ri) in previewBody" :key="ri" class="even:bg-[#FBFAF6]">
+                  <tr v-for="(row, ri) in previewBody" :key="ri" class="even:bg-[#F6F1EA]">
                     <td
                       v-for="(cell, ci) in row"
                       :key="ci"
@@ -204,11 +204,11 @@
                 v-model="name"
                 type="text"
                 placeholder="Data Agent name"
-                class="w-full rounded-xl border border-[#E7E5DD] bg-white px-3 py-2 text-sm text-[#1f2328] placeholder-[#9a958c] focus:outline-none focus:border-[#C2683F] focus:ring-1 focus:ring-[#C2683F]"
+                class="w-full rounded-xl border border-[#E9E0D3] bg-white px-3 py-2 text-sm text-[#1f2328] placeholder-[#9a958c] focus:outline-none focus:border-[#C2541E] focus:ring-1 focus:ring-[#C2541E]"
               />
               <!-- Neutral dup-name hint (backend auto-suffixes; not a blocker) -->
               <p v-if="nameCollides" class="flex items-start gap-1.5 text-xs text-[#9a958c]">
-                <UIcon name="i-heroicons-information-circle" class="w-4 h-4 shrink-0 mt-px text-[#A8542F]" />
+                <UIcon name="i-heroicons-information-circle" class="w-4 h-4 shrink-0 mt-px text-[#A8330F]" />
                 <span>A source named “{{ name.trim() }}” exists — this will be saved as “{{ suffixedName }}”.</span>
               </p>
             </div>
@@ -218,7 +218,7 @@
                 v-model="description"
                 rows="2"
                 placeholder="What is this data about?"
-                class="w-full resize-none rounded-xl border border-[#E7E5DD] bg-white px-3 py-2 text-sm text-[#1f2328] placeholder-[#9a958c] focus:outline-none focus:border-[#C2683F] focus:ring-1 focus:ring-[#C2683F]"
+                class="w-full resize-none rounded-xl border border-[#E9E0D3] bg-white px-3 py-2 text-sm text-[#1f2328] placeholder-[#9a958c] focus:outline-none focus:border-[#C2541E] focus:ring-1 focus:ring-[#C2541E]"
               />
             </div>
           </div>
@@ -236,7 +236,7 @@
         <button
           @click="close"
           :disabled="busy"
-          class="px-4 py-2 text-sm font-medium rounded-xl text-[#6b6b6b] hover:bg-[#F4F1EA] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          class="px-4 py-2 text-sm font-medium rounded-xl text-[#6b6b6b] hover:bg-[#F4EEE5] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Cancel
         </button>
@@ -244,7 +244,7 @@
           v-if="uploaded && !uploadError"
           @click="createDataSource"
           :disabled="busy || !canCreate"
-          class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-[#C2683F] text-white hover:bg-[#A8542F] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-[#C2541E] text-white hover:bg-[#A8330F] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Spinner v-if="creating" class="w-4 h-4" />
           <UIcon v-else name="i-heroicons-sparkles" class="w-4 h-4" />

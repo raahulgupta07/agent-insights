@@ -65,6 +65,31 @@ class TelegramChannelCreate(_BaseModel):
     audience: str = _Field(default="members", pattern="^(members|anyone)$")
 
 
+_AUDIENCE = _Field(default="members", pattern="^(members|anyone)$")
+
+
+# Per-studio channel bodies. Mirror the matching ORG configs (SlackConfig /
+# TeamsConfig / WhatsAppConfig / EmailConfig) field-for-field, plus `audience`.
+class SlackChannelCreate(SlackConfig):
+    audience: str = _AUDIENCE
+
+
+class TeamsChannelCreate(TeamsConfig):
+    audience: str = _AUDIENCE
+
+
+class WhatsAppChannelCreate(WhatsAppConfig):
+    audience: str = _AUDIENCE
+
+
+class EmailChannelCreate(EmailConfig):
+    audience: str = _AUDIENCE
+
+
+class McpChannelCreate(_BaseModel):
+    audience: str = _AUDIENCE
+
+
 async def _require_channel_manager(db, studio_id: str, user):
     """Owner/editor only for channel management. Raises 403 otherwise."""
     role = await _resolve_studio_access(db, studio_id, user)
@@ -121,6 +146,174 @@ async def create_telegram_channel(
     if warning:
         out["warning"] = warning
     return out
+
+
+async def _upsert_studio_channel(
+    db,
+    studio_id: str,
+    organization,
+    platform_type: str,
+    audience: str,
+    platform_config: dict,
+    credentials: dict | None,
+) -> ExternalPlatform:
+    """Create-or-update the single (studio, platform_type) channel row.
+
+    One row per (studio, type): if a non-deleted row already exists for this
+    studio + type we update it in place (upsert), otherwise we insert. Shared by
+    all per-studio channel create routes to avoid copy-paste.
+    """
+    res = await db.execute(
+        _select(ExternalPlatform).where(
+            ExternalPlatform.studio_id == studio_id,
+            ExternalPlatform.organization_id == organization.id,
+            ExternalPlatform.platform_type == platform_type,
+            ExternalPlatform.deleted_at.is_(None),
+        )
+    )
+    platform = res.scalar_one_or_none()
+    if platform is None:
+        platform = ExternalPlatform(
+            organization_id=organization.id,
+            platform_type=platform_type,
+            studio_id=studio_id,
+            audience=audience,
+            platform_config=platform_config,
+            is_active=True,
+        )
+        db.add(platform)
+    else:
+        platform.audience = audience
+        platform.platform_config = platform_config
+        platform.is_active = True
+    if credentials is not None:
+        platform.encrypt_credentials(credentials)
+
+    await db.commit()
+    await db.refresh(platform)
+    return _redact_channel(platform)
+
+
+@router.post("/studios/{studio_id}/channels/slack")
+async def create_studio_slack_channel(
+    studio_id: str,
+    data: SlackChannelCreate,
+    current_user: User = Depends(current_user),
+    organization: Organization = Depends(get_current_organization),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """Attach a per-agent Slack bot to a Studio (HYBRID_AGENT_CHANNELS)."""
+    if not _flags.AGENT_CHANNELS:
+        raise HTTPException(status_code=404, detail="Not found")
+    await _require_channel_manager(db, studio_id, current_user)
+    platform_config = {
+        "base_url": data.webhook_url or "https://your-domain.com",
+        "auto_link_by_email": data.auto_link_by_email,
+    }
+    credentials = {
+        "bot_token": data.bot_token,
+        "signing_secret": data.signing_secret,
+    }
+    return await _upsert_studio_channel(
+        db, studio_id, organization, "slack", data.audience, platform_config, credentials
+    )
+
+
+@router.post("/studios/{studio_id}/channels/teams")
+async def create_studio_teams_channel(
+    studio_id: str,
+    data: TeamsChannelCreate,
+    current_user: User = Depends(current_user),
+    organization: Organization = Depends(get_current_organization),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """Attach a per-agent Microsoft Teams bot to a Studio (HYBRID_AGENT_CHANNELS)."""
+    if not _flags.AGENT_CHANNELS:
+        raise HTTPException(status_code=404, detail="Not found")
+    await _require_channel_manager(db, studio_id, current_user)
+    platform_config = {
+        "tenant_id": data.tenant_id,
+        "app_id": data.app_id,
+        "auto_link_by_email": data.auto_link_by_email,
+    }
+    credentials = {
+        "app_id": data.app_id,
+        "client_secret": data.client_secret,
+    }
+    return await _upsert_studio_channel(
+        db, studio_id, organization, "teams", data.audience, platform_config, credentials
+    )
+
+
+@router.post("/studios/{studio_id}/channels/whatsapp")
+async def create_studio_whatsapp_channel(
+    studio_id: str,
+    data: WhatsAppChannelCreate,
+    current_user: User = Depends(current_user),
+    organization: Organization = Depends(get_current_organization),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """Attach a per-agent WhatsApp Cloud number to a Studio (HYBRID_AGENT_CHANNELS)."""
+    if not _flags.AGENT_CHANNELS:
+        raise HTTPException(status_code=404, detail="Not found")
+    await _require_channel_manager(db, studio_id, current_user)
+    platform_config = {
+        "phone_number_id": data.phone_number_id,
+        "waba_id": data.waba_id,
+    }
+    credentials = {
+        "access_token": data.access_token,
+        "phone_number_id": data.phone_number_id,
+        "waba_id": data.waba_id,
+        "app_secret": data.app_secret,
+        "verify_token": data.verify_token,
+    }
+    return await _upsert_studio_channel(
+        db, studio_id, organization, "whatsapp", data.audience, platform_config, credentials
+    )
+
+
+@router.post("/studios/{studio_id}/channels/email")
+async def create_studio_email_channel(
+    studio_id: str,
+    data: EmailChannelCreate,
+    current_user: User = Depends(current_user),
+    organization: Organization = Depends(get_current_organization),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """Attach a per-agent AI Mailbox to a Studio (HYBRID_AGENT_CHANNELS).
+
+    Reuses the service's shared (platform_config, credentials) builder so the
+    mailbox shape (provider host defaults, capability derivation, secret layout)
+    matches the org-wide Email integration exactly.
+    """
+    if not _flags.AGENT_CHANNELS:
+        raise HTTPException(status_code=404, detail="Not found")
+    await _require_channel_manager(db, studio_id, current_user)
+    platform_config, credentials = external_platform_service._email_creds_and_config(data)
+    return await _upsert_studio_channel(
+        db, studio_id, organization, "email", data.audience, platform_config, credentials
+    )
+
+
+@router.post("/studios/{studio_id}/channels/mcp")
+async def create_studio_mcp_channel(
+    studio_id: str,
+    data: McpChannelCreate,
+    current_user: User = Depends(current_user),
+    organization: Organization = Depends(get_current_organization),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """Enable the config-less MCP channel for a Studio (HYBRID_AGENT_CHANNELS).
+
+    No external credentials — just a platform_type='mcp' row toggled active.
+    """
+    if not _flags.AGENT_CHANNELS:
+        raise HTTPException(status_code=404, detail="Not found")
+    await _require_channel_manager(db, studio_id, current_user)
+    return await _upsert_studio_channel(
+        db, studio_id, organization, "mcp", data.audience, {}, None
+    )
 
 
 @router.get("/studios/{studio_id}/channels")
@@ -228,6 +421,177 @@ async def delete_studio_channel(
     platform.is_active = False
     await db.commit()
     return {"success": True}
+
+
+# ---------------------------------------------------------------------------
+# Per-agent (Studio) SMTP — outbound email for THIS agent's system mail
+# (shares, scheduled results, channel replies). Stored in Studio.config['smtp'].
+# mode == "global" (default) → inherit org/global; mode == "custom" → own server.
+# Mirrors the org SMTP shapes (organization_settings_schema) field-for-field.
+# ---------------------------------------------------------------------------
+class StudioSmtpSchema(_BaseModel):
+    """Read shape for an agent's SMTP (password never returned)."""
+    mode: str = _Field(default="global", pattern="^(global|custom)$")
+    host: str | None = None
+    port: int = 587
+    security: str = "starttls"  # "starttls" | "ssl" | "none"
+    username: str | None = None
+    password_set: bool = False
+    from_address: str | None = None
+    from_name: str | None = None
+    validate_certs: bool = True
+
+
+class StudioSmtpUpdate(_BaseModel):
+    """Write shape; ``password`` only sent when (re)setting it."""
+    mode: str = _Field(default="global", pattern="^(global|custom)$")
+    host: str | None = None
+    port: int = 587
+    security: str = "starttls"
+    username: str | None = None
+    password: str | None = None
+    from_address: str | None = None
+    from_name: str | None = None
+    validate_certs: bool = True
+
+
+def _studio_smtp_read(studio) -> StudioSmtpSchema:
+    raw = (studio.config or {}).get("smtp") or {}
+    return StudioSmtpSchema(
+        mode=raw.get("mode") or "global",
+        host=raw.get("host"),
+        port=int(raw.get("port") or 587),
+        security=raw.get("security") or "starttls",
+        username=raw.get("username"),
+        password_set=bool(raw.get("password_enc")),
+        from_address=raw.get("from_address"),
+        from_name=raw.get("from_name"),
+        validate_certs=bool(raw.get("validate_certs", True)),
+    )
+
+
+async def _load_studio(db, studio_id: str, organization):
+    from app.models.studio import Studio
+    result = await db.execute(
+        _select(Studio).where(
+            Studio.id == studio_id,
+            Studio.organization_id == organization.id,
+        )
+    )
+    studio = result.scalar_one_or_none()
+    if not studio:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return studio
+
+
+@router.get("/studios/{studio_id}/smtp", response_model=StudioSmtpSchema)
+async def get_studio_smtp_route(
+    studio_id: str,
+    current_user: User = Depends(current_user),
+    organization: Organization = Depends(get_current_organization),
+    db: AsyncSession = Depends(get_async_db),
+):
+    if not _flags.AGENT_CHANNELS:
+        raise HTTPException(status_code=404, detail="Not found")
+    await _require_channel_manager(db, studio_id, current_user)
+    studio = await _load_studio(db, studio_id, organization)
+    return _studio_smtp_read(studio)
+
+
+@router.put("/studios/{studio_id}/smtp", response_model=StudioSmtpSchema)
+async def update_studio_smtp_route(
+    studio_id: str,
+    data: StudioSmtpUpdate,
+    current_user: User = Depends(current_user),
+    organization: Organization = Depends(get_current_organization),
+    db: AsyncSession = Depends(get_async_db),
+):
+    if not _flags.AGENT_CHANNELS:
+        raise HTTPException(status_code=404, detail="Not found")
+    await _require_channel_manager(db, studio_id, current_user)
+    studio = await _load_studio(db, studio_id, organization)
+
+    from app.services.email.secrets import encrypt_secret
+    from sqlalchemy.orm.attributes import flag_modified
+
+    config = dict(studio.config or {})
+    existing = config.get("smtp") or {}
+    smtp = {
+        "mode": data.mode or "global",
+        "host": (data.host or "").strip() or None,
+        "port": int(data.port or 587),
+        "security": data.security or "starttls",
+        "username": (data.username or "").strip() or None,
+        "from_address": (data.from_address or "").strip() or None,
+        "from_name": data.from_name,
+        "validate_certs": bool(data.validate_certs),
+        # Keep existing encrypted password unless a new one is supplied.
+        "password_enc": existing.get("password_enc"),
+    }
+    if data.password:
+        smtp["password_enc"] = encrypt_secret(data.password)
+    if smtp["mode"] == "custom" and not smtp["host"]:
+        raise HTTPException(status_code=400, detail="SMTP host is required for custom mode")
+
+    config["smtp"] = smtp
+    studio.config = config
+    flag_modified(studio, "config")
+    db.add(studio)
+    await db.commit()
+    await db.refresh(studio)
+    try:
+        await audit_service.log(
+            db=db, organization_id=str(organization.id),
+            action="studio.smtp_updated", user_id=str(current_user.id),
+            resource_type="studio", resource_id=str(studio.id),
+            details={"mode": smtp["mode"], "host": smtp["host"]},
+        )
+    except Exception:  # noqa: BLE001
+        pass
+    return _studio_smtp_read(studio)
+
+
+@router.post("/studios/{studio_id}/smtp/test", response_model=dict)
+async def test_studio_smtp_route(
+    studio_id: str,
+    current_user: User = Depends(current_user),
+    organization: Organization = Depends(get_current_organization),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """Probe the agent's saved custom SMTP (connect + auth, no send)."""
+    if not _flags.AGENT_CHANNELS:
+        raise HTTPException(status_code=404, detail="Not found")
+    await _require_channel_manager(db, studio_id, current_user)
+    from app.services.email_client_resolver import get_studio_smtp
+    from app.services.email.sender import SmtpConfig, _tls_context
+    import aiosmtplib
+
+    smtp = await get_studio_smtp(db, studio_id)
+    if not (smtp and smtp.get("host")):
+        return {"success": False, "smtp": "no custom SMTP host configured"}
+    cfg = SmtpConfig(
+        host=smtp["host"], port=int(smtp.get("port") or 587),
+        username=smtp.get("username"), password=smtp.get("password"),
+        security=smtp.get("security") or "starttls",
+        validate_certs=bool(smtp.get("validate_certs", True)),
+    ).resolved()
+    try:
+        kwargs = dict(
+            hostname=cfg.host, port=cfg.port,
+            use_tls=(cfg.security == "ssl"),
+            start_tls=(cfg.security == "starttls"), timeout=15,
+        )
+        tls_context = _tls_context(cfg)
+        if tls_context is not None:
+            kwargs["tls_context"] = tls_context
+        client = aiosmtplib.SMTP(**kwargs)
+        await client.connect()
+        if cfg.username and cfg.password:
+            await client.login(cfg.username, cfg.password)
+        await client.quit()
+        return {"success": True, "smtp": "ok"}
+    except Exception as e:  # noqa: BLE001
+        return {"success": False, "smtp": f"failed: {e}"}
 
 @router.get("/settings/integrations", response_model=List[ExternalPlatformSchema])
 @requires_permission('manage_settings')

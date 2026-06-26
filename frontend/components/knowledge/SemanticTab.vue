@@ -62,7 +62,7 @@
         </div>
         <div class="h-1.5 w-full rounded-full bg-gray-100 overflow-hidden">
           <div
-            class="h-full rounded-full bg-[#C2683F] transition-all duration-500"
+            class="h-full rounded-full bg-[#C2541E] transition-all duration-500"
             :style="{ width: describedPct + '%' }"
           />
         </div>

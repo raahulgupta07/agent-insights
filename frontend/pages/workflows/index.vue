@@ -1,12 +1,12 @@
 <template>
-    <div class="flex justify-center px-4 md:px-6 text-sm bg-[#FBFAF6] min-h-full">
+    <div class="flex justify-center px-4 md:px-6 text-sm bg-[#F6F1EA] min-h-full">
         <div class="w-full max-w-7xl py-2 text-[#1f2328]">
             <!-- Header -->
             <div class="flex items-start justify-between gap-4 mb-6">
                 <div>
                     <h1
-                        class="text-2xl font-semibold text-[#1f2328] tracking-tight flex items-center"
-                        style="font-family: ui-serif, Georgia, 'Times New Roman', serif"
+                        class="text-[32px] font-medium text-[#211B14] tracking-tight flex items-center"
+                        style="font-family: 'Spectral', ui-serif, Georgia, serif"
                     >Workflows</h1>
                     <p class="mt-2 text-[#6b6b6b] leading-relaxed max-w-2xl">
                         Multi-step agent pipelines. You trigger; the agent runs each stage; a judge
@@ -22,11 +22,11 @@
             </div>
 
             <!-- Error -->
-            <div v-else-if="error" class="rounded-2xl border border-[#E7E5DD] bg-[#F3E7DF] p-4 text-sm text-[#A8542F]">
+            <div v-else-if="error" class="rounded-2xl border border-[#E9E0D3] bg-[#FBEFE4] p-4 text-sm text-[#A8330F]">
                 {{ error }}
                 <button
                     type="button"
-                    class="ms-2 rounded-lg px-2 py-0.5 text-xs font-medium text-[#C2683F] hover:bg-white/60"
+                    class="ms-2 rounded-lg px-2 py-0.5 text-xs font-medium text-[#C2541E] hover:bg-white/60"
                     @click="fetchWorkflows"
                 >
                     Retry
@@ -36,10 +36,10 @@
             <template v-else>
                 <!-- Empty state (flag off / none) -->
                 <div v-if="workflows.length === 0" class="flex flex-col items-center justify-center py-20 text-center">
-                    <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4F1EA] border border-[#E7E5DD] text-[#C2683F]">
+                    <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] text-[#C2541E]">
                         <UIcon name="i-heroicons-squares-plus" class="w-6 h-6" />
                     </span>
-                    <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">No workflows available</h3>
+                    <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">No workflows available</h3>
                     <p class="mt-1 text-sm text-[#9a958c] max-w-md leading-relaxed">
                         Enable Workflows in Feature Flags to run multi-step agent pipelines. Each
                         pipeline runs a stage per item and a judge gate scores it before it lands.
@@ -51,19 +51,19 @@
                     <div
                         v-for="wf in workflows"
                         :key="wf.name"
-                        class="flex flex-col gap-3 rounded-2xl border border-[#E7E5DD] bg-white p-4 transition hover:-translate-y-0.5 hover:shadow-md h-full"
+                        class="flex flex-col gap-3 rounded-2xl border border-[#E9E0D3] bg-white p-4 transition hover:-translate-y-0.5 hover:shadow-md h-full"
                     >
                         <!-- Title row -->
                         <div class="flex items-start justify-between gap-2">
-                            <div class="flex items-center gap-2 text-[15px] font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">
-                                <Icon name="heroicons:squares-2x2" class="w-[17px] h-[17px] text-[#C2683F] shrink-0" />
+                            <div class="flex items-center gap-2 text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">
+                                <Icon name="heroicons:squares-2x2" class="w-[17px] h-[17px] text-[#C2541E] shrink-0" />
                                 {{ wf.label || wf.name }}
                             </div>
                             <span
                                 v-if="wf.max_concurrency"
-                                class="inline-flex items-center gap-1 rounded-full border border-[#E7E5DD] bg-[#F4F1EA] px-2 py-0.5 text-[11px] font-medium text-[#6b6b6b] shrink-0"
+                                class="inline-flex items-center gap-1 rounded-full border border-[#E9E0D3] bg-[#F4EEE5] px-2 py-0.5 text-[11px] font-medium text-[#6b6b6b] shrink-0"
                             >
-                                <Icon name="heroicons:bolt" class="w-3 h-3 text-[#C2683F]" />
+                                <Icon name="heroicons:bolt" class="w-3 h-3 text-[#C2541E]" />
                                 {{ wf.max_concurrency }}x
                             </span>
                         </div>
@@ -74,7 +74,7 @@
                         </p>
 
                         <!-- Controls -->
-                        <div class="flex flex-col gap-2.5 pt-2 border-t border-[#E7E5DD]">
+                        <div class="flex flex-col gap-2.5 pt-2 border-t border-[#E9E0D3]">
                             <!-- Data source picker -->
                             <label class="flex flex-col gap-1">
                                 <span class="text-[11px] font-medium text-[#9a958c]">Data source</span>
@@ -114,7 +114,7 @@
                             <!-- Run button -->
                             <button
                                 type="button"
-                                class="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#C2683F] px-3 py-2 font-medium text-white transition hover:bg-[#A8542F] disabled:opacity-50 disabled:cursor-not-allowed"
+                                class="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#C2541E] px-3 py-2 font-medium text-white transition hover:bg-[#A8330F] disabled:opacity-50 disabled:cursor-not-allowed"
                                 :disabled="isRunning(wf.name) || !runState[wf.name].dataSourceId"
                                 @click="runWorkflow(wf)"
                             >
@@ -130,7 +130,7 @@
                         <!-- Summary (inline result) -->
                         <div
                             v-if="runState[wf.name].summary"
-                            class="mt-1 rounded-xl border border-[#E7E5DD] bg-[#F4F1EA] p-3 text-xs"
+                            class="mt-1 rounded-xl border border-[#E9E0D3] bg-[#F4EEE5] p-3 text-xs"
                         >
                             <div class="flex flex-wrap items-center gap-2 mb-2">
                                 <span class="inline-flex items-center gap-1 rounded-full border border-[#d7ebde] bg-[#eef6f0] px-2 py-0.5 font-medium text-[#3f9e6a]">
@@ -138,13 +138,13 @@
                                 </span>
                                 <span
                                     v-if="(runState[wf.name].summary.failed ?? 0) > 0"
-                                    class="inline-flex items-center gap-1 rounded-full border border-[#ecd8cb] bg-[#F3E7DF] px-2 py-0.5 font-medium text-[#C2683F]"
+                                    class="inline-flex items-center gap-1 rounded-full border border-[#ecd8cb] bg-[#FBEFE4] px-2 py-0.5 font-medium text-[#C2541E]"
                                 >
                                     {{ runState[wf.name].summary.failed }} failed
                                 </span>
                                 <span
                                     v-if="(runState[wf.name].summary.skipped ?? 0) > 0"
-                                    class="inline-flex items-center gap-1 rounded-full border border-[#E7E5DD] bg-white px-2 py-0.5 font-medium text-[#6b6b6b]"
+                                    class="inline-flex items-center gap-1 rounded-full border border-[#E9E0D3] bg-white px-2 py-0.5 font-medium text-[#6b6b6b]"
                                 >
                                     {{ runState[wf.name].summary.skipped }} skipped
                                 </span>

@@ -906,3 +906,108 @@ Fixes the "two add buttons / four zeros / no next step" confusion on `/studios`.
 - **v1.13.1** Dashboard fullscreen rendered only the static header, charts black. `ArtifactFrame` fullscreen overlay = a 2nd `<iframe>`; data was posted only to the bg iframe. Fix: `sendDataToIframe()` broadcasts `ARTIFACT_DATA` to both iframes + re-send on the fullscreen iframe's `@load`.
 - **v1.14.0** All 65 hybrid flags toggleable in Settings → Features (was ~32). `UPGRADE_FLAGS` extended with category/status/note for every flag; grouped + search + Enabled/Disabled filter + confirm dialog for unstable/needs-setup. `_effective()` falls back to override-or-env for env-only daemon knobs. Same `GET/PUT /api/organization/hybrid-flags`, no new routes/migration.
 - **v1.15.0** Hybrid Search real. OpenRouter `/embeddings` (OpenAI-compatible) → `openai/text-embedding-3-small` (1536d, matches existing column, no migration), org's existing key. `embeddings.py` + `indexer.py` (`reindex_org`) + `hybrid_search.py` pgvector arm + 3-way RRF + `HybridSearchContextBuilder` wired into context_hub + agent_v2 (gated). `POST /api/knowledge/reindex`, `GET /api/knowledge/search-index/status`, Rebuild-index button on Features. Proven: 293 indexed+embedded, RRF returns relevant hits. Reranker deferred (RRF sufficient).
+
+## 2026-06-25 — v1.17–1.18 Claude Design rollout (FE restyle, no functional change) — BAKED
+Source = Claude Design handoff bundle `~/Downloads/login-screen-redesign-request/project/*.dc.html`
+(Login / Studios v2 / Home). Warm palette everywhere: bg `#F6F1EA`, ink `#1A1611`, accent
+`#C2541E`/`#A8330F`/`#D67037`, borders `#E9E0D3`/`#E4D9CA`; fonts Spectral (serif headings) +
+Hanken Grotesk (body), loaded via `useHead` (app-wide from TopNav). All restyle-only — auth/fetch/router
+logic untouched.
+- **v1.17.0** Login (`pages/users/sign-in.vue`) — see its own entry; removed stat line, all auth buttons (Google/Microsoft + Enterprise SSO/Keycloak/LDAP), animated right panel, dynamic version chip.
+- **v1.18.0** Studios + Home + Nav + Reports + Agent widget:
+  - **Studios** `pages/studios/index.vue` + `components/studio/StudioCard.vue` → Studios v2 mock. Card = dark live-activity header (radial gradient + grid-drift + orange blob + animated equalizer on live / dashed "awaiting first source" on draft), white overlapping icon badge (`-24px`, body `pt-8` clears it), Spectral italic persona, live-stats vs draft/ready progress, coral + ghost action bar. Lifecycle (draft/ready/live/idle) + emits (`open`/`chat`) preserved. Equalizer + Live dot keep animating under `prefers-reduced-motion` (they ARE the live indicator; only card-hover/grid-drift gated).
+  - **Home** `pages/index.vue` → cream bg, orange orb glow, greeting eyebrow, Spectral 46px "What should we *explore* today?", subtitle. Dropped full-logo hero + purple `.gradient-glow`. Real `PromptBoxV2`/`DataSourceQuestionsHome`/`RecentReports` children kept as-is.
+  - **Nav** `components/nav/TopNav.vue` → cream translucent bar (blur + `#E9E0D3`), gradient logo mark + "City Agent Insights" wordmark, warm links (active `#A8330F`, no gray pills), cream New-report pill, dark-gradient avatar. **Full-width** — removed `max-w-[1340px] mx-auto`, logo flush-left / cluster flush-right (user wanted no side gap). All dropdowns/AgentSelector/WhatsNew/mobile-drawer/perms intact.
+  - **Reports** `components/home/RecentReports.vue` (dropdown → **segmented tab** Main Org / My Reports; `viewMode`/`availableOptions` logic kept) + `RecentReportCard.vue` (design card chrome: mode badge + Chat/Dashboard buttons; keeps the **REAL** `thumbnail_url` server preview — user rejected fake KPI mock; no-preview → mode-icon placeholder). Links/handlers unchanged.
+  - **Agent status widget** `components/agent/AgentThinking.vue` (NEW, mounted global in `layouts/default.vue` via EXPLICIT import → no dev restart needed). Floating coral robot launcher (bottom-right) → dark terminal popover that types REAL boot lines: `synced N sources · M tables` (N=active `/data_sources`, M=summed `connection.table_count`), `vector index warm`, `ready.` + blinking cursor; footer = green-dot Idle + real default model name from `/llm/models`. Fail-soft, counts warmed in background `onMounted`. NO fake numbers (user rule).
+- **Fast-dev loop used this session**: `cd frontend && DASH_BACKEND=127.0.0.1:3007 npm run dev` → Vite HMR on **:3000**, proxies `/api`→ca-app:3007. Edited every `.vue` live, baked once at end. Host node22 `~/.hermes/node/bin`. (CLAUDE.md "Fast dev lane" already documents this.)
+- **Admin login reset** (local only): no `DASH_ADMIN_*` env on this box, original password unknown (argon2 hash). Reset `admin@cityagent.io` → `Admin12345` via `PasswordHelper().hash` (fastapi-users uses **argon2id**, not bcrypt) → `UPDATE users SET hashed_password=...`. Two users in DB: `admin@cityagent.io`, `userb@cityagent.io` (neither is_superuser).
+- **Studio DETAIL retheme** (`pages/studios/[id]/index.vue`, image-84 page): warm-theme pass via global sed — page bg `#F6F1EA`+Hanken; clay `#C2683F`→coral `#C2541E` (64×), hover `#A8542F`→`#A8330F` (25×); headings Georgia→Spectral (27×); borders `#E7E5DD`→`#E9E0D3`. Logic/tabs untouched.
+- **CRASH FIXED — studio Open→/studios/[id] "Cannot read properties of null (reading 'name')"** (was reported "blank" earlier; same bug, error-boundary on :3007 vs blank on :3000). Triggers on **REFRESH/cold-load only**, NOT client navigate. ROOT CAUSE: teleported Nuxt-UI modal `FolderSyncSetupModal` (+ `FolderSyncCard`) bound `:target-studio-name="studio.name"`. **Teleported components render in a SEPARATE reactive scope**, so they evaluate `studio.name` during the brief cold-load window where `studio` ref is still `null` (before `fetchStudio` resolves) → throws. Navigate skips the window (studio already hydrated). FIX: `v-if="studio"` + `:target-studio-name="studio?.name || ''"` (lines ~1354 + 802). **LESSON: any prop on a TELEPORTED modal/popover that reads a fetched-ref's field must `?.`-guard or `v-if` — the parent's `v-else-if="data"` guard does NOT cover teleported children.**
+- **DIAGNOSTIC TECHNIQUE (prod minified crash, no DevTools, no source maps):** (1) temp client plugin `plugins/00.error-trace.client.ts` set `nuxtApp.vueApp.config.errorHandler` to PAINT the failing component name (`instance.$.type.__name`) + stack as a fixed on-screen banner → user screenshots it, names `component=<index>`. (2) Pinpoint the exact expression: read the minified chunk at the crash offset — `docker exec ca-app sh -c "awk 'NR==2' /app/frontend/dist/_nuxt/<chunk>.js | cut -c<off-200>-<off+150>"` → showed `...,"target-studio-name":t(k...` = the throwing binding. Remove the temp plugin after.
+- **NEW `scripts/fe-sync.sh`** — push FE into the running `ca-app` WITHOUT a Docker rebuild: `pkill nuxt dev` → `rm -rf .nuxt .output …cache` → `npm run generate` → `docker exec -u 0 ca-app rm -rf dist/*` + `docker cp .output/public/. ca-app:/app/frontend/dist/` + chown app:app. Skips base/pip/yarn-install layers + image commit; only cost = `nuxt generate` (~2–5 min, heavy bundle). EPHEMERAL — `--force-recreate` reverts to the baked image; bake for durable. LANDMINE reused: can't generate while `yarn dev` is live in the same dir.
+- **STATE:** v1.18.0 BAKED into `cityagent-analytics:dev`; the studio-detail retheme + crash fix + AgentThinking widget are live on :3007 **via FE-sync (ephemeral, NOT yet re-baked)** → next bake = v1.19.0. NOT committed/pushed (user rule: no creds/data from their side).
+
+## 2026-06-25 (cont.) — v1.19.0 bake + v1.20 nav rail + Workspace Templates restyle
+
+- **BAKED v1.19.0** — folded the ephemeral v1.18-era FE-sync work (studio-detail retheme + Open/refresh crash fix + AgentThinking) into the image durably. `docker compose -f docker-compose.build.yaml build app` → up. Verified `/healthz` 200, `VERSION_HYBRID`=1.19.0, DB `users`=2 (data intact).
+- **COMPOSE LANDMINE (caught mid-bake):** first recreate used plain `docker-compose.yaml` → that file is a DIFFERENT compose project (`dash-app`/`dash-postgres` container_names, volume `postgres_data`) and spun up a FRESH EMPTY DB. The real running stack is **`docker-compose.build.yaml`** (`ca-app`/`ca-postgres`/`ca-redis`, volume `ca_postgres_data`). Tore down the `dash-*` stack, brought `ca-*` back via build.yaml — real `ca_postgres_data` was never touched, no data loss. **RULE: always recreate/up THIS stack via `docker-compose.build.yaml`, never the bare `docker-compose.yaml`.**
+- **Studio-detail tab persists in URL** (`pages/studios/[id]/index.vue`): `const activeTab = ref(route.query.tab as string || 'autopilot')` + `watch(activeTab, t => router.replace({query:{...route.query,tab:t}}))`. Fixes "refresh bounces me off Metrics back to Auto-pilot" — tab is now shareable/bookmarkable. (`watch` is Nuxt auto-imported.)
+- **NAV RAIL (v1.20, requested from `City Agent Workspace v2.dc.html`)** — replaced top-nav DROPDOWNS with a contextual LEFT RAIL:
+  - `composables/useAppNav.ts` (NEW) — single source of truth for the grouped nav, shared by TopNav + AppRail so they never drift. Exposes `visibleGroups`, `activeGroup` (the non-`direct` group matching the route), `isRouteActive`, `isGroupActive`, `firstHref(group)`, `showMcpModal` (module-level singleton ref — fine on SPA/`nuxt generate`), `loadDomainPacksFlag`. Ports the full group model + permission gating + settings sub-tabs verbatim from the old TopNav inline model.
+  - `components/nav/AppRail.vue` (NEW) — cream 224px rail (`#F2EBE0`, border `#E9E0D3`). Shows the active group's eyebrow + items; active item = white pill, coral text. `v-if="activeGroup"` → self-hides on Home / Agent Studios (direct, excluded from `activeGroup`) / detail pages that own a rail.
+  - `components/nav/TopNav.vue` — desktop group menubar: each group is now a single `NuxtLink :to="group.direct || firstHref(group)"` (NO `UPopover`, no dropdown panels). Removed ~165 lines of inline nav model + dropdown markup; pulls everything from `useAppNav()`. Mobile slide-over drawer kept (still lists groups). Dropped now-unused imports (McpIcon/LibraryIcon/ActivityIcon/AgentIcon) + `isMcpEnabled` local.
+  - `layouts/default.vue` — non-report branch wraps content as `flex`: `<AppRail/>` + `<div class="flex-1 min-w-0 overflow-y-auto"><slot/></div>`. Report-detail branch (ChatHistoryRail) unchanged.
+  - LANDMINE: pages with their OWN internal sub-rail (Skills category rail All/Finance/…, Knowledge) now render TWO rails side-by-side (Build group rail + page rail). Acceptable for now; suppress AppRail per-page later if the user wants single-rail there.
+- **Workspace Templates restyle** (`pages/templates/index.vue`) to the v2 design: `.wk-h1` Spectral 500 33px header + green `#3E7A4D` "Your data never leaves"; coral-border Publish pill; segmented Org/Global/All toggle on `#EFE7DA` (active `#C2541E` white); white search `#E4D9CA`; cards `#E9E0D3`/radius-16 with gradient icon tile (`#FBEADF→#F4D8C6`), mono version chip `#F4EEE5`, Spectral 18px `.wk-card-title`, ★ uses, coral `.wk-prim` "Use template", `.wk-card` hover-lift. Logic/data (scope/search/BindWizard/openWizard) untouched. Remaining Workspace views (Reports/Dashboards/Presentations/Spreadsheets/Scheduled) defined in the same `.dc.html` — NOT yet restyled.
+- **STATE:** v1.19.0 BAKED. Nav rail + tab-persist + Templates restyle are live on :3007 **via FE-sync (ephemeral)** → next bake = **v1.20.0**. NOT committed/pushed (user rule: no creds/data from their side). Design mocks live at `~/Downloads/login-screen-redesign-request/project/*.dc.html`.
+
+## 2026-06-26 — v1.20.0 + v1.21.0 baked: nav rail + Workspace/Build/Manage/Settings warm restyle
+
+- **v1.20.0 BAKED** (nav rail + Templates + Build×5 + Manage×3 + studio-detail tab persist). See the 2026-06-25 entry for the nav-rail architecture (AppRail + useAppNav). Recreated via `docker-compose.build.yaml` (correct file — NOT plain docker-compose.yaml). Verified `/healthz` 200, users=2.
+- **v1.21.0 BAKED** — Settings warm-theme restyle (all 11 tabs): Members/Access, LLM/Models, AI Settings, General, Channels/Integrations, Folder Sync, Audit, Identity Provider (SSO/SCIM/LDAP), SMTP, Feature Flags, Pack Analytics. Also recolored `layouts/settings.vue` + settings-imported components (`sync/FolderSyncPanel.vue`, Email/WhatsApp/Teams/Slack integration modals). Verified `/healthz` 200, VERSION_HYBRID=1.21.0, users=2 (data intact).
+- **RESTYLE METHOD (warm-theme migration, token-only — NO icon/logo/markup/logic changes):** per-file `perl -0pi -e` over the page/component set:
+  - `#C2683F`→`#C2541E` · `#A8542F`→`#A8330F` · `#E7E5DD`→`#E9E0D3`
+  - `bg-[#FBFAF6]`→`bg-[#F6F1EA]` · `bg-[#F4F1EA]`→`bg-[#F4EEE5]` · `bg-[#F3E7DF]`→`bg-[#FBEFE4]`
+  - `ui-serif, Georgia[, 'Times New Roman'], serif`→`'Spectral', ui-serif, Georgia, serif`
+  - h1 `text-2xl font-semibold text-[#1f2328] tracking-tight`→`text-[32px] font-medium text-[#211B14] tracking-tight`
+  - LANDMINE: `for f in $(rtk proxy find …)` mangles the file list — use `find … -print0 | while IFS= read -r -d ''` instead. Verify residue with `grep -rl "C2683F\|A8542F\|#E7E5DD"`.
+- **Templates** was a FULL design rewrite (not just tokens) to `City Agent Workspace v2.dc.html`: `.wk-h1` Spectral 33px + green "Your data never leaves", segmented Org/Global/All, gradient icon-tile cards, coral "Use template".
+- **Deferred:** Workspace Reports/Dashboards/Presentations/Spreadsheets/Scheduled (own pages, not yet restyled) + Monitoring (`layout: 'monitoring'` + ConsoleOverview, deep sub-console outside AppRail).
+- **MOCKS:** `~/Downloads/login-screen-redesign-request/project/{City Agent Studios v2, Home, Workspace v2, Build v2, Manage, Settings}.dc.html` (DCLogic sandbox format).
+- **STATE:** v1.21.0 BAKED. NOT committed/pushed (user rule: no creds/data from their side). Stack on `docker-compose.build.yaml`.
+
+## 2026-06-26 (cont.) — Parquet result storage + interactive query endpoint (flag default ON)
+
+- **NEW `backend/app/services/parquet_store.py`** — large step results (`{rows,columns,info}`) offloaded to compressed Parquet on disk instead of inline JSON in Postgres. `maybe_offload` (flag + ≥`PARQUET_MIN_ROWS` rows → DuckDB `COPY … FORMAT PARQUET COMPRESSION ZSTD`, no pyarrow); marker `{__parquet__:1,path,columns,info,rows:[]}`. `hydrate` loads rows on read + tags `source:"parquet"`. Fail-soft (write error→inline), crash-safe (file before commit), missing file→empty rows. LANDMINE fixed: `_base_dir()` mkdir before COPY.
+- **Flag** `HYBRID_PARQUET_RESULTS` = `_bool(...,True)` **DEFAULT ON** (user requested) + `PARQUET_MIN_ROWS` `_int` env knob (default 2000) + UPGRADE_FLAGS entry + snapshot(). New `_int()` helper in hybrid_flags.py.
+- **Write sites** routed via `maybe_offload` (+ delete old file on rerun): query_service:244, step_service:150, project_manager.update_step_with_data.
+- **Read sites** hydrate (no-op when off/inline): StepSchema/PublicStepSchema `data` validator (covers all schema routes incl. CSV export); raw ORM readers patched — loadables (agent load_step), widget_context_builder (count uses info.total_rows), thumbnail_service, report_pdf_service, slack_notification_service.
+- **Interactive query endpoint** `POST /steps/{step_id}/query` (app/routes/step.py, `StepQueryRequest`, `requires_permission('view_reports')`) → `parquet_store.query(step.data, spec)`. Declarative ALLOW-LISTED DuckDB pushdown: ops {=,!=,>,>=,<,<=,in,contains}, aggs {sum,avg,min,max,count}; cols validated vs step columns; values param-bound; limit cap 5000; NO raw SQL; DuckDB err→ValueError→400. Returns {rows,columns,total_rows,source,ms}.
+- **Frontend** `composables/useStepQuery.ts` (queryStep via useMyFetch, fail-soft) + `DashboardComponent.vue` guarded branch: `widget.last_step.data.source==='parquet'` → server query for cross-filter/sort/page; else EXACT current client-side path (no-op for inline). `hydrate` emitting `source` is the activation link.
+- **GC** `sweep_orphans` (delete Parquet not referenced by any `steps.data->>'path'`) wired into daily `purge_step_payloads_per_organization` (flag-gated). Parquet under `/app/backend/uploads/parquet` on **ca_uploads** volume.
+- **NEW `scripts/safe-upgrade.sh`** — rollback-tag image + pg_dump + tar PG vol + tar uploads vol → build+tag :version → recreate → health-gate → AUTO-ROLLBACK on fail. Backs up DB + uploads TOGETHER (parquet integrity).
+- Built via 3 recon subagents (parallel touch-point mapping) + 2 build subagents (backend query+route / frontend wiring), disjoint files; I added the `source` link + ran security + parquet-path container smoke tests (bad col/op → 400; filter+group+agg+order correct).
+- Docs: `docs/parquet-results.md`. py_compile clean, container-tested. **NOT baked** → ships v1.23.0. NOT committed/pushed.
+
+---
+
+## 2026-06-26 — v1.24.0 Per-agent Channels (two-pane) + per-agent Email/SMTP + Docker build speedups (BAKED + live)
+Studio MANAGE rail split: **Settings · Access & Members · Channels · Email / SMTP · Members & Share**
+(was the combined "Access & Channels"). `VERSION_HYBRID` 1.23→1.24, baked, healthy, users=2.
+- **Channels tab** `components/studio/StudioChannels.vue` — org-style **two-pane picker** (platform
+  list + detail pane, status dots; per-platform set-up/reconfigure/enable/disable/delete). Reuses the
+  existing Slack/Teams/WhatsApp/AI-Mailbox config modals + Telegram/MCP inline; same config METHOD,
+  org LAYOUT. Catalog mirrors org Settings→Integrations. `GET /studios/{id}/channels` drives status.
+- `StudioAccess.vue` — channels card + 4 modals + telegram/mcp logic REMOVED; renamed "Access &
+  Members" (who-can-use / model / members / connections only). Header copy updated.
+- **Email / SMTP tab** `components/studio/StudioEmail.vue` (NEW) — per-agent outbound mail. Mode
+  radio: **global default** (inherit org/dash-config, zero-config) OR **custom SMTP for this agent**.
+  Custom fields mirror org SMTP (from name/addr, host, port, user/pass optional, security select,
+  validate-certs toggle) + "Send test connection". Password only sent when retyped (`password_set`
+  drives the saved-placeholder).
+- **Backend per-agent SMTP**:
+  - `email_client_resolver.py`: `_studio_smtp_resolved` + `studio_smtp` param in `choose_outbound`
+    (wins over AI-mailbox/org/global for either purpose); `get_studio_smtp(db, studio_id)` reads
+    `Studio.config['smtp']`, returns decrypted dict ONLY when `mode=='custom'`+host; `resolve_outbound`
+    gains `studio_id=`. Precedence: **agent custom → AI mailbox (analyst) → org SMTP → global**.
+  - `notification_service.py`: `studio_id` threaded through `dispatch` (+context), `send_custom_email`,
+    `_resolved_send` → `resolve_outbound(..., studio_id=)`. `_send_email` reads `context['studio_id']`.
+  - `report.py` share dispatch now passes `db` + `organization_id` + `studio_id=report.studio_id`
+    (so org-SMTP applies to shares too — behavior change: org-SMTP-enabled orgs now share via org SMTP,
+    not always global; the EMAIL-channel guard still requires global `email_client` present).
+  - `email_send_service.py` channel/agent reply: `send_custom_email(..., studio_id=report.studio_id)`.
+  - Routes `GET/PUT/POST-test /api/studios/{id}/smtp` in `external_platform.py`
+    (`StudioSmtpSchema`/`StudioSmtpUpdate` mirror `OrgSmtp*` + `mode`), flag `HYBRID_AGENT_CHANNELS`,
+    owner/editor via `_require_channel_manager`. `_load_studio` org-scopes. Audit `studio.smtp_updated`.
+    Fernet via `app.services.email.secrets.encrypt_secret`; `flag_modified(studio,'config')`.
+  - NULL studio / `mode==global` = byte-identical old behavior. No migration (`config` is JSON).
+- Verified live: `choose_outbound` precedence=studio_smtp; 3 smtp routes registered; `import main`
+  clean (456+ routes); AGENT_CHANNELS=True; users=2; /health 200; VERSION_HYBRID=1.24.0.
+- **Dockerfile speedups** (banked in same image): removed `apt-get upgrade -y` from `backend-builder`
+  + `frontend-builder` (deterministic, cache-stable; runtime `base` keeps security upgrade); added
+  BuildKit cache mounts on `yarn generate` (`node_modules/.cache` + `node_modules/.vite`,
+  `sharing=locked`) → repeat FE rebuilds much faster (cold seed once, then warm). NOT caching `.nuxt`
+  (stale-module/phantom-module risk). Why bakes are slow = `nuxt generate` is inherently minutes cold;
+  backend-only changes skip it (FE stage cache-hits). Use foreground `DOCKER_BUILDKIT=1 docker build`
+  to dodge the cache-stale `:dev` tag.

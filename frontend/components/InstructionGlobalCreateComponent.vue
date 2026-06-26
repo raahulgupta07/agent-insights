@@ -381,7 +381,7 @@
                             <template v-else>
                                 <span class="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{{ $t('instructionGlobalCreate.status.unlinked') }}</span>
                                 <UTooltip :text="$t('instructionGlobalCreate.tooltips.resumeSyncing')" :popper="{ placement: 'top' }">
-                                    <button type="button" class="text-[10px] text-[#C2683F] hover:text-[#A8542F] transition-colors" @click="$emit('relink-to-git')">{{ $t('instructionGlobalCreate.actions.relink') }}</button>
+                                    <button type="button" class="text-[10px] text-[#C2541E] hover:text-[#A8330F] transition-colors" @click="$emit('relink-to-git')">{{ $t('instructionGlobalCreate.actions.relink') }}</button>
                                 </UTooltip>
                             </template>
                         </template>
@@ -584,7 +584,7 @@
                         <template #option="{ option }">
                             <div
                                 v-if="option.__isAdd"
-                                class="flex items-center w-full py-0.5 text-[#C2683F] hover:text-[#A8542F] cursor-pointer"
+                                class="flex items-center w-full py-0.5 text-[#C2541E] hover:text-[#A8330F] cursor-pointer"
                                 @mousedown.prevent
                                 @click.stop="openAddLabelModal"
                             >
@@ -1495,7 +1495,7 @@ const getSourceTypeIconClass = () => {
     const sourceType = (fullInstruction.value || props.instruction)?.source_type || 'user'
     if (sourceType === 'ai') return 'text-amber-500'
     if (sourceType === 'git') return 'text-gray-500'
-    return 'text-[#C2683F]'
+    return 'text-[#C2541E]'
 }
 
 const getCreatorDisplayName = () => {
@@ -2109,7 +2109,7 @@ watch(isViewMode, (newVal) => {
     
     /* Regular links - but not inside headings */
     a {
-        @apply text-[#C2683F] hover:text-[#A8542F] underline;
+        @apply text-[#C2541E] hover:text-[#A8330F] underline;
     }
     
     blockquote { 

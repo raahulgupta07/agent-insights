@@ -3,12 +3,12 @@
        horizontal tabs with counts, responsive card grid. Reads the real
        /knowledge endpoints for the selected data source. The reusable
        <KnowledgePanel> (left-rail / top-tab) is kept for embeds elsewhere. -->
-  <div class="flex justify-center px-4 md:px-6 text-sm bg-[#FBFAF6] min-h-full">
+  <div class="flex justify-center px-4 md:px-6 text-sm bg-[#F6F1EA] min-h-full">
     <div class="w-full max-w-7xl py-2 text-[#1f2328]">
     <!-- header -->
     <div class="flex items-start justify-between gap-4">
       <div>
-        <h1 class="text-2xl font-semibold text-[#1f2328] tracking-tight" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">Knowledge</h1>
+        <h1 class="text-[32px] font-medium text-[#211B14] tracking-tight" style="font-family: 'Spectral', ui-serif, Georgia, serif">Knowledge</h1>
         <p class="mt-2 text-[#6b6b6b] leading-relaxed max-w-2xl">Ground every answer in what your data means.</p>
       </div>
       <!-- Primary action (canonical header slot): generate knowledge for this source -->
@@ -16,7 +16,7 @@
         v-if="selectedDs"
         @click="runAiSuggest"
         :disabled="aiSuggesting"
-        class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl bg-[#C2683F] text-white hover:bg-[#A8542F] disabled:opacity-50 whitespace-nowrap transition-colors shrink-0"
+        class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl bg-[#C2541E] text-white hover:bg-[#A8330F] disabled:opacity-50 whitespace-nowrap transition-colors shrink-0"
       >
         <UIcon :name="aiSuggesting ? 'i-heroicons-arrow-path' : 'i-heroicons-sparkles'" :class="['w-4 h-4', aiSuggesting ? 'animate-spin' : '']" />
         {{ aiSuggesting ? 'Generating…' : 'AI Suggestions' }}
@@ -24,7 +24,7 @@
     </div>
 
     <!-- tabs — directly under header, ABOVE search (canonical) -->
-    <div class="mt-6 border-b border-[#E7E5DD] flex items-center gap-6 overflow-x-auto">
+    <div class="mt-6 border-b border-[#E9E0D3] flex items-center gap-6 overflow-x-auto">
       <button
         v-for="tab in tabs"
         :key="tab.id"
@@ -32,7 +32,7 @@
         :class="[
           'pb-2 -mb-px text-sm whitespace-nowrap border-b-2 transition-colors flex items-center gap-1.5',
           activeTab === tab.id
-            ? 'border-[#C2683F] text-[#1f2328] font-medium'
+            ? 'border-[#C2541E] text-[#1f2328] font-medium'
             : 'border-transparent text-[#6b6b6b] font-medium hover:text-[#1f2328]'
         ]"
       >
@@ -41,7 +41,7 @@
           v-if="tab.count !== null"
           :class="[
             'text-xs',
-            tab.id === 'review' && tab.count > 0 ? 'inline-flex items-center justify-center min-w-[18px] h-4 px-1 rounded-full bg-[#F3E7DF] text-[#C2683F] font-semibold' : 'text-[#9a958c]'
+            tab.id === 'review' && tab.count > 0 ? 'inline-flex items-center justify-center min-w-[18px] h-4 px-1 rounded-full bg-[#FBEFE4] text-[#C2541E] font-semibold' : 'text-[#9a958c]'
           ]"
         >{{ tab.count }}</span>
       </button>
@@ -54,7 +54,7 @@
           v-model="search"
           type="text"
           placeholder="Search knowledge…"
-          class="w-full ps-10 pe-4 py-2.5 bg-white border border-[#E7E5DD] rounded-xl text-[#1f2328] placeholder:text-[#9a958c] focus:outline-none focus:ring-2 focus:ring-[#C2683F]/40 focus:border-[#C2683F]"
+          class="w-full ps-10 pe-4 py-2.5 bg-white border border-[#E9E0D3] rounded-xl text-[#1f2328] placeholder:text-[#9a958c] focus:outline-none focus:ring-2 focus:ring-[#C2541E]/40 focus:border-[#C2541E]"
         />
         <UIcon
           name="i-heroicons-magnifying-glass"
@@ -76,7 +76,7 @@
     <!-- loading: shimmer card skeletons matching the grid -->
     <div v-if="loading" class="mt-6">
       <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-        <div v-for="i in 10" :key="i" class="rounded-2xl border border-[#E7E5DD] bg-white overflow-hidden flex flex-col h-full">
+        <div v-for="i in 10" :key="i" class="rounded-2xl border border-[#E9E0D3] bg-white overflow-hidden flex flex-col h-full">
           <div class="h-28 ca-sk !rounded-none"></div>
           <div class="p-3 space-y-2">
             <div class="h-4 ca-sk w-2/3"></div>
@@ -94,13 +94,13 @@
         <span class="inline-flex items-center gap-1.5 rounded-lg border border-[#d7ebde] bg-[#eef6f0] px-3 py-1.5">
           <span class="font-semibold text-[#3f9e6a]">{{ gov.tables }}</span><span class="text-[#6b6b6b]">grounded</span>
         </span>
-        <span class="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5" :class="gov.stale ? 'border-[#ecd8cb] bg-[#F3E7DF]' : 'border-[#E7E5DD] bg-[#F4F1EA]'">
-          <span class="font-semibold" :class="gov.stale ? 'text-[#C2683F]' : 'text-[#9a958c]'">{{ gov.stale }}</span><span class="text-[#6b6b6b]">stale</span>
+        <span class="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5" :class="gov.stale ? 'border-[#ecd8cb] bg-[#FBEFE4]' : 'border-[#E9E0D3] bg-[#F4EEE5]'">
+          <span class="font-semibold" :class="gov.stale ? 'text-[#C2541E]' : 'text-[#9a958c]'">{{ gov.stale }}</span><span class="text-[#6b6b6b]">stale</span>
         </span>
-        <span class="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5" :class="gov.pii ? 'border-[#ecd8cb] bg-[#F3E7DF]' : 'border-[#E7E5DD] bg-[#F4F1EA]'">
-          <span class="font-semibold" :class="gov.pii ? 'text-[#C2683F]' : 'text-[#9a958c]'">{{ gov.pii }}</span><span class="text-[#6b6b6b]">PII</span>
+        <span class="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5" :class="gov.pii ? 'border-[#ecd8cb] bg-[#FBEFE4]' : 'border-[#E9E0D3] bg-[#F4EEE5]'">
+          <span class="font-semibold" :class="gov.pii ? 'text-[#C2541E]' : 'text-[#9a958c]'">{{ gov.pii }}</span><span class="text-[#6b6b6b]">PII</span>
         </span>
-        <span class="inline-flex items-center gap-1.5 rounded-lg border border-[#E7E5DD] bg-[#F4F1EA] px-3 py-1.5">
+        <span class="inline-flex items-center gap-1.5 rounded-lg border border-[#E9E0D3] bg-[#F4EEE5] px-3 py-1.5">
           <span class="font-semibold" :class="gov.unowned ? 'text-[#1f2328]' : 'text-[#9a958c]'">{{ gov.unowned }}</span><span class="text-[#6b6b6b]">unowned</span>
         </span>
         <span v-if="govAsOf" class="ml-auto text-[#9a958c]">Data as of {{ govAsOf }}</span>
@@ -109,34 +109,34 @@
         <div
           v-for="t in filteredSemantic"
           :key="t.id"
-          class="group rounded-2xl border border-[#E7E5DD] bg-white hover:shadow-md hover:-translate-y-0.5 transition cursor-pointer p-4 flex flex-col h-full"
+          class="group rounded-2xl border border-[#E9E0D3] bg-white hover:shadow-md hover:-translate-y-0.5 transition cursor-pointer p-4 flex flex-col h-full"
         >
           <div class="flex items-center justify-between mb-2.5">
-            <span class="inline-flex w-8 h-8 items-center justify-center rounded-lg bg-[#F4F1EA] border border-[#E7E5DD] text-[#C2683F]">
+            <span class="inline-flex w-8 h-8 items-center justify-center rounded-lg bg-[#F4EEE5] border border-[#E9E0D3] text-[#C2541E]">
               <UIcon name="i-heroicons-table-cells" class="w-4 h-4" />
             </span>
             <div class="flex items-center gap-1.5">
-              <span v-if="t.pii" class="text-[9.5px] font-semibold tracking-wide px-1.5 py-0.5 rounded bg-[#F3E7DF] text-[#C2683F]">PII</span>
+              <span v-if="t.pii" class="text-[9.5px] font-semibold tracking-wide px-1.5 py-0.5 rounded bg-[#FBEFE4] text-[#C2541E]">PII</span>
               <span :class="['text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded', statusClass(t.status)]">{{ t.status || 'draft' }}</span>
             </div>
           </div>
-          <div class="text-sm font-semibold text-[#1f2328] truncate" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">{{ t.table_name }}</div>
+          <div class="text-sm font-semibold text-[#1f2328] truncate" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ t.table_name }}</div>
           <p class="mt-1 text-xs text-[#6b6b6b] line-clamp-2 flex-1">{{ t.description || 'No description yet.' }}</p>
           <div v-if="(t.use_cases || []).length" class="mt-2 flex flex-wrap gap-1.5">
-            <span v-for="(u, i) in (t.use_cases || []).slice(0, 2)" :key="i" class="text-[11px] px-2 py-0.5 rounded bg-[#F4F1EA] text-[#6b6b6b] truncate max-w-full">{{ u }}</span>
+            <span v-for="(u, i) in (t.use_cases || []).slice(0, 2)" :key="i" class="text-[11px] px-2 py-0.5 rounded bg-[#F4EEE5] text-[#6b6b6b] truncate max-w-full">{{ u }}</span>
           </div>
-          <div class="mt-3 pt-2.5 border-t border-[#E7E5DD] flex items-center justify-between gap-2 text-[11px] text-[#9a958c]">
+          <div class="mt-3 pt-2.5 border-t border-[#E9E0D3] flex items-center justify-between gap-2 text-[11px] text-[#9a958c]">
             <span class="font-mono">{{ (t.columns || []).length }} columns</span>
             <span v-if="t.owner" class="inline-flex items-center gap-1 truncate"><span class="inline-flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-[#c2683f] to-[#dd9269] text-[7px] font-bold text-white">{{ ownerInitials(t.owner) }}</span>{{ t.owner }}</span>
             <span v-else-if="t.freshness_sla_hours" class="inline-flex items-center gap-1"><span class="h-1.5 w-1.5 rounded-full bg-[#3f9e6a]"></span>SLA {{ t.freshness_sla_hours }}h</span>
           </div>
         </div>
       </div>
-      <div v-else class="mt-2 rounded-2xl border border-dashed border-[#E7E5DD] px-6 py-16 text-center">
-        <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4F1EA] border border-[#E7E5DD] text-[#C2683F]">
+      <div v-else class="mt-2 rounded-2xl border border-dashed border-[#E9E0D3] px-6 py-16 text-center">
+        <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] text-[#C2541E]">
           <Icon name="heroicons:table-cells" class="w-6 h-6" />
         </span>
-        <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">No semantic tables yet</h3>
+        <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">No semantic tables yet</h3>
         <p class="mt-1 text-sm text-[#9a958c]">{{ emptyLabel('semantic') }}</p>
       </div>
     </div>
@@ -147,26 +147,26 @@
         <div
           v-for="m in filteredMetrics"
           :key="m.id"
-          class="group rounded-2xl border border-[#E7E5DD] bg-white hover:shadow-md hover:-translate-y-0.5 transition cursor-pointer overflow-hidden flex flex-col h-full"
+          class="group rounded-2xl border border-[#E9E0D3] bg-white hover:shadow-md hover:-translate-y-0.5 transition cursor-pointer overflow-hidden flex flex-col h-full"
         >
-          <div class="h-28 bg-[#F4F1EA] border-b border-[#E7E5DD] p-3 flex flex-col justify-between">
+          <div class="h-28 bg-[#F4EEE5] border-b border-[#E9E0D3] p-3 flex flex-col justify-between">
             <span :class="['self-start text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded', statusClass(m.status)]">{{ m.status || 'draft' }}</span>
-            <div class="font-mono text-[11px] text-[#C2683F] leading-tight line-clamp-2">{{ m.sql_calc }}</div>
+            <div class="font-mono text-[11px] text-[#C2541E] leading-tight line-clamp-2">{{ m.sql_calc }}</div>
           </div>
           <div class="p-3 flex-1 flex flex-col">
-            <div class="text-sm font-semibold text-[#1f2328] truncate" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">{{ m.name }}</div>
+            <div class="text-sm font-semibold text-[#1f2328] truncate" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ m.name }}</div>
             <p class="mt-1 text-xs text-[#6b6b6b] line-clamp-3 flex-1">{{ m.definition || 'No definition yet.' }}</p>
             <div v-if="m.table_ref" class="mt-2 flex items-center gap-1.5">
-              <span class="text-[11px] px-2 py-0.5 rounded bg-[#F4F1EA] text-[#6b6b6b]">{{ m.table_ref }}</span>
+              <span class="text-[11px] px-2 py-0.5 rounded bg-[#F4EEE5] text-[#6b6b6b]">{{ m.table_ref }}</span>
             </div>
           </div>
         </div>
       </div>
-      <div v-else class="mt-2 rounded-2xl border border-dashed border-[#E7E5DD] px-6 py-16 text-center">
-        <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4F1EA] border border-[#E7E5DD] text-[#C2683F]">
+      <div v-else class="mt-2 rounded-2xl border border-dashed border-[#E9E0D3] px-6 py-16 text-center">
+        <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] text-[#C2541E]">
           <Icon name="heroicons:calculator" class="w-6 h-6" />
         </span>
-        <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">No metrics yet</h3>
+        <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">No metrics yet</h3>
         <p class="mt-1 text-sm text-[#9a958c]">{{ emptyLabel('metrics') }}</p>
       </div>
     </div>
@@ -177,29 +177,29 @@
         <div
           v-for="q in filteredQueries"
           :key="q.id"
-          class="group rounded-2xl border border-[#E7E5DD] bg-white hover:shadow-md hover:-translate-y-0.5 transition cursor-pointer overflow-hidden flex flex-col h-full"
+          class="group rounded-2xl border border-[#E9E0D3] bg-white hover:shadow-md hover:-translate-y-0.5 transition cursor-pointer overflow-hidden flex flex-col h-full"
         >
-          <div class="h-28 bg-[#F4F1EA] border-b border-[#E7E5DD] p-3 flex flex-col justify-between">
+          <div class="h-28 bg-[#F4EEE5] border-b border-[#E9E0D3] p-3 flex flex-col justify-between">
             <span :class="['self-start text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded', statusClass(q.status)]">{{ q.status || 'draft' }}</span>
             <div class="font-mono text-[11px] text-[#3f9e6a] leading-tight line-clamp-3">{{ q.sql_text }}</div>
           </div>
           <div class="p-3 flex-1 flex flex-col">
-            <div class="text-sm font-semibold text-[#1f2328] truncate" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">{{ q.name }}</div>
+            <div class="text-sm font-semibold text-[#1f2328] truncate" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ q.name }}</div>
             <p class="mt-1 text-xs text-[#6b6b6b] line-clamp-2 flex-1">{{ q.description || '—' }}</p>
             <div class="mt-2 flex items-center justify-between">
               <div class="flex flex-wrap gap-1.5">
-                <span v-for="(tg, i) in (q.tags || []).slice(0, 2)" :key="i" class="text-[11px] px-2 py-0.5 rounded bg-[#F4F1EA] text-[#6b6b6b]">{{ tg }}</span>
+                <span v-for="(tg, i) in (q.tags || []).slice(0, 2)" :key="i" class="text-[11px] px-2 py-0.5 rounded bg-[#F4EEE5] text-[#6b6b6b]">{{ tg }}</span>
               </div>
               <span class="text-[11px] text-[#9a958c] shrink-0">{{ q.run_count || 0 }} runs</span>
             </div>
           </div>
         </div>
       </div>
-      <div v-else class="mt-2 rounded-2xl border border-dashed border-[#E7E5DD] px-6 py-16 text-center">
-        <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4F1EA] border border-[#E7E5DD] text-[#C2683F]">
+      <div v-else class="mt-2 rounded-2xl border border-dashed border-[#E9E0D3] px-6 py-16 text-center">
+        <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] text-[#C2541E]">
           <Icon name="heroicons:command-line" class="w-6 h-6" />
         </span>
-        <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">No saved queries yet</h3>
+        <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">No saved queries yet</h3>
         <p class="mt-1 text-sm text-[#9a958c]">{{ emptyLabel('queries') }}</p>
       </div>
     </div>
@@ -213,44 +213,44 @@
           v-if="selectedDs"
           @click="mineJoins"
           :disabled="mining"
-          class="inline-flex items-center gap-1.5 rounded-lg border border-[#E7E5DD] bg-white px-3 py-1.5 text-xs font-medium text-[#1f2328] hover:bg-[#F4F1EA] disabled:opacity-60 disabled:cursor-not-allowed transition"
+          class="inline-flex items-center gap-1.5 rounded-lg border border-[#E9E0D3] bg-white px-3 py-1.5 text-xs font-medium text-[#1f2328] hover:bg-[#F4EEE5] disabled:opacity-60 disabled:cursor-not-allowed transition"
         >
-          <span v-if="mining" class="h-3 w-3 rounded-full border-2 border-[#E7E5DD] border-t-[#C2683F] animate-spin"></span>
-          <span v-else class="i-heroicons-sparkles h-3.5 w-3.5 text-[#C2683F]"></span>
+          <span v-if="mining" class="h-3 w-3 rounded-full border-2 border-[#E9E0D3] border-t-[#C2541E] animate-spin"></span>
+          <span v-else class="i-heroicons-sparkles h-3.5 w-3.5 text-[#C2541E]"></span>
           {{ mining ? 'Mining…' : 'Mine joins' }}
         </button>
       </div>
 
-      <div v-if="filteredJoins.length" class="rounded-2xl border border-[#E7E5DD] bg-white overflow-hidden divide-y divide-[#E7E5DD]">
+      <div v-if="filteredJoins.length" class="rounded-2xl border border-[#E9E0D3] bg-white overflow-hidden divide-y divide-[#E9E0D3]">
         <div
           v-for="j in filteredJoins"
           :key="j.id"
-          class="flex items-center gap-3 px-4 py-3 hover:bg-[#F4F1EA]/70 transition"
+          class="flex items-center gap-3 px-4 py-3 hover:bg-[#F4EEE5]/70 transition"
         >
           <div class="flex-1 min-w-0">
             <div class="font-mono text-sm text-[#1f2328] truncate">
-              <span class="text-[#1f2328]">{{ j.left_table }}</span><span class="text-[#9a958c]">.</span><span class="text-[#C2683F]">{{ j.left_col }}</span>
+              <span class="text-[#1f2328]">{{ j.left_table }}</span><span class="text-[#9a958c]">.</span><span class="text-[#C2541E]">{{ j.left_col }}</span>
               <span class="mx-1.5 text-[#9a958c]">=</span>
-              <span class="text-[#1f2328]">{{ j.right_table }}</span><span class="text-[#9a958c]">.</span><span class="text-[#C2683F]">{{ j.right_col }}</span>
+              <span class="text-[#1f2328]">{{ j.right_table }}</span><span class="text-[#9a958c]">.</span><span class="text-[#C2541E]">{{ j.right_col }}</span>
             </div>
             <div class="mt-1 flex items-center gap-2 text-[11px] text-[#9a958c]">
               <span v-if="j.source" class="uppercase tracking-wide">{{ j.source }}</span>
               <span v-if="j.confidence">· {{ Math.round((j.confidence || 0) * 100) }}% conf</span>
             </div>
           </div>
-          <span class="text-[11px] px-2 py-0.5 rounded bg-[#F4F1EA] text-[#6b6b6b] shrink-0">seen {{ j.join_count || 0 }}×</span>
+          <span class="text-[11px] px-2 py-0.5 rounded bg-[#F4EEE5] text-[#6b6b6b] shrink-0">seen {{ j.join_count || 0 }}×</span>
           <span :class="['text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0', statusClass(j.status)]">{{ j.status || 'pending' }}</span>
           <div v-if="j.status === 'pending'" class="flex items-center gap-1.5 shrink-0">
             <button @click="approveJoin(j.id)" class="rounded-md px-2 py-1 text-[11px] font-medium text-[#3f9e6a] bg-[#eef6f0] hover:bg-[#dcefe4] transition">Approve</button>
-            <button @click="rejectJoin(j.id)" class="rounded-md px-2 py-1 text-[11px] font-medium text-[#C2683F] bg-[#F3E7DF] hover:bg-[#ecd8cb] transition">Reject</button>
+            <button @click="rejectJoin(j.id)" class="rounded-md px-2 py-1 text-[11px] font-medium text-[#C2541E] bg-[#FBEFE4] hover:bg-[#ecd8cb] transition">Reject</button>
           </div>
         </div>
       </div>
-      <div v-else class="mt-2 rounded-2xl border border-dashed border-[#E7E5DD] px-6 py-16 text-center">
-        <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4F1EA] border border-[#E7E5DD] text-[#C2683F]">
+      <div v-else class="mt-2 rounded-2xl border border-dashed border-[#E9E0D3] px-6 py-16 text-center">
+        <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] text-[#C2541E]">
           <Icon name="heroicons:share" class="w-6 h-6" />
         </span>
-        <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">No joins inferred yet</h3>
+        <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">No joins inferred yet</h3>
         <p class="mt-1 text-sm text-[#9a958c]">Run 'Mine joins' or let the daemon learn from query history.</p>
       </div>
     </div>
@@ -262,7 +262,7 @@
         <p class="text-xs text-[#6b6b6b]">Approved company documents ground the agent on business terms and definitions.</p>
         <button
           @click="showAddDoc = !showAddDoc"
-          class="inline-flex items-center gap-1.5 rounded-lg bg-[#C2683F] hover:bg-[#A8542F] px-3 py-1.5 text-xs font-medium text-white cursor-pointer transition"
+          class="inline-flex items-center gap-1.5 rounded-lg bg-[#C2541E] hover:bg-[#A8330F] px-3 py-1.5 text-xs font-medium text-white cursor-pointer transition"
         >
           <span class="i-heroicons-plus h-3.5 w-3.5"></span>
           {{ showAddDoc ? 'Close' : 'Add doc' }}
@@ -270,24 +270,24 @@
       </div>
 
       <!-- inline add-doc form -->
-      <div v-if="showAddDoc" class="mb-5 rounded-2xl border border-[#E7E5DD] bg-[#F4F1EA] p-4 space-y-3">
+      <div v-if="showAddDoc" class="mb-5 rounded-2xl border border-[#E9E0D3] bg-[#F4EEE5] p-4 space-y-3">
         <input
           v-model="docTitle"
           type="text"
           placeholder="Title"
-          class="w-full rounded-lg border border-[#E7E5DD] bg-white px-3 py-2 text-sm text-[#1f2328] placeholder-[#9a958c] focus:outline-none focus:border-[#C2683F] transition"
+          class="w-full rounded-lg border border-[#E9E0D3] bg-white px-3 py-2 text-sm text-[#1f2328] placeholder-[#9a958c] focus:outline-none focus:border-[#C2541E] transition"
         />
         <textarea
           v-model="docBody"
           rows="6"
           placeholder="Paste the document body here…"
-          class="w-full rounded-lg border border-[#E7E5DD] bg-white px-3 py-2 text-sm text-[#1f2328] placeholder-[#9a958c] focus:outline-none focus:border-[#C2683F] transition resize-y"
+          class="w-full rounded-lg border border-[#E9E0D3] bg-white px-3 py-2 text-sm text-[#1f2328] placeholder-[#9a958c] focus:outline-none focus:border-[#C2541E] transition resize-y"
         ></textarea>
         <div class="flex items-center justify-end gap-2">
           <button
             @click="addDoc"
             :disabled="savingDoc || !docTitle.trim()"
-            class="inline-flex items-center gap-1.5 rounded-lg bg-[#C2683F] hover:bg-[#A8542F] px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer transition"
+            class="inline-flex items-center gap-1.5 rounded-lg bg-[#C2541E] hover:bg-[#A8330F] px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer transition"
           >
             <span v-if="savingDoc" class="h-3 w-3 rounded-full border-2 border-white/50 border-t-white animate-spin"></span>
             {{ savingDoc ? 'Saving…' : 'Save' }}
@@ -295,14 +295,14 @@
         </div>
       </div>
 
-      <div v-if="docs.length" class="rounded-2xl border border-[#E7E5DD] bg-white overflow-hidden divide-y divide-[#E7E5DD]">
+      <div v-if="docs.length" class="rounded-2xl border border-[#E9E0D3] bg-white overflow-hidden divide-y divide-[#E9E0D3]">
         <div
           v-for="d in docs"
           :key="d.id"
-          class="flex items-center gap-3 px-4 py-3 hover:bg-[#F4F1EA]/70 transition"
+          class="flex items-center gap-3 px-4 py-3 hover:bg-[#F4EEE5]/70 transition"
         >
           <div class="flex-1 min-w-0">
-            <div class="text-sm font-semibold text-[#1f2328] truncate" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">{{ d.title }}</div>
+            <div class="text-sm font-semibold text-[#1f2328] truncate" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ d.title }}</div>
             <div class="mt-1 flex items-center gap-2 text-[11px] text-[#9a958c]">
               <span v-if="d.source" class="uppercase tracking-wide">{{ d.source }}</span>
               <span>· {{ d.chunks || 0 }} chunks</span>
@@ -311,15 +311,15 @@
           <span :class="['text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0', statusClass(d.status)]">{{ d.status || 'pending' }}</span>
           <div v-if="d.status === 'pending'" class="flex items-center gap-1.5 shrink-0">
             <button @click="approveDoc(d.id)" class="rounded-md px-2 py-1 text-[11px] font-medium text-[#3f9e6a] bg-[#eef6f0] hover:bg-[#dcefe4] cursor-pointer transition">Approve</button>
-            <button @click="rejectDoc(d.id)" class="rounded-md px-2 py-1 text-[11px] font-medium text-[#C2683F] bg-[#F3E7DF] hover:bg-[#ecd8cb] cursor-pointer transition">Reject</button>
+            <button @click="rejectDoc(d.id)" class="rounded-md px-2 py-1 text-[11px] font-medium text-[#C2541E] bg-[#FBEFE4] hover:bg-[#ecd8cb] cursor-pointer transition">Reject</button>
           </div>
         </div>
       </div>
-      <div v-else class="mt-2 rounded-2xl border border-dashed border-[#E7E5DD] px-6 py-16 text-center">
-        <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4F1EA] border border-[#E7E5DD] text-[#C2683F]">
+      <div v-else class="mt-2 rounded-2xl border border-dashed border-[#E9E0D3] px-6 py-16 text-center">
+        <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] text-[#C2541E]">
           <Icon name="heroicons:document-text" class="w-6 h-6" />
         </span>
-        <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">No documents yet</h3>
+        <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">No documents yet</h3>
         <p class="mt-1 text-sm text-[#9a958c]">Add one to ground the agent on your business terms.</p>
       </div>
     </div>
@@ -387,9 +387,9 @@ const tabs = computed(() => [
 
 function statusClass(s?: string) {
   if (s === 'approved') return 'bg-[#eef6f0] text-[#3f9e6a] border border-[#d7ebde]'
-  if (s === 'pending') return 'bg-[#F4F1EA] text-[#6b6b6b] border border-[#E7E5DD]'
-  if (s === 'rejected') return 'bg-[#F3E7DF] text-[#C2683F] border border-[#ecd8cb]'
-  return 'bg-[#F4F1EA] text-[#9a958c] border border-[#E7E5DD]'
+  if (s === 'pending') return 'bg-[#F4EEE5] text-[#6b6b6b] border border-[#E9E0D3]'
+  if (s === 'rejected') return 'bg-[#FBEFE4] text-[#C2541E] border border-[#ecd8cb]'
+  return 'bg-[#F4EEE5] text-[#9a958c] border border-[#E9E0D3]'
 }
 
 function matches(...fields: (string | undefined)[]) {

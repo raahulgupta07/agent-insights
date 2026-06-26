@@ -1,108 +1,91 @@
 <template>
-    <!-- Concept 1 "Hero Gradient" studio card. Root is a div (role=button) so the
-         hover action bar can hold real buttons without nesting <button> in <button>. -->
+    <!-- Studios v2 design card. Root is a div (role=button) so the action bar can
+         hold real buttons without nesting <button> in <button>. All data/logic
+         (lifecycle, sources, stats, emits) unchanged — only the skin is the design. -->
     <div
         role="button"
         tabindex="0"
-        class="studio-card group relative block text-left rounded-2xl border border-[#E7E5DD] bg-white overflow-hidden cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:border-[#dcd9cf] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C2683F]"
+        class="cr-card group relative flex flex-col text-left bg-white overflow-hidden cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C2541E]"
         @click="$emit('open')"
         @keydown.enter.prevent="$emit('open')"
         @keydown.space.prevent="$emit('open')"
     >
-        <!-- Persona-tinted gradient band (hue hashed from the studio name) -->
-        <div class="h-14 w-full relative" :style="bandStyle">
-            <div class="absolute inset-0 opacity-90" :style="bandGradient" />
-            <!-- lifecycle status chip: Draft -> Ready -> Live -> Idle -->
-            <span class="absolute top-2.5 right-3 inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full backdrop-blur"
-                  :class="lifecycleChip.cls">
-                <span class="w-1.5 h-1.5 rounded-full" :class="lifecycleChip.dot" />
-                {{ lifecycleChip.label }}
-            </span>
-        </div>
+        <!-- DARK live-activity header -->
+        <div class="cr-head">
+            <div class="cr-grid" />
+            <div class="cr-blob" />
 
-        <!-- Avatar overlapping the band -->
-        <div class="px-4 -mt-7 relative">
-            <div class="flex items-end justify-between">
-                <div class="shrink-0 flex items-center justify-center w-14 h-14 rounded-xl bg-white shadow-sm ring-2 ring-white text-2xl overflow-hidden"
-                     :style="avatarRing">
-                    <img v-if="isImageAvatar" :src="studio.avatar || ''" alt="" class="w-full h-full object-cover rounded-[10px]" />
-                    <span v-else-if="studio.avatar">{{ studio.avatar }}</span>
-                    <UIcon v-else name="i-heroicons-film" class="w-6 h-6 text-gray-400" />
-                </div>
-                <span :class="scopeBadgeClass" class="mb-1 shrink-0 text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded">
-                    {{ scopeLabel }}
+            <!-- lifecycle status pill -->
+            <div class="relative flex justify-end">
+                <span class="cr-pill" :class="darkPill.cls">
+                    <span class="cr-dot" :class="darkPill.dot" />
+                    {{ darkPill.label }}
                 </span>
             </div>
+
+            <!-- equalizer (has data) / dashed awaiting (draft) -->
+            <div v-if="lifecycle !== 'draft'" class="cr-eq">
+                <span v-for="n in 6" :key="n" :style="{ animationDelay: (n - 1) * 0.18 + 's', background: eqColors[(n - 1) % eqColors.length] }" />
+            </div>
+            <div v-else class="cr-await">awaiting first source</div>
+
+            <!-- icon badge overlapping into body -->
+            <div class="cr-badge">
+                <img v-if="isImageAvatar" :src="studio.avatar || ''" alt="" class="w-full h-full object-cover rounded-[12px]" />
+                <span v-else-if="studio.avatar" class="text-2xl">{{ studio.avatar }}</span>
+                <UIcon v-else name="i-heroicons-film" class="w-6 h-6 text-[#9A8F80]" />
+            </div>
         </div>
 
-        <div class="px-4 pt-2 pb-4">
-            <!-- Name + role -->
-            <div class="flex items-center gap-1.5">
-                <span class="font-semibold text-gray-900 text-sm leading-tight truncate">{{ studio.name }}</span>
-            </div>
-            <span v-if="roleLabel" class="text-[11px] text-gray-400">{{ roleLabel }}</span>
+        <!-- BODY -->
+        <div class="flex flex-col flex-1 px-[17px] pt-8 pb-[17px]">
+            <div class="cr-name">{{ studio.name }}</div>
+            <div class="cr-persona">{{ voiceLine ? '"' + voiceLine + '"' : (studio.description || '"' + scopeLabel + '"') }}</div>
 
-            <!-- Persona / voice one-liner -->
-            <p v-if="voiceLine" class="text-xs text-gray-500 italic line-clamp-1 mt-1">"{{ voiceLine }}"</p>
-            <p v-else-if="studio.description" class="text-xs text-gray-500 line-clamp-1 mt-1">{{ studio.description }}</p>
-
-            <!-- Source logo stack -->
-            <div class="flex items-center gap-2 mt-3 min-h-[20px]">
-                <div v-if="sourcePreview.length" class="flex -space-x-1.5">
-                    <span
-                        v-for="(s, i) in sourcePreview"
-                        :key="i"
-                        class="inline-flex items-center justify-center w-5 h-5 rounded-md bg-gray-50 ring-1 ring-white"
-                        :title="s.name"
-                    >
-                        <DataSourceIcon v-if="s.type" class="h-3" :type="s.type" />
-                        <UIcon v-else name="i-heroicons-circle-stack" class="w-3 h-3 text-gray-400" />
-                    </span>
+            <!-- LIVE / IDLE: source label + real stats -->
+            <div v-if="lifecycle === 'live' || lifecycle === 'idle'" class="flex-1 flex flex-col">
+                <div class="cr-src">
+                    <UIcon name="i-heroicons-circle-stack" class="w-3.5 h-3.5 text-[#A89C8C] shrink-0" />
+                    <span class="truncate">{{ sourceSummary }}</span>
                 </div>
-                <span class="text-[11px] text-gray-400 truncate">{{ sourceSummary }}</span>
-            </div>
-
-            <!-- DRAFT (no data): setup progress + clear next step instead of four zeros -->
-            <div v-if="lifecycle === 'draft'" class="mt-3">
-                <div class="h-1.5 rounded-full bg-[#f1efe9] overflow-hidden">
-                    <i class="block h-full rounded-full bg-[#C2683F]" style="width:25%" />
+                <div class="cr-stats">
+                    <b>{{ studio.chat_count ?? 0 }}</b> chats ·
+                    <b>{{ studio.member_count ?? 0 }}</b> {{ (studio.member_count ?? 0) === 1 ? 'member' : 'members' }} ·
+                    <b>{{ studio.source_count ?? 0 }}</b> {{ (studio.source_count ?? 0) === 1 ? 'source' : 'sources' }}
+                    <template v-if="lastActiveLabel"> · {{ lastActiveLabel }}</template>
                 </div>
-                <div class="text-[11px] text-[#b9791f] font-medium mt-1.5">Connect data to activate</div>
             </div>
 
-            <!-- READY (has data, untrained): nudge to train -->
-            <div v-else-if="lifecycle === 'ready'" class="mt-3">
-                <div class="h-1.5 rounded-full bg-[#f1efe9] overflow-hidden">
-                    <i class="block h-full rounded-full bg-[#3b6db8]" style="width:60%" />
-                </div>
-                <div class="text-[11px] text-[#3b6db8] font-medium mt-1.5">Train it to learn your data</div>
+            <!-- READY (data, untrained): blue progress + train nudge -->
+            <div v-else-if="lifecycle === 'ready'" class="flex-1 flex flex-col">
+                <div class="cr-bar"><i style="width:60%;background:linear-gradient(90deg,#3b6db8,#2a4f8f)" /></div>
+                <div class="cr-bar-note" style="color:#3b6db8">Train it to learn your data</div>
             </div>
 
-            <!-- LIVE / IDLE: real stats only once they exist -->
-            <div v-else class="flex items-center gap-4 mt-3 text-[12px] text-gray-500">
-                <span><b class="text-gray-800">{{ studio.chat_count ?? 0 }}</b> chats</span>
-                <span><b class="text-gray-800">{{ studio.member_count ?? 0 }}</b> {{ (studio.member_count ?? 0) === 1 ? 'member' : 'members' }}</span>
-                <span><b class="text-gray-800">{{ studio.source_count ?? 0 }}</b> {{ (studio.source_count ?? 0) === 1 ? 'source' : 'sources' }}</span>
-                <span v-if="lastActiveLabel" class="ml-auto text-gray-400">{{ lastActiveLabel }}</span>
+            <!-- DRAFT (no data): orange progress + connect nudge -->
+            <div v-else class="flex-1 flex flex-col">
+                <div class="cr-bar"><i style="width:30%;background:linear-gradient(90deg,#D67037,#A8330F)" /></div>
+                <div class="cr-bar-note" style="color:#B85C2E">Connect data to activate</div>
             </div>
 
-            <!-- Persistent action bar — every card shows a clear next step -->
-            <div class="flex items-center gap-2 mt-4">
+            <!-- action bar -->
+            <div class="mt-auto flex gap-[9px] pt-2">
                 <template v-if="lifecycle === 'draft'">
-                    <UButton color="orange" size="2xs" icon="i-heroicons-plus" class="flex-1 justify-center !bg-[#C2683F] hover:!bg-[#A8542F]" @click.stop="$emit('open')">
+                    <button class="cr-prim" @click.stop="$emit('open')">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>
                         Add data
-                    </UButton>
-                    <UButton color="gray" variant="soft" size="2xs" class="flex-1 justify-center" @click.stop="$emit('open')">
-                        Open
-                    </UButton>
+                    </button>
+                    <button class="cr-ghost" @click.stop="$emit('open')">Open</button>
                 </template>
                 <template v-else>
-                    <UButton color="orange" size="2xs" icon="i-heroicons-arrow-right" class="flex-1 justify-center !bg-[#C2683F] hover:!bg-[#A8542F]" @click.stop="$emit('open')">
+                    <button class="cr-prim" @click.stop="$emit('open')">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M5 12h13M13 6l6 6-6 6" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                         {{ $t('studio.open') || 'Open' }}
-                    </UButton>
-                    <UButton color="gray" variant="soft" size="2xs" icon="i-heroicons-plus" class="flex-1 justify-center" @click.stop="$emit('chat')">
+                    </button>
+                    <button class="cr-ghost" @click.stop="$emit('chat')">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
                         {{ $t('studio.chat') || 'Chat' }}
-                    </UButton>
+                    </button>
                 </template>
             </div>
         </div>
@@ -136,26 +119,12 @@ defineEmits<{ open: []; chat: [] }>()
 
 const { t } = useI18n()
 
+const eqColors = ['#D67037', '#C2541E', '#E89461', '#B8431A', '#D67037', '#E89461']
+
 const isImageAvatar = computed(() => {
     const a = props.studio.avatar || ''
     return /^https?:\/\//.test(a) || a.startsWith('/')
 })
-
-// Persona-derived hue: deterministic hash of the name -> 0..360. Gives every
-// studio a unique, stable accent without storing a color.
-const hue = computed(() => {
-    const s = props.studio.name || 'studio'
-    let h = 0
-    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360
-    return h
-})
-// Claude warm palette — calm, no rainbow hue hashing (user disliked the purple-blue band).
-const accent = computed(() => '#C2683F')
-const bandStyle = computed(() => ({ background: '#F4F1EA' }))
-const bandGradient = computed(() => ({
-    background: 'linear-gradient(120deg, #F6EFE8, #EFE7DC)',
-}))
-const avatarRing = computed(() => ({ boxShadow: '0 0 0 2px white, 0 0 0 3.5px #E7E5DD' }))
 
 const voiceLine = computed(() => {
     const p = (props.studio.persona || '').trim()
@@ -177,24 +146,6 @@ const sourceSummary = computed(() => {
     return `${n} ${n === 1 ? 'source' : 'sources'}`
 })
 
-const evalPct = computed(() => {
-    const r = props.studio.eval_pass_rate
-    return r === null || r === undefined ? '—' : `${Math.round(r * 100)}%`
-})
-
-// Activity sparkline from activity_7d (oldest -> newest), normalized.
-const hasActivity = computed(() => (props.studio.activity_7d || []).some(v => v > 0))
-const spark = computed(() => {
-    const data = props.studio.activity_7d || []
-    const w = 96, h = 20, pad = 1
-    const max = Math.max(1, ...data)
-    const step = data.length > 1 ? (w - pad * 2) / (data.length - 1) : 0
-    const points = data
-        .map((v, i) => `${(pad + i * step).toFixed(1)},${(h - pad - (v / max) * (h - pad * 2)).toFixed(1)}`)
-        .join(' ')
-    return { w, h, points }
-})
-
 const isLive = computed(() => {
     const ts = props.studio.last_active_at
     if (!ts) return false
@@ -210,12 +161,14 @@ const lifecycle = computed(() => {
     if (chats === 0) return 'ready'
     return isLive.value ? 'live' : 'idle'
 })
-const lifecycleChip = computed(() => {
+
+// Dark-header translucent pill styling per lifecycle.
+const darkPill = computed(() => {
     switch (lifecycle.value) {
-        case 'draft': return { label: 'Draft · needs data', cls: 'bg-[#fdf3e3] text-[#b9791f]', dot: 'bg-[#b9791f]' }
-        case 'ready': return { label: 'Ready to train', cls: 'bg-[#eaf1fb] text-[#3b6db8]', dot: 'bg-[#3b6db8]' }
-        case 'live': return { label: 'Live', cls: 'bg-[#eaf6f0] text-[#2f9e6f]', dot: 'bg-[#2f9e6f] animate-pulse' }
-        default: return { label: lastActiveLabel.value ? `Idle · ${lastActiveLabel.value.replace(' ago','')}` : 'Idle', cls: 'bg-[#f1efe9] text-[#9a958c]', dot: 'bg-[#cfcabf]' }
+        case 'draft': return { label: 'Needs data', cls: 'cr-pill-amber', dot: 'cr-dot-amber' }
+        case 'ready': return { label: 'Ready to train', cls: 'cr-pill-blue', dot: 'cr-dot-blue' }
+        case 'live': return { label: 'Live', cls: 'cr-pill-green', dot: 'cr-dot-green cr-pulse' }
+        default: return { label: lastActiveLabel.value ? `Idle · ${lastActiveLabel.value.replace(' ago', '')}` : 'Idle', cls: 'cr-pill-gray', dot: 'cr-dot-gray' }
     }
 })
 
@@ -238,30 +191,114 @@ const scopeLabel = computed(() => {
     if (s === 'link') return t('studio.scopeLink')
     return t('studio.scopePrivate')
 })
-const scopeBadgeClass = computed(() => {
-    const s = (props.studio.share_scope || 'private').toLowerCase()
-    if (s === 'org') return 'bg-[#F4F1EA] text-[#7a756c]'
-    if (s === 'link') return 'bg-[#F3E7DF] text-[#C2683F]'
-    return 'bg-[#F4F1EA] text-[#6b6b6b]'
-})
-const roleLabel = computed(() => {
-    const r = (props.studio.role || '').toLowerCase()
-    if (r === 'owner') return t('studio.roleOwner')
-    if (r === 'editor') return t('studio.roleEditor')
-    if (r === 'viewer') return t('studio.roleViewer')
-    return ''
-})
 </script>
 
 <style scoped>
-.line-clamp-1 {
-    display: -webkit-box;
-    -webkit-line-clamp: 1;
-    line-clamp: 1;
-    -webkit-box-orient: vertical;
+.cr-card {
+    border: 1px solid #E9E0D3;
+    border-radius: 18px;
+    box-shadow: 0 14px 32px -22px rgba(60, 40, 20, .4);
+    transition: transform .22s, box-shadow .22s, border-color .22s;
+    font-family: 'Hanken Grotesk', system-ui, sans-serif;
+}
+.cr-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 30px 60px -28px rgba(60, 40, 20, .42);
+    border-color: #E4D4C2;
+}
+
+/* dark header */
+.cr-head {
+    position: relative;
+    height: 118px;
+    background: radial-gradient(130% 120% at 75% -10%, #33251B, #130E0A);
+    padding: 15px;
     overflow: hidden;
 }
-/* Action bar sits over the bottom; give the card a little extra room so the
-   sparkline row isn't hidden until hover reveals the bar. */
-.studio-card { padding-bottom: 0; }
+.cr-grid {
+    position: absolute; inset: 0; pointer-events: none;
+    background-image: linear-gradient(rgba(255, 255, 255, .05) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, .05) 1px, transparent 1px);
+    background-size: 20px 20px;
+    -webkit-mask-image: radial-gradient(120% 90% at 70% 0, #000 30%, transparent 85%);
+    mask-image: radial-gradient(120% 90% at 70% 0, #000 30%, transparent 85%);
+    animation: cr-drift 7s linear infinite;
+}
+.cr-blob {
+    position: absolute; top: -30px; right: -20px; width: 160px; height: 160px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(214, 112, 55, .34), transparent 65%);
+    filter: blur(16px); pointer-events: none;
+}
+.cr-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 999px;
+}
+.cr-pill-green { color: #6FD49A; background: rgba(63, 168, 107, .14); border: 1px solid rgba(63, 168, 107, .3); }
+.cr-pill-amber { color: #E5A45B; background: rgba(224, 150, 46, .14); border: 1px solid rgba(224, 150, 46, .3); }
+.cr-pill-blue  { color: #8FB6E8; background: rgba(59, 109, 184, .16); border: 1px solid rgba(59, 109, 184, .34); }
+.cr-pill-gray  { color: #BFB3A2; background: rgba(180, 165, 145, .14); border: 1px solid rgba(180, 165, 145, .26); }
+.cr-dot { width: 6px; height: 6px; border-radius: 50%; }
+.cr-dot-green { background: #3FA86B; }
+.cr-dot-amber { background: #E0962E; }
+.cr-dot-blue  { background: #3b6db8; }
+.cr-dot-gray  { background: #9A8F80; }
+.cr-pulse { animation: cr-pulse 1.8s ease-in-out infinite; }
+
+.cr-eq {
+    position: absolute; left: 78px; bottom: 18px;
+    display: flex; align-items: flex-end; gap: 5px; height: 38px;
+}
+.cr-eq span {
+    width: 6px; height: 100%; border-radius: 2px; transform-origin: bottom;
+    animation: cr-eq 1.1s ease-in-out infinite;
+}
+.cr-await {
+    position: absolute; left: 78px; right: 16px; bottom: 18px; height: 34px;
+    border: 1.4px dashed rgba(255, 255, 255, .18); border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; color: #8A7868;
+}
+.cr-badge {
+    position: absolute; left: 15px; bottom: -24px; width: 56px; height: 56px;
+    border-radius: 15px; background: #fff; border: 1px solid #ECE3D5;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 10px 22px -8px rgba(0, 0, 0, .45);
+    overflow: hidden;
+}
+
+.cr-name { font-size: 17.5px; font-weight: 600; color: #211B14; line-height: 1.2; }
+.cr-persona {
+    font-family: 'Spectral', ui-serif, Georgia, serif; font-style: italic;
+    font-size: 13.5px; color: #8A7F70; margin: 3px 0 15px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cr-src {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; color: #6E6356; margin-bottom: 12px; min-width: 0;
+}
+.cr-stats { font-size: 12.5px; color: #9A8F80; margin-bottom: 16px; }
+.cr-stats b { color: #3A332B; font-weight: 700; }
+
+.cr-bar { height: 6px; border-radius: 99px; background: #EFE7DA; overflow: hidden; margin-bottom: 10px; }
+.cr-bar i { display: block; height: 100%; border-radius: 99px; }
+.cr-bar-note { font-size: 12.5px; font-weight: 600; margin-bottom: 16px; }
+
+.cr-prim, .cr-ghost {
+    flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+    border-radius: 10px; padding: 10px; cursor: pointer;
+    font-family: inherit; font-size: 13.5px; font-weight: 600; transition: .15s;
+}
+.cr-prim { border: none; background: #C2541E; color: #fff; }
+.cr-prim:hover { background: #A8330F; }
+.cr-ghost { border: 1px solid #E4D9CA; background: #FCFAF6; color: #574E44; }
+.cr-ghost:hover { border-color: #C9BEAF; background: #FFFFFF; }
+
+@keyframes cr-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .4; transform: scale(.7); } }
+@keyframes cr-eq { 0%, 100% { transform: scaleY(.32); } 50% { transform: scaleY(1); } }
+@keyframes cr-drift { 0% { background-position: 0 0; } 100% { background-position: 20px 20px; } }
+/* Note: the equalizer + Live dot intentionally keep animating even under
+   reduced-motion — they ARE the live-status indicator. Only the heavy
+   card hover/grid drift are disabled. */
+@media (prefers-reduced-motion: reduce) {
+    .cr-card, .cr-grid { animation: none !important; transition: none !important; }
+}
 </style>

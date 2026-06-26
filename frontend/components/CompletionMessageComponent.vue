@@ -78,7 +78,7 @@
                     
                     <div class="text-xs mt-2 w-full" v-if="localCompletion.widget">
                         <div class="border-2 text-gray-600 bg-white rounded-lg overflow-hidden" :class="{
-                            'border-[#C2683F]': isSelected(localCompletion.widget.id, localCompletion.step?.id),
+                            'border-[#C2541E]': isSelected(localCompletion.widget.id, localCompletion.step?.id),
                             'border-gray-200': !isSelected(localCompletion.widget.id, localCompletion.step?.id)
                         }">
                             <div class="p-2 flex justify-between items-center">
@@ -118,21 +118,21 @@
 
                                 <div class="pe-2 ps-2 mt-1.5 pb-1.5 flex justify-between items-center">
                                     <button @click="handleAddClick(localCompletion)"
-                                        class="text-xs rounded text-[#C2683F] hover:text-[#A8542F]"
+                                        class="text-xs rounded text-[#C2541E] hover:text-[#A8330F]"
                                         v-if="localCompletion.step?.status == 'success'">
                                         <Icon name="heroicons-play" />
                                         Add
                                     </button>
-                                    <button v-else-if="localCompletion.step?.status == 'error'" class="text-xs rounded text-[#C2683F]">
+                                    <button v-else-if="localCompletion.step?.status == 'error'" class="text-xs rounded text-[#C2541E]">
                                         <Icon name="heroicons-x-mark"
                                             class="w-3 h-3 inline-block" />
                                         {{  localCompletion.step?.status }}
                                     </button>
-                                    <button v-else-if="localCompletion.status === 'stopped' || localCompletion.sigkill" class="text-xs rounded text-[#C2683F]">
+                                    <button v-else-if="localCompletion.status === 'stopped' || localCompletion.sigkill" class="text-xs rounded text-[#C2541E]">
                                         <Icon name="heroicons-stop-circle" />
                                         Stopped generating
                                     </button>
-                                    <button v-else class="text-xs rounded text-[#C2683F]">
+                                    <button v-else class="text-xs rounded text-[#C2541E]">
                                         <Icon name="heroicons-arrow-path"
                                             class="w-3 h-3 animate-spin inline-block" />
                                         Generating
@@ -195,7 +195,7 @@
 
                 <hr class="w-full mb-4 mt-4" />
             <div v-if="planLoading" class="flex justify-center items-center py-8">
-                <Icon name="heroicons-arrow-path" class="w-6 h-6 animate-spin text-[#C2683F]" />
+                <Icon name="heroicons-arrow-path" class="w-6 h-6 animate-spin text-[#C2541E]" />
             </div>
             <div v-else-if="plans.length > 0" class="markdown-wrapper max-h-[60vh] overflow-auto">
                 <!-- Plans Navigation -->
@@ -206,7 +206,7 @@
                         @click="switchPlan(index)"
                         class="px-3 py-1 rounded text-sm"
                         :class="{
-                            'bg-[#C2683F] text-white': activePlanIndex === index,
+                            'bg-[#C2541E] text-white': activePlanIndex === index,
                             'bg-gray-100 hover:bg-gray-200': activePlanIndex !== index
                         }"
                     >
@@ -631,7 +631,7 @@ ul {
 
     /* Links */
     a {
-        @apply text-[#C2683F] hover:text-[#A8542F] underline;
+        @apply text-[#C2541E] hover:text-[#A8330F] underline;
     }
 
     /* Block quotes */

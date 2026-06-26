@@ -64,7 +64,7 @@
 
     <!-- Run-id link -->
     <div v-if="progress.run_id" class="mt-1 text-[10px] text-gray-400 ms-1">
-      <NuxtLink :to="`/evals/runs/${progress.run_id}`" class="hover:text-[#C2683F] inline-flex items-center gap-0.5">
+      <NuxtLink :to="`/evals/runs/${progress.run_id}`" class="hover:text-[#C2541E] inline-flex items-center gap-0.5">
         <Icon name="heroicons:arrow-top-right-on-square" class="w-3 h-3" />
         Open run
       </NuxtLink>
@@ -172,7 +172,7 @@ function caseIconColor(s: string): string {
   if (s === 'pass') return 'text-green-500'
   if (s === 'fail' || s === 'error') return 'text-red-500'
   if (s === 'stopped') return 'text-gray-500'
-  if (s === 'in_progress') return 'text-[#C2683F] animate-spin-slow'
+  if (s === 'in_progress') return 'text-[#C2541E] animate-spin-slow'
   return 'text-gray-400'
 }
 function caseStatusColor(s: string): string {

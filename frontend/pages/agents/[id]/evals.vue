@@ -186,7 +186,7 @@
                                 </tr>
                                 <tr v-for="r in agentRuns" :key="r.id" class="hover:bg-gray-50">
                                     <td class="px-6 py-3">
-                                        <NuxtLink :to="`/evals/runs/${r.id}`" class="text-[#C2683F] hover:underline">
+                                        <NuxtLink :to="`/evals/runs/${r.id}`" class="text-[#C2541E] hover:underline">
                                             {{ r.title || $t('evals.runs.fallbackTitle') }}
                                         </NuxtLink>
                                     </td>
@@ -582,7 +582,7 @@ function tabClass(tab: string) {
     const isActive = activeTab.value === tab
     return [
         'whitespace-nowrap py-4 px-1 border-b-2 text-sm font-medium',
-        isActive ? 'border-[#C2683F] text-[#C2683F]' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300',
+        isActive ? 'border-[#C2541E] text-[#C2541E]' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300',
     ]
 }
 
@@ -676,7 +676,7 @@ function categoriesForCase(c: TestCaseRow) {
 
 function badgeClassesFor(catKey: string) {
     const map: Record<string, string> = {
-        'tool:create_data': 'bg-[#F6EFEA] text-[#A8542F] border-[#E8C9B5]',
+        'tool:create_data': 'bg-[#F6EFEA] text-[#A8330F] border-[#E8C9B5]',
         'tool:clarify': 'bg-amber-50 text-amber-700 border-amber-100',
         'tool:describe_table': 'bg-teal-50 text-teal-700 border-teal-100',
         'metadata': 'bg-slate-50 text-slate-700 border-slate-100',

@@ -149,7 +149,7 @@
                 <!-- View dashboard pill (only if artifacts exist) -->
                 <button
                     v-if="props.hasArtifacts"
-                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-gray-200 bg-white text-xs text-[#C2683F] hover:bg-[#F6EFEA] transition-colors"
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-gray-200 bg-white text-xs text-[#C2541E] hover:bg-[#F6EFEA] transition-colors"
                     @click="emit('viewDashboard')"
                 >
                     {{ $t('prompt.viewDashboard') }}
@@ -172,7 +172,7 @@
         <!-- Minimalist prompt container -->
         <div
             class="border rounded-2xl bg-white shadow-sm transition-colors relative"
-            :class="[isDraggingFiles ? 'border-[#C2683F] border-2 bg-[#F3E7DF]/30' : mode === 'training' ? 'border-sky-300 focus-within:border-sky-400' : 'border-[#E7E5DD] focus-within:border-[#C2683F]', props.compact ? 'text-sm' : '']"
+            :class="[isDraggingFiles ? 'border-[#C2541E] border-2 bg-[#FBEFE4]/30' : mode === 'training' ? 'border-sky-300 focus-within:border-sky-400' : 'border-[#E9E0D3] focus-within:border-[#C2541E]', props.compact ? 'text-sm' : '']"
             @dragenter="handleDragEnter"
             @dragleave="handleDragLeave"
             @dragover="handleDragOver"
@@ -182,9 +182,9 @@
             <!-- Drop overlay -->
             <div
                 v-if="isDraggingFiles"
-                class="absolute inset-0 bg-[#F3E7DF]/80 rounded-2xl flex items-center justify-center z-10 pointer-events-none"
+                class="absolute inset-0 bg-[#FBEFE4]/80 rounded-2xl flex items-center justify-center z-10 pointer-events-none"
             >
-                <div class="flex flex-col items-center text-[#A8542F]">
+                <div class="flex flex-col items-center text-[#A8330F]">
                     <Icon name="heroicons-cloud-arrow-up" class="w-8 h-8 mb-2" />
                     <span class="text-sm font-medium">{{ $t('prompt.dropFilesToUpload') }}</span>
                 </div>
@@ -241,7 +241,7 @@
                         </div>
                         <!-- Processing overlay -->
                         <div v-if="file.status === 'processing'" class="absolute inset-0 flex items-center justify-center bg-white/60">
-                            <Spinner class="w-4 h-4 text-[#C2683F]" />
+                            <Spinner class="w-4 h-4 text-[#C2541E]" />
                         </div>
                         <!-- Error overlay -->
                         <div v-if="file.status === 'error'" class="absolute inset-0 flex items-center justify-center bg-red-50/80">
@@ -264,7 +264,7 @@
                     :key="file.id"
                     class="inline-flex items-center gap-1.5 px-2 py-1 bg-gray-100 rounded-lg text-xs text-gray-700 group"
                 >
-                    <Spinner v-if="file.status === 'processing'" class="w-3 h-3 text-[#C2683F] flex-shrink-0" />
+                    <Spinner v-if="file.status === 'processing'" class="w-3 h-3 text-[#C2541E] flex-shrink-0" />
                     <Icon v-else-if="file.status === 'error'" name="heroicons-exclamation-circle" class="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
                     <Icon v-else name="heroicons-document" class="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
                     <span class="truncate max-w-[150px]">{{ file.filename }}</span>
@@ -304,21 +304,21 @@
                                         <Icon name="heroicons-chat-bubble-left-right" class="w-4 h-4 me-2" />
                                         {{ $t('prompt.chat') }}
                                     </div>
-                                    <Icon v-if="mode === 'chat'" name="heroicons-check" class="w-4 h-4 text-[#C2683F]" />
+                                    <Icon v-if="mode === 'chat'" name="heroicons-check" class="w-4 h-4 text-[#C2541E]" />
                                 </div>
                                 <div class="px-2 py-1 rounded hover:bg-gray-100 cursor-pointer flex items-center justify-between" @click="() => { selectMode('deep'); close(); }">
                                     <div class="flex items-center">
                                         <Icon name="heroicons-light-bulb" class="w-4 h-4 me-2" />
                                         {{ $t('prompt.deepAnalytics') }}
                                     </div>
-                                    <Icon v-if="mode === 'deep'" name="heroicons-check" class="w-4 h-4 text-[#C2683F]" />
+                                    <Icon v-if="mode === 'deep'" name="heroicons-check" class="w-4 h-4 text-[#C2541E]" />
                                 </div>
                                 <div v-if="canUseTrainingMode" class="px-2 py-1 rounded hover:bg-gray-100 cursor-pointer flex items-center justify-between" @click="() => { selectMode('training'); close(); }">
                                     <div class="flex items-center">
                                         <Icon name="heroicons-academic-cap" class="w-4 h-4 me-2" />
                                         {{ $t('prompt.training') }}
                                     </div>
-                                    <Icon v-if="mode === 'training'" name="heroicons-check" class="w-4 h-4 text-[#C2683F]" />
+                                    <Icon v-if="mode === 'training'" name="heroicons-check" class="w-4 h-4 text-[#C2541E]" />
                                 </div>
                             </div>
                         </template>
@@ -440,7 +440,7 @@
                     <!-- Model selector -->
                     <UPopover :key="'model-' + (props.popoverOffset || 0)" :popper="popperLegacy">
                         <UTooltip :text="selectedModelLabel" :popper="{ strategy: 'fixed', placement: 'top' }">
-                            <button class="text-gray-600 hover:text-gray-900 hover:bg-[#F4F1EA] rounded-md px-2 py-1 text-xs flex items-center gap-1 max-w-[180px]">
+                            <button class="text-gray-600 hover:text-gray-900 hover:bg-[#F4EEE5] rounded-md px-2 py-1 text-xs flex items-center gap-1 max-w-[180px]">
                                 <span class="font-medium truncate">{{ selectedModelLabel }}</span>
                                 <Icon name="heroicons-chevron-down" class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
                             </button>
@@ -451,10 +451,10 @@
                                     v-for="m in models"
                                     :key="m.id"
                                     class="relative px-2.5 py-2 rounded-lg cursor-pointer flex items-start gap-2.5 transition-colors"
-                                    :class="selectedModel === m.id ? 'bg-[#F3E7DF]/60' : 'hover:bg-[#faf8f3]'"
+                                    :class="selectedModel === m.id ? 'bg-[#FBEFE4]/60' : 'hover:bg-[#faf8f3]'"
                                     @click="() => { selectModel(m.id); close(); }"
                                 >
-                                    <span v-if="selectedModel === m.id" class="absolute start-0 top-2 bottom-2 w-0.5 rounded-full bg-[#C2683F]"></span>
+                                    <span v-if="selectedModel === m.id" class="absolute start-0 top-2 bottom-2 w-0.5 rounded-full bg-[#C2541E]"></span>
                                     <div class="mt-0.5">
                                         <LLMProviderIcon :provider="m.provider?.provider_type || 'default'" :icon="true" class="w-4 h-4" />
                                     </div>
@@ -463,16 +463,16 @@
                                             <span class="font-semibold text-gray-900 truncate" :title="m.name">{{ m.name }}</span>
                                             <span
                                                 class="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0"
-                                                :class="modelMeta(m).tier === 'pro' ? 'bg-[#F3E7DF] text-[#C2683F]' : 'bg-[#eef6f0] text-[#3f9e6a]'"
+                                                :class="modelMeta(m).tier === 'pro' ? 'bg-[#FBEFE4] text-[#C2541E]' : 'bg-[#eef6f0] text-[#3f9e6a]'"
                                             >{{ modelMeta(m).tierLabel }}</span>
-                                            <Icon v-if="selectedModel === m.id" name="heroicons-check" class="w-3.5 h-3.5 text-[#C2683F] ms-auto shrink-0" />
+                                            <Icon v-if="selectedModel === m.id" name="heroicons-check" class="w-3.5 h-3.5 text-[#C2541E] ms-auto shrink-0" />
                                         </div>
                                         <p class="text-gray-500 text-[11px] leading-snug mt-0.5">{{ modelMeta(m).desc }}</p>
                                         <div class="flex flex-wrap gap-1 mt-1.5">
                                             <span
                                                 v-for="(c, i) in modelMeta(m).chips"
                                                 :key="i"
-                                                class="text-[10px] text-[#7a756c] bg-[#F4F1EA] border border-[#E7E5DD] rounded px-1.5 py-0.5"
+                                                class="text-[10px] text-[#7a756c] bg-[#F4EEE5] border border-[#E9E0D3] rounded px-1.5 py-0.5"
                                             >{{ c }}</span>
                                         </div>
                                     </div>
@@ -501,7 +501,7 @@
                     <UTooltip v-else-if="!props.hideSubmitButton" :text="submitTooltip" :popper="{ strategy: 'fixed', placement: 'top' }" :disabled="canSubmit">
                         <button
                             class="text-white w-7 h-7 rounded-full flex items-center justify-center transition-colors ms-1"
-                            :class="canSubmit ? (mode === 'training' ? 'bg-sky-500 hover:cursor-pointer hover:bg-sky-600' : 'bg-[#C2683F] hover:cursor-pointer hover:bg-[#A8542F]') : 'bg-gray-300 cursor-not-allowed'"
+                            :class="canSubmit ? (mode === 'training' ? 'bg-sky-500 hover:cursor-pointer hover:bg-sky-600' : 'bg-[#C2541E] hover:cursor-pointer hover:bg-[#A8330F]') : 'bg-gray-300 cursor-not-allowed'"
                             :disabled="!canSubmit"
                             @click="submit"
                         >
@@ -958,7 +958,7 @@ function quotaMetricBarClass(metric: any): string {
     if (pct === null || pct === undefined) return 'bg-gray-300'
     if (pct >= 100) return 'bg-red-500'
     if (pct >= 80) return 'bg-amber-500'
-    return 'bg-[#C2683F]'
+    return 'bg-[#C2541E]'
 }
 
 const contextIndicatorIcon = computed(() => {

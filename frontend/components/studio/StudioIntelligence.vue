@@ -6,7 +6,7 @@
         <span v-html="M.glyph" />
       </div>
       <div>
-        <h2 class="text-lg font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">{{ M.title }}</h2>
+        <h2 class="text-lg font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ M.title }}</h2>
         <p class="text-xs text-[#6b6b6b] mt-0.5">{{ M.sub }}</p>
       </div>
       <div class="ms-auto flex items-center gap-2.5">
@@ -20,7 +20,7 @@
           type="button"
           :disabled="!canEdit || toggling"
           class="relative w-[44px] h-[25px] rounded-full transition-colors flex-none"
-          :class="[enabled ? 'bg-[#C2683F]' : 'bg-[#d7d7d7]', (!canEdit || toggling) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer']"
+          :class="[enabled ? 'bg-[#C2541E]' : 'bg-[#d7d7d7]', (!canEdit || toggling) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer']"
           :title="canEdit ? 'Toggle org-wide' : 'Editors only'"
           @click="toggle"
         >
@@ -48,12 +48,12 @@
       </div>
 
       <!-- Data table -->
-      <div v-if="data?.table?.rows?.length" class="bg-white border border-[#E7E5DD] rounded-xl p-4 mb-4 mt-3">
+      <div v-if="data?.table?.rows?.length" class="bg-white border border-[#E9E0D3] rounded-xl p-4 mb-4 mt-3">
         <h3 class="text-[11.5px] font-bold uppercase tracking-wide text-[#6b6b6b] mb-3">{{ data.table.title }}</h3>
         <table class="w-full text-[12px]">
           <thead>
             <tr>
-              <th v-for="h in data.table.head" :key="h" class="text-left text-[10px] uppercase tracking-wide text-[#9a958c] font-bold py-1.5 px-2 border-b border-[#E7E5DD]">{{ h }}</th>
+              <th v-for="h in data.table.head" :key="h" class="text-left text-[10px] uppercase tracking-wide text-[#9a958c] font-bold py-1.5 px-2 border-b border-[#E9E0D3]">{{ h }}</th>
             </tr>
           </thead>
           <tbody>
@@ -65,7 +65,7 @@
       </div>
 
       <!-- Note / empty state -->
-      <div v-if="data?.note" class="text-[12px] text-[#555] bg-[#faf8f4] border-l-[3px] border-[#C2683F] rounded-r-lg px-3.5 py-2.5 mt-3">
+      <div v-if="data?.note" class="text-[12px] text-[#555] bg-[#faf8f4] border-l-[3px] border-[#C2541E] rounded-r-lg px-3.5 py-2.5 mt-3">
         {{ data.note }}
       </div>
     </template>

@@ -8,7 +8,7 @@
                         v-model="searchQuery"
                         type="text"
                         :placeholder="$t('rolesManager.searchPlaceholder')"
-                        class="w-full ps-10 pe-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#C2683F] focus:border-[#C2683F]"
+                        class="w-full ps-10 pe-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#C2541E] focus:border-[#C2541E]"
                     />
                     <UIcon
                         name="i-heroicons-magnifying-glass"

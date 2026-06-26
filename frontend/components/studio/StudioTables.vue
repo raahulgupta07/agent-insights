@@ -22,7 +22,7 @@
                     type="button"
                     class="inline-flex items-center gap-1.5 text-xs rounded-full border px-3 py-1.5 transition-colors"
                     :class="String(activeSourceId) === String(s.agent_id)
-                        ? 'border-[#C2683F] bg-[#F6EFEA] text-[#A8542F]'
+                        ? 'border-[#C2541E] bg-[#F6EFEA] text-[#A8330F]'
                         : 'border-gray-200 text-gray-600 hover:bg-gray-50'"
                     @click="activeSourceId = String(s.agent_id)"
                 >
@@ -95,7 +95,7 @@
                                                 v-model="colState(table).edits[col.name]"
                                                 type="text"
                                                 :placeholder="$t('studio.colDescriptionPlaceholder') || 'Add a description…'"
-                                                class="w-full text-xs rounded border border-[#E7E5DD] px-2 py-1 text-gray-700 placeholder:text-[#9a958c] focus:outline-none focus:border-[#C2683F] focus:ring-1 focus:ring-[#C2683F]"
+                                                class="w-full text-xs rounded border border-[#E9E0D3] px-2 py-1 text-gray-700 placeholder:text-[#9a958c] focus:outline-none focus:border-[#C2541E] focus:ring-1 focus:ring-[#C2541E]"
                                             />
                                             <!-- Read-only for viewers -->
                                             <div v-else class="text-gray-600 truncate" :title="col.description || ''">
@@ -119,7 +119,7 @@
                                         :disabled="!hasChanges(table) || savingCols[tableKey(table)]"
                                         class="inline-flex items-center gap-1.5 text-xs rounded-md px-3 py-1.5 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                         :class="hasChanges(table) && !savingCols[tableKey(table)]
-                                            ? 'bg-[#C2683F] text-white hover:bg-[#A8542F]'
+                                            ? 'bg-[#C2541E] text-white hover:bg-[#A8330F]'
                                             : 'bg-gray-100 text-gray-400'"
                                         @click="saveDescriptions(table)"
                                     >

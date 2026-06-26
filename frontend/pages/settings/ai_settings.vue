@@ -185,7 +185,7 @@
 
                     <div class="pt-2">
                         <i18n-t keypath="settings.aiSettingsPage.llmConfirmLabel" tag="label" class="block text-sm text-[#6b6b6b] mb-2">
-                            <template #phrase><span class="font-mono bg-[#F4F1EA] px-1.5 py-0.5 rounded">{{ $t('settings.aiSettingsPage.llmConfirmPhrase') }}</span></template>
+                            <template #phrase><span class="font-mono bg-[#F4EEE5] px-1.5 py-0.5 rounded">{{ $t('settings.aiSettingsPage.llmConfirmPhrase') }}</span></template>
                         </i18n-t>
                         <UInput
                             v-model="llmConfirmText"

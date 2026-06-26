@@ -3,7 +3,7 @@
     <template v-for="(segment, i) in segments" :key="i">
       <span
         v-if="segment.ref || segment.mention"
-        class="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-[#F3E7DF] border border-[#E2B79B] text-[11px] font-sans font-medium text-[#A8542F] align-baseline"
+        class="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-[#FBEFE4] border border-[#E2B79B] text-[11px] font-sans font-medium text-[#A8330F] align-baseline"
       >
         <template v-if="segment.ref">
           <DataSourceIcon
@@ -14,17 +14,17 @@
           <Icon
             v-else-if="segment.ref.type === 'instruction'"
             name="heroicons:document-text"
-            class="w-3 h-3 flex-shrink-0 text-[#C2683F]"
+            class="w-3 h-3 flex-shrink-0 text-[#C2541E]"
           />
           <Icon
             v-else
             name="heroicons:table-cells"
-            class="w-3 h-3 flex-shrink-0 text-[#C2683F]"
+            class="w-3 h-3 flex-shrink-0 text-[#C2541E]"
           />
           <Icon
             v-if="segment.ref.type === 'connection_tool'"
             name="heroicons:wrench-screwdriver"
-            class="w-2.5 h-2.5 flex-shrink-0 text-[#C2683F]"
+            class="w-2.5 h-2.5 flex-shrink-0 text-[#C2541E]"
           />
           <span>@{{ segment.ref.name || segment.raw }}</span>
         </template>

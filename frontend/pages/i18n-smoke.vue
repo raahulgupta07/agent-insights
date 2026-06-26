@@ -10,7 +10,7 @@
             v-for="code in ['en', 'es', 'he', 'fr', 'sv', 'ar', 'ru', 'de', 'pt', 'it']"
             :key="code"
             class="px-3 py-1 rounded border border-gray-300 hover:bg-gray-100"
-            :class="{ 'bg-[#C2683F] text-white border-[#C2683F]': $i18n.locale === code }"
+            :class="{ 'bg-[#C2541E] text-white border-[#C2541E]': $i18n.locale === code }"
             @click="switchLocale(code)"
           >
             {{ code }}

@@ -3,7 +3,7 @@
     <!-- Bell button -->
     <button
       type="button"
-      class="relative inline-flex items-center justify-center w-9 h-9 rounded-lg text-[#6b6b6b] hover:text-[#1f2328] hover:bg-[#F4F1EA] transition-colors cursor-pointer"
+      class="relative inline-flex items-center justify-center w-9 h-9 rounded-lg text-[#6b6b6b] hover:text-[#1f2328] hover:bg-[#F4EEE5] transition-colors cursor-pointer"
       title="What's new"
       @click="togglePanel"
     >
@@ -11,17 +11,17 @@
       <!-- Unseen badge -->
       <span
         v-if="unseen > 0"
-        class="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-[#C2683F] text-white text-[10px] font-semibold leading-[16px] text-center"
+        class="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-[#C2541E] text-white text-[10px] font-semibold leading-[16px] text-center"
       >{{ unseen > 9 ? '9+' : unseen }}</span>
     </button>
 
     <!-- Popover panel -->
     <div
       v-if="open"
-      class="absolute right-0 mt-2 w-[360px] max-w-[92vw] rounded-2xl border border-[#E7E5DD] bg-white shadow-lg z-50 overflow-hidden"
+      class="absolute right-0 mt-2 w-[360px] max-w-[92vw] rounded-2xl border border-[#E9E0D3] bg-white shadow-lg z-50 overflow-hidden"
     >
       <!-- Header: tabs + close -->
-      <div class="flex items-center gap-4 px-4 pt-3 border-b border-[#E7E5DD]">
+      <div class="flex items-center gap-4 px-4 pt-3 border-b border-[#E9E0D3]">
         <button
           type="button"
           class="relative pb-2 text-sm font-medium transition-colors cursor-pointer"
@@ -29,7 +29,7 @@
           @click="activeTab = 'activity'"
         >
           Activity
-          <span v-if="activeTab === 'activity'" class="absolute left-0 -bottom-px h-[2px] w-full bg-[#C2683F]" />
+          <span v-if="activeTab === 'activity'" class="absolute left-0 -bottom-px h-[2px] w-full bg-[#C2541E]" />
         </button>
         <button
           type="button"
@@ -38,11 +38,11 @@
           @click="activeTab = 'whatsnew'"
         >
           What's new
-          <span v-if="activeTab === 'whatsnew'" class="absolute left-0 -bottom-px h-[2px] w-full bg-[#C2683F]" />
+          <span v-if="activeTab === 'whatsnew'" class="absolute left-0 -bottom-px h-[2px] w-full bg-[#C2541E]" />
         </button>
         <button
           type="button"
-          class="ms-auto -mt-1 mb-1 w-7 h-7 inline-flex items-center justify-center rounded-md text-[#9a958c] hover:text-[#1f2328] hover:bg-[#F4F1EA] transition-colors cursor-pointer"
+          class="ms-auto -mt-1 mb-1 w-7 h-7 inline-flex items-center justify-center rounded-md text-[#9a958c] hover:text-[#1f2328] hover:bg-[#F4EEE5] transition-colors cursor-pointer"
           title="Close"
           @click="open = false"
         >
@@ -51,7 +51,7 @@
       </div>
 
       <!-- Version chip line -->
-      <div class="flex items-center gap-2 px-4 py-2 text-[11px] text-[#6b6b6b] bg-[#FBFAF6] border-b border-[#E7E5DD]">
+      <div class="flex items-center gap-2 px-4 py-2 text-[11px] text-[#6b6b6b] bg-[#F6F1EA] border-b border-[#E9E0D3]">
         <span class="font-mono text-[#1f2328]">v{{ current || '—' }}</span>
         <span class="text-[#cfcabf]">·</span>
         <span>baked</span>
@@ -69,11 +69,11 @@
           <div class="flex items-center justify-between px-4 pt-3 pb-1">
             <h3
               class="text-[15px] font-semibold text-[#1f2328]"
-              style="font-family: ui-serif, Georgia, 'Times New Roman', serif"
+              style="font-family: 'Spectral', ui-serif, Georgia, serif"
             >&#10022; What's new</h3>
             <NuxtLink
               to="/changelog"
-              class="text-xs font-medium text-[#C2683F] hover:text-[#A8542F] transition-colors cursor-pointer"
+              class="text-xs font-medium text-[#C2541E] hover:text-[#A8330F] transition-colors cursor-pointer"
               @click="open = false"
             >See all ({{ entries.length }})</NuxtLink>
           </div>
@@ -90,7 +90,7 @@
                 @click="toggleEntry(i)"
               >
                 <div class="flex-1 min-w-0">
-                  <div class="text-[11px] font-mono text-[#C2683F]">v{{ e.version }}</div>
+                  <div class="text-[11px] font-mono text-[#C2541E]">v{{ e.version }}</div>
                   <div class="text-sm font-semibold text-[#1f2328] truncate">{{ e.title }}</div>
                 </div>
                 <div class="flex items-center gap-1.5 flex-none">
@@ -111,7 +111,7 @@
                   :key="fi"
                   class="flex items-start gap-2 text-[13px] text-[#444] leading-snug"
                 >
-                  <span class="mt-1.5 w-1 h-1 rounded-full flex-none" style="background:#C2683F" />
+                  <span class="mt-1.5 w-1 h-1 rounded-full flex-none" style="background:#C2541E" />
                   <span>{{ f }}</span>
                 </li>
               </ul>

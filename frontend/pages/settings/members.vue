@@ -1,7 +1,7 @@
 <template>
     <div class="mt-6">
         <!-- Inner tabs -->
-        <div class="border-b border-[#E7E5DD] dark:border-gray-700 mb-4">
+        <div class="border-b border-[#E9E0D3] dark:border-gray-700 mb-4">
             <nav class="-mb-px flex space-x-6">
                 <button
                     v-for="tab in visibleTabs"
@@ -9,8 +9,8 @@
                     @click="activeTab = tab.key"
                     :class="[
                         activeTab === tab.key
-                            ? 'border-[#C2683F] text-[#C2683F]'
-                            : 'border-transparent text-[#6b6b6b] hover:border-[#E7E5DD] hover:text-[#1f2328] dark:hover:text-gray-300',
+                            ? 'border-[#C2541E] text-[#C2541E]'
+                            : 'border-transparent text-[#6b6b6b] hover:border-[#E9E0D3] hover:text-[#1f2328] dark:hover:text-gray-300',
                     ]"
                     class="whitespace-nowrap border-b-2 py-2 px-1 text-sm font-medium transition-colors"
                 >

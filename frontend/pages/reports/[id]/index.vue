@@ -10,7 +10,7 @@
 	<div v-else-if="reportNotFound" class="h-full w-full flex flex-col items-center justify-center text-gray-400">
 		<span class="text-5xl font-light">404</span>
 		<span class="mt-2 text-sm">{{ $t('reportView.reportNotFound') }}</span>
-		<NuxtLink to="/reports" class="mt-4 text-sm text-[#C2683F] hover:text-[#A8542F] hover:underline">{{ $t('reportView.backToReports') }}</NuxtLink>
+		<NuxtLink to="/reports" class="mt-4 text-sm text-[#C2541E] hover:text-[#A8330F] hover:underline">{{ $t('reportView.backToReports') }}</NuxtLink>
 	</div>
 
 	<SplitScreenLayout v-else
@@ -23,31 +23,31 @@
 		@update:dockWidth="setDockWidth"
 	>
 		<template #left>
-	<div class="flex flex-col h-full overflow-y-hidden bg-[#FBFAF6] relative"
+	<div class="flex flex-col h-full overflow-y-hidden bg-[#F6F1EA] relative"
 		:class="{ 'dash-dock': dashboardFirst && !isMobile }"
 		:style="(dashboardFirst && !isMobile) ? { minWidth: 0, overflowX: 'hidden' } : undefined">
 		<!-- Dashboard-first: collapsed chat dock = thin rail (just an expand chevron). -->
 		<div
 			v-if="dashboardFirst && !isMobile && dockCollapsed"
-			class="absolute inset-0 z-40 bg-[#FBFAF6] border-s border-[#E7E5DD] flex flex-col items-center pt-3"
+			class="absolute inset-0 z-40 bg-[#F6F1EA] border-s border-[#E9E0D3] flex flex-col items-center pt-3"
 		>
 			<button
 				@click="toggleDockCollapsed"
 				aria-label="Expand chat dock"
 				title="Expand chat"
-				class="flex items-center justify-center w-8 h-8 rounded-lg text-[#6b6b6b] hover:bg-[#F4F1EA] transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C2683F]"
+				class="flex items-center justify-center w-8 h-8 rounded-lg text-[#6b6b6b] hover:bg-[#F4EEE5] transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C2541E]"
 			>
-				<Icon name="heroicons:chat-bubble-left-right" class="w-5 h-5 text-[#C2683F]" />
+				<Icon name="heroicons:chat-bubble-left-right" class="w-5 h-5 text-[#C2541E]" />
 			</button>
 		</div>
 		<!-- Dashboard-first: dock header (collapse chevron + "Switch to chat-first"). -->
 		<div
 			v-if="dashboardFirst && !isMobile && !dockCollapsed"
-			class="shrink-0 flex items-center justify-between gap-2 px-3 py-2 border-b border-[#E7E5DD] bg-[#FBFAF6]"
+			class="shrink-0 flex items-center justify-between gap-2 px-3 py-2 border-b border-[#E9E0D3] bg-[#F6F1EA]"
 		>
 			<button
 				@click="exitDashboardFirst"
-				class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[#E7E5DD] text-[#1f2328] bg-white hover:bg-[#F4F1EA] transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C2683F]"
+				class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[#E9E0D3] text-[#1f2328] bg-white hover:bg-[#F4EEE5] transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C2541E]"
 			>
 				<Icon name="heroicons:chat-bubble-left-right" class="w-4 h-4" />
 				Switch to chat-first
@@ -56,7 +56,7 @@
 				@click="toggleDockCollapsed"
 				aria-label="Collapse chat dock"
 				title="Collapse chat"
-				class="flex-none flex items-center justify-center w-7 h-7 rounded-lg text-[#9a958c] hover:text-[#1f2328] hover:bg-[#F4F1EA] transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C2683F]"
+				class="flex-none flex items-center justify-center w-7 h-7 rounded-lg text-[#9a958c] hover:text-[#1f2328] hover:bg-[#F4EEE5] transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C2541E]"
 			>
 				<Icon name="heroicons:chevron-double-right" class="w-4 h-4" />
 			</button>
@@ -73,7 +73,7 @@
 			<button
 				@click="exitDashboardFirst"
 				title="Switch to chat-first layout"
-				class="ms-auto flex-none inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg border border-[#E7E5DD] text-[#1f2328] bg-white hover:bg-[#F4F1EA] transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#C2683F]"
+				class="ms-auto flex-none inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg border border-[#E9E0D3] text-[#1f2328] bg-white hover:bg-[#F4EEE5] transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#C2541E]"
 			>
 				<Icon name="heroicons:chat-bubble-left-right" class="w-3.5 h-3.5" />
 				Chat-first
@@ -327,7 +327,7 @@
 											v-if="(m.completion_blocks || []).some(b => b.tool_execution)"
 											class="flex items-center gap-2 mb-2 text-[13px] text-[#7A7066] select-none"
 										>
-											<span v-if="m.status === 'in_progress'" class="inline-block w-3.5 h-3.5 rounded-full border-2 border-[#E8C9B5] border-t-[#C2683F] animate-spin"></span>
+											<span v-if="m.status === 'in_progress'" class="inline-block w-3.5 h-3.5 rounded-full border-2 border-[#E8C9B5] border-t-[#C2541E] animate-spin"></span>
 											<Icon v-else name="heroicons:check-circle" class="w-4 h-4 text-[#3F7A4F]" />
 											<span class="ui-serif">
 												{{ m.status === 'in_progress' ? 'Working' : 'Thought process' }} ·
@@ -461,7 +461,7 @@
 
 										<!-- Thinking pill when system is working but no visible progress - moved to end -->
 										<div v-if="shouldShowWorkingDots(m)" class="mt-2 flex items-center gap-2 text-[13px] text-[#7A7066]">
-											<span class="inline-block w-3.5 h-3.5 rounded-full border-2 border-[#E8C9B5] border-t-[#C2683F] animate-spin"></span>
+											<span class="inline-block w-3.5 h-3.5 rounded-full border-2 border-[#E8C9B5] border-t-[#C2541E] animate-spin"></span>
 											<span class="tool-shimmer">Thinking…</span>
 										</div>
 									</div>
@@ -498,7 +498,7 @@
 																<span class="flex-1 truncate">{{ ins.title || $t('reportView.untitled') }}</span>
 																<span class="text-[10px] text-gray-400 flex-shrink-0">{{ ins.category || 'general' }}</span>
 																<span class="text-[9px] px-1.5 py-0.5 rounded flex-shrink-0"
-																	:class="(ins.load_mode || 'always') === 'always' ? 'bg-green-50 text-green-600' : 'bg-[#F6EFEA] text-[#A8542F]'">
+																	:class="(ins.load_mode || 'always') === 'always' ? 'bg-green-50 text-green-600' : 'bg-[#F6EFEA] text-[#A8330F]'">
 																	{{ ins.load_mode || 'always' }}
 																</span>
 															</div>
@@ -553,7 +553,7 @@
 													v-for="(q, qi) in (m as any).followups"
 													:key="qi"
 													:title="q"
-													class="cursor-pointer px-3 py-1.5 text-xs rounded-full border border-gray-200 bg-gray-50 text-gray-700 hover:bg-[#F3E7DF] hover:border-[#C2683F] transition-colors"
+													class="cursor-pointer px-3 py-1.5 text-xs rounded-full border border-gray-200 bg-gray-50 text-gray-700 hover:bg-[#FBEFE4] hover:border-[#C2541E] transition-colors"
 													@click="handleExampleClick(q)"
 												>
 													{{ q }}
@@ -589,12 +589,12 @@
 				<!-- Chat / deep mode empty state -->
 				<template v-else>
 					<div class="flex flex-col items-center text-center min-h-[58vh] justify-center">
-						<h1 class="text-lg font-semibold" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">{{ $t('reports.emptyTitle') }}</h1>
+						<h1 class="text-lg font-semibold" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ $t('reports.emptyTitle') }}</h1>
 						<div v-if="agentConversationStarters.length > 0" class="mt-5 flex flex-wrap justify-center gap-2">
 							<button
 								v-for="s in agentConversationStarters"
 								:key="s.title"
-								class="px-3 py-1.5 text-xs rounded-full border border-gray-200 bg-gray-50 text-gray-700 hover:bg-[#F3E7DF] hover:border-[#C2683F] transition-colors"
+								class="px-3 py-1.5 text-xs rounded-full border border-gray-200 bg-gray-50 text-gray-700 hover:bg-[#FBEFE4] hover:border-[#C2541E] transition-colors"
 								@click="handleExampleClick(s.title === s.prompt ? s.prompt : `${s.title}\n\n${s.prompt}`)"
 							>
 								{{ s.title }}
@@ -624,7 +624,7 @@
 			</div>
 		<div v-if="report.external_platform?.platform_type === 'mcp'" class="mx-auto px-4 mt-2 mb-2 max-w-2xl w-full">
 			<div class="text-xs flex items-center">
-				<span class="font-medium bg-[#F6EFEA] text-[#A8542F] px-3 py-2 rounded-md flex items-center gap-2">
+				<span class="font-medium bg-[#F6EFEA] text-[#A8330F] px-3 py-2 rounded-md flex items-center gap-2">
 					<img src="/icons/mcp.png" class="h-4 w-4" />
 					<span>This session was created via MCP. The conversation reflects tool calls made by an external AI assistant. You can view the generated data and visualizations above.</span>
 				</span>
@@ -632,7 +632,7 @@
 		</div>
 		<div v-if="report.external_platform?.platform_type === 'slack'" class="mx-auto px-4 mt-2 mb-2 max-w-2xl w-full">
 			<div class="text-xs flex items-center">
-				<span class="font-medium bg-[#F6EFEA] text-[#A8542F] px-3 py-2 rounded-md flex items-center gap-2">
+				<span class="font-medium bg-[#F6EFEA] text-[#A8330F] px-3 py-2 rounded-md flex items-center gap-2">
 					<img src="/icons/slack.png" class="h-4 w-4" />
 					<span>This session was created via Slack.</span>
 				</span>
@@ -640,7 +640,7 @@
 		</div>
 		<div v-if="report.external_platform?.platform_type === 'teams'" class="mx-auto px-4 mt-2 mb-2 max-w-2xl w-full">
 			<div class="text-xs flex items-center">
-				<span class="font-medium bg-[#F6EFEA] text-[#A8542F] px-3 py-2 rounded-md flex items-center gap-2">
+				<span class="font-medium bg-[#F6EFEA] text-[#A8330F] px-3 py-2 rounded-md flex items-center gap-2">
 					<img src="/icons/teams.png" class="h-4 w-4" />
 					<span>This session was created via Microsoft Teams.</span>
 				</span>
@@ -655,13 +655,13 @@
 			</div>
 		</div>
 		<!-- Prompt box (in normal flow at the bottom of the left column) -->
-		<div class="shrink-0 bg-[#FBFAF6] pt-2 pb-6">
+		<div class="shrink-0 bg-[#F6F1EA] pt-2 pb-6">
 			<div :class="['mx-auto w-full', isExcel ? 'px-0' : 'px-4 max-w-2xl']">
 				<!-- Slide-workspace composer framing: PromptBoxV2 owns its own placeholder
 				     (i18n, internal), so we surface the slide-scoped intent as a hint chip
 				     above the same composer — the agent can already edit/analyze the deck. -->
 				<div v-if="slidesFocus" class="flex items-center gap-1.5 mb-1.5 text-[12px] text-[#7A7066]">
-					<Icon name="heroicons:presentation-chart-bar" class="w-3.5 h-3.5 text-[#C2683F] flex-none" />
+					<Icon name="heroicons:presentation-chart-bar" class="w-3.5 h-3.5 text-[#C2541E] flex-none" />
 					<span>Ask to edit a slide or analyze the deck&hellip;</span>
 				</div>
 				<PromptBoxV2
@@ -744,15 +744,15 @@
 			<div v-else class="flex items-center gap-0.5 min-w-0">
 				<button
 					@click="setPanelView('studio', true)"
-					class="tabico relative flex items-center justify-center w-9 h-8 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#C2683F] hover:bg-gray-100"
+					class="tabico relative flex items-center justify-center w-9 h-8 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#C2541E] hover:bg-gray-100"
 					:class="rightPanelView === 'studio' ? 'bg-[#F6EFEA]' : ''"
 				>
-					<svg width="19" height="19" viewBox="0 0 48 48" class="flex-none"><path d="M24 6l4 12 12 4-12 4-4 12-4-12-12-4 12-4z" fill="#C2683F"/></svg>
+					<svg width="19" height="19" viewBox="0 0 48 48" class="flex-none"><path d="M24 6l4 12 12 4-12 4-4 12-4-12-12-4 12-4z" fill="#C2541E"/></svg>
 					<span class="ttip">Studio</span>
 				</button>
 				<button
 					@click="setPanelView('summary', true)"
-					class="tabico relative flex items-center justify-center w-9 h-8 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#C2683F] hover:bg-gray-100"
+					class="tabico relative flex items-center justify-center w-9 h-8 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#C2541E] hover:bg-gray-100"
 					:class="rightPanelView === 'summary' ? 'bg-gray-100' : ''"
 				>
 					<svg width="19" height="19" viewBox="0 0 48 48" class="flex-none"><rect x="6" y="8" width="36" height="32" rx="5" fill="url(#tblB)"/><rect x="6" y="8" width="36" height="9" rx="5" fill="#1E3A8A"/><g stroke="#fff" stroke-width="1.6" opacity=".9"><path d="M6 24h36M6 32h36M18 17v23M30 17v23"/></g></svg>
@@ -760,7 +760,7 @@
 				</button>
 				<button
 					@click="setPanelView('artifact', true)"
-					class="tabico relative flex items-center justify-center w-9 h-8 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#C2683F] hover:bg-gray-100"
+					class="tabico relative flex items-center justify-center w-9 h-8 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#C2541E] hover:bg-gray-100"
 					:class="rightPanelView === 'artifact' || rightPanelView === 'grid' ? 'bg-gray-100' : ''"
 				>
 					<svg width="19" height="19" viewBox="0 0 48 48" class="flex-none"><rect x="9" y="20" width="7" height="20" rx="2.5" fill="url(#pbiY)"/><rect x="20" y="10" width="7" height="30" rx="2.5" fill="url(#pbiY)"/><rect x="31" y="26" width="7" height="14" rx="2.5" fill="url(#pbiY)"/></svg>
@@ -768,7 +768,7 @@
 				</button>
 				<button
 					@click="setPanelView('agent', true)"
-					class="tabico relative flex items-center justify-center w-9 h-8 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#C2683F] hover:bg-gray-100"
+					class="tabico relative flex items-center justify-center w-9 h-8 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#C2541E] hover:bg-gray-100"
 					:class="rightPanelView === 'agent' ? 'bg-gray-100' : ''"
 				>
 					<svg width="19" height="19" viewBox="0 0 48 48" class="flex-none"><path d="M24 7c4 0 6 3 7 7s4 6 8 7c-4 1-6 3-7 7s-3 7-8 8c1-4-1-7-4-9s-7-2-9 1c0-5 2-7 6-9s7-5 7-12z" fill="url(#agV)"/></svg>
@@ -776,7 +776,7 @@
 				</button>
 				<button
 					@click="setPanelView('slides', true)"
-					class="tabico relative flex items-center justify-center w-9 h-8 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#C2683F] hover:bg-gray-100"
+					class="tabico relative flex items-center justify-center w-9 h-8 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#C2541E] hover:bg-gray-100"
 					:class="rightPanelView === 'slides' ? 'bg-gray-100' : ''"
 				>
 					<svg width="19" height="19" viewBox="0 0 48 48" class="flex-none"><circle cx="27" cy="21" r="15" fill="url(#ppO)"/><rect x="6" y="17" width="22" height="22" rx="5" fill="url(#ppP)"/><path d="M12 22h6.5a4 4 0 0 1 0 8H15v4h-3V22zm3 3v2.5h3.2a1.25 1.25 0 0 0 0-2.5H15z" fill="#fff"/></svg>
@@ -784,7 +784,7 @@
 				</button>
 				<button
 					@click="setPanelView('excel', true)"
-					class="tabico relative flex items-center justify-center w-9 h-8 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#C2683F] hover:bg-gray-100"
+					class="tabico relative flex items-center justify-center w-9 h-8 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#C2541E] hover:bg-gray-100"
 					:class="rightPanelView === 'excel' ? 'bg-gray-100' : ''"
 				>
 					<svg width="19" height="19" viewBox="0 0 48 48" class="flex-none"><path d="M27 6H13a3 3 0 0 0-3 3v30a3 3 0 0 0 3 3h22a3 3 0 0 0 3-3V17L27 6z" fill="#E6E6E6"/><path d="M27 6l11 11H30a3 3 0 0 1-3-3V6z" fill="#C8C8C8"/><rect x="6" y="15" width="20" height="18" rx="3" fill="url(#xlG)"/><path d="M11 19l4.5 5L11 29h3l3-3.4L20 29h3l-4.5-5L23 19h-3l-3 3.4L14 19h-3z" fill="#fff"/></svg>
@@ -796,7 +796,7 @@
 				v-if="dashboardFirst && !isMobile"
 				@click="exitDashboardFirst"
 				title="Switch to chat-first layout"
-				class="ms-auto flex-none inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg border border-[#E7E5DD] text-[#1f2328] bg-white hover:bg-[#F4F1EA] transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#C2683F]"
+				class="ms-auto flex-none inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg border border-[#E9E0D3] text-[#1f2328] bg-white hover:bg-[#F4EEE5] transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#C2541E]"
 			>
 				<Icon name="heroicons:chat-bubble-left-right" class="w-3.5 h-3.5" />
 				Chat-first
@@ -807,7 +807,7 @@
 				@click="toggleAutoPilot"
 				:title="autoPilotPanel ? 'Auto-pilot on: panel follows the run. Click to turn off.' : 'Auto-pilot off: manual panel. Click to turn on.'"
 				aria-label="Auto-pilot"
-				class="ms-auto flex-none flex items-center justify-center w-7 h-7 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#C2683F]"
+				class="ms-auto flex-none flex items-center justify-center w-7 h-7 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#C2541E]"
 				:class="autoPilotPanel ? 'text-[#8B4427] bg-[#F6EFEA]' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'"
 			>
 				<Icon :name="autoPilotPanel ? 'heroicons:bolt' : 'heroicons:bolt-slash'" class="w-3.5 h-3.5" />
@@ -816,7 +816,7 @@
 			<button
 				@click="userClosedPanel = true; toggleSplitScreen()"
 				aria-label="Close panel"
-				class="flex-none ms-1 p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#C2683F]"
+				class="flex-none ms-1 p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#C2541E]"
 			>
 				<Icon name="heroicons:x-mark" class="w-4 h-4" />
 			</button>
@@ -844,8 +844,8 @@
 							<div class="mt-1 text-[11px] font-semibold text-[#5A41A8] leading-tight">Report</div>
 						</button>
 						<button @click="setPanelView('slides', true)" class="text-left rounded-lg border border-gray-200 p-2 bg-[#FFF4EF] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
-							<div class="flex items-center justify-between"><svg width="15" height="15" fill="none" stroke="#D2603A" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="1.5"/><path d="M8 21h8M12 17v4"/></svg><span class="text-[9px] font-bold leading-none px-1.5 py-0.5 rounded bg-[#FEE9DF] text-[#C2683F]">PPT</span></div>
-							<div class="mt-1 text-[11px] font-semibold text-[#C2683F] leading-tight">Slides</div>
+							<div class="flex items-center justify-between"><svg width="15" height="15" fill="none" stroke="#D2603A" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="1.5"/><path d="M8 21h8M12 17v4"/></svg><span class="text-[9px] font-bold leading-none px-1.5 py-0.5 rounded bg-[#FEE9DF] text-[#C2541E]">PPT</span></div>
+							<div class="mt-1 text-[11px] font-semibold text-[#C2541E] leading-tight">Slides</div>
 						</button>
 						<button @click="setPanelView('excel', true)" class="text-left rounded-lg border border-gray-200 p-2 bg-[#EEFAF1] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
 							<div class="flex items-center justify-between"><svg width="15" height="15" fill="none" stroke="#1E9E57" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 8l8 8M16 8l-8 8"/></svg><span class="text-[9px] font-bold leading-none px-1.5 py-0.5 rounded bg-[#D8F3E1] text-[#157A43]">XLS</span></div>
@@ -874,8 +874,8 @@
 
 					<!-- NOW banner (always visible) -->
 					<div class="rounded-xl border border-[#EAD8CD] bg-[#FFF9F6] px-3 py-2 flex items-center gap-2">
-						<span class="w-1.5 h-1.5 rounded-full flex-none" :class="activityNow ? 'bg-[#C2683F] animate-pulse' : 'bg-gray-300'"></span>
-						<span class="text-[10px] font-bold tracking-wide text-[#C2683F] flex-none">NOW</span>
+						<span class="w-1.5 h-1.5 rounded-full flex-none" :class="activityNow ? 'bg-[#C2541E] animate-pulse' : 'bg-gray-300'"></span>
+						<span class="text-[10px] font-bold tracking-wide text-[#C2541E] flex-none">NOW</span>
 						<span class="text-[12px] text-gray-700 truncate">{{ activityNow || 'Idle' }}</span>
 					</div>
 
@@ -892,7 +892,7 @@
 									:class="step.status === 'done' ? 'bg-green-500'
 										: (step.recovered || step.status === 'warn') ? 'bg-amber-400'
 										: step.status === 'err' ? 'bg-red-500'
-										: step.status === 'run' ? 'bg-[#C2683F] animate-pulse'
+										: step.status === 'run' ? 'bg-[#C2541E] animate-pulse'
 										: 'bg-gray-300'"
 								></span>
 								<span class="font-medium truncate">{{ (step.recovered || step.status === 'warn') ? (step.recoveredLabel || 'self-fixed') : step.title }}</span>
@@ -906,7 +906,7 @@
 						</div>
 						<div v-else class="text-[12px] text-gray-400 py-1">No steps yet for this run.</div>
 						<div class="h-1.5 bg-gray-100 rounded-full overflow-hidden mt-2.5">
-							<div class="h-full bg-[#C2683F] transition-all" :style="{ width: activityProgressPct + '%' }"></div>
+							<div class="h-full bg-[#C2541E] transition-all" :style="{ width: activityProgressPct + '%' }"></div>
 						</div>
 						<div class="text-[10px] text-gray-400 mt-1.5">{{ activityDoneCount }} of {{ activityTotal }} steps · context budget &mdash; / &mdash; tokens</div>
 					</div>
@@ -948,9 +948,9 @@
 								:key="skill.id"
 								class="flex items-center gap-2"
 							>
-								<svg width="13" height="13" fill="none" stroke="#C2683F" stroke-width="1.9" viewBox="0 0 24 24" class="flex-none"><path d="M12 3l2.2 5.6L20 9.8l-4.4 3.6L17 19l-5-3-5 3 1.4-5.6L4 9.8l5.8-1.2z"/></svg>
+								<svg width="13" height="13" fill="none" stroke="#C2541E" stroke-width="1.9" viewBox="0 0 24 24" class="flex-none"><path d="M12 3l2.2 5.6L20 9.8l-4.4 3.6L17 19l-5-3-5 3 1.4-5.6L4 9.8l5.8-1.2z"/></svg>
 								<span class="font-medium truncate">{{ skill.title }}</span>
-								<span class="ms-auto text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#F3E7DF] text-[#C2683F] flex-none">{{ skill.badge === 'run_skill_file' ? 'ran' : 'used' }}</span>
+								<span class="ms-auto text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#FBEFE4] text-[#C2541E] flex-none">{{ skill.badge === 'run_skill_file' ? 'ran' : 'used' }}</span>
 							</div>
 							<div v-if="!activitySkills.length" class="text-[12px] text-gray-400 py-1">none this run</div>
 						</div>
@@ -984,7 +984,7 @@
 					<div class="rounded-xl border border-gray-200 p-3">
 						<div class="flex items-center gap-2 mb-2">
 							<span class="text-[10px] font-bold uppercase tracking-wide text-gray-400">Outputs this run</span>
-							<span class="ms-auto text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#F3E7DF] text-[#C2683F]">{{ activityOutputs.length }}</span>
+							<span class="ms-auto text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#FBEFE4] text-[#C2541E]">{{ activityOutputs.length }}</span>
 						</div>
 						<button
 							v-for="step in activityOutputs"
@@ -1067,7 +1067,7 @@
 									:class="step.status === 'done' ? 'bg-[#3F7A4F]'
 										: step.status === 'warn' ? 'bg-[#B5822F]'
 										: step.status === 'err' ? 'bg-[#B3402F]'
-										: step.status === 'run' ? 'bg-[#C2683F] animate-pulse'
+										: step.status === 'run' ? 'bg-[#C2541E] animate-pulse'
 										: 'bg-[#E8C9B5]'"
 								></span>
 								<span class="truncate">{{ step.title }}</span>
@@ -1112,7 +1112,7 @@
 					<div v-else class="text-[13px] text-[#7A7066] py-1">No steps yet for this run.</div>
 					<!-- progress bar (pinned to the bottom of the reserved card) -->
 					<div class="h-[5px] bg-[#F4E5DA] rounded mt-auto overflow-hidden">
-						<div class="h-full bg-[#C2683F] transition-all" :style="{ width: activityProgressPct + '%' }"></div>
+						<div class="h-full bg-[#C2541E] transition-all" :style="{ width: activityProgressPct + '%' }"></div>
 					</div>
 					<div class="text-[11px] text-[#7A7066] mt-1.5">
 						{{ activityDoneCount }} of {{ activityTotal }} steps
@@ -1200,7 +1200,7 @@
 					class="h-full flex flex-col items-center justify-center text-center gap-3 px-6"
 				>
 					<div class="w-12 h-12 rounded-xl bg-[#F6EFEA] flex items-center justify-center">
-						<Icon name="heroicons:presentation-chart-bar" class="w-6 h-6 text-[#C2683F]" />
+						<Icon name="heroicons:presentation-chart-bar" class="w-6 h-6 text-[#C2541E]" />
 					</div>
 					<div class="text-sm font-semibold text-[#1f2328]">No slides yet</div>
 					<div class="text-[13px] text-[#7A7066] max-w-xs leading-relaxed">

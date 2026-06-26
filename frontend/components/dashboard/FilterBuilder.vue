@@ -82,7 +82,7 @@
                   :key="condition.id"
                   class="mb-2 last:mb-0"
                 >
-                  <div v-if="condIndex > 0" class="text-[10px] font-semibold text-[#C2683F] mb-1">{{ $t('filter.andDivider') }}</div>
+                  <div v-if="condIndex > 0" class="text-[10px] font-semibold text-[#C2541E] mb-1">{{ $t('filter.andDivider') }}</div>
 
                   <div class="flex items-center gap-1.5">
                     <!-- Column Select -->

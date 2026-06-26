@@ -185,8 +185,8 @@
                       :class="[
                         'flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] rounded border transition-colors',
                         connectingId === a.id
-                          ? 'text-[#C2683F] bg-[#F6EFEA] border-[#E8C9B5] cursor-default'
-                          : 'text-[#C2683F] bg-[#F6EFEA] border-[#E8C9B5] hover:bg-[#F4E5DA]'
+                          ? 'text-[#C2541E] bg-[#F6EFEA] border-[#E8C9B5] cursor-default'
+                          : 'text-[#C2541E] bg-[#F6EFEA] border-[#E8C9B5] hover:bg-[#F4E5DA]'
                       ]"
                     >
                       <Spinner v-if="connectingId === a.id" class="w-3 h-3" />

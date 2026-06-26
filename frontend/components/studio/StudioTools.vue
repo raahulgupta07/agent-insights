@@ -9,8 +9,8 @@
 
     <template v-else>
       <!-- Optional-tools note: clarify that tools are NOT required for data analysis. -->
-      <div class="mb-4 rounded-lg border border-[#E7E5DD] bg-[#FBFAF6] px-3.5 py-3 flex items-start gap-2.5">
-        <UIcon name="i-heroicons-puzzle-piece" class="w-4 h-4 mt-0.5 text-[#C2683F] shrink-0" />
+      <div class="mb-4 rounded-lg border border-[#E9E0D3] bg-[#F6F1EA] px-3.5 py-3 flex items-start gap-2.5">
+        <UIcon name="i-heroicons-puzzle-piece" class="w-4 h-4 mt-0.5 text-[#C2541E] shrink-0" />
         <div>
           <p class="text-xs font-medium text-gray-700 mb-0.5">No external tools (optional)</p>
           <p class="text-xs text-gray-500 leading-relaxed">
@@ -28,7 +28,7 @@
           type="button"
           class="px-2.5 py-1 rounded-md text-xs border transition-colors"
           :class="activeSourceId === String(src.agent_id)
-            ? 'border-[#E8C9B5] bg-[#F6EFEA] text-[#A8542F] font-medium'
+            ? 'border-[#E8C9B5] bg-[#F6EFEA] text-[#A8330F] font-medium'
             : 'border-gray-200 text-gray-600 hover:bg-gray-50'"
           @click="activeSourceId = String(src.agent_id)"
         >

@@ -82,7 +82,7 @@
             <Icon v-else-if="expandedCategory === 'entities'" :name="expandedItem?.entity_type === 'metric' ? 'heroicons-chart-bar' : 'heroicons-cube'" class="w-3.5 h-3.5 flex-shrink-0 text-gray-500" />
             <div class="text-[13px] font-medium truncate">{{ expandedItem?.name }}</div>
           </div>
-          <button @click="selectItem(expandedItem, expandedCategory)" class="text-sm text-[#C2683F] hover:text-[#A8542F] font-medium px-1">+</button>
+          <button @click="selectItem(expandedItem, expandedCategory)" class="text-sm text-[#C2541E] hover:text-[#A8330F] font-medium px-1">+</button>
         </div>
 
         <!-- Agent details: description + tables + tools -->

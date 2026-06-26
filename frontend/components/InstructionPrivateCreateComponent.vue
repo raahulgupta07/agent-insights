@@ -150,7 +150,7 @@
                         >
                             <button 
                                 type="button"
-                                class="text-[11px] text-[#C2683F] hover:text-[#A8542F] transition-colors"
+                                class="text-[11px] text-[#C2541E] hover:text-[#A8330F] transition-colors"
                                 @click="$emit('relink-to-git')"
                             >
                                 Relink
@@ -161,15 +161,15 @@
 
                 <!-- Build Approval Notice (shown to non-admins creating new instructions) -->
                 <div v-if="showBuildApprovalNotice" class="flex items-center gap-2 p-2.5 bg-[#F6EFEA] border border-[#E8C9B5] rounded-lg">
-                    <Icon name="heroicons:clock" class="w-4 h-4 text-[#C2683F] shrink-0" />
+                    <Icon name="heroicons:clock" class="w-4 h-4 text-[#C2541E] shrink-0" />
                     <div class="min-w-0">
-                        <span class="text-xs font-medium text-[#A8542F]">Pending Build Approval</span>
-                        <p class="text-[11px] text-[#A8542F] mt-0.5">This instruction will be added to a build for admin review.</p>
+                        <span class="text-xs font-medium text-[#A8330F]">Pending Build Approval</span>
+                        <p class="text-[11px] text-[#A8330F] mt-0.5">This instruction will be added to a build for admin review.</p>
                     </div>
                 </div>
 
                 <!-- Hero Textarea / Code Editor -->
-                <div class="border border-gray-200 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-[#F4E5DA] focus-within:border-[#C2683F]">
+                <div class="border border-gray-200 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-[#F4E5DA] focus-within:border-[#C2541E]">
                     <!-- Header with title and code view toggle -->
                     <div class="flex items-center justify-between px-3 py-1.5 bg-white border-b border-gray-100">
                         <div class="flex items-center gap-2 min-w-0">
@@ -1013,7 +1013,7 @@ watch(() => props.selectedDataSources, () => {
     
     /* Regular links - but not inside headings */
     a { 
-        @apply text-[#C2683F] hover:text-[#A8542F] underline;
+        @apply text-[#C2541E] hover:text-[#A8330F] underline;
     }
     
     blockquote { 

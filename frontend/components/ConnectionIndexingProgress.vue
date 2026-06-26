@@ -2,13 +2,13 @@
     <div class="space-y-2">
         <!-- Running / pending state -->
         <template v-if="isActive">
-            <div class="flex items-center justify-between text-xs text-[#A8542F]">
+            <div class="flex items-center justify-between text-xs text-[#A8330F]">
                 <span class="font-medium">{{ summary }}</span>
                 <span v-if="hasTotal">{{ percent }}%</span>
             </div>
             <div class="h-1.5 w-full bg-[#F4E5DA] rounded overflow-hidden">
                 <div
-                    class="h-full bg-[#C2683F] transition-all duration-300"
+                    class="h-full bg-[#C2541E] transition-all duration-300"
                     :class="{ 'animate-pulse w-1/3': !hasTotal }"
                     :style="hasTotal ? { width: percent + '%' } : {}"
                 ></div>

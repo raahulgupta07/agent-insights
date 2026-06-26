@@ -4,7 +4,7 @@
     <div class="flex items-center text-xs text-gray-500 cursor-pointer hover:text-gray-700" @click="toggleCollapsed">
       <Icon :name="isCollapsed ? 'heroicons-chevron-right' : 'heroicons-chevron-down'" class="w-3 h-3 me-1.5 text-gray-400 rtl-flip" />
       <Spinner v-if="status === 'running'" class="w-3 h-3 me-1.5 text-gray-400" />
-      <Icon v-else-if="status === 'success'" name="heroicons-document-text" class="w-3 h-3 me-1.5 text-[#C2683F]" />
+      <Icon v-else-if="status === 'success'" name="heroicons-document-text" class="w-3 h-3 me-1.5 text-[#C2541E]" />
       <Icon v-else-if="status === 'error'" name="heroicons-exclamation-circle" class="w-3 h-3 me-1.5 text-amber-500" />
 
       <span v-if="status === 'running'" class="tool-shimmer">Reading report…</span>
@@ -46,7 +46,7 @@
           <div class="text-[11px] font-medium text-gray-500 mb-0.5">Conversation</div>
           <ul class="space-y-1">
             <li v-for="(m, i) in conversation" :key="i" class="leading-snug">
-              <span class="text-[9px] uppercase tracking-wide me-1" :class="m.role === 'user' ? 'text-[#C2683F]' : 'text-gray-400'">{{ m.role }}</span>
+              <span class="text-[9px] uppercase tracking-wide me-1" :class="m.role === 'user' ? 'text-[#C2541E]' : 'text-gray-400'">{{ m.role }}</span>
               <span class="text-gray-700">{{ truncate(m.content) }}</span>
             </li>
           </ul>

@@ -6,9 +6,9 @@
             <!-- Indexing banner: shown while any linked connection is discovering schema -->
             <div
                 v-if="indexingConnections.length > 0"
-                class="mb-4 flex items-start gap-3 bg-[#F4F1EA] border border-[#E7E5DD] text-[#1f2328] rounded-2xl px-4 py-3"
+                class="mb-4 flex items-start gap-3 bg-[#F4EEE5] border border-[#E9E0D3] text-[#1f2328] rounded-2xl px-4 py-3"
             >
-                <UIcon name="heroicons-arrow-path" class="w-5 h-5 mt-0.5 animate-spin flex-none text-[#C2683F]" />
+                <UIcon name="heroicons-arrow-path" class="w-5 h-5 mt-0.5 animate-spin flex-none text-[#C2541E]" />
                 <div class="flex-1 text-sm">
                     <div class="font-medium">
                         Discovering schema for
@@ -22,7 +22,7 @@
                         </div>
                     </div>
                 </div>
-                <NuxtLink :to="`/agents/${route.params.id}/connection`" class="text-xs font-medium text-[#C2683F] hover:underline">
+                <NuxtLink :to="`/agents/${route.params.id}/connection`" class="text-xs font-medium text-[#C2541E] hover:underline">
                     View progress
                 </NuxtLink>
             </div>
@@ -36,7 +36,7 @@
                     <!-- Inline create form -->
                     <div
                         v-if="creatingInstruction"
-                        class="primary-instruction-editor flex flex-col border border-[#E7E5DD] rounded-2xl overflow-hidden bg-white"
+                        class="primary-instruction-editor flex flex-col border border-[#E9E0D3] rounded-2xl overflow-hidden bg-white"
                         style="height: min(600px, 70vh)"
                     >
                         <InstructionGlobalCreateComponent
@@ -52,7 +52,7 @@
                     <!-- Inline edit form -->
                     <div
                         v-else-if="editingInstruction && dataSource?.primary_instruction"
-                        class="primary-instruction-editor flex flex-col border border-[#E7E5DD] rounded-2xl overflow-hidden bg-white"
+                        class="primary-instruction-editor flex flex-col border border-[#E9E0D3] rounded-2xl overflow-hidden bg-white"
                         style="height: min(600px, 70vh)"
                     >
                         <InstructionGlobalCreateComponent
@@ -68,7 +68,7 @@
                     <!-- Existing instruction: simple read-only view -->
                     <template v-else-if="dataSource?.primary_instruction">
                         <div class="flex items-center justify-between gap-2 mb-2">
-                            <span class="text-sm font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">{{ dataSource.primary_instruction.title || 'Primary instruction' }}</span>
+                            <span class="text-sm font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ dataSource.primary_instruction.title || 'Primary instruction' }}</span>
                             <PrimaryInstructionMenu
                                 v-if="useCan('update_data_source')"
                                 :agent-id="(route.params.id as string)"
@@ -88,9 +88,9 @@
                     </template>
 
                     <!-- Empty state -->
-                    <div v-else class="border border-dashed border-[#E7E5DD] rounded-2xl px-6 py-10 text-center bg-[#F4F1EA]/50">
-                        <div class="mx-auto w-10 h-10 rounded-full bg-[#F4F1EA] border border-[#E7E5DD] flex items-center justify-center mb-3">
-                            <UIcon name="heroicons-document-text" class="w-5 h-5 text-[#C2683F]" />
+                    <div v-else class="border border-dashed border-[#E9E0D3] rounded-2xl px-6 py-10 text-center bg-[#F4EEE5]/50">
+                        <div class="mx-auto w-10 h-10 rounded-full bg-[#F4EEE5] border border-[#E9E0D3] flex items-center justify-center mb-3">
+                            <UIcon name="heroicons-document-text" class="w-5 h-5 text-[#C2541E]" />
                         </div>
                         <div class="text-sm font-medium text-[#1f2328]">No primary instruction</div>
                         <div class="text-xs text-[#6b6b6b] mt-1 max-w-md mx-auto">
@@ -99,7 +99,7 @@
                         <div v-if="useCan('update_data_source')" class="mt-4 flex items-center justify-center gap-3">
                             <button
                                 @click="creatingInstruction = true"
-                                class="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 bg-[#C2683F] text-white rounded-lg hover:bg-[#A8542F] transition-colors"
+                                class="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 bg-[#C2541E] text-white rounded-lg hover:bg-[#A8330F] transition-colors"
                             >
                                 <UIcon name="heroicons-plus" class="w-3.5 h-3.5" />
                                 Add Primary Instruction
@@ -112,7 +112,7 @@
                             />
                         </div>
                         <div v-if="useCan('update_data_source') && canStartTraining" class="mt-3">
-                            <button @click="startTrainingSession" class="text-xs text-[#C2683F] hover:underline inline-flex items-center gap-1">
+                            <button @click="startTrainingSession" class="text-xs text-[#C2541E] hover:underline inline-flex items-center gap-1">
                                 <UIcon name="heroicons-academic-cap" class="w-3.5 h-3.5" />
                                 Start a training session
                             </button>
@@ -124,11 +124,11 @@
                 <div>
                     <div class="flex items-center gap-2">
                         <div class="text-xs uppercase tracking-wide text-[#9a958c]">{{ $t('dataSource.conversationStarters') }}</div>
-                        <button v-if="useCan('update_data_source')" @click="openEditStarters" class="text-[10px] text-[#C2683F] hover:underline">{{ $t('dataSource.edit') }}</button>
+                        <button v-if="useCan('update_data_source')" @click="openEditStarters" class="text-[10px] text-[#C2541E] hover:underline">{{ $t('dataSource.edit') }}</button>
                     </div>
                     <div class="mt-3 flex flex-wrap gap-2">
                         <div v-for="starter in displayDataSource?.conversation_starters" :key="starter"
-                        class="bg-[#F4F1EA] border border-[#E7E5DD] text-[#1f2328] rounded-lg px-3 py-2 text-xs"
+                        class="bg-[#F4EEE5] border border-[#E9E0D3] text-[#1f2328] rounded-lg px-3 py-2 text-xs"
                         >
                             <span>{{ starter.split('\n')[0] }}</span>
                         </div>
@@ -142,11 +142,11 @@
 
         <UModal v-model="showEditModal" :ui="{ width: 'sm:max-w-2xl' }">
             <div class="p-5">
-                <div class="text-sm font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">{{ $t('dataSource.editStartersTitle') }}</div>
+                <div class="text-sm font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ $t('dataSource.editStartersTitle') }}</div>
                 <div class="text-xs text-[#6b6b6b] mt-1">{{ $t('dataSource.editStartersHint') }}</div>
 
                 <div class="mt-4 space-y-2 max-h-[60vh] overflow-auto pe-1">
-                    <div v-for="(item, idx) in editStarters" :key="idx" class="rounded-md border border-[#E7E5DD] p-2">
+                    <div v-for="(item, idx) in editStarters" :key="idx" class="rounded-md border border-[#E9E0D3] p-2">
                         <div class="flex items-center justify-between mb-1">
                             <span class="text-[10px] uppercase tracking-wide text-[#9a958c]">{{ $t('dataSource.starterN', { n: idx + 1 }) }}</span>
                             <button @click="removeStarter(idx)" class="text-[11px] text-[#6b6b6b] hover:text-red-600">{{ $t('dataSource.remove') }}</button>
@@ -154,22 +154,22 @@
                         <div class="space-y-1">
                             <div>
                                 <label class="block text-[11px] text-[#6b6b6b] mb-0.5">{{ $t('dataSource.starterTitle') }}</label>
-                                <input v-model="item.title" type="text" class="w-full h-8 text-sm border border-[#E7E5DD] rounded-md px-2 focus:outline-none focus:ring-2 focus:ring-[#C2683F]/30 focus:border-[#C2683F]" :placeholder="$t('dataSource.starterTitlePlaceholder')" />
+                                <input v-model="item.title" type="text" class="w-full h-8 text-sm border border-[#E9E0D3] rounded-md px-2 focus:outline-none focus:ring-2 focus:ring-[#C2541E]/30 focus:border-[#C2541E]" :placeholder="$t('dataSource.starterTitlePlaceholder')" />
                             </div>
                             <div>
                                 <label class="block text-[11px] text-[#6b6b6b] mb-0.5">{{ $t('dataSource.starterPrompt') }}</label>
-                                <textarea v-model="item.prompt" rows="2" class="w-full text-sm border border-[#E7E5DD] rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#C2683F]/30 focus:border-[#C2683F]" :placeholder="$t('dataSource.starterPromptPlaceholder')"></textarea>
+                                <textarea v-model="item.prompt" rows="2" class="w-full text-sm border border-[#E9E0D3] rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#C2541E]/30 focus:border-[#C2541E]" :placeholder="$t('dataSource.starterPromptPlaceholder')"></textarea>
                             </div>
                         </div>
                     </div>
                     <div>
-                        <button @click="addStarter" class="text-xs border border-[#E7E5DD] text-[#1f2328] rounded-lg px-2 py-1 hover:bg-[#ECEAE1]">{{ $t('dataSource.addStarter') }}</button>
+                        <button @click="addStarter" class="text-xs border border-[#E9E0D3] text-[#1f2328] rounded-lg px-2 py-1 hover:bg-[#ECEAE1]">{{ $t('dataSource.addStarter') }}</button>
                     </div>
                 </div>
 
                 <div class="flex justify-end gap-2 mt-4">
-                    <button @click="onCancelEdit" class="px-3 py-1.5 text-xs border border-[#E7E5DD] text-[#1f2328] rounded-lg hover:bg-[#ECEAE1]">{{ $t('dataSource.cancel') }}</button>
-                    <button @click="onSaveStarters" :disabled="savingStarters" class="px-3 py-1.5 text-xs bg-[#C2683F] text-white rounded-lg hover:bg-[#A8542F] disabled:opacity-60">{{ savingStarters ? $t('dataSource.saving') : $t('dataSource.save') }}</button>
+                    <button @click="onCancelEdit" class="px-3 py-1.5 text-xs border border-[#E9E0D3] text-[#1f2328] rounded-lg hover:bg-[#ECEAE1]">{{ $t('dataSource.cancel') }}</button>
+                    <button @click="onSaveStarters" :disabled="savingStarters" class="px-3 py-1.5 text-xs bg-[#C2541E] text-white rounded-lg hover:bg-[#A8330F] disabled:opacity-60">{{ savingStarters ? $t('dataSource.saving') : $t('dataSource.save') }}</button>
                 </div>
             </div>
         </UModal>
@@ -398,7 +398,7 @@ function onCancelEdit() {
 
 	pre { @apply bg-gray-50 p-4 rounded-lg mb-4 overflow-x-auto; }
 	code { @apply bg-gray-50 px-1 py-0.5 rounded text-sm font-mono; }
-	a { @apply text-[#C2683F] hover:text-[#A8542F] underline; }
+	a { @apply text-[#C2541E] hover:text-[#A8330F] underline; }
 	blockquote { @apply border-l-4 border-gray-200 pl-4 italic my-4; }
 	table { @apply w-full border-collapse mb-4; }
 	table th, table td { @apply border border-gray-200 p-2 text-xs bg-white; }

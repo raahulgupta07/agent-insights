@@ -21,7 +21,7 @@
         <div class="h-24">
             <div v-if="isLoading" class="flex items-center justify-center h-full">
                 <div class="flex items-center space-x-2">
-                    <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-[#C2683F]"></div>
+                    <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-[#C2541E]"></div>
                     <span class="text-gray-500 text-sm">{{ $t('monitoring.diagnosis.activityChartLoading') }}</span>
                 </div>
             </div>

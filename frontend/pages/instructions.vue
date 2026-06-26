@@ -1,5 +1,5 @@
 <template>
-    <div class="flex justify-center px-4 md:px-6 text-sm bg-[#FBFAF6] min-h-full">
+    <div class="flex justify-center px-4 md:px-6 text-sm bg-[#F6F1EA] min-h-full">
         <div class="w-full max-w-7xl py-2 h-full">
             <ConsoleInstructions show-header />
         </div>

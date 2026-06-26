@@ -67,7 +67,7 @@
                         @click="handleFilterChange(filter)"
                         :class="[
                             selectedFilter.value === filter.value
-                                ? 'border-[#C2683F] text-[#C2683F]'
+                                ? 'border-[#C2541E] text-[#C2541E]'
                                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300',
                             'whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm'
                         ]"
@@ -77,7 +77,7 @@
                             v-if="filter.count !== undefined && filter.count >= 0"
                             :class="[
                                 selectedFilter.value === filter.value
-                                    ? 'bg-[#F4E5DA] text-[#A8542F]'
+                                    ? 'bg-[#F4E5DA] text-[#A8330F]'
                                     : 'bg-gray-100 text-gray-600',
                                 'ms-2 py-0.5 px-2 rounded-full text-xs font-medium'
                             ]"
@@ -93,7 +93,7 @@
         <div v-if="selectedDay" class="mb-4 -mt-2">
             <button
                 @click="clearDayFilter"
-                class="inline-flex items-center gap-1.5 px-3 py-1 bg-[#F6EFEA] text-[#A8542F] border border-[#E8C9B5] rounded-full text-xs font-medium hover:bg-[#F4E5DA]"
+                class="inline-flex items-center gap-1.5 px-3 py-1 bg-[#F6EFEA] text-[#A8330F] border border-[#E8C9B5] rounded-full text-xs font-medium hover:bg-[#F4E5DA]"
             >
                 {{ $t('monitoring.diagnosis.dayFilterLabel', { date: formatDate(selectedDay) }) }}
                 <UIcon name="i-heroicons-x-mark" class="w-3.5 h-3.5" />
@@ -103,7 +103,7 @@
         <!-- Loading state -->
         <div v-if="isLoading" class="flex items-center justify-center py-12">
             <div class="flex items-center space-x-2">
-                <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-[#C2683F]"></div>
+                <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-[#C2541E]"></div>
                 <span class="text-gray-600">{{ $t('monitoring.diagnosis.loading') }}</span>
             </div>
         </div>
@@ -183,7 +183,7 @@
                                 </div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <NuxtLink v-if="item.report_link" :to="item.report_link" class="text-[#C2683F] hover:underline" @click.stop>
+                                <NuxtLink v-if="item.report_link" :to="item.report_link" class="text-[#C2541E] hover:underline" @click.stop>
                                     {{ item.report_name || item.report_id }}
                                 </NuxtLink>
                                 <span v-else>{{ item.report_name || item.report_id }}</span>

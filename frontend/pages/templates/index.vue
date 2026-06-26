@@ -1,21 +1,19 @@
 <template>
-  <div class="flex justify-center px-4 md:px-6 text-sm bg-[#FBFAF6] min-h-full">
-    <div class="w-full max-w-7xl py-2">
+  <div class="wk-page min-h-full bg-[#F6F1EA] text-[#1A1611]">
+    <div class="w-full max-w-[1500px] px-6 sm:px-10 py-8 pb-24">
       <!-- Header -->
-      <div class="flex items-start justify-between gap-4 mb-6">
-        <div>
-          <h1
-            class="text-2xl font-semibold tracking-tight text-[#1f2328]"
-            style="font-family: ui-serif, Georgia, 'Times New Roman', serif"
-          >Templates</h1>
-          <p class="mt-2 text-[#6b6b6b] leading-relaxed max-w-2xl">
+      <div class="flex items-start justify-between gap-6 mb-6">
+        <div class="max-w-[620px]">
+          <h1 class="wk-h1">Templates</h1>
+          <p class="mt-2 text-[15px] leading-relaxed text-[#6E6356]">
             Reusable agent know-how — rules, metric formulas and example patterns. Bind one to
-            your own columns and get your own agent. Your data never leaves.
+            your own columns and get your own agent.
+            <span class="text-[#3E7A4D] font-semibold">Your data never leaves.</span>
           </p>
         </div>
         <NuxtLink
           to="/studios"
-          class="flex-none inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border border-dashed border-[#E7E5DD] text-[#C2683F] hover:border-[#C2683F] hover:bg-[#F3E7DF] transition-colors cursor-pointer"
+          class="wk-ghost flex-none inline-flex items-center gap-2 px-4 py-2.5 text-[14px] font-semibold rounded-[11px] border border-[#E4C9B6] bg-[#FCFAF6] text-[#A8330F] transition-colors cursor-pointer"
         >
           <UIcon name="i-heroicons-plus" class="w-4 h-4" />
           Publish
@@ -23,102 +21,100 @@
       </div>
 
       <!-- Controls: scope toggle + search -->
-      <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+      <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
         <!-- Scope toggle -->
-        <div class="inline-flex items-center gap-1 bg-white border border-[#E7E5DD] rounded-lg p-1">
+        <div class="inline-flex items-center gap-1 bg-[#EFE7DA] rounded-[11px] p-1">
           <button
             v-for="opt in scopes"
             :key="opt.value"
             type="button"
-            class="px-3 py-1.5 text-[13px] font-medium rounded-md transition-colors cursor-pointer"
+            class="px-4 py-1.5 text-[13.5px] font-semibold rounded-lg transition-colors cursor-pointer"
             :class="scope === opt.value
-              ? 'bg-[#C2683F] text-white'
-              : 'text-[#6b6b6b] hover:bg-[#F4F1EA]'"
+              ? 'bg-[#C2541E] text-white'
+              : 'text-[#7A7062] hover:bg-white/60'"
             @click="setScope(opt.value)"
           >{{ opt.label }}</button>
         </div>
 
         <!-- Search -->
-        <div class="relative w-full sm:w-72">
+        <div class="relative w-full sm:w-[320px]">
           <UIcon
             name="i-heroicons-magnifying-glass"
-            class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9a958c]"
+            class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A89C8C]"
           />
           <input
             v-model="q"
             type="text"
             placeholder="Search templates…"
-            class="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-[#E7E5DD] bg-white text-[#1f2328] placeholder:text-[#9a958c] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C2683F] transition-colors"
+            class="w-full pl-10 pr-3 py-2.5 text-[14px] rounded-[11px] border border-[#E4D9CA] bg-white text-[#1A1611] placeholder:text-[#A89C8C] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C2541E]/40 transition-colors"
             @input="onSearch"
           />
         </div>
       </div>
 
       <!-- Loading skeletons -->
-      <div v-if="loading" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div v-if="loading" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <div
           v-for="n in 6"
           :key="n"
-          class="animate-pulse rounded-2xl border border-[#E7E5DD] bg-white p-4"
+          class="animate-pulse rounded-2xl border border-[#E9E0D3] bg-white p-5"
         >
-          <div class="h-11 w-11 bg-[#F4F1EA] rounded-xl mb-3" />
-          <div class="h-3 w-1/2 bg-[#F4F1EA] rounded mb-3" />
-          <div class="h-16 bg-[#F4F1EA] rounded" />
+          <div class="h-11 w-11 bg-[#F4EEE5] rounded-xl mb-4" />
+          <div class="h-3 w-1/2 bg-[#F4EEE5] rounded mb-3" />
+          <div class="h-12 bg-[#F4EEE5] rounded" />
         </div>
       </div>
 
       <!-- Grid -->
       <div
         v-else-if="templates.length"
-        class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
+        class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
       >
         <div
           v-for="t in templates"
           :key="t.id"
-          class="flex flex-col rounded-2xl border border-[#E7E5DD] bg-white p-4 hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer"
+          class="wk-card flex flex-col rounded-2xl border border-[#E9E0D3] bg-white p-5 cursor-pointer"
           @click="openDetail(t.id)"
         >
           <!-- Icon tile + version -->
-          <div class="flex items-start justify-between gap-2 mb-3">
-            <div class="w-11 h-11 rounded-xl bg-[#F3E7DF] border border-[#E8C9B5] text-[#A8542F] flex items-center justify-center flex-none">
-              <UIcon name="i-heroicons-square-3-stack-3d" class="w-6 h-6" />
+          <div class="flex items-start justify-between gap-2 mb-5">
+            <div class="w-[46px] h-[46px] rounded-[13px] flex items-center justify-center flex-none"
+                 style="background: linear-gradient(150deg,#FBEADF,#F4D8C6)">
+              <UIcon name="i-heroicons-square-3-stack-3d" class="w-[22px] h-[22px] text-[#A8330F]" />
             </div>
             <span
               v-if="t.version"
-              class="font-mono text-[11px] text-[#9a958c] bg-[#F4F1EA] border border-[#E7E5DD] rounded-md px-1.5 py-0.5"
+              class="font-mono text-[11.5px] text-[#8A7F70] bg-[#F4EEE5] rounded-[7px] px-2 py-0.5"
             >v{{ t.version }}</span>
           </div>
 
           <!-- Name + description -->
-          <h3
-            class="text-sm font-medium text-[#1f2328] mb-1"
-            style="font-family: ui-serif, Georgia, serif"
-          >{{ t.name }}</h3>
-          <p class="text-[13px] text-[#6b6b6b] leading-snug line-clamp-2 mb-3 min-h-[34px]">
+          <h3 class="wk-card-title">{{ t.name }}</h3>
+          <p class="text-[13.5px] text-[#8A7F70] leading-snug line-clamp-2 mb-4 min-h-[34px]">
             {{ t.description || 'No description.' }}
           </p>
 
           <!-- Domain tags -->
-          <div v-if="t.domain_tags && t.domain_tags.length" class="flex flex-wrap gap-1.5 mb-3">
+          <div v-if="t.domain_tags && t.domain_tags.length" class="flex flex-wrap gap-1.5 mb-4">
             <span
               v-for="tag in t.domain_tags.slice(0, 4)"
               :key="tag"
-              class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#F4F1EA] text-[#6b6b6b] border border-[#E7E5DD]"
+              class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#F4EEE5] text-[#8A7F70]"
             >{{ tag }}</span>
           </div>
 
           <!-- Footer: author + uses + CTA -->
-          <div class="mt-auto pt-3 border-t border-[#E7E5DD] flex items-center justify-between gap-2">
-            <div class="flex items-center gap-2 min-w-0">
-              <span class="text-xs text-[#9a958c] truncate">{{ t.author || 'Unknown' }}</span>
-              <span class="text-[#cfcabf]">·</span>
-              <span class="text-xs text-[#9a958c] inline-flex items-center gap-0.5 flex-none">
-                <UIcon name="i-heroicons-star" class="w-3.5 h-3.5" />{{ t.uses ?? 0 }}
+          <div class="mt-auto pt-3.5 border-t border-[#ECE2D3] flex items-center justify-between gap-2">
+            <div class="flex items-center gap-1.5 min-w-0 text-[13px] text-[#9A8F80]">
+              <span class="truncate">{{ t.author || 'Unknown' }}</span>
+              <span class="text-[#D9C8B6]">·</span>
+              <span class="inline-flex items-center gap-0.5 flex-none">
+                <span class="text-[#C2854F]">★</span>{{ t.uses ?? 0 }}
               </span>
             </div>
             <button
               type="button"
-              class="flex-none inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium rounded-lg bg-[#C2683F] text-white hover:bg-[#A8542F] transition-colors cursor-pointer"
+              class="wk-prim flex-none inline-flex items-center gap-1.5 px-4 py-2 text-[13.5px] font-semibold rounded-[10px] bg-[#C2541E] text-white transition-colors cursor-pointer"
               @click.stop="openWizard(t)"
             >Use template</button>
           </div>
@@ -128,15 +124,15 @@
       <!-- Empty -->
       <div
         v-else
-        class="text-center py-14 px-6 bg-white border border-[#E7E5DD] rounded-2xl"
+        class="text-center py-16 px-6 bg-white border border-[#E9E0D3] rounded-2xl"
       >
-        <div class="w-11 h-11 rounded-xl bg-[#F4F1EA] border border-[#E7E5DD] mx-auto flex items-center justify-center mb-3">
-          <UIcon name="i-heroicons-square-3-stack-3d" class="w-6 h-6 text-[#9a958c]" />
+        <div class="w-[60px] h-[60px] rounded-2xl bg-[#FBEFE4] mx-auto flex items-center justify-center mb-4">
+          <UIcon name="i-heroicons-square-3-stack-3d" class="w-7 h-7 text-[#C2854F]" />
         </div>
-        <p class="text-sm font-medium text-[#1f2328]" style="font-family: ui-serif, Georgia, serif">
+        <p class="wk-card-title text-[20px]">
           No templates {{ q ? 'match your search' : 'yet' }}
         </p>
-        <p class="text-xs text-[#9a958c] mt-1">
+        <p class="text-[14px] text-[#8A7F70] mt-2">
           Export an agent's know-how from a Studio to share it here.
         </p>
       </div>
@@ -207,3 +203,26 @@ async function loadTemplates() {
 
 onMounted(loadTemplates)
 </script>
+
+<style scoped>
+.wk-page { font-family: 'Hanken Grotesk', system-ui, sans-serif; }
+.wk-h1 {
+  font-family: 'Spectral', Georgia, serif;
+  font-weight: 500;
+  font-size: 33px;
+  letter-spacing: -.015em;
+  color: #211B14;
+  margin: 0;
+}
+.wk-card-title {
+  font-family: 'Spectral', Georgia, serif;
+  font-weight: 600;
+  font-size: 18px;
+  color: #211B14;
+  margin: 0 0 2px;
+}
+.wk-card { transition: transform .2s, box-shadow .2s, border-color .2s; box-shadow: 0 10px 26px -18px rgba(60,40,20,.26); }
+.wk-card:hover { transform: translateY(-3px); box-shadow: 0 22px 46px -24px rgba(60,40,20,.36); border-color: #E4D4C2; }
+.wk-prim:hover { background: #A8330F !important; }
+.wk-ghost:hover { border-color: #C9BEAF !important; background: #FFFFFF !important; }
+</style>

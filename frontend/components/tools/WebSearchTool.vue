@@ -47,7 +47,7 @@
           :href="s.url"
           target="_blank"
           rel="noopener noreferrer"
-          class="flex items-center gap-1.5 text-[11px] text-[#C2683F] hover:underline"
+          class="flex items-center gap-1.5 text-[11px] text-[#C2541E] hover:underline"
           @click.stop
         >
           <img :src="faviconFor(s.url)" class="w-3.5 h-3.5 rounded-sm shrink-0" loading="lazy" @error="onFaviconError" />

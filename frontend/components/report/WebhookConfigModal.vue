@@ -60,21 +60,21 @@
 					<div>
 						<label class="block text-xs text-gray-500 mb-1.5">Name</label>
 						<input v-model="form.name" type="text" placeholder="PR triage"
-							class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#F4E5DA] focus:border-[#C2683F]" />
+							class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#F4E5DA] focus:border-[#C2541E]" />
 					</div>
 
 					<div class="grid grid-cols-2 gap-3">
 						<div>
 							<label class="block text-xs text-gray-500 mb-1.5">Source</label>
 							<select v-model="form.source"
-								class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-[#F4E5DA] focus:border-[#C2683F]">
+								class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-[#F4E5DA] focus:border-[#C2541E]">
 								<option v-for="s in sources" :key="s.source" :value="s.source">{{ s.label }}</option>
 							</select>
 						</div>
 						<div>
 							<label class="block text-xs text-gray-500 mb-1.5">Auth</label>
 							<select v-model="form.auth_mode"
-								class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-[#F4E5DA] focus:border-[#C2683F]">
+								class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-[#F4E5DA] focus:border-[#C2541E]">
 								<option value="token">Token header</option>
 								<option value="hmac">HMAC (signed)</option>
 								<option value="url_token">URL token</option>
@@ -83,14 +83,14 @@
 					</div>
 
 					<label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-						<input v-model="form.classify_enabled" type="checkbox" class="rounded border-gray-300 text-[#C2683F] focus:ring-[#F4E5DA]" />
+						<input v-model="form.classify_enabled" type="checkbox" class="rounded border-gray-300 text-[#C2541E] focus:ring-[#F4E5DA]" />
 						Let AI decide whether to respond
 					</label>
 
 					<div v-if="form.classify_enabled">
 						<label class="block text-xs text-gray-500 mb-1.5">Guidance (optional)</label>
 						<textarea v-model="form.classifier_prompt" rows="2" placeholder="Only respond to PRs touching billing; ignore dependabot."
-							class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#F4E5DA] focus:border-[#C2683F]"></textarea>
+							class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#F4E5DA] focus:border-[#C2541E]"></textarea>
 					</div>
 
 					<div class="flex justify-end pt-1">

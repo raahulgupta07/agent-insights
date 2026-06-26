@@ -8,7 +8,7 @@
                         v-model="searchQuery"
                         type="text"
                         :placeholder="$t('settings.members.searchPlaceholder')"
-                        class="w-full ps-10 pe-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#C2683F] focus:border-[#C2683F]"
+                        class="w-full ps-10 pe-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#C2541E] focus:border-[#C2541E]"
                     />
                     <UIcon
                         name="i-heroicons-magnifying-glass"
@@ -320,7 +320,7 @@
                                         type="text"
                                         maxlength="500"
                                         placeholder="—"
-                                        class="w-full text-sm text-gray-700 placeholder:text-gray-300 border border-transparent hover:bg-gray-100 focus:bg-white focus:border-[#C2683F] focus:ring-1 focus:ring-[#C2683F] rounded-md px-2 py-1 outline-none bg-transparent transition-colors"
+                                        class="w-full text-sm text-gray-700 placeholder:text-gray-300 border border-transparent hover:bg-gray-100 focus:bg-white focus:border-[#C2541E] focus:ring-1 focus:ring-[#C2541E] rounded-md px-2 py-1 outline-none bg-transparent transition-colors"
                                     />
                                     <UTooltip v-else-if="member.note" :text="member.note">
                                         <span class="text-sm text-gray-700 truncate block max-w-[16rem]">{{ member.note }}</span>
@@ -362,7 +362,7 @@
                                             v-if="!member.user && useCan('update_organization_members')"
                                             @click="resendInvite(member)"
                                             :disabled="resendingId === member.id"
-                                            class="inline-flex items-center gap-1 text-xs font-medium text-[#C2683F] hover:text-[#A8542F] transition-colors disabled:opacity-50"
+                                            class="inline-flex items-center gap-1 text-xs font-medium text-[#C2541E] hover:text-[#A8330F] transition-colors disabled:opacity-50"
                                         >
                                             <UIcon :name="resendingId === member.id ? 'i-heroicons-arrow-path-20-solid' : 'i-heroicons-paper-airplane'" class="h-3.5 w-3.5" :class="{ 'animate-spin': resendingId === member.id }" />
                                             {{ resendingId === member.id ? $t('settings.members.resending') : $t('settings.members.resend') }}
@@ -546,12 +546,12 @@
                     type="file"
                     accept=".xlsx,.csv"
                     @change="onImportFileSelected"
-                    class="block w-full text-sm text-gray-700 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-[#F6EFEA] file:text-[#A8542F] hover:file:bg-[#F4E5DA]"
+                    class="block w-full text-sm text-gray-700 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-[#F6EFEA] file:text-[#A8330F] hover:file:bg-[#F4E5DA]"
                 />
                 <button
                     type="button"
                     @click="downloadImportTemplate"
-                    class="text-xs text-[#C2683F] hover:underline"
+                    class="text-xs text-[#C2541E] hover:underline"
                 >
                     Download CSV template
                 </button>

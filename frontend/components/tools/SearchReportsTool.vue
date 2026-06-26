@@ -18,7 +18,7 @@
       <ul class="ms-1 space-y-0.5 leading-snug">
         <li v-for="(item, idx) in reports" :key="item.id || idx">
           <div class="flex items-center py-1 px-1 rounded">
-            <Icon name="heroicons-document-text" class="w-3 h-3 me-1.5 text-[#C2683F] flex-shrink-0" />
+            <Icon name="heroicons-document-text" class="w-3 h-3 me-1.5 text-[#C2541E] flex-shrink-0" />
             <div class="font-medium text-gray-700 truncate">{{ item.title || 'Untitled' }}</div>
             <span
               v-if="item.status"

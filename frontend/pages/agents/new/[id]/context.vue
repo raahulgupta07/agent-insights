@@ -15,7 +15,7 @@
 
           <!-- outer wrapper is relative so dropdown can overflow the border box -->
           <div class="relative">
-            <div class="border border-gray-200 focus-within:ring-2 focus-within:ring-[#E8C9B5] focus-within:border-[#C2683F]">
+            <div class="border border-gray-200 focus-within:ring-2 focus-within:ring-[#E8C9B5] focus-within:border-[#C2541E]">
               <!-- Loading overlay -->
               <div v-if="loadingDraft" class="flex items-center justify-center gap-2 py-10 text-xs text-gray-400">
                 <Spinner class="w-4 h-4" />
@@ -65,12 +65,12 @@
                 <template v-else-if="item.type === 'connection_tool'">
                   <span class="relative inline-flex shrink-0 mt-0.5">
                     <DataSourceIcon v-if="item.dataSourceType" :type="item.dataSourceType" class="h-3.5" />
-                    <Icon v-else name="heroicons:table-cells" class="w-3.5 h-3.5 text-[#C2683F]" />
+                    <Icon v-else name="heroicons:table-cells" class="w-3.5 h-3.5 text-[#C2541E]" />
                     <Icon name="heroicons:wrench-screwdriver" class="absolute -bottom-0.5 -right-1 w-2 h-2 text-indigo-400" />
                   </span>
                 </template>
                 <template v-else>
-                  <Icon name="heroicons:table-cells" class="w-3.5 h-3.5 mt-0.5 shrink-0 text-[#C2683F]" />
+                  <Icon name="heroicons:table-cells" class="w-3.5 h-3.5 mt-0.5 shrink-0 text-[#C2541E]" />
                 </template>
                 <div class="flex-1 min-w-0">
                   <template v-if="item.type === 'instruction'">
@@ -94,11 +94,11 @@
         <div v-if="!integration?.git_repository" class="flex items-center gap-1.5 text-xs text-gray-400">
           <GitBranchIcon class="w-3.5 h-3.5" />
           <span>Connect a git repository for Tableau, dbt, and markdown context —</span>
-          <button class="text-[#C2683F] hover:text-[#A8542F] underline-offset-2 hover:underline" @click="showGitModal = true">integrate</button>
+          <button class="text-[#C2541E] hover:text-[#A8330F] underline-offset-2 hover:underline" @click="showGitModal = true">integrate</button>
         </div>
 
         <div class="flex justify-end pt-4">
-          <button @click="handleSave" :disabled="saving || loadingDraft" class="bg-[#C2683F] hover:bg-[#A8542F] text-white text-xs font-medium py-1.5 px-3 rounded disabled:opacity-50">
+          <button @click="handleSave" :disabled="saving || loadingDraft" class="bg-[#C2541E] hover:bg-[#A8330F] text-white text-xs font-medium py-1.5 px-3 rounded disabled:opacity-50">
             <span v-if="saving">Saving...</span>
             <span v-else>Save & Continue</span>
           </button>

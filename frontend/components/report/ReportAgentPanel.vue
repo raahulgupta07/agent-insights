@@ -64,7 +64,7 @@
       <button
         @click="onConnect(selectedAgentDetails)"
         :disabled="connectingId === selectedAgentDetails.id"
-        class="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs text-[#C2683F] bg-[#F6EFEA] border border-[#E8C9B5] rounded-lg hover:bg-[#F4E5DA] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+        class="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs text-[#C2541E] bg-[#F6EFEA] border border-[#E8C9B5] rounded-lg hover:bg-[#F4E5DA] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
       >
         <Spinner v-if="connectingId === selectedAgentDetails.id" class="w-3.5 h-3.5" />
         <Icon v-else name="heroicons-key" class="w-3.5 h-3.5" />
@@ -107,12 +107,12 @@
               <button
                 v-if="canCreateInstructions && selectedAgentDetails.primary_instruction"
                 @click="openInstruction(selectedAgentDetails.primary_instruction)"
-                class="text-[10px] text-[#C2683F] hover:underline"
+                class="text-[10px] text-[#C2541E] hover:underline"
               >{{ $t('dataSource.edit') }}</button>
               <button
                 v-else-if="canCreateInstructions"
                 @click="activeTab = 'instructions'; creatingInstruction = true; creatingPrimaryInstruction = true"
-                class="text-[10px] text-[#C2683F] hover:underline"
+                class="text-[10px] text-[#C2541E] hover:underline"
               >{{ $t('reportAgent.create') }}</button>
             </div>
             <div v-if="selectedAgentDetails.primary_instruction">
@@ -129,7 +129,7 @@
           <div v-if="selectedAgentDetails.conversation_starters?.length || canUpdateDataSource">
             <div class="flex items-center gap-2 mb-2">
               <div class="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">{{ $t('dataSource.conversationStarters') }}</div>
-              <button v-if="canUpdateDataSource" @click="openEditStarters" class="text-[10px] text-[#C2683F] hover:underline">{{ $t('dataSource.edit') }}</button>
+              <button v-if="canUpdateDataSource" @click="openEditStarters" class="text-[10px] text-[#C2541E] hover:underline">{{ $t('dataSource.edit') }}</button>
             </div>
             <div v-if="selectedAgentDetails.conversation_starters?.length" class="space-y-1.5">
               <button
@@ -411,7 +411,7 @@
                 <div class="flex items-center gap-1.5">
                   <span
                     class="px-1 py-0.5 text-[9px] rounded border flex-shrink-0"
-                    :class="entity.type === 'metric' ? 'text-emerald-700 border-emerald-200 bg-emerald-50' : 'text-[#A8542F] border-[#E8C9B5] bg-[#F6EFEA]'"
+                    :class="entity.type === 'metric' ? 'text-emerald-700 border-emerald-200 bg-emerald-50' : 'text-[#A8330F] border-[#E8C9B5] bg-[#F6EFEA]'"
                   >{{ (entity.type || 'entity').toUpperCase() }}</span>
                   <span class="truncate text-gray-800 font-medium">{{ entity.title || entity.slug }}</span>
                 </div>
@@ -482,7 +482,7 @@
         </div>
         <div class="flex justify-end gap-2 mt-4">
           <button @click="showEditStarters = false" class="px-3 py-1.5 text-xs border border-gray-300 text-gray-700 rounded-lg">{{ $t('dataSource.cancel') }}</button>
-          <button @click="saveStarters" :disabled="savingStarters" class="px-3 py-1.5 text-xs border border-[#E8C9B5] text-[#A8542F] rounded-lg hover:bg-[#F6EFEA]">{{ savingStarters ? $t('dataSource.saving') : $t('dataSource.save') }}</button>
+          <button @click="saveStarters" :disabled="savingStarters" class="px-3 py-1.5 text-xs border border-[#E8C9B5] text-[#A8330F] rounded-lg hover:bg-[#F6EFEA]">{{ savingStarters ? $t('dataSource.saving') : $t('dataSource.save') }}</button>
         </div>
       </div>
     </UModal>

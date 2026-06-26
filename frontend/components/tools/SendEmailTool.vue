@@ -11,7 +11,7 @@
           {{ $t('tools.sendEmail.sending') }}
         </span>
         <span v-else-if="isSuccess" class="text-gray-600 flex items-center">
-          <Icon name="heroicons-envelope" class="w-3 h-3 me-1.5 text-[#C2683F]" />
+          <Icon name="heroicons-envelope" class="w-3 h-3 me-1.5 text-[#C2541E]" />
           <span dir="auto" class="truncate max-w-[300px]">{{ $t('tools.sendEmail.sentPrefix', { subject: truncatedSubject }) }}</span>
           <Icon
             :name="isExpanded ? 'heroicons-chevron-down' : 'heroicons-chevron-right'"

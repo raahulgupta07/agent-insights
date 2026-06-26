@@ -75,7 +75,7 @@
           <button
             v-if="!editingDesc"
             type="button"
-            class="inline-flex items-center gap-1 text-xs text-[#C2683F] hover:text-[#A8542F]"
+            class="inline-flex items-center gap-1 text-xs text-[#C2541E] hover:text-[#A8330F]"
             @click="startDesc"
           >
             <Icon name="heroicons:pencil-square" class="w-3.5 h-3.5" /> Edit
@@ -109,7 +109,7 @@
           <button
             v-if="!editingUseCases"
             type="button"
-            class="inline-flex items-center gap-1 text-xs text-[#C2683F] hover:text-[#A8542F]"
+            class="inline-flex items-center gap-1 text-xs text-[#C2541E] hover:text-[#A8330F]"
             @click="startUseCases"
           >
             <Icon name="heroicons:pencil-square" class="w-3.5 h-3.5" /> Edit
@@ -131,7 +131,7 @@
           <span
             v-for="(uc, i) in table.use_cases"
             :key="i"
-            class="inline-flex px-2 py-0.5 rounded-md text-xs bg-[#F6EFEA] text-[#A8542F]"
+            class="inline-flex px-2 py-0.5 rounded-md text-xs bg-[#F6EFEA] text-[#A8330F]"
           >{{ uc }}</span>
         </div>
         <p v-else class="text-sm text-gray-400 italic">None yet.</p>
@@ -144,7 +144,7 @@
           <button
             v-if="!editingQuality"
             type="button"
-            class="inline-flex items-center gap-1 text-xs text-[#C2683F] hover:text-[#A8542F]"
+            class="inline-flex items-center gap-1 text-xs text-[#C2541E] hover:text-[#A8330F]"
             @click="startQuality"
           >
             <Icon name="heroicons:pencil-square" class="w-3.5 h-3.5" /> Edit
@@ -216,7 +216,7 @@
                     >{{ col.meaning || 'No meaning yet.' }}</span>
                     <button
                       type="button"
-                      class="opacity-0 group-hover:opacity-100 transition-opacity text-[#C2683F] hover:text-[#A8542F] shrink-0"
+                      class="opacity-0 group-hover:opacity-100 transition-opacity text-[#C2541E] hover:text-[#A8330F] shrink-0"
                       @click="startCol(col)"
                     >
                       <Icon name="heroicons:pencil-square" class="w-3.5 h-3.5" />

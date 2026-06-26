@@ -4,8 +4,8 @@
         <div v-if="showHeader" class="flex items-start justify-between gap-4 mb-6 shrink-0">
             <div>
                 <h1
-                    class="text-2xl font-semibold text-[#1f2328] tracking-tight flex items-center"
-                    style="font-family: ui-serif, Georgia, 'Times New Roman', serif"
+                    class="text-[32px] font-medium text-[#211B14] tracking-tight flex items-center"
+                    style="font-family: 'Spectral', ui-serif, Georgia, serif"
                 >{{ $t('consoleInstructions.title') }}</h1>
                 <p class="mt-2 text-[#6b6b6b] leading-relaxed max-w-2xl">{{ $t('consoleInstructions.subtitle') }}</p>
             </div>
@@ -44,7 +44,7 @@
                     size="xs"
                     :ui="{ color: { white: { solid: '' } } }"
                     color="white"
-                    class="bg-[#C2683F] text-white hover:bg-[#A8542F] ring-0"
+                    class="bg-[#C2541E] text-white hover:bg-[#A8330F] ring-0"
                     @click="addInstruction"
                 >
                     {{ addButtonLabel }}

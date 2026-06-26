@@ -79,7 +79,7 @@
             <div v-if="loadMode" class="flex items-center gap-1">
               <span class="text-gray-500">{{ $t('tools.createInstruction.load') }}</span>
               <span class="px-1.5 py-0.5 rounded text-[9px] font-medium"
-                :class="loadMode === 'always' ? 'bg-[#F4E5DA] text-[#A8542F]' : 'bg-gray-100 text-gray-600'"
+                :class="loadMode === 'always' ? 'bg-[#F4E5DA] text-[#A8330F]' : 'bg-gray-100 text-gray-600'"
               >
                 {{ loadMode }}
               </span>

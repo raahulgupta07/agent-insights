@@ -21,7 +21,7 @@
           <span
             :class="[
               'text-[9px] font-mono font-semibold uppercase tracking-wide',
-              inst.isEdit ? 'text-[#C2683F]' : 'text-green-600'
+              inst.isEdit ? 'text-[#C2541E]' : 'text-green-600'
             ]"
           >
             {{ inst.isEdit ? $t('prompt.changeEdit', 'edit') : $t('prompt.changeNew', 'new') }}

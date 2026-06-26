@@ -1,7 +1,10 @@
+from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Response, Request
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_async_db, get_current_organization
 from app.services.step_service import StepService
+from app.services import parquet_store
 from app.models.user import User
 from app.models.organization import Organization
 from app.core.auth import current_user
@@ -10,6 +13,16 @@ from app.ee.audit.service import audit_service
 import io
 import logging
 from app.schemas.step_schema import StepSchema
+
+
+class StepQueryRequest(BaseModel):
+    select: List[str] = Field(default_factory=list)
+    filters: List[dict] = Field(default_factory=list)
+    group_by: List[str] = Field(default_factory=list)
+    aggs: List[dict] = Field(default_factory=list)
+    order_by: List[dict] = Field(default_factory=list)
+    limit: int = 100
+    offset: int = 0
 
 router = APIRouter(tags=["steps"])
 step_service = StepService()
@@ -71,3 +84,21 @@ async def get_step(
     if not step:
         raise HTTPException(status_code=404, detail="Step not found")
     return StepSchema.from_orm(step)
+
+
+@router.post("/steps/{step_id}/query")
+@requires_permission('view_reports')
+async def query_step(
+    step_id: str,
+    body: StepQueryRequest,
+    current_user: User = Depends(current_user),
+    organization: Organization = Depends(get_current_organization),
+    db: AsyncSession = Depends(get_async_db)
+):
+    step = await step_service.get_step_by_id(db, step_id)
+    if not step:
+        raise HTTPException(status_code=404, detail="Step not found")
+    try:
+        return parquet_store.query(step.data, body.model_dump())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

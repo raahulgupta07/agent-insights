@@ -158,7 +158,7 @@
                                           <span class="font-medium truncate">{{ m.name || m.model_id }}</span>
                                           <span class="text-gray-500 text-[10px] truncate">{{ m.provider?.name || m.provider_name || '' }}</span>
                                         </div>
-                                        <Icon v-if="(getJudgeRule(cat, 'model_id').matcher as any).value === (m.model_id || m.value)" name="heroicons-check" class="w-4 h-4 text-[#C2683F] ms-2 flex-shrink-0" />
+                                        <Icon v-if="(getJudgeRule(cat, 'model_id').matcher as any).value === (m.model_id || m.value)" name="heroicons-check" class="w-4 h-4 text-[#C2541E] ms-2 flex-shrink-0" />
                                       </div>
                                     </div>
                                   </template>
@@ -261,7 +261,7 @@
                           <div class="text-[11px] text-gray-500">Other rules</div>
                           <div v-for="(r, idx) in otherRules" :key="`other:${idx}`" class="rounded-md border border-[#E8C9B5] px-3 py-2 space-y-2">
                             <div class="flex items-center gap-2">
-                              <span class="bg-[#F6EFEA] text-[#A8542F] text-[10px] uppercase tracking-wide px-2 py-0.5 rounded">{{ r.type }}</span>
+                              <span class="bg-[#F6EFEA] text-[#A8330F] text-[10px] uppercase tracking-wide px-2 py-0.5 rounded">{{ r.type }}</span>
                               <UButton class="ms-auto" color="gray" variant="ghost" size="xs" icon="i-heroicons-trash" @click="removeOtherRule(idx)" />
                             </div>
 

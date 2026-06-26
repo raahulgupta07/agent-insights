@@ -4,9 +4,9 @@
       <!-- backdrop -->
       <div class="absolute inset-0 bg-black/30" @click="$emit('close')" />
       <!-- panel -->
-      <div class="relative w-[420px] max-w-[92vw] max-h-[85vh] overflow-y-auto bg-white border border-[#E7E5DD] rounded-2xl shadow-lg">
-        <div class="flex items-center justify-between px-4 py-3 border-b border-[#E7E5DD]">
-          <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, serif;">Conditional formatting</h3>
+      <div class="relative w-[420px] max-w-[92vw] max-h-[85vh] overflow-y-auto bg-white border border-[#E9E0D3] rounded-2xl shadow-lg">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-[#E9E0D3]">
+          <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif;">Conditional formatting</h3>
           <button class="text-[#9a958c] hover:text-[#1f2328] cursor-pointer" @click="$emit('close')">
             <Icon name="heroicons:x-mark" class="w-4 h-4" />
           </button>
@@ -18,14 +18,14 @@
             <div class="flex items-center justify-between mb-2">
               <span class="text-xs font-semibold text-[#6b6b6b] uppercase tracking-wide">Color rules</span>
               <button
-                class="text-[11px] font-semibold px-2 py-1 rounded-lg border border-[#E7E5DD] text-[#6b6b6b] hover:bg-[#F4F1EA] transition-colors cursor-pointer"
+                class="text-[11px] font-semibold px-2 py-1 rounded-lg border border-[#E9E0D3] text-[#6b6b6b] hover:bg-[#F4EEE5] transition-colors cursor-pointer"
                 @click="addRule"
               >+ Add rule</button>
             </div>
             <p v-if="!rules.length" class="text-xs text-[#9a958c] italic">No rules — bars/slices use the palette. Add a rule to color by value (first match wins).</p>
             <div v-for="(r, i) in rules" :key="r.id" class="flex items-center gap-1.5 mb-2">
               <span class="text-xs text-[#6b6b6b]">if value</span>
-              <select v-model="r.op" class="text-xs border border-[#E7E5DD] rounded-md px-1.5 py-1 bg-white">
+              <select v-model="r.op" class="text-xs border border-[#E9E0D3] rounded-md px-1.5 py-1 bg-white">
                 <option value=">">&gt;</option>
                 <option value=">=">&ge;</option>
                 <option value="<">&lt;</option>
@@ -34,12 +34,12 @@
                 <option value="!=">&ne;</option>
                 <option value="between">between</option>
               </select>
-              <input v-model.number="r.value" type="number" class="w-16 text-xs border border-[#E7E5DD] rounded-md px-1.5 py-1" />
+              <input v-model.number="r.value" type="number" class="w-16 text-xs border border-[#E9E0D3] rounded-md px-1.5 py-1" />
               <template v-if="r.op === 'between'">
                 <span class="text-xs text-[#6b6b6b]">and</span>
-                <input v-model.number="r.value2" type="number" class="w-16 text-xs border border-[#E7E5DD] rounded-md px-1.5 py-1" />
+                <input v-model.number="r.value2" type="number" class="w-16 text-xs border border-[#E9E0D3] rounded-md px-1.5 py-1" />
               </template>
-              <input v-model="r.color" type="color" class="w-7 h-7 border border-[#E7E5DD] rounded-md cursor-pointer p-0" />
+              <input v-model="r.color" type="color" class="w-7 h-7 border border-[#E9E0D3] rounded-md cursor-pointer p-0" />
               <button class="text-red-400 hover:bg-red-50 rounded p-1 cursor-pointer" @click="rules.splice(i, 1)">
                 <Icon name="heroicons:trash" class="w-3.5 h-3.5" />
               </button>
@@ -50,20 +50,20 @@
           <section v-else-if="kind === 'table'">
             <span class="text-xs font-semibold text-[#6b6b6b] uppercase tracking-wide">Data bars</span>
             <label class="flex items-center gap-2 mt-2 text-sm text-[#1f2328] cursor-pointer">
-              <input v-model="dataBars.enabled" type="checkbox" class="rounded border-[#E7E5DD] text-[#C2683F] focus:ring-[#C2683F]" />
+              <input v-model="dataBars.enabled" type="checkbox" class="rounded border-[#E9E0D3] text-[#C2541E] focus:ring-[#C2541E]" />
               Show inline bars in a numeric column
             </label>
             <div v-if="dataBars.enabled" class="mt-3 space-y-2 ps-6">
               <div class="flex items-center gap-2">
                 <span class="text-xs text-[#6b6b6b] w-14">Column</span>
-                <select v-model="dataBars.column" class="flex-1 text-xs border border-[#E7E5DD] rounded-md px-1.5 py-1 bg-white">
+                <select v-model="dataBars.column" class="flex-1 text-xs border border-[#E9E0D3] rounded-md px-1.5 py-1 bg-white">
                   <option value="">Auto (first numeric)</option>
                   <option v-for="c in columns" :key="c" :value="c">{{ c }}</option>
                 </select>
               </div>
               <div class="flex items-center gap-2">
                 <span class="text-xs text-[#6b6b6b] w-14">Color</span>
-                <input v-model="dataBars.color" type="color" class="w-7 h-7 border border-[#E7E5DD] rounded-md cursor-pointer p-0" />
+                <input v-model="dataBars.color" type="color" class="w-7 h-7 border border-[#E9E0D3] rounded-md cursor-pointer p-0" />
               </div>
             </div>
           </section>
@@ -72,17 +72,17 @@
           <section v-else-if="kind === 'kpi'">
             <span class="text-xs font-semibold text-[#6b6b6b] uppercase tracking-wide">KPI target</span>
             <label class="flex items-center gap-2 mt-2 text-sm text-[#1f2328] cursor-pointer">
-              <input v-model="kpiEnabled" type="checkbox" class="rounded border-[#E7E5DD] text-[#C2683F] focus:ring-[#C2683F]" />
+              <input v-model="kpiEnabled" type="checkbox" class="rounded border-[#E9E0D3] text-[#C2541E] focus:ring-[#C2541E]" />
               Compare to a target value
             </label>
             <div v-if="kpiEnabled" class="mt-3 space-y-2 ps-6">
               <div class="flex items-center gap-2">
                 <span class="text-xs text-[#6b6b6b] w-16">Target</span>
-                <input v-model.number="kpiTarget.value" type="number" class="flex-1 text-xs border border-[#E7E5DD] rounded-md px-1.5 py-1" />
+                <input v-model.number="kpiTarget.value" type="number" class="flex-1 text-xs border border-[#E9E0D3] rounded-md px-1.5 py-1" />
               </div>
               <div class="flex items-center gap-2">
                 <span class="text-xs text-[#6b6b6b] w-16">Good when</span>
-                <select v-model="kpiTarget.direction" class="flex-1 text-xs border border-[#E7E5DD] rounded-md px-1.5 py-1 bg-white">
+                <select v-model="kpiTarget.direction" class="flex-1 text-xs border border-[#E9E0D3] rounded-md px-1.5 py-1 bg-white">
                   <option value="higher">Actual ≥ target (higher is better)</option>
                   <option value="lower">Actual ≤ target (lower is better)</option>
                 </select>
@@ -93,13 +93,13 @@
           <p v-else class="text-xs text-[#9a958c] italic">No formatting options for this widget type.</p>
         </div>
 
-        <div class="flex items-center justify-end gap-2 px-4 py-3 border-t border-[#E7E5DD]">
+        <div class="flex items-center justify-end gap-2 px-4 py-3 border-t border-[#E9E0D3]">
           <button
-            class="text-sm font-medium px-3 py-2 rounded-lg border border-[#E7E5DD] text-[#6b6b6b] hover:bg-[#F4F1EA] transition-colors cursor-pointer"
+            class="text-sm font-medium px-3 py-2 rounded-lg border border-[#E9E0D3] text-[#6b6b6b] hover:bg-[#F4EEE5] transition-colors cursor-pointer"
             @click="$emit('close')"
           >Cancel</button>
           <button
-            class="text-sm font-medium px-4 py-2.5 rounded-xl bg-[#C2683F] text-white hover:bg-[#A8542F] transition-colors cursor-pointer"
+            class="text-sm font-medium px-4 py-2.5 rounded-xl bg-[#C2541E] text-white hover:bg-[#A8330F] transition-colors cursor-pointer"
             @click="apply"
           >Apply</button>
         </div>
@@ -148,23 +148,23 @@ const columns = computed<string[]>(() => {
 
 // Editable local state.
 const rules = ref<any[]>([])
-const dataBars = ref<{ enabled: boolean; column: string; color: string }>({ enabled: false, column: '', color: '#C2683F' })
+const dataBars = ref<{ enabled: boolean; column: string; color: string }>({ enabled: false, column: '', color: '#C2541E' })
 const kpiEnabled = ref(false)
 const kpiTarget = ref<{ value: number | null; direction: string }>({ value: null, direction: 'higher' })
 
 let ruleSeq = 0
 function addRule() {
-  rules.value.push({ id: `r${Date.now()}_${ruleSeq++}`, op: '>', value: 0, value2: null, color: '#C2683F' })
+  rules.value.push({ id: `r${Date.now()}_${ruleSeq++}`, op: '>', value: 0, value2: null, color: '#C2541E' })
 }
 
 // Seed from the widget's existing view config whenever the editor opens.
 function seed() {
   const v = props.widget?.view?.view || {}
   rules.value = Array.isArray(v.conditionalRules)
-    ? v.conditionalRules.map((r: any) => ({ id: r.id || `r${Date.now()}_${ruleSeq++}`, op: r.op || '>', value: r.value ?? 0, value2: r.value2 ?? null, color: r.color || '#C2683F' }))
+    ? v.conditionalRules.map((r: any) => ({ id: r.id || `r${Date.now()}_${ruleSeq++}`, op: r.op || '>', value: r.value ?? 0, value2: r.value2 ?? null, color: r.color || '#C2541E' }))
     : []
   const db = v.dataBars || {}
-  dataBars.value = { enabled: !!db.enabled, column: db.column || '', color: db.color || '#C2683F' }
+  dataBars.value = { enabled: !!db.enabled, column: db.column || '', color: db.color || '#C2541E' }
   const kt = v.kpiTarget
   kpiEnabled.value = !!(kt && typeof kt.value === 'number')
   kpiTarget.value = { value: kt?.value ?? null, direction: kt?.direction || 'higher' }

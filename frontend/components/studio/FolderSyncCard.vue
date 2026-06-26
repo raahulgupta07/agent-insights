@@ -4,12 +4,12 @@
     <!-- EMPTY STATE — no synced folder yet for this studio -->
     <div v-if="!paths.length" class="rounded-xl border border-dashed border-[#E8C9B5] bg-[#FBF4EF] px-4 py-3">
       <div class="flex items-center gap-1.5 mb-1">
-        <span class="text-[#C2683F] text-sm">⟳</span>
-        <h3 class="text-[13px] font-semibold text-[#2B2622]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">Folder Sync</h3>
+        <span class="text-[#C2541E] text-sm">⟳</span>
+        <h3 class="text-[13px] font-semibold text-[#2B2622]" style="font-family: 'Spectral', ui-serif, Georgia, serif">Folder Sync</h3>
       </div>
       <p class="text-[11.5px] text-[#8A7E76] mb-2.5">Auto-ingest a local folder into this agent — like Claude Code.</p>
       <button type="button"
-              class="inline-flex items-center gap-1.5 text-[12px] font-semibold text-white bg-[#C2683F] hover:bg-[#A8542F] rounded-lg px-3 py-1.5 transition-colors"
+              class="inline-flex items-center gap-1.5 text-[12px] font-semibold text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-lg px-3 py-1.5 transition-colors"
               @click="showModal = true">
         <UIcon name="i-heroicons-folder-plus" class="w-3.5 h-3.5" />
         Set up folder sync
@@ -20,8 +20,8 @@
     <div v-else class="rounded-xl border border-[#E8C9B5] bg-[#FBF4EF] px-4 py-3">
       <div class="flex items-center justify-between gap-2 mb-2">
         <div class="flex items-center gap-1.5">
-          <span class="text-[#C2683F] text-sm">⟳</span>
-          <h3 class="text-[13px] font-semibold text-[#2B2622]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">Folder Sync</h3>
+          <span class="text-[#C2541E] text-sm">⟳</span>
+          <h3 class="text-[13px] font-semibold text-[#2B2622]" style="font-family: 'Spectral', ui-serif, Georgia, serif">Folder Sync</h3>
           <span class="text-[#E8C9B5]">·</span>
           <span class="inline-flex items-center gap-1 text-[11px] font-medium text-[#3F8C5E]">
             <span class="w-1.5 h-1.5 rounded-full bg-[#3F8C5E]"></span> Live
@@ -31,7 +31,7 @@
           <button type="button"
                   class="inline-flex items-center gap-1 text-[11px] font-medium text-[#2B2622] bg-white border border-[#E8C9B5] rounded-lg px-2.5 py-1 hover:bg-[#F4E5DA] transition-colors"
                   @click="showModal = true">
-            <UIcon name="i-heroicons-cog-6-tooth" class="w-3.5 h-3.5 text-[#C2683F]" /> Manage
+            <UIcon name="i-heroicons-cog-6-tooth" class="w-3.5 h-3.5 text-[#C2541E]" /> Manage
           </button>
           <UTooltip text="Pause from the desktop app">
             <button type="button" disabled
@@ -45,7 +45,7 @@
       <!-- folder path(s) -->
       <ul class="space-y-1 mb-2">
         <li v-for="(p, i) in paths" :key="i" class="flex items-center gap-1.5 min-w-0">
-          <UIcon name="i-heroicons-folder" class="w-3.5 h-3.5 text-[#C2683F] shrink-0" />
+          <UIcon name="i-heroicons-folder" class="w-3.5 h-3.5 text-[#C2541E] shrink-0" />
           <code class="text-[11px] font-mono text-[#2B2622] truncate">{{ p.source_path }}</code>
           <span v-if="p.file_name" class="text-[10.5px] text-[#8A7E76] truncate">/ {{ p.file_name }}</span>
         </li>

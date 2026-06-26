@@ -20,7 +20,7 @@
                 <div>
                     <h3 class="text-xs font-medium text-gray-600 mb-1">Data Sources</h3>
                     <div v-if="instruction.data_sources.length === 0" class="flex items-center gap-2 text-xs text-gray-500">
-                        <Icon name="heroicons:globe-alt" class="w-3 h-3 text-[#C2683F]" />
+                        <Icon name="heroicons:globe-alt" class="w-3 h-3 text-[#C2541E]" />
                         <span>All Data Sources (Global access)</span>
                     </div>
                     <div v-else class="flex flex-wrap gap-2">

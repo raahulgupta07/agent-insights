@@ -201,7 +201,7 @@ function statusClass(status?: string): string {
 
 function kindClass(kind?: string): string {
   switch (kind) {
-    case 'view': return 'bg-[#F6EFEA] text-[#A8542F]'
+    case 'view': return 'bg-[#F6EFEA] text-[#A8330F]'
     case 'materialized_view': return 'bg-purple-50 text-purple-700'
     case 'table': return 'bg-gray-100 text-gray-600'
     default: return 'bg-gray-100 text-gray-600'

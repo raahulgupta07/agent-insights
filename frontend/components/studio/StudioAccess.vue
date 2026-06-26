@@ -1,15 +1,15 @@
 <template>
     <div>
         <div class="mb-4">
-            <h2 class="text-lg font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">Access &amp; Channels</h2>
-            <p class="text-xs text-[#6b6b6b] mt-0.5">Decide who can use this agent, which model it runs on, and where it answers.</p>
+            <h2 class="text-lg font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">Access &amp; Members</h2>
+            <p class="text-xs text-[#6b6b6b] mt-0.5">Decide who can use this agent and which model it runs on. Set up Channels and Email in their own tabs.</p>
         </div>
 
         <!-- WHO CAN USE -->
-        <div class="rounded-2xl border border-[#E7E5DD] bg-white p-4 mb-3">
+        <div class="rounded-2xl border border-[#E9E0D3] bg-white p-4 mb-3">
             <div class="flex items-center justify-between mb-1">
-                <h3 class="text-sm font-semibold text-[#1f2328] flex items-center gap-1.5" style="font-family: ui-serif, Georgia, serif">
-                    <UIcon name="i-heroicons-lock-closed" class="w-4 h-4 text-[#C2683F]" /> Who can use this agent
+                <h3 class="text-sm font-semibold text-[#1f2328] flex items-center gap-1.5" style="font-family: 'Spectral', ui-serif, Georgia, serif">
+                    <UIcon name="i-heroicons-lock-closed" class="w-4 h-4 text-[#C2541E]" /> Who can use this agent
                 </h3>
                 <span v-if="savingScope" class="text-[10px] text-[#9a958c] inline-flex items-center gap-1"><Spinner class="h-3 w-3" /> saving…</span>
             </div>
@@ -20,7 +20,7 @@
                     :key="opt.value"
                     class="flex items-start gap-2 rounded-xl border p-2.5 transition-colors"
                     :class="[
-                        scope === opt.value ? 'border-[#E8C9B5] bg-[#F6EFEA]' : 'border-[#E7E5DD]',
+                        scope === opt.value ? 'border-[#E8C9B5] bg-[#F6EFEA]' : 'border-[#E9E0D3]',
                         canEdit ? 'cursor-pointer hover:border-[#dcd9cf]' : 'opacity-70 cursor-default',
                     ]"
                 >
@@ -29,7 +29,7 @@
                         :value="opt.value"
                         :checked="scope === opt.value"
                         :disabled="!canEdit || savingScope"
-                        class="mt-0.5 text-[#C2683F] focus:ring-[#C2683F]"
+                        class="mt-0.5 text-[#C2541E] focus:ring-[#C2541E]"
                         @change="setScope(opt.value)"
                     />
                     <span>
@@ -50,9 +50,9 @@
         </div>
 
         <!-- MEMBERS (only when Scoped) -->
-        <div v-if="scope === 'private'" class="rounded-2xl border border-[#E7E5DD] bg-white p-4 mb-3">
-            <h3 class="text-sm font-semibold text-[#1f2328] flex items-center gap-1.5 mb-1" style="font-family: ui-serif, Georgia, serif">
-                <UIcon name="i-heroicons-users" class="w-4 h-4 text-[#C2683F]" /> Members
+        <div v-if="scope === 'private'" class="rounded-2xl border border-[#E9E0D3] bg-white p-4 mb-3">
+            <h3 class="text-sm font-semibold text-[#1f2328] flex items-center gap-1.5 mb-1" style="font-family: 'Spectral', ui-serif, Georgia, serif">
+                <UIcon name="i-heroicons-users" class="w-4 h-4 text-[#C2541E]" /> Members
             </h3>
             <p class="text-[11px] text-[#6b6b6b] mb-3">Only these people can open and use the agent.</p>
 
@@ -116,16 +116,16 @@
         </div>
 
         <!-- MODEL (per-agent override) -->
-        <div class="rounded-2xl border border-[#E7E5DD] bg-white p-4 mb-3">
-            <h3 class="text-sm font-semibold text-[#1f2328] flex items-center gap-1.5 mb-1" style="font-family: ui-serif, Georgia, serif">
-                <UIcon name="i-heroicons-cpu-chip" class="w-4 h-4 text-[#C2683F]" /> Model
+        <div class="rounded-2xl border border-[#E9E0D3] bg-white p-4 mb-3">
+            <h3 class="text-sm font-semibold text-[#1f2328] flex items-center gap-1.5 mb-1" style="font-family: 'Spectral', ui-serif, Georgia, serif">
+                <UIcon name="i-heroicons-cpu-chip" class="w-4 h-4 text-[#C2541E]" /> Model
             </h3>
             <p class="text-[11px] text-[#6b6b6b] mb-3">Pick the LLM this agent uses. Leave on <span class="font-medium">Org default</span> to follow the org-wide setting.</p>
             <div class="flex items-center gap-2">
                 <select
                     :value="modelId"
                     :disabled="!canEdit || savingModel || loadingModels"
-                    class="flex-1 text-xs text-[#1f2328] bg-white border border-[#E7E5DD] rounded-lg px-3 py-2 focus:outline-none focus:border-[#C2683F] disabled:opacity-60"
+                    class="flex-1 text-xs text-[#1f2328] bg-white border border-[#E9E0D3] rounded-lg px-3 py-2 focus:outline-none focus:border-[#C2541E] disabled:opacity-60"
                     @change="(e: any) => setModel(e.target.value)"
                 >
                     <option value="">Org default</option>
@@ -139,14 +139,14 @@
         </div>
 
         <!-- CONNECTION (read-only summary) -->
-        <div class="rounded-2xl border border-[#E7E5DD] bg-white p-4 mb-3">
-            <h3 class="text-sm font-semibold text-[#1f2328] flex items-center gap-1.5 mb-1" style="font-family: ui-serif, Georgia, serif">
-                <UIcon name="i-heroicons-signal" class="w-4 h-4 text-[#C2683F]" /> Connections
+        <div class="rounded-2xl border border-[#E9E0D3] bg-white p-4 mb-3">
+            <h3 class="text-sm font-semibold text-[#1f2328] flex items-center gap-1.5 mb-1" style="font-family: 'Spectral', ui-serif, Georgia, serif">
+                <UIcon name="i-heroicons-signal" class="w-4 h-4 text-[#C2541E]" /> Connections
             </h3>
             <p class="text-[11px] text-[#6b6b6b] mb-3">Data sources this agent is grounded on. Manage them in the Connection tab.</p>
             <div v-if="!sources.length" class="text-[11px] text-[#9a958c] py-2">No sources pinned yet.</div>
             <ul v-else class="space-y-1.5">
-                <li v-for="s in sources" :key="s.id" class="flex items-center justify-between gap-2 rounded-lg border border-[#F0EEE6] bg-[#FBFAF6] px-3 py-2">
+                <li v-for="s in sources" :key="s.id" class="flex items-center justify-between gap-2 rounded-lg border border-[#F0EEE6] bg-[#F6F1EA] px-3 py-2">
                     <div class="flex items-center gap-2 min-w-0">
                         <DataSourceIcon v-if="s.type" class="h-4 shrink-0" :type="s.type" />
                         <UIcon v-else name="i-heroicons-circle-stack" class="w-4 h-4 shrink-0 text-[#9a958c]" />
@@ -157,100 +157,6 @@
             </ul>
         </div>
 
-        <!-- CHANNELS -->
-        <div class="rounded-2xl border border-[#E7E5DD] bg-white p-4">
-            <div class="flex items-center justify-between mb-1">
-                <h3 class="text-sm font-semibold text-[#1f2328] flex items-center gap-1.5" style="font-family: ui-serif, Georgia, serif">
-                    <UIcon name="i-heroicons-megaphone" class="w-4 h-4 text-[#C2683F]" /> Channels
-                </h3>
-                <button
-                    v-if="canEdit && !channelsUnavailable"
-                    type="button"
-                    class="inline-flex items-center gap-1.5 text-xs font-medium text-[#6b6b6b] bg-white border border-[#E7E5DD] rounded-lg px-3 py-1.5 hover:bg-[#faf8f3] hover:border-[#dcd9cf] transition-colors"
-                    @click="openTelegramModal"
-                >
-                    <UIcon name="i-heroicons-plus" class="w-3.5 h-3.5" /> Add channel
-                </button>
-            </div>
-            <p class="text-[11px] text-[#6b6b6b] mb-3">Let people reach this agent outside the app — e.g. a Telegram bot.</p>
-
-            <div v-if="channelsUnavailable" class="text-[11px] text-[#9a958c] py-2 flex items-center gap-1.5">
-                <UIcon name="i-heroicons-information-circle" class="w-3.5 h-3.5" /> Channels aren't enabled for this org yet.
-            </div>
-            <div v-else-if="loadingChannels" class="flex items-center justify-center py-6 text-[#9a958c]">
-                <Spinner class="h-4 w-4" /><span class="ms-2 text-xs">{{ $t('common.loading') }}</span>
-            </div>
-            <ul v-else-if="channels.length" class="space-y-1.5">
-                <li v-for="c in channels" :key="c.id" class="flex items-center justify-between gap-2 rounded-lg border border-[#F0EEE6] bg-[#FBFAF6] px-3 py-2">
-                    <div class="flex items-center gap-2 min-w-0">
-                        <UIcon name="i-heroicons-paper-airplane" class="w-4 h-4 shrink-0 text-[#1F6F8B]" />
-                        <div class="min-w-0">
-                            <div class="text-xs font-medium text-[#1f2328] truncate">
-                                {{ platformLabel(c.platform_type) }}<span v-if="c.display" class="text-[#9a958c] font-normal"> · {{ c.display }}</span>
-                            </div>
-                            <div class="text-[10px] text-[#9a958c]">Audience: {{ audienceLabel(c.audience) }}</div>
-                        </div>
-                    </div>
-                    <div class="flex items-center gap-2 shrink-0">
-                        <span class="text-[10px] font-medium px-1.5 py-0.5 rounded" :class="c.is_active ? 'bg-[#E7F2EC] text-[#2f7a52]' : 'bg-[#F3F0E9] text-[#9a958c]'">{{ c.is_active ? 'On' : 'Off' }}</span>
-                        <button
-                            v-if="canEdit"
-                            type="button"
-                            class="text-[11px] font-medium text-[#6b6b6b] border border-[#E7E5DD] rounded-md px-2 py-1 hover:bg-[#faf8f3]"
-                            @click="toggleChannel(c)"
-                        >
-                            {{ c.is_active ? 'Disable' : 'Enable' }}
-                        </button>
-                        <button
-                            v-if="canEdit"
-                            type="button"
-                            class="text-[#9a958c] hover:text-red-500"
-                            title="Delete channel"
-                            @click="deleteChannel(c)"
-                        >
-                            <UIcon name="i-heroicons-trash" class="w-4 h-4" />
-                        </button>
-                    </div>
-                </li>
-            </ul>
-            <p v-else class="text-[11px] text-[#9a958c] py-2">No channels yet — add a Telegram bot to let people chat with this agent.</p>
-        </div>
-
-        <!-- Telegram modal -->
-        <UModal v-model="showTelegram" :ui="{ width: 'sm:max-w-md' }">
-            <div class="p-6">
-                <div class="flex items-center justify-between mb-4">
-                    <h2 class="text-lg font-medium text-[#1f2328]" style="font-family: ui-serif, Georgia, serif">Add Telegram channel</h2>
-                    <button class="text-[#9a958c] hover:text-[#6b6b6b]" @click="showTelegram = false">
-                        <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
-                    </button>
-                </div>
-                <label class="block text-xs font-medium text-[#1f2328] mb-1">Bot token</label>
-                <p class="text-[11px] text-[#9a958c] mb-2">Create a bot with @BotFather on Telegram and paste its token here.</p>
-                <UInput v-model="botToken" type="password" size="sm" placeholder="123456:ABC-DEF…" class="mb-4" />
-
-                <label class="block text-xs font-medium text-[#1f2328] mb-2">Who can use the bot</label>
-                <div class="space-y-2 mb-5">
-                    <label
-                        v-for="opt in audienceOptions"
-                        :key="opt.value"
-                        class="flex items-start gap-2 rounded-xl border p-2.5 cursor-pointer transition-colors"
-                        :class="audience === opt.value ? 'border-[#E8C9B5] bg-[#F6EFEA]' : 'border-[#E7E5DD] hover:border-[#dcd9cf]'"
-                    >
-                        <input type="radio" :value="opt.value" v-model="audience" class="mt-0.5 text-[#C2683F] focus:ring-[#C2683F]" />
-                        <span>
-                            <span class="block text-xs font-medium text-[#1f2328]">{{ opt.label }}</span>
-                            <span class="block text-[11px] text-[#9a958c]">{{ opt.hint }}</span>
-                        </span>
-                    </label>
-                </div>
-
-                <div class="flex justify-end gap-2">
-                    <UButton color="gray" variant="outline" size="sm" @click="showTelegram = false">Cancel</UButton>
-                    <UButton color="orange" size="sm" :loading="addingChannel" :disabled="!botToken.trim()" @click="addTelegram">Add channel</UButton>
-                </div>
-            </div>
-        </UModal>
     </div>
 </template>
 
@@ -265,7 +171,6 @@ interface Member {
     user_email?: string | null
 }
 interface Source { id: string; agent_id: string; name?: string | null; type?: string | null; credential_mode?: string | null }
-interface Channel { id: string; platform_type: string; audience: string; is_active: boolean; display?: string | null }
 interface Studio { id: string; share_scope?: string; share_token?: string | null; config?: Record<string, any> }
 
 const props = defineProps<{
@@ -463,92 +368,6 @@ const credentialMode = (s: Source) => {
     return s.type || 'data source'
 }
 
-// ---- CHANNELS ----------------------------------------------------------
-const channels = ref<Channel[]>([])
-const loadingChannels = ref(false)
-const channelsUnavailable = ref(false)
-
-const platformLabel = (p: string) => p === 'telegram' ? 'Telegram' : (p || 'Channel')
-const audienceLabel = (a: string) => a === 'anyone' ? 'Anyone' : 'Members only'
-
-const fetchChannels = async () => {
-    loadingChannels.value = true
-    try {
-        const { data, error } = await useMyFetch<Channel[]>(`/studios/${props.studioId}/channels`, { method: 'GET' })
-        if (error?.value) throw error.value
-        channels.value = data.value || []
-        channelsUnavailable.value = false
-    } catch (e: any) {
-        // 404 / not enabled → hide the section gracefully, never crash.
-        if (e?.statusCode === 404 || e?.status === 404) channelsUnavailable.value = true
-        else console.error('Failed to load channels:', e)
-    } finally {
-        loadingChannels.value = false
-    }
-}
-
-// Telegram modal
-const showTelegram = ref(false)
-const botToken = ref('')
-const audience = ref<'members' | 'anyone'>('members')
-const addingChannel = ref(false)
-const audienceOptions = [
-    { value: 'members', label: 'Members only', hint: 'Only agent members can talk to the bot.' },
-    { value: 'anyone', label: 'Anyone', hint: 'Anyone who finds the bot can chat with it.' },
-]
-
-const openTelegramModal = () => {
-    botToken.value = ''
-    audience.value = 'members'
-    showTelegram.value = true
-}
-
-const addTelegram = async () => {
-    if (!botToken.value.trim()) return
-    addingChannel.value = true
-    try {
-        const { error } = await useMyFetch(`/studios/${props.studioId}/channels/telegram`, {
-            method: 'POST',
-            body: { bot_token: botToken.value.trim(), audience: audience.value },
-        })
-        if (error?.value) throw error.value
-        showTelegram.value = false
-        botToken.value = ''
-        toast.add({ title: 'Channel added', color: 'green', icon: 'i-heroicons-check-circle' })
-        await fetchChannels()
-    } catch (e: any) {
-        console.error('Failed to add channel:', e)
-        toast.add({ title: t('studio.actionFailed') || 'Action failed', color: 'red' })
-    } finally {
-        addingChannel.value = false
-    }
-}
-
-const toggleChannel = async (c: Channel) => {
-    const action = c.is_active ? 'disable' : 'enable'
-    try {
-        const { error } = await useMyFetch(`/studios/${props.studioId}/channels/${c.id}/${action}`, { method: 'POST' })
-        if (error?.value) throw error.value
-        await fetchChannels()
-    } catch (e: any) {
-        console.error('Failed to toggle channel:', e)
-        toast.add({ title: t('studio.actionFailed') || 'Action failed', color: 'red' })
-    }
-}
-
-const deleteChannel = async (c: Channel) => {
-    if (!window.confirm('Delete this channel?')) return
-    try {
-        const { error } = await useMyFetch(`/studios/${props.studioId}/channels/${c.id}`, { method: 'DELETE' })
-        if (error?.value) throw error.value
-        toast.add({ title: 'Channel deleted', color: 'green', icon: 'i-heroicons-check-circle' })
-        await fetchChannels()
-    } catch (e: any) {
-        console.error('Failed to delete channel:', e)
-        toast.add({ title: t('studio.actionFailed') || 'Action failed', color: 'red' })
-    }
-}
-
 // Keep local scope/token in sync if the parent studio changes.
 watch(() => props.studio, (s) => {
     scope.value = s?.share_scope || 'private'
@@ -558,6 +377,5 @@ watch(() => props.studio, (s) => {
 onMounted(() => {
     fetchMembers()
     loadModels()
-    fetchChannels()
 })
 </script>

@@ -1,5 +1,5 @@
 <template>
-  <div class="py-8 bg-[#FBFAF6] min-h-full">
+  <div class="py-8 bg-[#F6F1EA] min-h-full">
     <div class="max-w-3xl mx-auto px-6">
       <div class="mb-5">
         <div class="flex items-start gap-3">
@@ -7,7 +7,7 @@
             <div class="flex items-center gap-2 mb-2">
               <span
                 class="text-[10px] px-1.5 py-0.5 rounded-md border font-medium"
-                :class="detail?.type === 'metric' ? 'text-[#3f9e6a] border-[#cde7d6] bg-[#eef6f0]' : 'text-[#6b6b6b] border-[#E7E5DD] bg-[#F4F1EA]'"
+                :class="detail?.type === 'metric' ? 'text-[#3f9e6a] border-[#cde7d6] bg-[#eef6f0]' : 'text-[#6b6b6b] border-[#E9E0D3] bg-[#F4EEE5]'"
               >{{ (detail?.type || '').toUpperCase() }}</span>
 
               <!-- Green check badge for approved/published entities -->
@@ -23,18 +23,18 @@
               <!-- Entity workflow status badge -->
               <span
                 v-if="entityType === 'draft'"
-                class="text-[10px] px-1.5 py-0.5 rounded-md border text-[#6b6b6b] border-[#E7E5DD] bg-[#F4F1EA] font-medium"
+                class="text-[10px] px-1.5 py-0.5 rounded-md border text-[#6b6b6b] border-[#E9E0D3] bg-[#F4EEE5] font-medium"
               >{{ $t('queries.draftBadge') }}</span>
               <span
                 v-else-if="entityType === 'private'"
-                class="text-[10px] px-1.5 py-0.5 rounded-md border text-[#6b6b6b] border-[#E7E5DD] bg-[#F4F1EA] font-medium"
+                class="text-[10px] px-1.5 py-0.5 rounded-md border text-[#6b6b6b] border-[#E9E0D3] bg-[#F4EEE5] font-medium"
               >{{ $t('queries.draftBadge') }}</span>
               <span
                 v-else-if="entityType === 'suggested'"
-                class="text-[10px] px-1.5 py-0.5 rounded-md border text-[#C2683F] border-[#ecd8cb] bg-[#F3E7DF] font-medium"
+                class="text-[10px] px-1.5 py-0.5 rounded-md border text-[#C2541E] border-[#ecd8cb] bg-[#FBEFE4] font-medium"
               >{{ $t('queries.suggestedBadge') }}</span>
             </div>
-            <h1 class="text-2xl font-semibold text-[#1f2328]" style="font-family: ui-serif, Georgia, 'Times New Roman', serif">{{ detail?.title || detail?.slug }}</h1>
+            <h1 class="text-2xl font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ detail?.title || detail?.slug }}</h1>
             <div class="text-[13px] text-[#6b6b6b] mt-1 leading-relaxed">{{ detail?.description || '—' }}</div>
             <!-- Data source icons under description -->
             <div v-if="detail?.data_sources?.length" class="mt-2 flex items-center gap-1.5">
@@ -43,7 +43,7 @@
                 :key="ds.id"
                 :src="dataSourceIcon(ds.type)"
                 :alt="ds.type"
-                class="w-5 h-5 rounded border border-[#E7E5DD] bg-white object-contain p-0.5"
+                class="w-5 h-5 rounded border border-[#E9E0D3] bg-white object-contain p-0.5"
                 @error="(e: any) => e.target && (e.target.style.visibility = 'hidden')"
               />
             </div>
@@ -52,7 +52,7 @@
               <span
                 v-for="tag in (detail?.tags || [])"
                 :key="tag"
-                class="text-[10px] px-1.5 py-0.5 rounded-md bg-[#F4F1EA] border border-[#E7E5DD] text-[#6b6b6b]"
+                class="text-[10px] px-1.5 py-0.5 rounded-md bg-[#F4EEE5] border border-[#E9E0D3] text-[#6b6b6b]"
               >{{ tag }}</span>
             </div>
           </div>
@@ -61,25 +61,25 @@
               <span v-if="deleting">{{ $t('queries.detail.deletingInProgress') }}</span>
               <span v-else>{{ $t('queries.detail.deleteAction') }}</span>
             </button>
-            <button v-if="canUpdateEntities" class="text-[11px] px-2.5 py-1 rounded-lg border border-[#E7E5DD] bg-white text-[#1f2328] hover:bg-[#F4F1EA] transition-colors" @click="openEdit = true">
+            <button v-if="canUpdateEntities" class="text-[11px] px-2.5 py-1 rounded-lg border border-[#E9E0D3] bg-white text-[#1f2328] hover:bg-[#F4EEE5] transition-colors" @click="openEdit = true">
               {{ $t('queries.detail.editAction') }}
             </button>
           </div>
         </div>
 
         <div class="mt-3 flex items-center gap-2 flex-wrap">
-          <div v-if="viewType" class="text-[11px] text-[#6b6b6b] px-1.5 py-0.5 bg-[#F4F1EA] border border-[#E7E5DD] rounded-md">{{ viewType }}</div>
+          <div v-if="viewType" class="text-[11px] text-[#6b6b6b] px-1.5 py-0.5 bg-[#F4EEE5] border border-[#E9E0D3] rounded-md">{{ viewType }}</div>
           <div v-if="detail?.data?.info?.total_rows !== undefined" class="text-[11px] text-[#9a958c]">{{ $t('queries.detail.rowsLabel', { n: formatCount(detail?.data?.info?.total_rows) }) }}</div>
           <div v-if="detail?.data?.info?.total_columns !== undefined" class="text-[11px] text-[#9a958c]">{{ $t('queries.detail.columnsLabel', { n: formatCount(detail?.data?.info?.total_columns) }) }}</div>
           <div v-if="detail?.last_refreshed_at" class="text-[11px] text-[#9a958c]">{{ $t('queries.detail.refreshedLabel', { when: timeAgo(detail?.last_refreshed_at as any) }) }}</div>
 
           <!-- Workflow actions -->
-          <button v-if="canSuggest" class="ms-auto text-[11px] px-2.5 py-1 rounded-lg bg-[#C2683F] hover:bg-[#A8542F] text-white font-medium transition-colors" @click="suggestEntity" :disabled="suggesting">
+          <button v-if="canSuggest" class="ms-auto text-[11px] px-2.5 py-1 rounded-lg bg-[#C2541E] hover:bg-[#A8330F] text-white font-medium transition-colors" @click="suggestEntity" :disabled="suggesting">
             <span v-if="suggesting">{{ $t('queries.detail.suggestingInProgress') }}</span>
             <span v-else>{{ $t('queries.detail.suggestAction') }}</span>
           </button>
 
-          <button v-if="canWithdraw" class="ms-auto text-[11px] px-2.5 py-1 rounded-lg border border-[#E7E5DD] bg-white text-[#1f2328] hover:bg-[#F4F1EA] transition-colors" @click="withdrawSuggestion" :disabled="withdrawing">
+          <button v-if="canWithdraw" class="ms-auto text-[11px] px-2.5 py-1 rounded-lg border border-[#E9E0D3] bg-white text-[#1f2328] hover:bg-[#F4EEE5] transition-colors" @click="withdrawSuggestion" :disabled="withdrawing">
             <span v-if="withdrawing">{{ $t('queries.detail.withdrawingInProgress') }}</span>
             <span v-else>{{ $t('queries.detail.withdrawAction') }}</span>
           </button>
@@ -95,23 +95,23 @@
           </button>
 
 
-          <button class="text-[11px] px-2.5 py-1 rounded-lg border border-[#E7E5DD] bg-white text-[#1f2328] hover:bg-[#F4F1EA] transition-colors" :class="{ 'ms-auto': !canCreateEntities && !isOwner && !canSuggest && !canWithdraw && !canApprove }" @click="refreshEntity" :disabled="refreshing">
+          <button class="text-[11px] px-2.5 py-1 rounded-lg border border-[#E9E0D3] bg-white text-[#1f2328] hover:bg-[#F4EEE5] transition-colors" :class="{ 'ms-auto': !canCreateEntities && !isOwner && !canSuggest && !canWithdraw && !canApprove }" @click="refreshEntity" :disabled="refreshing">
             <span v-if="refreshing">{{ $t('queries.detail.refreshingInProgress') }}</span>
             <span v-else>{{ $t('queries.detail.refreshAction') }}</span>
           </button>
         </div>
 
         <div class="mt-4">
-          <div class="border border-[#E7E5DD] rounded-2xl bg-white overflow-hidden">
+          <div class="border border-[#E9E0D3] rounded-2xl bg-white overflow-hidden">
             <!-- Tab Navigation -->
-            <div class="flex border-b border-[#E7E5DD] px-1">
+            <div class="flex border-b border-[#E9E0D3] px-1">
               <button
                 v-if="showVisual"
                 @click="activeTab = 'visual'"
                 :class="[
                   'px-4 py-2.5 text-sm border-b-2 transition-colors',
                   activeTab === 'visual'
-                    ? 'border-[#C2683F] text-[#1f2328] font-semibold'
+                    ? 'border-[#C2541E] text-[#1f2328] font-semibold'
                     : 'border-transparent text-[#6b6b6b] hover:text-[#1f2328]'
                 ]"
               >
@@ -122,7 +122,7 @@
                 :class="[
                   'px-4 py-2.5 text-sm border-b-2 transition-colors inline-flex items-center',
                   activeTab === 'data'
-                    ? 'border-[#C2683F] text-[#1f2328] font-semibold'
+                    ? 'border-[#C2541E] text-[#1f2328] font-semibold'
                     : 'border-transparent text-[#6b6b6b] hover:text-[#1f2328]'
                 ]"
               >
@@ -134,7 +134,7 @@
                 :class="[
                   'px-4 py-2.5 text-sm border-b-2 transition-colors',
                   activeTab === 'code'
-                    ? 'border-[#C2683F] text-[#1f2328] font-semibold'
+                    ? 'border-[#C2541E] text-[#1f2328] font-semibold'
                     : 'border-transparent text-[#6b6b6b] hover:text-[#1f2328]'
                 ]"
               >
@@ -171,10 +171,10 @@
 
               <!-- Code Content -->
               <Transition name="fade" mode="out-in">
-                <div v-if="activeTab === 'code'" class="bg-[#F4F1EA] border border-[#E7E5DD] rounded-xl p-3 overflow-auto" style="max-height: 400px;">
+                <div v-if="activeTab === 'code'" class="bg-[#F4EEE5] border border-[#E9E0D3] rounded-xl p-3 overflow-auto" style="max-height: 400px;">
                   <div class="flex items-center justify-between mb-2">
                     <span class="text-[11px] text-[#9a958c]">&nbsp;</span>
-                    <button class="text-[11px] px-2.5 py-1 rounded-lg border border-[#E7E5DD] bg-white text-[#1f2328] hover:bg-[#ECEAE1] transition-colors" @click="copyCode">{{ $t('queries.detail.copyAction') }}</button>
+                    <button class="text-[11px] px-2.5 py-1 rounded-lg border border-[#E9E0D3] bg-white text-[#1f2328] hover:bg-[#ECEAE1] transition-colors" @click="copyCode">{{ $t('queries.detail.copyAction') }}</button>
                   </div>
                   <pre class="text-[11px] text-[#1f2328] leading-relaxed" style="font-family: ui-monospace, 'SF Mono', Menlo, monospace"><code>{{ detail?.code || $t('queries.detail.noCode') }}</code></pre>
                 </div>

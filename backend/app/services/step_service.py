@@ -145,9 +145,12 @@ class StepService:
 
         df, output_log, _ = code_execution_manager.execute_code(code=code, db_clients=db_clients, excel_files=excel_files, loadables=loadables)
         df = code_execution_manager.format_df_for_widget(df)
-        
-        # Update existing step instead of creating new one
-        step.data = df
+
+        # Update existing step instead of creating new one. Replacing the marker in
+        # place is safe — the old Parquet file (if any) is superseded; delete it first.
+        from app.services import parquet_store
+        parquet_store.delete_file(step.data)
+        step.data = parquet_store.maybe_offload(df)
         await db.commit()
         await db.refresh(step)
 

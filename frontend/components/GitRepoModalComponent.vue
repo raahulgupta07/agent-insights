@@ -23,12 +23,12 @@
                     >
                         <div 
                             class="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-medium transition-colors"
-                            :class="step <= currentStep ? 'bg-[#C2683F] text-white' : 'bg-gray-100 text-gray-400'"
+                            :class="step <= currentStep ? 'bg-[#C2541E] text-white' : 'bg-gray-100 text-gray-400'"
                         >
                             <UIcon v-if="step < currentStep" name="i-heroicons-check" class="w-3 h-3" />
                             <span v-else>{{ step }}</span>
                         </div>
-                        <div v-if="step < 3" class="w-6 h-0.5" :class="step < currentStep ? 'bg-[#C2683F]' : 'bg-gray-200'" />
+                        <div v-if="step < 3" class="w-6 h-0.5" :class="step < currentStep ? 'bg-[#C2541E]' : 'bg-gray-200'" />
                     </div>
                 </div>
             </template>
@@ -201,11 +201,11 @@
                                     <UIcon :name="connectedRepo.can_create_pr ? 'i-heroicons-check-circle' : 'i-heroicons-x-circle'" class="w-3.5 h-3.5" />
                                     <span>Create PR</span>
                                 </div>
-                                <div class="flex items-center gap-1" :class="connectedRepo.has_ssh_key ? 'text-[#C2683F]' : 'text-gray-400'">
+                                <div class="flex items-center gap-1" :class="connectedRepo.has_ssh_key ? 'text-[#C2541E]' : 'text-gray-400'">
                                     <UIcon name="i-heroicons-key" class="w-3.5 h-3.5" />
                                     <span>SSH</span>
                                 </div>
-                                <div class="flex items-center gap-1" :class="connectedRepo.has_access_token ? 'text-[#C2683F]' : 'text-gray-400'">
+                                <div class="flex items-center gap-1" :class="connectedRepo.has_access_token ? 'text-[#C2541E]' : 'text-gray-400'">
                                     <UIcon name="i-heroicons-lock-closed" class="w-3.5 h-3.5" />
                                     <span>PAT</span>
                                 </div>
@@ -219,7 +219,7 @@
                         <!-- Indexing Progress Bar -->
                         <div v-if="isReindexing" class="mt-2 space-y-1">
                             <div class="flex items-center gap-2">
-                                <Spinner class="w-3 h-3 text-[#C2683F] flex-shrink-0" />
+                                <Spinner class="w-3 h-3 text-[#C2541E] flex-shrink-0" />
                                 <div class="flex-1 min-w-0">
                                     <div class="flex items-center justify-between text-xs text-gray-500 mb-1">
                                         <span class="truncate">{{ indexingPhase || 'Indexing...' }}</span>
@@ -300,7 +300,7 @@
                                 type="button"
                                 class="p-3 rounded border text-sm flex flex-col items-center gap-1.5 transition-colors"
                                 :class="selectedProvider === provider.type 
-                                    ? 'border-[#C2683F] bg-[#F6EFEA] text-[#A8542F]'
+                                    ? 'border-[#C2541E] bg-[#F6EFEA] text-[#A8330F]'
                                     : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'"
                             >
                                 <UIcon :name="provider.icon" class="w-5 h-5" />
@@ -317,7 +317,7 @@
                                 v-model="formData.customHost"
                                 type="text"
                                 placeholder="git.customdomain.com"
-                                class="mt-1.5 border border-gray-200 rounded px-3 py-2 w-full text-sm focus:outline-none focus:border-[#C2683F]"
+                                class="mt-1.5 border border-gray-200 rounded px-3 py-2 w-full text-sm focus:outline-none focus:border-[#C2541E]"
                             />
                         </div>
 
@@ -329,13 +329,13 @@
                                     v-model="formData.repoUrl"
                                     type="text"
                                     placeholder="git@github.com:user/repo.git"
-                                    class="flex-1 border border-gray-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-[#C2683F]"
+                                    class="flex-1 border border-gray-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-[#C2541E]"
                                 />
                                 <input 
                                     v-model="formData.branch"
                                     type="text"
                                     placeholder="main"
-                                    class="w-24 border border-gray-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-[#C2683F]"
+                                    class="w-24 border border-gray-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-[#C2541E]"
                                 />
                             </div>
                         </div>
@@ -348,7 +348,7 @@
                                     type="button"
                                     class="flex-1 px-3 py-2 text-sm rounded border transition-colors"
                                     :class="authMethod === 'ssh' 
-                                        ? 'border-[#C2683F] bg-[#F6EFEA] text-[#A8542F]'
+                                        ? 'border-[#C2541E] bg-[#F6EFEA] text-[#A8330F]'
                                         : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'"
                                     @click="authMethod = 'ssh'"
                                 >
@@ -361,7 +361,7 @@
                                     type="button"
                                     class="flex-1 px-3 py-2 text-sm rounded border transition-colors"
                                     :class="authMethod === 'pat' 
-                                        ? 'border-[#C2683F] bg-[#F6EFEA] text-[#A8542F]'
+                                        ? 'border-[#C2541E] bg-[#F6EFEA] text-[#A8330F]'
                                         : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'"
                                     @click="authMethod = 'pat'"
                                 >
@@ -396,7 +396,7 @@
                                     v-model="formData.accessToken"
                                     type="password"
                                     placeholder="ghp_xxxx or glpat-xxxx"
-                                    class="mt-1.5 border border-gray-200 rounded px-3 py-2 w-full text-sm focus:outline-none focus:border-[#C2683F] font-mono"
+                                    class="mt-1.5 border border-gray-200 rounded px-3 py-2 w-full text-sm focus:outline-none focus:border-[#C2541E] font-mono"
                                 />
                                 <p class="text-xs text-gray-400 mt-1">Enables clone/push via HTTPS and PR creation.</p>
                             </div>
@@ -408,7 +408,7 @@
                                     v-model="formData.accessTokenUsername"
                                     type="text"
                                     placeholder="your-username"
-                                    class="mt-1.5 border border-gray-200 rounded px-3 py-2 w-full text-sm focus:outline-none focus:border-[#C2683F]"
+                                    class="mt-1.5 border border-gray-200 rounded px-3 py-2 w-full text-sm focus:outline-none focus:border-[#C2541E]"
                                 />
                                 <p class="text-xs text-gray-400 mt-1">Required for Bitbucket Cloud App Passwords.</p>
                             </div>
@@ -479,7 +479,7 @@
                     <div class="py-3">
                         <div v-if="isIndexing || isReindexing" class="space-y-2">
                             <div class="flex items-center justify-center gap-2">
-                                <Spinner class="w-4 h-4 text-[#C2683F]" />
+                                <Spinner class="w-4 h-4 text-[#C2541E]" />
                                 <p class="text-sm font-medium text-gray-700">Indexing Repository...</p>
                             </div>
                             <div class="px-4">
@@ -749,14 +749,14 @@ const statusText = computed(() => {
 })
 
 const statusClass = computed(() => {
-    if (isReindexing.value) return 'text-[#C2683F]'
+    if (isReindexing.value) return 'text-[#C2541E]'
     // Check repo status first (for org-level repos), then metadata_resources (for data-source-scoped)
     const repoStatus = connectedRepo.value?.status
     const metaStatus = metadata_resources.value?.status
     const status = repoStatus || metaStatus
     if (status === 'completed') return 'text-green-600'
     if (status === 'failed') return 'text-red-600'
-    if (status === 'running' || status === 'indexing') return 'text-[#C2683F]'
+    if (status === 'running' || status === 'indexing') return 'text-[#C2541E]'
     return 'text-gray-600'
 })
 

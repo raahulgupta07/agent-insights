@@ -7,14 +7,14 @@
                     type="text"
                     v-model="searchQuery"
                     :placeholder="$t('settings.llms.searchPlaceholder')"
-                    class="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-[#C2683F] focus:border-[#C2683F] w-full"
+                    class="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-[#C2541E] focus:border-[#C2541E] w-full"
                 >
             </div>
             <div class="space-x-2">
                 <button 
                     v-if="useCan('manage_llm_settings')"
                     @click="providerModalOpen = true" 
-                    class="bg-[#C2683F] hover:bg-[#A8542F] text-white text-sm px-3 py-1.5 rounded-md"
+                    class="bg-[#C2541E] hover:bg-[#A8330F] text-white text-sm px-3 py-1.5 rounded-md"
                 >
                     {{ $t('settings.llms.integrateModels') }}
                 </button>
@@ -40,7 +40,7 @@
                                 <div class="ms-4">
                                     <div class="text-sm font-medium text-gray-900">
                                         {{ model.name }}
-                                        <span v-if="model.is_default" class="text-xs bg-[#C2683F] text-white px-1.5 py-0.5 rounded-md">{{ $t('settings.llms.badgeDefault') }}</span>
+                                        <span v-if="model.is_default" class="text-xs bg-[#C2541E] text-white px-1.5 py-0.5 rounded-md">{{ $t('settings.llms.badgeDefault') }}</span>
                                         <span v-if="model.is_small_default" class="text-xs bg-green-500 text-white px-1.5 py-0.5 rounded-md ms-1">
                                             <UTooltip :text="$t('settings.llms.smallDefaultTooltip')">
                                             {{ $t('settings.llms.badgeSmallDefault') }}
@@ -83,7 +83,7 @@
             <button
                 v-if="useCan('manage_llm_settings')"
                 @click="providerModalOpen = true"
-                class="bg-[#C2683F] text-white text-sm px-4 py-2 rounded-md hover:bg-[#A8542F] transition-colors"
+                class="bg-[#C2541E] text-white text-sm px-4 py-2 rounded-md hover:bg-[#A8330F] transition-colors"
             >
                 {{ $t('settings.llms.integrateModels') }}
             </button>

@@ -12,7 +12,7 @@
       Loading Chart...
     </div>
      <div v-else-if="!props.data?.rows?.length" class="h-full flex flex-col items-center justify-center text-center gap-1 py-6">
-         <Icon name="heroicons:circle-stack" class="w-6 h-6 text-[#C2683F]/40" />
+         <Icon name="heroicons:circle-stack" class="w-6 h-6 text-[#C2541E]/40" />
          <div class="text-sm font-medium text-gray-600">Query returned 0 rows</div>
          <div class="text-xs text-gray-400">No data matched — check the filters (e.g. the date/year range may not exist in this data).</div>
     </div>
