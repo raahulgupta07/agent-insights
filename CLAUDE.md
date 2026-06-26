@@ -3,6 +3,19 @@
 Guide for any AI agent working in this repo. This is a **hybrid fork of bagofwords (bow), rebranded Dash**
 on branch `hybrid-brain`. Read this before touching anything.
 
+@docs/CODEBASE_MAP.md
+
+## Boot protocol (READ FIRST — do not scan the tree)
+You become the codebase expert by READING, not scanning. On session start, these load automatically and
+are authoritative: **CLAUDE.md** (this file — rules/current state), **`docs/CODEBASE_MAP.md`** (entry points +
+extension patterns + landmines — the expert primer, imported above), **`ROADMAP.md`** (forward plan), and the
+HEAD of **`DEVLOG.md`** (recent dated history). That is enough to work fast.
+- Do **NOT** read every file or run a full tree scan. Trust the map; open a specific file only when you need
+  its exact contents to edit it.
+- If the map is missing a path you need, read that one file, then **add it to `docs/CODEBASE_MAP.md`** so next
+  session is faster (the map is the durable memory — keep it current, same habit as the DEVLOG/VERSION bump).
+- The map covers the load-bearing 20%; `DEVLOG.md` has full per-feature history if you need depth.
+
 ## What this project is
 Single-project agentic-analytics platform = **Dash chassis** (FastAPI + Nuxt, own AgentV2
 plan/execute/reflect loop, ~46 warehouse connectors, multi-tenant, Instructions + approval
