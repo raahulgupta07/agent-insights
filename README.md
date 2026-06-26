@@ -286,6 +286,14 @@ Point a small desktop app at a folder; new and changed **Excel/CSV** files becom
 
 Flag `HYBRID_FOLDER_SYNC` (default OFF).
 
+### Scheduled Reports — agent emails a clean result on a cadence
+
+Any studio can email a **structured result** (not the raw agent chat) on a cron schedule. Studio → **Manage → Reports**: create/edit/pause/delete a scheduled prompt, set cadence + subscribers + a **format** (`auto · table · dashboard · artifact · workflow`), and **Send test now**. On each run the agent executes against a hidden per-studio container report, the result is rendered **clean** (zebra table / Playwright dashboard PNG+PDF / artifact preview / workflow timeline), and is delivered via the **agent's own SMTP identity** (per-studio → AI-mailbox → org → global).
+
+- **Engine** — `backend/app/services/report_delivery/` (frozen `contract.py` + auto-discovered `renderers/<mode>.py`; sanitizer strips planning/fences/recap noise). Per-agent SMTP via `email_client_resolver.resolve_outbound(...)`. Routes `routes/studio_reports.py`; UI `components/studio/StudioReports.vue`.
+- **Flags** — `HYBRID_AGENT_REPORTS` (Reports tab) + `HYBRID_RICH_REPORT_EMAIL` (rich-render engine; OFF = legacy raw path). Both default OFF.
+- **Note** — dashboard/artifact rendering needs the image's headless chromium (Playwright) + `soffice`/`pdftoppm`; transient Docker-DNS SMTP failures are retried ×3.
+
 ### Releasing a feature (changelog)
 
 Shipped features are versioned in `VERSION_HYBRID` (hybrid semver, e.g. `1.2.0`) with a matching entry in `CHANGELOG_HYBRID.md` (`## v<semver> — <title>  (<YYYY-MM-DD>)` + `-` bullets, newest first). The app exposes this at `GET /api/changelog` and surfaces it as a **🔔 What's new** popover in the top bar (bell before the user profile) with an unseen badge per user. Bump `VERSION_HYBRID` and prepend a `CHANGELOG_HYBRID.md` entry whenever you ship — the bell updates automatically. Full feed at `/changelog`.
@@ -296,7 +304,7 @@ Shipped features are versioned in `VERSION_HYBRID` (hybrid semver, e.g. `1.2.0`)
 
 New features are flag-gated (`backend/app/settings/hybrid_flags.py`, env `HYBRID_*`, default OFF; dev `.env` turns them on). Per-org live overrides via **Settings → Feature Flags**.
 
-Key flags: `COLUMN_INTEL · AUTO_QUERIES · AUTO_EVALS · JOIN_GRAPH · DOC_KNOWLEDGE · STUDIOS · SEMANTIC_LAYER · METRICS_CATALOG · DOMAIN_PACKS · PACK_ROUTER · PACK_AUTOBIND · TEACH_BOX · SCOPE_GATE · FOLLOWUPS · AGENT_TEMPLATES · FOLDER_SYNC`. Intelligence Layer: `PROFILE_V2 · PROACTIVE_INSIGHTS · FORECAST · GOLDEN_QUERIES · CODE_ENRICH · VERIFIED_METRICS · SEMANTIC_SEARCH`. Env knob: `STUDIO_LEARN_DAEMON_ENABLED`.
+Key flags: `COLUMN_INTEL · AUTO_QUERIES · AUTO_EVALS · JOIN_GRAPH · DOC_KNOWLEDGE · STUDIOS · SEMANTIC_LAYER · METRICS_CATALOG · DOMAIN_PACKS · PACK_ROUTER · PACK_AUTOBIND · TEACH_BOX · SCOPE_GATE · FOLLOWUPS · AGENT_TEMPLATES · FOLDER_SYNC · AGENT_REPORTS · RICH_REPORT_EMAIL`. Intelligence Layer: `PROFILE_V2 · PROACTIVE_INSIGHTS · FORECAST · GOLDEN_QUERIES · CODE_ENRICH · VERIFIED_METRICS · SEMANTIC_SEARCH`. Env knob: `STUDIO_LEARN_DAEMON_ENABLED`.
 
 For stability, **Skills (heavy sandbox exec) / sub-agents / MCP are OFF by default**; the lightweight Domain-Pack path is the supported "skills" mechanism.
 
