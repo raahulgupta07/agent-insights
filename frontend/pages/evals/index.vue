@@ -1,31 +1,45 @@
 <template>
-    <div class="flex justify-center px-4 md:px-6 text-sm bg-[#F6F1EA] min-h-full">
-        <div class="w-full max-w-7xl py-2 text-[#1f2328]">
-            <!-- Header -->
-            <div>
-                <h1
-                    class="text-[32px] font-medium text-[#211B14] tracking-tight flex items-center"
-                    style="font-family: 'Spectral', ui-serif, Georgia, serif"
-                >
-                    {{ $t('evals.title') }}
-                </h1>
-                <p class="mt-2 text-[#6b6b6b] leading-relaxed max-w-2xl">{{ $t('evals.subtitle') }}</p>
+    <div class="bg-[#F1ECE3] h-full overflow-hidden flex flex-col">
+        <div class="my-2 me-2 px-6 md:px-8 py-6 text-sm bg-[#FBFAF6] border border-[#E9E0D3] rounded-2xl flex-1 overflow-y-auto text-[#1f2328]">
+
+            <!-- Header: serif title + subtitle + readiness ring -->
+            <div class="flex items-start justify-between gap-4 mb-1">
+                <div>
+                    <h1
+                        class="text-2xl font-semibold text-[#1f2328]"
+                        style="font-family: 'Spectral', ui-serif, Georgia, serif"
+                    >
+                        {{ $t('evals.title') }}
+                    </h1>
+                    <p class="text-xs text-[#6b6b6b] mt-0.5 max-w-[520px]">{{ $t('evals.subtitle') }}</p>
+                </div>
+                <div class="shrink-0 text-center">
+                    <div class="relative w-[54px] h-[54px] mx-auto">
+                        <svg width="54" height="54" style="transform:rotate(-90deg)">
+                            <circle cx="27" cy="27" r="22" stroke="#ECE7E0" stroke-width="6" fill="none" />
+                            <circle cx="27" cy="27" r="22" stroke="#2F6F4F" stroke-width="6" fill="none" stroke-linecap="round" stroke-dasharray="138" :stroke-dashoffset="(metrics?.total_test_runs ?? 0) > 0 ? 0 : 138" style="transition:stroke-dashoffset .5s" />
+                        </svg>
+                        <div class="absolute inset-0 flex items-center justify-center text-[15px] font-semibold text-[#2F6F4F]" style="font-family: ui-serif, Georgia, serif">{{ metrics?.total_test_runs ?? 0 }}</div>
+                    </div>
+                    <div class="text-[9px] uppercase tracking-wide text-[#9a958c] mt-0.5">runs</div>
+                </div>
             </div>
 
-            <div class="mt-6">
-                <!-- Top metrics -->
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    <div class="bg-white p-6 border border-[#E9E0D3] rounded-xl shadow-sm">
-                        <div class="text-sm font-medium text-[#6b6b6b]">{{ $t('evals.totalTestCases') }}</div>
-                        <div class="text-2xl font-bold text-[#1f2328] mt-1">{{ metrics?.total_test_cases ?? 0 }}</div>
+            <!-- OVERVIEW · top metrics -->
+            <div class="relative mt-4 border border-[#E9E0D3] rounded-2xl bg-white p-4">
+                <span class="absolute -top-2.5 left-4 bg-[#2B2A26] text-white text-[9.5px] font-semibold px-2.5 py-0.5 rounded-full tracking-wide">OVERVIEW</span>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-1">
+                    <div class="border border-[#E9E0D3] rounded-xl p-3 bg-gradient-to-b from-white to-[#fdfcf9]">
+                        <div class="text-[11px] uppercase tracking-wide text-[#7c7368]">{{ $t('evals.totalTestCases') }}</div>
+                        <div class="text-2xl font-semibold text-[#1f2328] mt-1">{{ metrics?.total_test_cases ?? 0 }}</div>
                     </div>
-                    <div class="bg-white p-6 border border-[#E9E0D3] rounded-xl shadow-sm">
-                        <div class="text-sm font-medium text-[#6b6b6b]">{{ $t('evals.totalTestRuns') }}</div>
-                        <div class="text-2xl font-bold text-[#1f2328] mt-1">{{ metrics?.total_test_runs ?? 0 }}</div>
+                    <div class="border border-[#E9E0D3] rounded-xl p-3 bg-gradient-to-b from-white to-[#fdfcf9]">
+                        <div class="text-[11px] uppercase tracking-wide text-[#7c7368]">{{ $t('evals.totalTestRuns') }}</div>
+                        <div class="text-2xl font-semibold text-[#1f2328] mt-1">{{ metrics?.total_test_runs ?? 0 }}</div>
                     </div>
-                    <div class="bg-white p-6 border border-[#E9E0D3] rounded-xl shadow-sm">
-                        <div class="text-sm font-medium text-[#6b6b6b]">{{ $t('evals.lastTestResult') }}</div>
-                        <div class="mt-1">
+                    <div class="border border-[#E9E0D3] rounded-xl p-3 bg-gradient-to-b from-white to-[#fdfcf9]">
+                        <div class="text-[11px] uppercase tracking-wide text-[#7c7368]">{{ $t('evals.lastTestResult') }}</div>
+                        <div class="mt-1.5">
                             <span v-if="metrics?.last_result_status" :class="['inline-flex items-center px-2 py-1 rounded-full text-xs font-medium', statusClass(derivedStatus(metrics?.last_result_status))]">
                                 {{ localizedStatus(derivedStatus(metrics?.last_result_status)) }}
                             </span>
@@ -36,31 +50,31 @@
                         </div>
                     </div>
                 </div>
+            </div>
 
-                <!-- Tabs -->
-                <div class="border-b border-[#E9E0D3] mb-6">
-                    <nav class="-mb-px flex space-x-8" aria-label="Tabs">
-                        <button
-                            type="button"
-                            @click="activeTab = 'tests'"
-                            :class="tabClass('tests')"
-                        >
-                            {{ $t('evals.tabs.tests') }}
-                        </button>
-                        <button
-                            type="button"
-                            @click="activeTab = 'runs'"
-                            :class="tabClass('runs')"
-                        >
-                            {{ $t('evals.tabs.runs') }}
-                        </button>
-                    </nav>
-                </div>
+            <!-- Tabs (segmented pill group) -->
+            <div class="mt-5 inline-flex items-center gap-1 bg-[#F4EEE5] border border-[#E9E0D3] rounded-full p-1">
+                <button
+                    type="button"
+                    @click="activeTab = 'tests'"
+                    :class="tabClass('tests')"
+                >
+                    {{ $t('evals.tabs.tests') }}
+                </button>
+                <button
+                    type="button"
+                    @click="activeTab = 'runs'"
+                    :class="tabClass('runs')"
+                >
+                    {{ $t('evals.tabs.runs') }}
+                </button>
+            </div>
 
-                <!-- Tests tab -->
-                <div v-if="activeTab === 'tests'">
-                    <div class="bg-white shadow-sm border border-[#E9E0D3] rounded-lg overflow-hidden">
-                        <div class="px-6 py-4 border-b border-[#E9E0D3]">
+            <!-- Tests tab -->
+            <div v-if="activeTab === 'tests'">
+                <div class="relative mt-5 border border-[#E9E0D3] rounded-2xl bg-white p-4 mb-6">
+                    <span class="absolute -top-2.5 left-4 bg-[#2B2A26] text-white text-[9.5px] font-semibold px-2.5 py-0.5 rounded-full tracking-wide">TEST CASES</span>
+                    <div class="pt-1 pb-3 border-b border-[#E9E0D3]">
                             <div class="flex flex-col md:flex-row md:items-center gap-3">
                                 <div class="text-sm font-medium text-[#1f2328] me-auto">{{ $t('evals.tests.title') }}</div>
                                 <div class="flex items-center gap-2 w-full md:w-auto">
@@ -101,21 +115,21 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="overflow-x-auto">
-                            <table class="min-w-full divide-y divide-[#E9E0D3]">
-                                <thead class="bg-[#faf8f3]">
-                                    <tr>
+                        <div class="overflow-x-auto mt-3">
+                            <table class="min-w-full">
+                                <thead>
+                                    <tr class="border-b border-[#E9E0D3]">
                                         <th class="px-4 py-3 w-10 text-center">
                                             <input type="checkbox" :checked="allVisibleSelected" @change="toggleAllVisible" />
                                         </th>
-                                        <th class="px-6 py-3 text-start text-xs font-medium text-[#9a958c] uppercase tracking-wider">{{ $t('evals.tests.colPrompt') }}</th>
-                                        <th class="px-6 py-3 text-start text-xs font-medium text-[#9a958c] uppercase tracking-wider">{{ $t('evals.tests.colRules') }}</th>
-                                        <th class="px-6 py-3 text-start text-xs font-medium text-[#9a958c] uppercase tracking-wider">{{ $t('evals.tests.colSuite') }}</th>
-                                        <th class="px-6 py-3 text-start text-xs font-medium text-[#9a958c] uppercase tracking-wider">{{ $t('evals.tests.colOptions') }}</th>
+                                        <th class="px-6 py-3 text-start text-[11px] font-medium text-[#7c7368] uppercase tracking-wide">{{ $t('evals.tests.colPrompt') }}</th>
+                                        <th class="px-6 py-3 text-start text-[11px] font-medium text-[#7c7368] uppercase tracking-wide">{{ $t('evals.tests.colRules') }}</th>
+                                        <th class="px-6 py-3 text-start text-[11px] font-medium text-[#7c7368] uppercase tracking-wide">{{ $t('evals.tests.colSuite') }}</th>
+                                        <th class="px-6 py-3 text-start text-[11px] font-medium text-[#7c7368] uppercase tracking-wide">{{ $t('evals.tests.colOptions') }}</th>
                                     </tr>
                                 </thead>
-                                <tbody class="bg-white divide-y divide-[#E9E0D3] text-xs">
-                                    <tr v-for="c in filteredTests" :key="c.id" class="hover:bg-[#faf8f3]">
+                                <tbody class="text-xs">
+                                    <tr v-for="c in filteredTests" :key="c.id" class="border-b border-[#F0EAE0] hover:bg-[#FBF8F2]">
                                         <td class="px-4 py-3 w-10 text-center">
                                             <div class="flex items-center justify-center">
                                                 <input type="checkbox" :checked="selectedIds.has(c.id)" @change="toggleOne(c.id)" />
@@ -160,7 +174,7 @@
                                 </tbody>
                             </table>
                         </div>
-                        <div class="px-6 py-3 border-t border-[#E9E0D3] flex flex-col md:flex-row gap-3 md:items-center justify-between">
+                        <div class="pt-3 mt-3 border-t border-[#E9E0D3] flex flex-col md:flex-row gap-3 md:items-center justify-between">
                             <div class="text-xs text-[#9a958c]">{{ $t('evals.pagination.showing', { page: testsPage, n: filteredTests.length }) }}</div>
                             <div class="flex items-center gap-2">
                                 <USelectMenu
@@ -180,8 +194,9 @@
 
                 <!-- Runs tab -->
                 <div v-else>
-                    <div class="bg-white shadow-sm border border-[#E9E0D3] rounded-lg overflow-hidden">
-                        <div class="px-6 py-4 border-b border-[#E9E0D3]">
+                    <div class="relative mt-5 border border-[#E9E0D3] rounded-2xl bg-white p-4 mb-6">
+                        <span class="absolute -top-2.5 left-4 bg-[#2B2A26] text-white text-[9.5px] font-semibold px-2.5 py-0.5 rounded-full tracking-wide">TEST RUNS</span>
+                        <div class="pt-1 pb-3 border-b border-[#E9E0D3]">
                             <div class="flex flex-col md:flex-row md:items-center gap-3">
                                 <div class="text-sm font-medium text-[#1f2328] me-auto">{{ $t('evals.runs.title') }}</div>
                                 <div class="flex items-center gap-2 w-full md:w-auto">
@@ -225,21 +240,21 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="overflow-x-auto">
-                            <table class="min-w-full divide-y divide-[#E9E0D3]">
-                                <thead class="bg-[#faf8f3]">
-                                    <tr>
-                                        <th class="px-6 py-3 text-start text-xs font-medium text-[#9a958c] uppercase tracking-wider">{{ $t('evals.runs.colTitle') }}</th>
-                                        <th class="px-6 py-3 text-start text-xs font-medium text-[#9a958c] uppercase tracking-wider">{{ $t('evals.runs.colStarted') }}</th>
-                                        <th class="px-6 py-3 text-start text-xs font-medium text-[#9a958c] uppercase tracking-wider">{{ $t('evals.runs.colTrigger') }}</th>
-                                        <th class="px-6 py-3 text-start text-xs font-medium text-[#9a958c] uppercase tracking-wider">{{ $t('evals.runs.colBuild') }}</th>
-                                        <th class="px-6 py-3 text-start text-xs font-medium text-[#9a958c] uppercase tracking-wider">{{ $t('evals.runs.colStatus') }}</th>
-                                        <th class="px-6 py-3 text-start text-xs font-medium text-[#9a958c] uppercase tracking-wider">{{ $t('evals.runs.colResults') }}</th>
-                                        <th class="px-6 py-3 text-start text-xs font-medium text-[#9a958c] uppercase tracking-wider">{{ $t('evals.runs.colDuration') }}</th>
+                        <div class="overflow-x-auto mt-3">
+                            <table class="min-w-full">
+                                <thead>
+                                    <tr class="border-b border-[#E9E0D3]">
+                                        <th class="px-6 py-3 text-start text-[11px] font-medium text-[#7c7368] uppercase tracking-wide">{{ $t('evals.runs.colTitle') }}</th>
+                                        <th class="px-6 py-3 text-start text-[11px] font-medium text-[#7c7368] uppercase tracking-wide">{{ $t('evals.runs.colStarted') }}</th>
+                                        <th class="px-6 py-3 text-start text-[11px] font-medium text-[#7c7368] uppercase tracking-wide">{{ $t('evals.runs.colTrigger') }}</th>
+                                        <th class="px-6 py-3 text-start text-[11px] font-medium text-[#7c7368] uppercase tracking-wide">{{ $t('evals.runs.colBuild') }}</th>
+                                        <th class="px-6 py-3 text-start text-[11px] font-medium text-[#7c7368] uppercase tracking-wide">{{ $t('evals.runs.colStatus') }}</th>
+                                        <th class="px-6 py-3 text-start text-[11px] font-medium text-[#7c7368] uppercase tracking-wide">{{ $t('evals.runs.colResults') }}</th>
+                                        <th class="px-6 py-3 text-start text-[11px] font-medium text-[#7c7368] uppercase tracking-wide">{{ $t('evals.runs.colDuration') }}</th>
                                     </tr>
                                 </thead>
-                                <tbody class="bg-white divide-y divide-[#E9E0D3] text-xs">
-                                    <tr v-for="r in filteredRuns" :key="r.id" class="hover:bg-[#faf8f3]">
+                                <tbody class="text-xs">
+                                    <tr v-for="r in filteredRuns" :key="r.id" class="border-b border-[#F0EAE0] hover:bg-[#FBF8F2]">
                                         <td class="px-6 py-3 text-[#1f2328]">
                                             <NuxtLink :to="`/evals/runs/${r.id}`" class="text-[#C2541E] hover:underline">
                                                 {{ r.title || $t('evals.runs.fallbackTitle') }}
@@ -275,7 +290,7 @@
                                 </tbody>
                             </table>
                         </div>
-                        <div class="px-6 py-3 border-t border-[#E9E0D3] flex flex-col md:flex-row gap-3 md:items-center justify-between">
+                        <div class="pt-3 mt-3 border-t border-[#E9E0D3] flex flex-col md:flex-row gap-3 md:items-center justify-between">
                             <div class="text-xs text-[#9a958c]">{{ $t('evals.pagination.showing', { page: runsPage, n: filteredRuns.length }) }}</div>
                             <div class="flex items-center gap-2">
                                 <USelectMenu
@@ -293,7 +308,6 @@
                     </div>
                 </div>
             </div>
-        </div>
         <AddTestCaseModal
             v-if="showAddCase"
             v-model="showAddCase"
@@ -407,10 +421,10 @@ const statusClass = (status?: string) => {
 const tabClass = (tab: 'tests' | 'runs') => {
     const isActive = activeTab.value === tab
     return [
-        'whitespace-nowrap py-4 px-1 border-b-2 text-sm font-medium',
+        'whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-medium transition-colors',
         isActive
-            ? 'border-[#C2541E] text-[#1f2328]'
-            : 'border-transparent text-[#6b6b6b] hover:text-[#1f2328] hover:border-[#E9E0D3]'
+            ? 'bg-[#2F6F4F] text-white'
+            : 'text-[#6b6b6b] hover:text-[#1f2328]'
     ]
 }
 

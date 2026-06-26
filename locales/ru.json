@@ -72,7 +72,8 @@
     "newPassword": "Новый пароль",
     "confirmPassword": "Подтвердите новый пароль",
     "forgotPassword": "Забыли пароль?",
-    "newToBow": "Впервые в Dash?",    "alreadyHaveAccount": "Уже есть аккаунт?",
+    "newToBow": "Впервые в Dash?",
+    "alreadyHaveAccount": "Уже есть аккаунт?",
     "rememberPassword": "Помните пароль?",
     "resetPassword": "Сбросить пароль",
     "resetPasswordTitle": "Сбросить пароль",
@@ -278,7 +279,12 @@
     "columnUser": "Пользователь",
     "emptyTitle": "Задайте вопрос, чтобы начать.",
     "emptyTipLabel": "Совет:",
-    "emptyTipBody": "Не знаете, что спросить? Вы можете попросить ИИ-аналитика предложить вопросы по конкретной теме."
+    "emptyTipBody": "Не знаете, что спросить? Вы можете попросить ИИ-аналитика предложить вопросы по конкретной теме.",
+    "openButton": "Open",
+    "openInChatButton": "Open in chat",
+    "statusLive": "live",
+    "statusDraft": "draft",
+    "scopeAll": "All"
   },
   "traceModal": {
     "title": "Выполнение агента",
@@ -844,7 +850,8 @@
       "ldapSubtitle": "Синхронизируйте группы и членства напрямую с вашего сервера LDAP / Active Directory",
       "enterpriseLdap": "Синхронизация каталога LDAP требует лицензии enterprise. Автоматически синхронизируйте группы из Active Directory, OpenLDAP и других серверов LDAP.",
       "ldapNotConfigured": "LDAP не настроен",
-      "ldapNotConfiguredHint": "Настройте LDAP в файле dash-config, чтобы включить синхронизацию каталога",      "statusConnected": "Подключено",
+      "ldapNotConfiguredHint": "Настройте LDAP в файле dash-config, чтобы включить синхронизацию каталога",
+      "statusConnected": "Подключено",
       "statusFailed": "Сбой подключения",
       "statusNotTested": "Не проверено",
       "testConnection": "Проверить подключение",
@@ -893,7 +900,9 @@
       "integrate": "Интегрировать",
       "setup": "Настроить",
       "excelAddinName": "Надстройка Excel",
-      "excelAddinDescription": "Установите надстройку Dash напрямую из этого экземпляра",      "mcpName": "Сервер Dash MCP",      "mcpDescription": "Включите конечную точку MCP для интеграции с ИИ-ассистентами, такими как Cursor, Claude и другими"
+      "excelAddinDescription": "Установите надстройку Dash напрямую из этого экземпляра",
+      "mcpName": "Сервер Dash MCP",
+      "mcpDescription": "Включите конечную точку MCP для интеграции с ИИ-ассистентами, такими как Cursor, Claude и другими"
     },
     "aiSettings": "Настройки ИИ",
     "llm": "LLM",
@@ -955,7 +964,8 @@
     "uploadIcon": "Загрузить иконку",
     "iconConstraints": "PNG/JPEG, ≤ 512 КБ.",
     "aiAnalystName": "Имя ИИ-аналитика",
-    "showCredit": "Показать ссылку «Made with Dash»",    "language": {
+    "showCredit": "Показать ссылку «Made with Dash»",
+    "language": {
       "title": "Язык",
       "description": "Устанавливает язык по умолчанию для всей организации. Пользователи увидят интерфейс на этом языке, и ИИ будет отвечать на нём.",
       "label": "Язык организации",
@@ -1392,6 +1402,7 @@
     "subtitle": "Просматривайте и управляйте вашими дашбордами и слайдами",
     "searchPlaceholder": "Поиск дашбордов…",
     "myDashboards": "Мои дашборды",
+    "newDashboard": "Новый дашборд",
     "sharedWithMe": "Доступные мне",
     "empty": "Дашборды не найдены",
     "emptyDescription": "Попробуйте изменить поисковый запрос или создайте отчёт с дашбордом.",
@@ -1518,7 +1529,8 @@
   "onboarding": {
     "loading": "Загрузка...",
     "skip": "Пропустить онбординг",
-    "welcome": "Добро пожаловать в Dash! 🎉",    "welcomeSubtitle": "Общайтесь с данными, проводите глубокий анализ и создавайте дашборды за секунды",
+    "welcome": "Добро пожаловать в Dash! 🎉",
+    "welcomeSubtitle": "Общайтесь с данными, проводите глубокий анализ и создавайте дашборды за секунды",
     "next": "Далее",
     "fallbackTitle": "Начать",
     "fallbackDescription": "Завершите следующий шаг настройки",
@@ -1527,7 +1539,8 @@
     "intro1": "Начать просто: подключите модель и источник данных, и вы будете готовы задать первый вопрос.",
     "intro2": "👉 Давайте всё настроим!",
     "steps": {
-      "onboardingTitle": "Добро пожаловать в Dash! 🎉",      "onboardingDescription": "Общайтесь с данными, проводите глубокий анализ и создавайте дашборды за секунды",
+      "onboardingTitle": "Добро пожаловать в Dash! 🎉",
+      "onboardingDescription": "Общайтесь с данными, проводите глубокий анализ и создавайте дашборды за секунды",
       "onboardingButton": "Добро пожаловать",
       "llmTitle": "Настроить LLM",
       "llmDescription": "Подключитесь к любому поставщику LLM и используйте свой ключ API",
@@ -1990,7 +2003,9 @@
     }
   },
   "mcpServerModal": {
-    "title": "MCP-сервер Dash",    "subtitle": "Подключите Claude, Cursor или любой MCP-клиент для запросов к вашим данным через MCP-сервер Dash.",    "loading": "Загрузка...",
+    "title": "MCP-сервер Dash",
+    "subtitle": "Подключите Claude, Cursor или любой MCP-клиент для запросов к вашим данным через MCP-сервер Dash.",
+    "loading": "Загрузка...",
     "tabMcpClients": "MCP-клиенты",
     "tabOauth": "OAuth",
     "generateToken": "Сгенерировать токен",

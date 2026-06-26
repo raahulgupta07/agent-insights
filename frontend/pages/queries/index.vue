@@ -1,72 +1,88 @@
 <template>
-  <div class="flex justify-center px-4 md:px-6 text-sm bg-[#F6F1EA] min-h-full">
-    <div class="w-full max-w-7xl py-2 text-[#1f2328]">
-      <div class="mb-6">
-        <h1 class="text-[32px] font-medium text-[#211B14] tracking-tight flex items-center" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ $t('queries.title') }}</h1>
-        <p class="mt-2 text-[#6b6b6b] leading-relaxed max-w-2xl">{{ $t('queries.subtitle') }}</p>
+  <div class="bg-[#F1ECE3] h-full overflow-hidden flex flex-col">
+    <div class="my-2 me-2 px-6 md:px-8 py-6 text-sm bg-[#FBFAF6] border border-[#E9E0D3] rounded-2xl flex-1 overflow-y-auto text-[#1f2328]">
 
-        <!-- Search -->
-        <div class="mt-4">
-          <div class="relative">
-            <input v-model="q" type="text" :placeholder="$t('queries.searchPlaceholder')" class="w-full ps-10 pe-4 py-2.5 bg-white border border-[#E9E0D3] rounded-xl text-[#1f2328] placeholder:text-[#9a958c] focus:outline-none focus:ring-2 focus:ring-[#C2541E]/40 focus:border-[#C2541E] transition-colors" @keyup.enter="reload()" />
+      <!-- header: serif title + subtitle + readiness ring -->
+      <div class="flex items-start justify-between gap-4 mb-1">
+        <div>
+          <h2 class="text-2xl font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ $t('queries.title') }}</h2>
+          <p class="text-[#6b6b6b] mt-1 max-w-2xl leading-relaxed">{{ $t('queries.subtitle') }}</p>
+        </div>
+        <div class="shrink-0 text-center">
+          <div class="relative w-[54px] h-[54px] mx-auto">
+            <svg width="54" height="54" style="transform:rotate(-90deg)">
+              <circle cx="27" cy="27" r="22" stroke="#ECE7E0" stroke-width="6" fill="none" />
+              <circle cx="27" cy="27" r="22" stroke="#5A4FCF" stroke-width="6" fill="none" stroke-linecap="round" stroke-dasharray="138" :stroke-dashoffset="Math.round(138 - 138 * (allItems.length ? filteredItems.length / allItems.length : 0))" style="transition:stroke-dashoffset .5s" />
+            </svg>
+            <div class="absolute inset-0 flex items-center justify-center text-[15px] font-semibold text-[#5A4FCF]" style="font-family: ui-serif, Georgia, serif">{{ filteredItems.length }}</div>
+          </div>
+          <div class="text-[9px] uppercase tracking-wide text-[#9a958c] mt-0.5">{{ filterType === 'suggested' ? 'drafts' : 'published' }}</div>
+        </div>
+      </div>
+
+      <!-- LIBRARY section card -->
+      <div class="relative mt-4 border border-[#E9E0D3] rounded-2xl bg-white p-4">
+        <span class="absolute -top-2.5 left-4 bg-[#2B2A26] text-white text-[9.5px] font-semibold px-2.5 py-0.5 rounded-full tracking-wide">QUERY LIBRARY</span>
+
+        <!-- toolbar: search + segmented filter -->
+        <div class="flex flex-col md:flex-row md:items-center gap-3 mt-1 mb-3">
+          <div class="relative flex-1">
+            <input v-model="q" type="text" :placeholder="$t('queries.searchPlaceholder')" class="w-full ps-9 pe-4 py-1.5 bg-white border border-[#E9E0D3] rounded-lg text-sm text-[#1f2328] placeholder:text-[#9a958c] focus:outline-none focus:ring-2 focus:ring-[#5A4FCF]/40 focus:border-[#5A4FCF] transition-colors" @keyup.enter="reload()" />
             <UIcon name="i-heroicons-magnifying-glass" class="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9a958c]" />
+          </div>
+          <div class="inline-flex items-center gap-0.5 p-0.5 rounded-lg bg-[#F4EEE5] border border-[#E9E0D3] shrink-0">
+            <button
+              @click="filterType = 'published'"
+              :class="[
+                'px-3 py-1 text-sm rounded-md transition-colors',
+                filterType === 'published'
+                  ? 'bg-[#5A4FCF] text-white font-semibold'
+                  : 'text-[#6b6b6b] hover:text-[#1f2328]'
+              ]"
+            >
+              {{ $t('queries.published') }}
+            </button>
+            <button
+              @click="filterType = 'suggested'"
+              :class="[
+                'px-3 py-1 text-sm rounded-md transition-colors inline-flex items-center',
+                filterType === 'suggested'
+                  ? 'bg-[#5A4FCF] text-white font-semibold'
+                  : 'text-[#6b6b6b] hover:text-[#1f2328]'
+              ]"
+            >
+              {{ isAdmin ? $t('queries.draftSuggested') : $t('queries.myDrafts') }}
+              <span v-if="suggestedCount > 0" :class="['ms-1.5 px-1.5 py-0.5 rounded-full text-[10px]', filterType === 'suggested' ? 'bg-white/25 text-white' : 'bg-[#ECEAFB] text-[#5A4FCF]']">{{ suggestedCount }}</span>
+            </button>
           </div>
         </div>
 
-        <!-- Filter tabs -->
-        <div class="mt-4 flex items-center gap-1 border-b border-[#E9E0D3]">
-          <button
-            @click="filterType = 'published'"
-            :class="[
-              'px-3 py-2 text-sm border-b-2 transition-colors',
-              filterType === 'published'
-                ? 'border-[#C2541E] text-[#1f2328] font-semibold'
-                : 'border-transparent text-[#6b6b6b] hover:text-[#1f2328]'
-            ]"
-          >
-            {{ $t('queries.published') }}
-          </button>
-          <button
-            @click="filterType = 'suggested'"
-            :class="[
-              'px-3 py-2 text-sm border-b-2 transition-colors inline-flex items-center',
-              filterType === 'suggested'
-                ? 'border-[#C2541E] text-[#1f2328] font-semibold'
-                : 'border-transparent text-[#6b6b6b] hover:text-[#1f2328]'
-            ]"
-          >
-            {{ isAdmin ? $t('queries.draftSuggested') : $t('queries.myDrafts') }}
-            <span v-if="suggestedCount > 0" class="ms-1.5 px-1.5 py-0.5 rounded-full text-[10px] bg-[#F4EEE5] text-[#6b6b6b]">{{ suggestedCount }}</span>
-          </button>
+        <div v-if="loading" class="text-sm text-[#6b6b6b] inline-flex items-center">
+          <Spinner class="me-1" /> {{ $t('queries.loading') }}
         </div>
-      </div>
-
-      <div v-if="loading" class="text-sm text-[#6b6b6b] inline-flex items-center">
-        <Spinner class="me-1" /> {{ $t('queries.loading') }}
-      </div>
-      <div v-else-if="filteredItems.length === 0" class="mt-12 flex flex-col items-center text-center">
-        <div class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] text-[#C2541E]">
-          <Icon
-            :name="filterType === 'suggested' ? 'heroicons:light-bulb' : 'heroicons:cube'"
-            class="w-6 h-6"
-          />
+        <div v-else-if="filteredItems.length === 0" class="py-12 flex flex-col items-center text-center">
+          <div class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#ECEAFB] border border-[#E9E0D3] text-[#5A4FCF]">
+            <Icon
+              :name="filterType === 'suggested' ? 'heroicons:light-bulb' : 'heroicons:cube'"
+              class="w-6 h-6"
+            />
+          </div>
+          <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">
+            {{ filterType === 'suggested' ? $t('queries.noDrafts') : $t('queries.noPublished') }}
+          </h3>
+          <p class="mt-1 text-sm text-[#9a958c] max-w-sm">
+            {{ filterType === 'suggested'
+              ? $t('queries.draftsDescription')
+              : $t('queries.publishedDescription')
+            }}
+          </p>
         </div>
-        <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">
-          {{ filterType === 'suggested' ? $t('queries.noDrafts') : $t('queries.noPublished') }}
-        </h3>
-        <p class="mt-1 text-sm text-[#9a958c] max-w-sm">
-          {{ filterType === 'suggested'
-            ? $t('queries.draftsDescription')
-            : $t('queries.publishedDescription')
-          }}
-        </p>
-      </div>
 
-      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+        <div v-else class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         <div
           v-for="item in filteredItems"
           :key="item.id"
-          class="bg-white border border-[#E9E0D3] rounded-2xl p-4 hover:shadow-lg hover:-translate-y-0.5 hover:border-[#d9d6cd] transition-all cursor-pointer flex flex-col h-full"
+          class="bg-gradient-to-b from-white to-[#fdfcf9] border border-[#E9E0D3] rounded-xl p-4 hover:shadow-lg hover:-translate-y-0.5 hover:border-[#5A4FCF] transition-all cursor-pointer flex flex-col h-full"
           @click="navigateToEntity(item.id)"
         >
           <div class="min-w-0 flex-1 flex flex-col">
@@ -158,10 +174,12 @@
         </div>
       </div>
 
-      <!-- Results summary -->
-      <div v-if="!loading && filteredItems.length > 0" class="mt-6 text-center text-[11px] text-[#9a958c]">
-        {{ summaryLabel }}
+        <!-- Results summary -->
+        <div v-if="!loading && filteredItems.length > 0" class="mt-4 text-center text-[11px] text-[#9a958c]">
+          {{ summaryLabel }}
+        </div>
       </div>
+
     </div>
   </div>
 </template>

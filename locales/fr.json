@@ -72,7 +72,8 @@
     "newPassword": "Nouveau mot de passe",
     "confirmPassword": "Confirmer le nouveau mot de passe",
     "forgotPassword": "Mot de passe oublié ?",
-    "newToBow": "Nouveau sur Dash ?",    "alreadyHaveAccount": "Vous avez déjà un compte ?",
+    "newToBow": "Nouveau sur Dash ?",
+    "alreadyHaveAccount": "Vous avez déjà un compte ?",
     "rememberPassword": "Vous vous souvenez de votre mot de passe ?",
     "resetPassword": "Réinitialiser le mot de passe",
     "resetPasswordTitle": "Réinitialiser le mot de passe",
@@ -278,7 +279,12 @@
     "columnUser": "Utilisateur",
     "emptyTitle": "Posez une question pour commencer.",
     "emptyTipLabel": "Astuce :",
-    "emptyTipBody": "Vous ne savez pas quoi demander ? Vous pouvez demander à l'Analyste IA de suggérer des questions sur un sujet spécifique."
+    "emptyTipBody": "Vous ne savez pas quoi demander ? Vous pouvez demander à l'Analyste IA de suggérer des questions sur un sujet spécifique.",
+    "openButton": "Open",
+    "openInChatButton": "Open in chat",
+    "statusLive": "live",
+    "statusDraft": "draft",
+    "scopeAll": "All"
   },
   "traceModal": {
     "title": "Exécution de l'agent",
@@ -844,7 +850,8 @@
       "ldapSubtitle": "Synchronisez les groupes et adhésions directement depuis votre serveur LDAP / Active Directory",
       "enterpriseLdap": "La synchronisation d'annuaire LDAP nécessite une licence enterprise. Synchronisez automatiquement les groupes depuis Active Directory, OpenLDAP et d'autres serveurs LDAP.",
       "ldapNotConfigured": "LDAP n'est pas configuré",
-      "ldapNotConfiguredHint": "Configurez LDAP dans votre fichier dash-config pour activer la synchronisation d'annuaire",      "statusConnected": "Connecté",
+      "ldapNotConfiguredHint": "Configurez LDAP dans votre fichier dash-config pour activer la synchronisation d'annuaire",
+      "statusConnected": "Connecté",
       "statusFailed": "Échec de connexion",
       "statusNotTested": "Non testé",
       "testConnection": "Tester la connexion",
@@ -893,7 +900,9 @@
       "integrate": "Intégrer",
       "setup": "Configurer",
       "excelAddinName": "Module complémentaire Excel",
-      "excelAddinDescription": "Chargez le module complémentaire Dash directement depuis cette instance",      "mcpName": "Serveur MCP Dash",      "mcpDescription": "Activer le point de terminaison MCP pour l'intégration avec des assistants IA comme Cursor, Claude, ou autres"
+      "excelAddinDescription": "Chargez le module complémentaire Dash directement depuis cette instance",
+      "mcpName": "Serveur MCP Dash",
+      "mcpDescription": "Activer le point de terminaison MCP pour l'intégration avec des assistants IA comme Cursor, Claude, ou autres"
     },
     "aiSettings": "Paramètres IA",
     "llm": "LLM",
@@ -955,7 +964,8 @@
     "uploadIcon": "Téléverser une icône",
     "iconConstraints": "PNG/JPEG, ≤ 512 Ko.",
     "aiAnalystName": "Nom de l'analyste IA",
-    "showCredit": "Afficher la mention « Made with Dash »",    "language": {
+    "showCredit": "Afficher la mention « Made with Dash »",
+    "language": {
       "title": "Langue",
       "description": "Définit la langue par défaut pour toute l'organisation. Les utilisateurs verront l'interface dans cette langue et l'IA y répondra.",
       "label": "Langue de l'organisation",
@@ -1392,6 +1402,7 @@
     "subtitle": "Parcourez et gérez vos tableaux de bord et diapositives",
     "searchPlaceholder": "Rechercher des tableaux de bord…",
     "myDashboards": "Mes tableaux de bord",
+    "newDashboard": "Nouveau tableau de bord",
     "sharedWithMe": "Partagés avec moi",
     "empty": "Aucun tableau de bord trouvé",
     "emptyDescription": "Essayez d'ajuster votre terme de recherche ou créez un rapport avec un tableau de bord.",
@@ -1518,7 +1529,8 @@
   "onboarding": {
     "loading": "Chargement...",
     "skip": "Passer l'intégration",
-    "welcome": "Bienvenue sur Dash ! 🎉",    "welcomeSubtitle": "Discutez avec vos données, exécutez des analyses approfondies et créez des tableaux de bord en quelques secondes",
+    "welcome": "Bienvenue sur Dash ! 🎉",
+    "welcomeSubtitle": "Discutez avec vos données, exécutez des analyses approfondies et créez des tableaux de bord en quelques secondes",
     "next": "Suivant",
     "fallbackTitle": "Commencer",
     "fallbackDescription": "Complétez l'étape suivante de votre configuration",
@@ -1527,7 +1539,8 @@
     "intro1": "Démarrer est rapide : il suffit de connecter votre modèle et votre source de données, et vous serez prêt à poser votre première question.",
     "intro2": "👉 Configurons tout cela !",
     "steps": {
-      "onboardingTitle": "Bienvenue sur Dash ! 🎉",      "onboardingDescription": "Discutez avec vos données, exécutez des analyses approfondies et créez des tableaux de bord en quelques secondes",
+      "onboardingTitle": "Bienvenue sur Dash ! 🎉",
+      "onboardingDescription": "Discutez avec vos données, exécutez des analyses approfondies et créez des tableaux de bord en quelques secondes",
       "onboardingButton": "Bienvenue",
       "llmTitle": "Configurer le LLM",
       "llmDescription": "Connectez-vous à n'importe quel fournisseur de LLM, et apportez votre propre clé API",
@@ -1990,7 +2003,9 @@
     }
   },
   "mcpServerModal": {
-    "title": "Serveur MCP Dash",    "subtitle": "Connectez Claude, Cursor ou tout client MCP pour interroger vos données via le serveur MCP Dash.",    "loading": "Chargement...",
+    "title": "Serveur MCP Dash",
+    "subtitle": "Connectez Claude, Cursor ou tout client MCP pour interroger vos données via le serveur MCP Dash.",
+    "loading": "Chargement...",
     "tabMcpClients": "Clients MCP",
     "tabOauth": "OAuth",
     "generateToken": "Générer un jeton",

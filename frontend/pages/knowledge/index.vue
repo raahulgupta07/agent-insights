@@ -3,28 +3,32 @@
        horizontal tabs with counts, responsive card grid. Reads the real
        /knowledge endpoints for the selected data source. The reusable
        <KnowledgePanel> (left-rail / top-tab) is kept for embeds elsewhere. -->
-  <div class="flex justify-center px-4 md:px-6 text-sm bg-[#F6F1EA] min-h-full">
-    <div class="w-full max-w-7xl py-2 text-[#1f2328]">
+  <div class="bg-[#F1ECE3] h-full overflow-hidden flex flex-col">
+    <div class="my-2 me-2 px-6 md:px-8 py-6 text-sm bg-[#FBFAF6] border border-[#E9E0D3] rounded-2xl flex-1 overflow-y-auto text-[#1f2328]">
     <!-- header -->
-    <div class="flex items-start justify-between gap-4">
+    <div class="flex items-start justify-between gap-4 mb-1">
       <div>
-        <h1 class="text-[32px] font-medium text-[#211B14] tracking-tight" style="font-family: 'Spectral', ui-serif, Georgia, serif">Knowledge</h1>
-        <p class="mt-2 text-[#6b6b6b] leading-relaxed max-w-2xl">Ground every answer in what your data means.</p>
+        <h1 class="text-2xl font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">Knowledge</h1>
+        <p class="text-xs text-[#6b6b6b] mt-0.5 max-w-[460px]">Ground every answer in what your data means — semantic tables, metrics, queries, joins and docs the agent can trust.</p>
       </div>
       <!-- Primary action (canonical header slot): generate knowledge for this source -->
       <button
         v-if="selectedDs"
         @click="runAiSuggest"
         :disabled="aiSuggesting"
-        class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl bg-[#C2541E] text-white hover:bg-[#A8330F] disabled:opacity-50 whitespace-nowrap transition-colors shrink-0"
+        class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg bg-[#C2541E] text-white hover:bg-[#A8330F] disabled:opacity-50 whitespace-nowrap transition-colors shrink-0"
       >
         <UIcon :name="aiSuggesting ? 'i-heroicons-arrow-path' : 'i-heroicons-sparkles'" :class="['w-4 h-4', aiSuggesting ? 'animate-spin' : '']" />
         {{ aiSuggesting ? 'Generating…' : 'AI Suggestions' }}
       </button>
     </div>
 
+    <!-- toolbar card: tabs + search + data-source scope -->
+    <div class="relative mt-4 border border-[#E9E0D3] rounded-2xl bg-white p-4">
+      <span class="absolute -top-2.5 left-4 bg-[#2B2A26] text-white text-[9.5px] font-semibold px-2.5 py-0.5 rounded-full tracking-wide">KNOWLEDGE LAYER</span>
+
     <!-- tabs — directly under header, ABOVE search (canonical) -->
-    <div class="mt-6 border-b border-[#E9E0D3] flex items-center gap-6 overflow-x-auto">
+    <div class="mt-1 border-b border-[#E9E0D3] flex items-center gap-6 overflow-x-auto">
       <button
         v-for="tab in tabs"
         :key="tab.id"
@@ -32,7 +36,7 @@
         :class="[
           'pb-2 -mb-px text-sm whitespace-nowrap border-b-2 transition-colors flex items-center gap-1.5',
           activeTab === tab.id
-            ? 'border-[#C2541E] text-[#1f2328] font-medium'
+            ? 'border-[#2F6F4F] text-[#1f2328] font-medium'
             : 'border-transparent text-[#6b6b6b] font-medium hover:text-[#1f2328]'
         ]"
       >
@@ -41,7 +45,7 @@
           v-if="tab.count !== null"
           :class="[
             'text-xs',
-            tab.id === 'review' && tab.count > 0 ? 'inline-flex items-center justify-center min-w-[18px] h-4 px-1 rounded-full bg-[#FBEFE4] text-[#C2541E] font-semibold' : 'text-[#9a958c]'
+            tab.id === 'review' && tab.count > 0 ? 'inline-flex items-center justify-center min-w-[18px] h-4 px-1 rounded-full bg-[#E7F1EB] text-[#2F6F4F] font-semibold' : 'text-[#9a958c]'
           ]"
         >{{ tab.count }}</span>
       </button>
@@ -54,7 +58,7 @@
           v-model="search"
           type="text"
           placeholder="Search knowledge…"
-          class="w-full ps-10 pe-4 py-2.5 bg-white border border-[#E9E0D3] rounded-xl text-[#1f2328] placeholder:text-[#9a958c] focus:outline-none focus:ring-2 focus:ring-[#C2541E]/40 focus:border-[#C2541E]"
+          class="w-full ps-10 pe-4 py-1.5 bg-white border border-[#E9E0D3] rounded-lg text-sm text-[#1f2328] placeholder:text-[#9a958c] focus:outline-none focus:ring-2 focus:ring-[#2F6F4F]/40 focus:border-[#2F6F4F]"
         />
         <UIcon
           name="i-heroicons-magnifying-glass"
@@ -72,9 +76,15 @@
         :loading="loadingSources"
       />
     </div>
+    </div>
+    <!-- /toolbar card -->
+
+    <!-- content section card -->
+    <div class="relative mt-5 border border-[#E9E0D3] rounded-2xl bg-white p-4 mb-6">
+      <span class="absolute -top-2.5 left-4 bg-[#2B2A26] text-white text-[9.5px] font-semibold px-2.5 py-0.5 rounded-full tracking-wide">{{ activeTab.toUpperCase() }}</span>
 
     <!-- loading: shimmer card skeletons matching the grid -->
-    <div v-if="loading" class="mt-6">
+    <div v-if="loading" class="mt-1">
       <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
         <div v-for="i in 10" :key="i" class="rounded-2xl border border-[#E9E0D3] bg-white overflow-hidden flex flex-col h-full">
           <div class="h-28 ca-sk !rounded-none"></div>
@@ -88,7 +98,7 @@
     </div>
 
     <!-- ===== SEMANTIC GRID ===== -->
-    <div v-else-if="activeTab === 'semantic'" class="mt-6">
+    <div v-else-if="activeTab === 'semantic'" class="mt-1">
       <!-- Governance summary strip (Kepler Phase 1) -->
       <div v-if="gov && gov.tables > 0" class="mb-4 flex flex-wrap items-center gap-3 text-xs">
         <span class="inline-flex items-center gap-1.5 rounded-lg border border-[#d7ebde] bg-[#eef6f0] px-3 py-1.5">
@@ -109,10 +119,10 @@
         <div
           v-for="t in filteredSemantic"
           :key="t.id"
-          class="group rounded-2xl border border-[#E9E0D3] bg-white hover:shadow-md hover:-translate-y-0.5 transition cursor-pointer p-4 flex flex-col h-full"
+          class="group rounded-xl border border-[#E9E0D3] bg-gradient-to-b from-white to-[#fdfcf9] hover:border-[#2F6F4F] hover:shadow-md hover:-translate-y-0.5 transition cursor-pointer p-4 flex flex-col h-full"
         >
           <div class="flex items-center justify-between mb-2.5">
-            <span class="inline-flex w-8 h-8 items-center justify-center rounded-lg bg-[#F4EEE5] border border-[#E9E0D3] text-[#C2541E]">
+            <span class="inline-flex w-8 h-8 items-center justify-center rounded-lg bg-[#E7F1EB] border border-[#d7ebde] text-[#2F6F4F]">
               <UIcon name="i-heroicons-table-cells" class="w-4 h-4" />
             </span>
             <div class="flex items-center gap-1.5">
@@ -133,7 +143,7 @@
         </div>
       </div>
       <div v-else class="mt-2 rounded-2xl border border-dashed border-[#E9E0D3] px-6 py-16 text-center">
-        <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] text-[#C2541E]">
+        <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#E7F1EB] border border-[#d7ebde] text-[#2F6F4F]">
           <Icon name="heroicons:table-cells" class="w-6 h-6" />
         </span>
         <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">No semantic tables yet</h3>
@@ -142,16 +152,16 @@
     </div>
 
     <!-- ===== METRICS GRID ===== -->
-    <div v-else-if="activeTab === 'metrics'" class="mt-6">
+    <div v-else-if="activeTab === 'metrics'" class="mt-1">
       <div v-if="filteredMetrics.length" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5 ca-stagger">
         <div
           v-for="m in filteredMetrics"
           :key="m.id"
-          class="group rounded-2xl border border-[#E9E0D3] bg-white hover:shadow-md hover:-translate-y-0.5 transition cursor-pointer overflow-hidden flex flex-col h-full"
+          class="group rounded-xl border border-[#E9E0D3] bg-gradient-to-b from-white to-[#fdfcf9] hover:border-[#2F6F4F] hover:shadow-md hover:-translate-y-0.5 transition cursor-pointer overflow-hidden flex flex-col h-full"
         >
-          <div class="h-28 bg-[#F4EEE5] border-b border-[#E9E0D3] p-3 flex flex-col justify-between">
+          <div class="h-28 bg-[#E7F1EB] border-b border-[#d7ebde] p-3 flex flex-col justify-between">
             <span :class="['self-start text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded', statusClass(m.status)]">{{ m.status || 'draft' }}</span>
-            <div class="font-mono text-[11px] text-[#C2541E] leading-tight line-clamp-2">{{ m.sql_calc }}</div>
+            <div class="font-mono text-[11px] text-[#2F6F4F] leading-tight line-clamp-2">{{ m.sql_calc }}</div>
           </div>
           <div class="p-3 flex-1 flex flex-col">
             <div class="text-sm font-semibold text-[#1f2328] truncate" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ m.name }}</div>
@@ -163,7 +173,7 @@
         </div>
       </div>
       <div v-else class="mt-2 rounded-2xl border border-dashed border-[#E9E0D3] px-6 py-16 text-center">
-        <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] text-[#C2541E]">
+        <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#E7F1EB] border border-[#d7ebde] text-[#2F6F4F]">
           <Icon name="heroicons:calculator" class="w-6 h-6" />
         </span>
         <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">No metrics yet</h3>
@@ -172,16 +182,16 @@
     </div>
 
     <!-- ===== QUERIES GRID ===== -->
-    <div v-else-if="activeTab === 'queries'" class="mt-6">
+    <div v-else-if="activeTab === 'queries'" class="mt-1">
       <div v-if="filteredQueries.length" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5 ca-stagger">
         <div
           v-for="q in filteredQueries"
           :key="q.id"
-          class="group rounded-2xl border border-[#E9E0D3] bg-white hover:shadow-md hover:-translate-y-0.5 transition cursor-pointer overflow-hidden flex flex-col h-full"
+          class="group rounded-xl border border-[#E9E0D3] bg-gradient-to-b from-white to-[#fdfcf9] hover:border-[#2F6F4F] hover:shadow-md hover:-translate-y-0.5 transition cursor-pointer overflow-hidden flex flex-col h-full"
         >
-          <div class="h-28 bg-[#F4EEE5] border-b border-[#E9E0D3] p-3 flex flex-col justify-between">
+          <div class="h-28 bg-[#E7F1EB] border-b border-[#d7ebde] p-3 flex flex-col justify-between">
             <span :class="['self-start text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded', statusClass(q.status)]">{{ q.status || 'draft' }}</span>
-            <div class="font-mono text-[11px] text-[#3f9e6a] leading-tight line-clamp-3">{{ q.sql_text }}</div>
+            <div class="font-mono text-[11px] text-[#2F6F4F] leading-tight line-clamp-3">{{ q.sql_text }}</div>
           </div>
           <div class="p-3 flex-1 flex flex-col">
             <div class="text-sm font-semibold text-[#1f2328] truncate" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ q.name }}</div>
@@ -196,7 +206,7 @@
         </div>
       </div>
       <div v-else class="mt-2 rounded-2xl border border-dashed border-[#E9E0D3] px-6 py-16 text-center">
-        <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] text-[#C2541E]">
+        <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#E7F1EB] border border-[#d7ebde] text-[#2F6F4F]">
           <Icon name="heroicons:command-line" class="w-6 h-6" />
         </span>
         <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">No saved queries yet</h3>
@@ -205,7 +215,7 @@
     </div>
 
     <!-- ===== JOINS ===== -->
-    <div v-else-if="activeTab === 'joins'" class="mt-6">
+    <div v-else-if="activeTab === 'joins'" class="mt-1">
       <!-- action bar -->
       <div class="mb-4 flex items-center justify-between gap-3">
         <p class="text-xs text-[#6b6b6b]">Learned join paths between your tables — inferred from proven SQL and reviewed before grounding the agent.</p>
@@ -247,7 +257,7 @@
         </div>
       </div>
       <div v-else class="mt-2 rounded-2xl border border-dashed border-[#E9E0D3] px-6 py-16 text-center">
-        <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] text-[#C2541E]">
+        <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#E7F1EB] border border-[#d7ebde] text-[#2F6F4F]">
           <Icon name="heroicons:share" class="w-6 h-6" />
         </span>
         <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">No joins inferred yet</h3>
@@ -256,7 +266,7 @@
     </div>
 
     <!-- ===== DOCS ===== -->
-    <div v-else-if="activeTab === 'docs'" class="mt-6">
+    <div v-else-if="activeTab === 'docs'" class="mt-1">
       <!-- action bar -->
       <div class="mb-4 flex items-center justify-between gap-3">
         <p class="text-xs text-[#6b6b6b]">Approved company documents ground the agent on business terms and definitions.</p>
@@ -316,7 +326,7 @@
         </div>
       </div>
       <div v-else class="mt-2 rounded-2xl border border-dashed border-[#E9E0D3] px-6 py-16 text-center">
-        <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] text-[#C2541E]">
+        <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#E7F1EB] border border-[#d7ebde] text-[#2F6F4F]">
           <Icon name="heroicons:document-text" class="w-6 h-6" />
         </span>
         <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">No documents yet</h3>
@@ -325,12 +335,14 @@
     </div>
 
     <!-- ===== ASSETS / REVIEW: reuse existing tab components ===== -->
-    <div v-else-if="activeTab === 'assets'" class="mt-6">
+    <div v-else-if="activeTab === 'assets'" class="mt-1">
       <AssetsTab :dataSourceId="selectedDs?.id || ''" />
     </div>
-    <div v-else-if="activeTab === 'review'" class="mt-6">
+    <div v-else-if="activeTab === 'review'" class="mt-1">
       <ReviewTab :dataSourceId="selectedDs?.id || ''" @count="reviewCount = $event" />
     </div>
+    </div>
+    <!-- /content section card -->
     </div>
   </div>
 </template>

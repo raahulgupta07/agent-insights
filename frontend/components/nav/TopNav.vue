@@ -9,9 +9,7 @@
         class="flex items-center gap-[11px] shrink-0 pe-1"
         :aria-label="$t('nav.home') /* falls back to key text if missing */"
       >
-        <span class="cag-mark">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#fff" stroke-width="2" opacity=".55"/><path d="M12 3a9 9 0 0 1 0 18" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="12" r="2.6" fill="#fff"/></svg>
-        </span>
+        <img class="cag-mark" src="/assets/logo-mark.png" alt="City Agent Insights" />
         <span class="cag-word">City Agent <span class="cag-word-em">Insights</span></span>
       </button>
 
@@ -371,10 +369,9 @@
   font-family: 'Hanken Grotesk', system-ui, sans-serif;
 }
 .cag-mark {
-  width: 34px; height: 34px; border-radius: 9px;
-  background: linear-gradient(150deg, #D67037, #A8330F);
-  display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 5px 14px -5px rgba(168, 51, 15, .6);
+  width: 34px; height: 34px;
+  object-fit: contain;
+  display: block;
   flex-shrink: 0;
 }
 .cag-word {

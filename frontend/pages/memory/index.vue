@@ -1,36 +1,41 @@
 <template>
-    <div class="flex justify-center px-4 md:px-6 text-sm bg-[#F6F1EA] min-h-full">
-        <div class="w-full max-w-7xl py-2 text-[#1f2328]">
+  <div class="bg-[#F1ECE3] h-full overflow-hidden flex flex-col">
+    <div class="my-2 me-2 px-6 md:px-8 py-6 text-sm bg-[#FBFAF6] border border-[#E9E0D3] rounded-2xl flex-1 overflow-y-auto text-[#1f2328]">
+
             <!-- Header -->
-            <div class="flex items-start justify-between gap-4 mb-6">
+            <div class="flex items-start justify-between gap-4 mb-1">
                 <div>
-                    <h1
-                        class="text-[32px] font-medium text-[#211B14] tracking-tight flex items-center"
+                    <h2
+                        class="text-2xl font-semibold text-[#1f2328]"
                         style="font-family: 'Spectral', ui-serif, Georgia, serif"
-                    >Agent Memory</h1>
-                    <p class="mt-2 text-[#6b6b6b] leading-relaxed max-w-2xl">
+                    >Agent Memory</h2>
+                    <p class="text-xs text-[#6b6b6b] mt-0.5 max-w-[460px]">
                         Facts the agent learned mid-chat. Shared memories need your approval before
                         any chat can recall them.
                     </p>
                 </div>
             </div>
 
-            <!-- Tabs -->
-            <div class="flex items-center gap-1 border-b border-[#E9E0D3] mb-5">
+            <!-- Memories section card -->
+            <div class="relative mt-4 border border-[#E9E0D3] rounded-2xl bg-white p-4">
+                <span class="absolute -top-2.5 left-4 bg-[#2B2A26] text-white text-[9.5px] font-semibold px-2.5 py-0.5 rounded-full tracking-wide">MEMORIES</span>
+
+            <!-- Toolbar: segmented filter -->
+            <div class="flex items-center gap-1 mt-2 mb-4 p-0.5 rounded-lg bg-[#F4EEE5] w-fit">
                 <button
                     v-for="tab in tabs"
                     :key="tab.key"
                     type="button"
                     @click="setTab(tab.key)"
-                    class="-mb-px flex items-center gap-1.5 rounded-t-lg px-3 py-2 text-sm transition"
+                    class="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition"
                     :class="tab.key === activeTab
-                        ? 'bg-[#ECEAE1] text-[#1f2328] font-medium border-b-2 border-[#C2541E]'
-                        : 'text-[#6b6b6b] hover:text-[#1f2328] hover:bg-[#F4EEE5] border-b-2 border-transparent'"
+                        ? 'bg-[#A8330F] text-white font-medium'
+                        : 'text-[#6b6b6b] hover:text-[#1f2328]'"
                 >
                     {{ tab.label }}
                     <span
                         class="rounded-full px-1.5 py-0.5 text-[11px]"
-                        :class="tab.key === activeTab ? 'bg-white text-[#6b6b6b]' : 'bg-[#ECEAE1] text-[#9a958c]'"
+                        :class="tab.key === activeTab ? 'bg-white/20 text-white' : 'bg-[#ECEAE1] text-[#9a958c]'"
                     >{{ tab.key === activeTab ? memories.length : '' }}</span>
                 </button>
             </div>
@@ -56,7 +61,7 @@
             <template v-else>
                 <!-- Empty state -->
                 <div v-if="memories.length === 0" class="flex flex-col items-center justify-center py-20 text-center">
-                    <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] text-[#C2541E]">
+                    <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F6EBE3] border border-[#E9E0D3] text-[#A8330F]">
                         <UIcon name="i-heroicons-bookmark-square" class="w-6 h-6" />
                     </span>
                     <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ emptyTitle }}</h3>
@@ -73,11 +78,11 @@
                     <div
                         v-for="mem in memories"
                         :key="mem.id"
-                        class="flex flex-col gap-3 rounded-2xl border border-[#E9E0D3] bg-white p-4 transition hover:shadow-sm"
+                        class="flex flex-col gap-3 rounded-xl border border-[#E9E0D3] bg-gradient-to-b from-white to-[#fdfcf9] p-4 transition hover:border-[#A8330F] hover:shadow-sm"
                     >
                         <!-- Text -->
                         <div class="flex items-start gap-2">
-                            <Icon name="heroicons:sparkles" class="w-[17px] h-[17px] text-[#C2541E] shrink-0 mt-0.5" />
+                            <Icon name="heroicons:sparkles" class="w-[17px] h-[17px] text-[#A8330F] shrink-0 mt-0.5" />
                             <p class="text-[15px] text-[#1f2328] leading-relaxed" style="font-family: 'Spectral', ui-serif, Georgia, serif">
                                 {{ mem.text }}
                             </p>
@@ -100,7 +105,7 @@
                         <div v-if="activeTab === 'pending'" class="pt-3 border-t border-[#E9E0D3] flex items-center gap-2">
                             <button
                                 type="button"
-                                class="inline-flex items-center gap-1.5 rounded-xl bg-[#C2541E] px-3 py-1.5 font-medium text-white transition hover:bg-[#A8330F] disabled:opacity-50 disabled:cursor-not-allowed"
+                                class="inline-flex items-center gap-1.5 rounded-lg bg-[#C2541E] px-3 py-1.5 text-sm font-medium text-white transition hover:bg-[#A8330F] disabled:opacity-50 disabled:cursor-not-allowed"
                                 :disabled="acting[mem.id]"
                                 @click="approve(mem)"
                             >
@@ -128,8 +133,10 @@
                     </div>
                 </div>
             </template>
-        </div>
+
+            </div>
     </div>
+  </div>
 </template>
 
 <script setup lang="ts">

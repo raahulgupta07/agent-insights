@@ -53,19 +53,18 @@ COPY ./tools/qvd2parquet/src ./src
 RUN --mount=type=cache,target=/usr/local/cargo/registry cargo build --release --locked && \
     strip target/release/qvd2parquet
 
-FROM ubuntu:24.04 AS frontend-builder
+# Node 22 comes preinstalled in this base image — no nodesource curl|bash apt
+# install (that step downloaded Node from the internet on every cold build and
+# was the #1 cause of flaky/offline build failures + OOM). Only `git` + classic
+# `yarn` are added on top.
+FROM node:22-bookworm-slim AS frontend-builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install Node.js 22 and prepare environment (no `apt-get upgrade -y` — builder
-# stages pin to the base image package set; see backend-builder note above).
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl ca-certificates gnupg && \
-    mkdir -p /etc/apt/keyrings && \
-    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
-    apt-get install -y --no-install-recommends nodejs git && \
-    npm install --global yarn@1.22.22 && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends git && \
+    rm -rf /var/lib/apt/lists/* && \
+    npm install --global yarn@1.22.22
 
 # Set the working directory in the container for the frontend
 WORKDIR /app

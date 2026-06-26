@@ -1,16 +1,16 @@
 <template>
   <div class="h-full w-full flex flex-col bg-white">
     <!-- Header / Toolbar -->
-    <div class="flex-shrink-0 flex items-center justify-between px-4 py-2 bg-gradient-to-b from-cyan-50/50 to-white border-b">
-      <div class="flex items-center gap-3">
+    <div class="flex-shrink-0 flex items-center justify-between gap-2 px-3 py-2 bg-gradient-to-b from-cyan-50/50 to-white border-b">
+      <div class="flex items-center gap-2 min-w-0 flex-1">
         <UTooltip text="Back to chat">
-          <button @click="$emit('close')" class="hover:bg-gray-100 p-1 rounded">
+          <button @click="$emit('close')" class="hover:bg-gray-100 p-1 rounded shrink-0">
             <Icon name="heroicons:x-mark" class="w-4 h-4 text-gray-500" />
           </button>
         </UTooltip>
 
         <!-- Artifact Selector Dropdown -->
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 min-w-0 flex-1">
           <USelectMenu
             v-if="artifactsList.length > 0"
             v-model="selectedArtifactId"
@@ -18,7 +18,7 @@
             value-attribute="value"
             option-attribute="label"
             size="xs"
-            class="min-w-[280px]"
+            class="min-w-0 flex-1 max-w-[240px]"
             placeholder="Select artifact..."
             :ui="{ option: { base: 'py-2' } }"
           >
@@ -52,17 +52,18 @@
             v-if="!isLatestSelected && artifactsList.length > 1"
             @click="useThisVersion"
             :disabled="isDuplicating"
-            class="text-xs px-2 py-1 bg-[#F6EFEA] text-[#C2541E] hover:bg-[#F4E5DA] rounded border border-[#E8C9B5] transition-colors disabled:opacity-50 flex items-center gap-1"
+            class="text-xs px-2 py-1 bg-[#F6EFEA] text-[#C2541E] hover:bg-[#F4E5DA] rounded border border-[#E8C9B5] transition-colors disabled:opacity-50 flex items-center gap-1 shrink-0 whitespace-nowrap"
           >
             <Spinner v-if="isDuplicating" class="w-3 h-3" />
             <Icon v-else name="heroicons:arrow-uturn-up" class="w-3 h-3" />
-            Use this version
+            <span class="hidden lg:inline">Use this version</span>
+            <span class="lg:hidden">Use</span>
           </button>
         </div>
       </div>
 
-      <div class="flex items-center gap-2">
-        <span v-if="isLoading" class="text-xs text-gray-400">{{ t('artifactFrame.loading') }}</span>
+      <div class="flex items-center gap-1 shrink-0">
+        <span v-if="isLoading" class="text-xs text-gray-400 hidden sm:inline">{{ t('artifactFrame.loading') }}</span>
 
         <!-- Refresh Dashboard (rerun + refresh) -->
         <UTooltip text="Refresh Data">
@@ -335,7 +336,7 @@
             ref="fullscreenIframeRef"
             :srcdoc="iframeSrcdoc"
             sandbox="allow-scripts allow-same-origin"
-            class="absolute inset-2 sm:inset-4 w-auto h-auto border-0 rounded-lg bg-white shadow-2xl"
+            class="w-full h-full border-0 rounded-lg bg-white shadow-2xl"
             @load="onFullscreenIframeLoad"
           />
         </div>

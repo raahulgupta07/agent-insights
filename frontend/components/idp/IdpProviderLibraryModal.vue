@@ -28,20 +28,24 @@
 
           <!-- Catalog -->
           <div class="lib-body">
-            <div class="lib-lbl">POPULAR</div>
-            <div class="grid">
-              <button
-                v-for="tpl in filtered"
-                :key="tpl.key"
-                type="button"
-                class="pcard"
-                @click="selectTemplate(tpl)"
-              >
-                <div class="pcard-logo" v-html="idpLogoSvg(tpl.logo)" />
-                <div class="pcard-name">{{ tpl.name }}</div>
-                <div class="pcard-type">{{ tpl.type }}</div>
-              </button>
-            </div>
+            <template v-for="grp in groups" :key="grp.key">
+              <template v-if="grp.items.length">
+                <div class="lib-lbl">{{ grp.label }}</div>
+                <div class="grid">
+                  <button
+                    v-for="tpl in grp.items"
+                    :key="tpl.key"
+                    type="button"
+                    class="pcard"
+                    @click="selectTemplate(tpl)"
+                  >
+                    <div class="pcard-logo" v-html="idpLogoSvg(tpl.logo)" />
+                    <div class="pcard-name">{{ tpl.name }}</div>
+                    <div class="pcard-type">{{ tpl.type }}</div>
+                  </button>
+                </div>
+              </template>
+            </template>
 
             <div v-if="filtered.length === 0" class="no-results">
               No providers match "<strong>{{ query }}</strong>"
@@ -86,6 +90,16 @@ const filtered = computed<IdpTemplate[]>(() => {
   return IDP_TEMPLATES.filter(
     (t) => t.name.toLowerCase().includes(q) || t.type.toLowerCase().includes(q) || t.key.toLowerCase().includes(q)
   )
+})
+
+// Three grouped sections rendered in order: SOCIAL / OIDC · DIRECTORY · PROVISIONING.
+const groups = computed(() => {
+  const items = filtered.value
+  return [
+    { key: 'social', label: 'SOCIAL / OIDC', items: items.filter((t) => (t.group ?? 'social') === 'social') },
+    { key: 'directory', label: 'DIRECTORY', items: items.filter((t) => t.group === 'directory') },
+    { key: 'provisioning', label: 'PROVISIONING', items: items.filter((t) => t.group === 'provisioning') },
+  ]
 })
 
 // ---- Handlers ----

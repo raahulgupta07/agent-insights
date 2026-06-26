@@ -75,7 +75,8 @@
     "newPassword": "סיסמה חדשה",
     "confirmPassword": "אישור סיסמה חדשה",
     "forgotPassword": "שכחתם סיסמה?",
-    "newToBow": "חדשים ב-Dash?",    "alreadyHaveAccount": "כבר יש לכם חשבון?",
+    "newToBow": "חדשים ב-Dash?",
+    "alreadyHaveAccount": "כבר יש לכם חשבון?",
     "rememberPassword": "זוכרים את הסיסמה?",
     "resetPassword": "איפוס סיסמה",
     "resetPasswordTitle": "איפוס סיסמה",
@@ -288,7 +289,12 @@
     "emptyHint": "נסו לשנות את המסננים או את מונח החיפוש",
     "emptyTitle": "שאל שאלה כדי להתחיל.",
     "emptyTipLabel": "טיפ:",
-    "emptyTipBody": "לא בטוח מה לשאול? אפשר לבקש מסוכן ה-AI להציע שאלות על נושא מסוים."
+    "emptyTipBody": "לא בטוח מה לשאול? אפשר לבקש מסוכן ה-AI להציע שאלות על נושא מסוים.",
+    "openButton": "Open",
+    "openInChatButton": "Open in chat",
+    "statusLive": "live",
+    "statusDraft": "draft",
+    "scopeAll": "All"
   },
   "traceModal": {
     "title": "הפעלת סוכן",
@@ -920,7 +926,8 @@
       "ldapSubtitle": "סנכרן קבוצות וחברויות ישירות משרת ה-LDAP / Active Directory שלך",
       "enterpriseLdap": "סנכרון ספריית LDAP דורש רישיון Enterprise. סנכרן אוטומטית קבוצות מ-Active Directory, OpenLDAP ושרתי LDAP נוספים.",
       "ldapNotConfigured": "LDAP אינו מוגדר",
-      "ldapNotConfiguredHint": "הגדר LDAP בקובץ dash-config כדי לאפשר סנכרון ספרייה",      "statusConnected": "מחובר",
+      "ldapNotConfiguredHint": "הגדר LDAP בקובץ dash-config כדי לאפשר סנכרון ספרייה",
+      "statusConnected": "מחובר",
       "statusFailed": "החיבור נכשל",
       "statusNotTested": "לא נבדק",
       "testConnection": "בדיקת חיבור",
@@ -969,7 +976,9 @@
       "integrate": "שלב",
       "setup": "הגדרה",
       "excelAddinName": "תוסף Excel",
-      "excelAddinDescription": "טען את תוסף Dash ישירות מהמופע הזה",      "mcpName": "שרת MCP של Dash",      "mcpDescription": "הפעל נקודת קצה של MCP לאינטגרציה עם עוזרי בינה מלאכותית כמו Cursor, Claude ועוד"
+      "excelAddinDescription": "טען את תוסף Dash ישירות מהמופע הזה",
+      "mcpName": "שרת MCP של Dash",
+      "mcpDescription": "הפעל נקודת קצה של MCP לאינטגרציה עם עוזרי בינה מלאכותית כמו Cursor, Claude ועוד"
     },
     "aiSettings": "הגדרות AI",
     "llm": "LLM",
@@ -1032,7 +1041,8 @@
     "uploadIcon": "העלאת אייקון",
     "iconConstraints": "PNG/JPEG, ≤ 512 KB.",
     "aiAnalystName": "שם האנליסט",
-    "showCredit": "הצגת קרדיט \"Made with Dash\"",    "workspacePlaceholder": "שם סביבת העבודה",
+    "showCredit": "הצגת קרדיט \"Made with Dash\"",
+    "workspacePlaceholder": "שם סביבת העבודה",
     "changeIcon": "שינוי סמל",
     "uploadIconButton": "העלאת סמל",
     "iconTooLarge": "הסמל גדול מדי",
@@ -1470,6 +1480,7 @@
     "subtitle": "עיון וניהול של דשבורדים והמצגות שלך",
     "searchPlaceholder": "חיפוש דשבורדים…",
     "myDashboards": "דשבורדים שלי",
+    "newDashboard": "לוח חדש",
     "sharedWithMe": "משותפים איתי",
     "empty": "לא נמצאו דשבורדים",
     "emptyDescription": "נסה לשנות את מונח החיפוש, או צור דשבורד חדש.",
@@ -1596,7 +1607,8 @@
   "onboarding": {
     "loading": "טוען...",
     "skip": "דלג על ההדרכה",
-    "welcome": "ברוכים הבאים ל־Dash! 🎉",    "welcomeSubtitle": "שוחחו עם הנתונים, הריצו ניתוחים מעמיקים ובנו דשבורדים בשניות",
+    "welcome": "ברוכים הבאים ל־Dash! 🎉",
+    "welcomeSubtitle": "שוחחו עם הנתונים, הריצו ניתוחים מעמיקים ובנו דשבורדים בשניות",
     "next": "הבא",
     "fallbackTitle": "להתחיל",
     "fallbackDescription": "השלימו את השלב הבא בהגדרה",
@@ -1605,7 +1617,8 @@
     "intro1": "זה פשוט: חברו את המודל ואת מקור הנתונים, ותוכלו לשאול את השאלה הראשונה.",
     "intro2": "👉 בואו נתחיל להגדיר!",
     "steps": {
-      "onboardingTitle": "ברוכים הבאים ל־Dash! 🎉",      "onboardingDescription": "שוחחו עם הנתונים, הריצו ניתוחים מעמיקים ובנו דשבורדים בשניות",
+      "onboardingTitle": "ברוכים הבאים ל־Dash! 🎉",
+      "onboardingDescription": "שוחחו עם הנתונים, הריצו ניתוחים מעמיקים ובנו דשבורדים בשניות",
       "onboardingButton": "ברוכים הבאים",
       "llmTitle": "הגדרת LLM",
       "llmDescription": "התחברו לכל ספק LLM עם מפתח ה־API שלכם",
@@ -2068,7 +2081,9 @@
     }
   },
   "mcpServerModal": {
-    "title": "שרת MCP של Dash",    "subtitle": "חבר את Claude, Cursor או כל לקוח MCP כדי לתשאל את הנתונים שלך דרך שרת ה-MCP של Dash.",    "loading": "טוען...",
+    "title": "שרת MCP של Dash",
+    "subtitle": "חבר את Claude, Cursor או כל לקוח MCP כדי לתשאל את הנתונים שלך דרך שרת ה-MCP של Dash.",
+    "loading": "טוען...",
     "tabMcpClients": "לקוחות MCP",
     "tabOauth": "OAuth",
     "generateToken": "צור טוקן",

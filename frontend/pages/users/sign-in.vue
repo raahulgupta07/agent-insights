@@ -4,9 +4,7 @@
     <!-- ============ top brand bar ============ -->
     <header class="cai-header">
       <div style="display:flex; align-items:center; gap:12px;">
-        <div style="width:38px; height:38px; border-radius:10px; background:linear-gradient(150deg,#D67037,#A8330F); display:flex; align-items:center; justify-content:center; box-shadow:0 6px 18px -6px rgba(168,51,15,.6);">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#fff" stroke-width="2" opacity=".55"/><path d="M12 3a9 9 0 0 1 0 18" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="12" r="2.6" fill="#fff"/></svg>
-        </div>
+        <img src="/assets/logo-mark.png" alt="City Agent Insights" style="width:40px; height:40px; object-fit:contain; display:block;" />
         <div style="line-height:1.1;">
           <div style="font-size:16px; font-weight:600; letter-spacing:-.01em;">City Agent <span style="color:#C2541E;">Insights</span></div>
           <div style="font-size:9.5px; letter-spacing:.22em; color:#9A8F80; font-weight:600; margin-top:2px;">DATA INTELLIGENCE</div>

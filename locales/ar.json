@@ -72,7 +72,8 @@
     "newPassword": "كلمة المرور الجديدة",
     "confirmPassword": "تأكيد كلمة المرور الجديدة",
     "forgotPassword": "هل نسيت كلمة المرور؟",
-    "newToBow": "هل أنت جديد على Dash؟",    "alreadyHaveAccount": "هل لديك حساب بالفعل؟",
+    "newToBow": "هل أنت جديد على Dash؟",
+    "alreadyHaveAccount": "هل لديك حساب بالفعل؟",
     "rememberPassword": "هل تتذكر كلمة المرور؟",
     "resetPassword": "إعادة تعيين كلمة المرور",
     "resetPasswordTitle": "إعادة تعيين كلمة المرور",
@@ -278,7 +279,12 @@
     "columnUser": "المستخدم",
     "emptyTitle": "اطرح سؤالًا للبدء.",
     "emptyTipLabel": "تلميح:",
-    "emptyTipBody": "لست متأكدًا مما يجب طرحه؟ يمكنك أن تطلب من محلل الذكاء الاصطناعي اقتراح أسئلة حول موضوع محدد."
+    "emptyTipBody": "لست متأكدًا مما يجب طرحه؟ يمكنك أن تطلب من محلل الذكاء الاصطناعي اقتراح أسئلة حول موضوع محدد.",
+    "openButton": "Open",
+    "openInChatButton": "Open in chat",
+    "statusLive": "live",
+    "statusDraft": "draft",
+    "scopeAll": "All"
   },
   "traceModal": {
     "title": "تنفيذ الوكيل",
@@ -844,7 +850,8 @@
       "ldapSubtitle": "زامِن المجموعات والعضويات مباشرة من خادم LDAP / Active Directory",
       "enterpriseLdap": "تتطلب مزامنة دليل LDAP ترخيص enterprise. زامِن المجموعات تلقائيًا من Active Directory وOpenLDAP وخوادم LDAP الأخرى.",
       "ldapNotConfigured": "LDAP غير مهيأ",
-      "ldapNotConfiguredHint": "اضبط LDAP في ملف dash-config لتفعيل مزامنة الدليل",      "statusConnected": "متصل",
+      "ldapNotConfiguredHint": "اضبط LDAP في ملف dash-config لتفعيل مزامنة الدليل",
+      "statusConnected": "متصل",
       "statusFailed": "فشل الاتصال",
       "statusNotTested": "لم يتم اختباره",
       "testConnection": "اختبار الاتصال",
@@ -893,7 +900,9 @@
       "integrate": "ربط",
       "setup": "إعداد",
       "excelAddinName": "إضافة Excel",
-      "excelAddinDescription": "حمّل إضافة Dash مباشرة من هذا الإصدار",      "mcpName": "خادم Dash MCP",      "mcpDescription": "تفعيل نقطة نهاية MCP للتكامل مع مساعدي الذكاء الاصطناعي مثل Cursor وClaude وغيرها"
+      "excelAddinDescription": "حمّل إضافة Dash مباشرة من هذا الإصدار",
+      "mcpName": "خادم Dash MCP",
+      "mcpDescription": "تفعيل نقطة نهاية MCP للتكامل مع مساعدي الذكاء الاصطناعي مثل Cursor وClaude وغيرها"
     },
     "aiSettings": "إعدادات الذكاء الاصطناعي",
     "llm": "نموذج اللغة",
@@ -955,7 +964,8 @@
     "uploadIcon": "رفع أيقونة",
     "iconConstraints": "PNG/JPEG، ≤ 512 ك.ب.",
     "aiAnalystName": "اسم محلل الذكاء الاصطناعي",
-    "showCredit": "عرض ملاحظة \"Made with Dash\"",    "language": {
+    "showCredit": "عرض ملاحظة \"Made with Dash\"",
+    "language": {
       "title": "اللغة",
       "description": "تحدد اللغة الافتراضية للمؤسسة بأكملها. سيرى المستخدمون الواجهة بهذه اللغة وسيرد الذكاء الاصطناعي بها.",
       "label": "لغة المؤسسة",
@@ -1392,6 +1402,7 @@
     "subtitle": "تصفّح وأدِر لوحات التحكم والشرائح",
     "searchPlaceholder": "ابحث في لوحات التحكم…",
     "myDashboards": "لوحات التحكم الخاصة بي",
+    "newDashboard": "لوحة جديدة",
     "sharedWithMe": "تمت مشاركتها معي",
     "empty": "لا توجد لوحات تحكم",
     "emptyDescription": "حاول تعديل مصطلح البحث، أو أنشئ تقريرًا بلوحة تحكم.",
@@ -1518,7 +1529,8 @@
   "onboarding": {
     "loading": "جارٍ التحميل...",
     "skip": "تخطي الإعداد",
-    "welcome": "مرحبًا بك في Dash! 🎉",    "welcomeSubtitle": "تحدّث مع بياناتك، وشغّل تحليلات متعمقة، وأنشئ لوحات تحكم في ثوانٍ",
+    "welcome": "مرحبًا بك في Dash! 🎉",
+    "welcomeSubtitle": "تحدّث مع بياناتك، وشغّل تحليلات متعمقة، وأنشئ لوحات تحكم في ثوانٍ",
     "next": "التالي",
     "fallbackTitle": "ابدأ",
     "fallbackDescription": "أكمل الخطوة التالية من إعدادك",
@@ -1527,7 +1539,8 @@
     "intro1": "البدء سريع: فقط اربط نموذجك ومصدر بياناتك، وستكون جاهزًا لطرح أول سؤال.",
     "intro2": "👉 لنبدأ الإعداد!",
     "steps": {
-      "onboardingTitle": "مرحبًا بك في Dash! 🎉",      "onboardingDescription": "تحدّث مع بياناتك، وشغّل تحليلات متعمقة، وأنشئ لوحات تحكم في ثوانٍ",
+      "onboardingTitle": "مرحبًا بك في Dash! 🎉",
+      "onboardingDescription": "تحدّث مع بياناتك، وشغّل تحليلات متعمقة، وأنشئ لوحات تحكم في ثوانٍ",
       "onboardingButton": "أهلًا بك",
       "llmTitle": "إعداد نموذج اللغة",
       "llmDescription": "اتصل بأي موفّر نماذج لغة، وأحضر مفتاح API الخاص بك",
@@ -1990,7 +2003,9 @@
     }
   },
   "mcpServerModal": {
-    "title": "خادم Dash MCP",    "subtitle": "اربط Claude أو Cursor أو أي عميل MCP للاستعلام عن بياناتك عبر خادم Dash MCP.",    "loading": "جارٍ التحميل...",
+    "title": "خادم Dash MCP",
+    "subtitle": "اربط Claude أو Cursor أو أي عميل MCP للاستعلام عن بياناتك عبر خادم Dash MCP.",
+    "loading": "جارٍ التحميل...",
     "tabMcpClients": "عملاء MCP",
     "tabOauth": "OAuth",
     "generateToken": "توليد رمز",

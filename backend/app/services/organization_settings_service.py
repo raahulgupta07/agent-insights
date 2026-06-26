@@ -1,3 +1,8 @@
+import secrets
+import logging
+from typing import Optional, List
+from urllib.parse import urlparse
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from fastapi import HTTPException, UploadFile
@@ -22,6 +27,8 @@ from app.schemas.organization_settings_schema import (
     OrgSsoGoogleUpdate,
     OrgSsoOidcUpdate,
     OrgSsoAuthModeUpdate,
+    OrgLdapDirectorySchema,
+    OrgLdapDirectoryUpdate,
     _clean_logo,
 )
 from datetime import datetime
@@ -30,6 +37,8 @@ import hashlib
 from PIL import Image
 from io import BytesIO
 from app.ee.audit.service import audit_service
+
+_svc_logger = logging.getLogger(__name__)
 
 
 class OrganizationSettingsService:
@@ -901,6 +910,379 @@ class OrganizationSettingsService:
             return {"success": False, "error": str(e)}
 
     # ------------------------------------------------------------------
+    # Multi-directory LDAP (stored as config['ldap_directories'])
+    # ------------------------------------------------------------------
+
+    async def _get_or_create_settings(self, db: AsyncSession, organization: Organization):
+        """Get or create settings row for the given organization (no current_user needed)."""
+        result = await db.execute(
+            select(OrganizationSettings)
+            .filter(OrganizationSettings.organization_id == organization.id)
+        )
+        settings = result.scalar_one_or_none()
+        if not settings:
+            from app.schemas.organization_settings_schema import OrganizationSettingsConfig
+            config = OrganizationSettingsConfig()
+            settings = OrganizationSettings(
+                organization_id=organization.id,
+                config=config.dict()
+            )
+            db.add(settings)
+            await db.commit()
+            await db.refresh(settings)
+        return settings
+
+    def _dir_to_schema(self, d: dict) -> OrgLdapDirectorySchema:
+        """Convert a directory dict to OrgLdapDirectorySchema (fail-soft)."""
+        return OrgLdapDirectorySchema(
+            id=str(d.get("id") or ""),
+            name=str(d.get("name") or "Directory"),
+            enabled=bool(d.get("enabled", True)),
+            logo=_clean_logo(d.get("logo")),
+            host=str(d.get("host") or ""),
+            port=int(d.get("port") or 389),
+            use_ssl=bool(d.get("use_ssl", False)),
+            start_tls=bool(d.get("start_tls", False)),
+            bind_dn=str(d.get("bind_dn") or ""),
+            bind_password_set=bool(d.get("bind_password_enc")),
+            base_dn=str(d.get("base_dn") or ""),
+            user_filter=str(d.get("user_filter") or "(sAMAccountName={username})"),
+            email_attr=str(d.get("email_attr") or "mail"),
+            name_attr=str(d.get("name_attr") or "cn"),
+            user_search_base=str(d.get("user_search_base") or ""),
+            group_search_base=str(d.get("group_search_base") or ""),
+            group_search_filter=str(d.get("group_search_filter") or "(objectClass=group)"),
+            group_name_attribute=str(d.get("group_name_attribute") or "cn"),
+            group_member_attribute=str(d.get("group_member_attribute") or "member"),
+            group_member_format=str(d.get("group_member_format") or "dn"),
+            sync_interval_minutes=int(d.get("sync_interval_minutes") or 60),
+            auto_provision_users=bool(d.get("auto_provision_users", False)),
+            connection_timeout=int(d.get("connection_timeout") or 10),
+            page_size=int(d.get("page_size") or 500),
+        )
+
+    def _migrate_legacy_to_dir(self, ldap_cfg: dict) -> dict:
+        """Convert a legacy config['ldap'] dict to a directory-shaped dict.
+
+        Parses host/port/use_ssl from the url field if present.
+        """
+        url = (ldap_cfg.get("url") or "").strip()
+        host = ""
+        port = 389
+        use_ssl = bool(ldap_cfg.get("use_ssl", False))
+        if url:
+            try:
+                parsed = urlparse(url)
+                scheme = (parsed.scheme or "").lower()
+                if scheme == "ldaps":
+                    use_ssl = True
+                    port = parsed.port or 636
+                elif scheme == "ldap":
+                    use_ssl = False
+                    port = parsed.port or 389
+                else:
+                    # bare host
+                    port = ldap_cfg.get("port") or 389
+                host = parsed.hostname or parsed.path or url
+            except Exception:
+                host = url
+        elif ldap_cfg.get("host"):
+            host = str(ldap_cfg["host"])
+            port = int(ldap_cfg.get("port") or 389)
+
+        # user_filter: use user_dn_template if it contains {username}, else default
+        user_filter = ldap_cfg.get("user_filter") or ""
+        if not user_filter:
+            udn = ldap_cfg.get("user_dn_template") or ""
+            if "{username}" in udn:
+                user_filter = udn
+        if not user_filter:
+            user_filter = "(sAMAccountName={username})"
+
+        return {
+            "id": "default",
+            "name": "Directory",
+            "enabled": bool(ldap_cfg.get("enabled", True)),
+            "logo": _clean_logo(ldap_cfg.get("logo")),
+            "host": host,
+            "port": int(port or 389),
+            "use_ssl": use_ssl,
+            "start_tls": bool(ldap_cfg.get("start_tls", False)),
+            "bind_dn": ldap_cfg.get("bind_dn") or "",
+            "bind_password_enc": ldap_cfg.get("bind_password_enc"),
+            "base_dn": ldap_cfg.get("base_dn") or "",
+            "user_filter": user_filter,
+            "email_attr": ldap_cfg.get("email_attr") or ldap_cfg.get("user_email_attribute") or "mail",
+            "name_attr": ldap_cfg.get("name_attr") or ldap_cfg.get("user_name_attribute") or "cn",
+            "user_search_base": ldap_cfg.get("user_search_base") or "",
+            "group_search_base": ldap_cfg.get("group_search_base") or "",
+            "group_search_filter": ldap_cfg.get("group_search_filter") or "(objectClass=group)",
+            "group_name_attribute": ldap_cfg.get("group_name_attribute") or "cn",
+            "group_member_attribute": ldap_cfg.get("group_member_attribute") or "member",
+            "group_member_format": ldap_cfg.get("group_member_format") or "dn",
+            "sync_interval_minutes": int(ldap_cfg.get("sync_interval_minutes") or 60),
+            "auto_provision_users": bool(ldap_cfg.get("auto_provision_users", False)),
+            "connection_timeout": int(ldap_cfg.get("connection_timeout") or 10),
+            "page_size": int(ldap_cfg.get("page_size") or 500),
+        }
+
+    async def list_ldap_directories(
+        self, db: AsyncSession, organization: Organization
+    ) -> List[OrgLdapDirectorySchema]:
+        """Return the org's list of LDAP directories (fail-soft, never raises)."""
+        try:
+            settings = await self._get_or_create_settings(db, organization)
+            config = settings.config or {}
+            dirs = config.get("ldap_directories")
+            if dirs and isinstance(dirs, list) and len(dirs) > 0:
+                result = []
+                for d in dirs:
+                    try:
+                        result.append(self._dir_to_schema(d))
+                    except Exception as exc:
+                        _svc_logger.warning(f"Skipping malformed ldap_directory entry: {exc}")
+                return result
+            # Fall back to legacy single config
+            ldap_raw = config.get("ldap")
+            if ldap_raw and isinstance(ldap_raw, dict):
+                try:
+                    return [self._dir_to_schema(self._migrate_legacy_to_dir(ldap_raw))]
+                except Exception as exc:
+                    _svc_logger.warning(f"Could not migrate legacy LDAP config: {exc}")
+            return []
+        except Exception as exc:
+            _svc_logger.warning(f"list_ldap_directories failed: {exc}")
+            return []
+
+    async def upsert_ldap_directory(
+        self,
+        db: AsyncSession,
+        organization: Organization,
+        current_user: User,
+        data: OrgLdapDirectoryUpdate,
+        dir_id: Optional[str] = None,
+    ) -> OrgLdapDirectorySchema:
+        """Create or update an LDAP directory entry."""
+        from app.services.email.secrets import encrypt_secret
+
+        settings = await self._get_or_create_settings(db, organization)
+        if settings.config is None:
+            settings.config = {}
+        current_config = dict(settings.config)
+
+        # Load existing dirs (with legacy migration)
+        existing_dirs_raw = current_config.get("ldap_directories")
+        if existing_dirs_raw and isinstance(existing_dirs_raw, list):
+            dirs = list(existing_dirs_raw)
+        else:
+            # Try migrating from legacy single config
+            ldap_raw = current_config.get("ldap")
+            if ldap_raw and isinstance(ldap_raw, dict):
+                dirs = [self._migrate_legacy_to_dir(ldap_raw)]
+            else:
+                dirs = []
+
+        # Find or create entry
+        if dir_id is None:
+            dir_id = secrets.token_hex(8)
+            entry = {}
+        else:
+            entry = next((d for d in dirs if str(d.get("id")) == str(dir_id)), None)
+            if entry is None:
+                entry = {}
+
+        # Apply all non-None fields from data
+        if data.name is not None:
+            entry["name"] = data.name
+        if data.enabled is not None:
+            entry["enabled"] = bool(data.enabled)
+        if data.logo is not None:
+            entry["logo"] = _clean_logo(data.logo)
+        if data.host is not None:
+            entry["host"] = (data.host or "").strip()
+        if data.port is not None:
+            entry["port"] = int(data.port)
+        if data.use_ssl is not None:
+            entry["use_ssl"] = bool(data.use_ssl)
+        if data.start_tls is not None:
+            entry["start_tls"] = bool(data.start_tls)
+        if data.bind_dn is not None:
+            entry["bind_dn"] = (data.bind_dn or "").strip()
+        if data.bind_password:
+            entry["bind_password_enc"] = encrypt_secret(data.bind_password)
+        if data.base_dn is not None:
+            entry["base_dn"] = (data.base_dn or "").strip()
+        if data.user_filter is not None:
+            entry["user_filter"] = data.user_filter
+        if data.email_attr is not None:
+            entry["email_attr"] = data.email_attr
+        if data.name_attr is not None:
+            entry["name_attr"] = data.name_attr
+        if data.user_search_base is not None:
+            entry["user_search_base"] = (data.user_search_base or "").strip()
+        if data.group_search_base is not None:
+            entry["group_search_base"] = (data.group_search_base or "").strip()
+        if data.group_search_filter is not None:
+            entry["group_search_filter"] = data.group_search_filter
+        if data.group_name_attribute is not None:
+            entry["group_name_attribute"] = data.group_name_attribute
+        if data.group_member_attribute is not None:
+            entry["group_member_attribute"] = data.group_member_attribute
+        if data.group_member_format is not None:
+            entry["group_member_format"] = data.group_member_format
+        if data.sync_interval_minutes is not None:
+            entry["sync_interval_minutes"] = int(data.sync_interval_minutes)
+        if data.auto_provision_users is not None:
+            entry["auto_provision_users"] = bool(data.auto_provision_users)
+        if data.connection_timeout is not None:
+            entry["connection_timeout"] = int(data.connection_timeout)
+        if data.page_size is not None:
+            entry["page_size"] = int(data.page_size)
+
+        # Apply sane defaults for required fields on new entries
+        entry.setdefault("id", dir_id)
+        entry.setdefault("name", "Directory")
+        entry.setdefault("enabled", True)
+        entry.setdefault("logo", "")
+        entry.setdefault("host", "")
+        entry.setdefault("port", 389)
+        entry.setdefault("use_ssl", False)
+        entry.setdefault("start_tls", False)
+        entry.setdefault("bind_dn", "")
+        entry.setdefault("base_dn", "")
+        entry.setdefault("user_filter", "(sAMAccountName={username})")
+        entry.setdefault("email_attr", "mail")
+        entry.setdefault("name_attr", "cn")
+        entry.setdefault("user_search_base", "")
+        entry.setdefault("group_search_base", "")
+        entry.setdefault("group_search_filter", "(objectClass=group)")
+        entry.setdefault("group_name_attribute", "cn")
+        entry.setdefault("group_member_attribute", "member")
+        entry.setdefault("group_member_format", "dn")
+        entry.setdefault("sync_interval_minutes", 60)
+        entry.setdefault("auto_provision_users", False)
+        entry.setdefault("connection_timeout", 10)
+        entry.setdefault("page_size", 500)
+
+        # Upsert into dirs list
+        existing_idx = next(
+            (i for i, d in enumerate(dirs) if str(d.get("id")) == str(dir_id)), None
+        )
+        if existing_idx is not None:
+            dirs[existing_idx] = entry
+        else:
+            dirs.append(entry)
+
+        current_config["ldap_directories"] = dirs
+        settings.config = current_config
+        settings.updated_at = datetime.utcnow()
+        flag_modified(settings, "config")
+        db.add(settings)
+        await db.commit()
+        await db.refresh(settings)
+
+        try:
+            await audit_service.log(
+                db=db, organization_id=str(organization.id),
+                action="settings.ldap_directory_upserted", user_id=str(current_user.id),
+                resource_type="organization_settings", resource_id=str(settings.id),
+                details={"dir_id": dir_id, "name": entry.get("name"), "host": entry.get("host")},
+            )
+        except Exception:
+            pass
+
+        return self._dir_to_schema(entry)
+
+    async def delete_ldap_directory(
+        self,
+        db: AsyncSession,
+        organization: Organization,
+        current_user: User,
+        dir_id: str,
+    ) -> bool:
+        """Delete an LDAP directory by id. Returns True if deleted, False if not found."""
+        settings = await self._get_or_create_settings(db, organization)
+        if settings.config is None:
+            return False
+        current_config = dict(settings.config)
+        dirs = list(current_config.get("ldap_directories") or [])
+        new_dirs = [d for d in dirs if str(d.get("id")) != str(dir_id)]
+        if len(new_dirs) == len(dirs):
+            return False
+
+        current_config["ldap_directories"] = new_dirs
+        settings.config = current_config
+        settings.updated_at = datetime.utcnow()
+        flag_modified(settings, "config")
+        db.add(settings)
+        await db.commit()
+
+        try:
+            await audit_service.log(
+                db=db, organization_id=str(organization.id),
+                action="settings.ldap_directory_deleted", user_id=str(current_user.id),
+                resource_type="organization_settings", resource_id=str(settings.id),
+                details={"dir_id": dir_id},
+            )
+        except Exception:
+            pass
+
+        return True
+
+    async def test_ldap_directory(
+        self,
+        db: AsyncSession,
+        organization: Organization,
+        current_user: User,
+        dir_id: str,
+    ) -> dict:
+        """Test an LDAP directory connection by id."""
+        from app.services.email.secrets import decrypt_secret
+        from app.settings.dash_config import LDAPConfig
+
+        # Load dirs list with legacy migration
+        settings = await self._get_or_create_settings(db, organization)
+        config = settings.config or {}
+        dirs_raw = config.get("ldap_directories")
+        if dirs_raw and isinstance(dirs_raw, list):
+            dirs = dirs_raw
+        else:
+            ldap_raw = config.get("ldap")
+            dirs = [self._migrate_legacy_to_dir(ldap_raw)] if ldap_raw else []
+
+        d = next((x for x in dirs if str(x.get("id")) == str(dir_id)), None)
+        if d is None:
+            return {"success": False, "error": f"Directory '{dir_id}' not found"}
+
+        try:
+            ldap_cfg = _dir_to_ldap_config(d)
+        except Exception as exc:
+            return {"success": False, "error": f"Config error: {exc}"}
+
+        try:
+            from app.ee.ldap.connection import LDAPConnectionManager
+            manager = LDAPConnectionManager(ldap_cfg)
+            conn_result = manager.test_connection()
+            result = {
+                "success": conn_result.get("connected", False),
+                "server": conn_result.get("server"),
+                "vendor": conn_result.get("vendor"),
+                "error": conn_result.get("error"),
+            }
+            if conn_result.get("connected"):
+                try:
+                    result["user_count"] = len(manager.search_users())
+                except Exception:
+                    pass
+                try:
+                    result["group_count"] = len(manager.search_groups())
+                except Exception:
+                    pass
+            return result
+        except Exception as exc:
+            return {"success": False, "error": str(exc)}
+
+    # ------------------------------------------------------------------
     # SSO (instance-level; stored under first org's settings)
     # ------------------------------------------------------------------
 
@@ -1344,16 +1726,21 @@ async def get_effective_signup_enabled() -> bool:
 async def get_effective_ldap_enabled() -> bool:
     """Return effective LDAP-enabled flag (DB overrides file config).
 
-    Reads config['ldap'].enabled from the first OrganizationSettings row,
-    falling back to dash_config.ldap.enabled. Used by the public /settings
-    endpoint so the login page can show the LDAP button only when it's on.
-    Never raises — returns False on any error.
+    Reads config['ldap'].enabled or any enabled ldap_directory from the first
+    OrganizationSettings row, falling back to dash_config.ldap.enabled.
+    Used by the public /settings endpoint so the login page can show the LDAP
+    button only when it's on. Never raises — returns False on any error.
     """
     from app.settings.config import settings as app_settings
 
     file_ldap = getattr(app_settings.dash_config, "ldap", None)
     file_default = bool(getattr(file_ldap, "enabled", False)) if file_ldap else False
     try:
+        # Check multi-directory config first
+        dirs = await get_effective_ldap_directories()
+        if dirs:
+            return True
+
         from app.dependencies import async_session_maker
         from sqlalchemy import asc
         from app.models.organization import Organization as OrgModel
@@ -1379,6 +1766,129 @@ async def get_effective_ldap_enabled() -> bool:
             return file_default
     except Exception:
         return file_default
+
+
+async def get_effective_ldap_config():
+    """Return the effective LDAPConfig (DB org settings override file config).
+
+    The admin configures LDAP through the UI → stored in
+    ``OrganizationSettings.config['ldap']``. The login path must use THAT, not
+    the static ``dash_config.ldap`` (which is empty on a UI-driven deploy). This
+    resolver opens its own session (login runs before any user/org context),
+    reads the first org's DB LDAP config, and falls back to the file config when
+    the DB has none. Never raises — returns the file config on any error.
+    """
+    from app.settings.config import settings as app_settings
+
+    file_cfg = getattr(app_settings.dash_config, "ldap", None)
+    try:
+        from app.dependencies import async_session_maker
+        from sqlalchemy import asc
+        from app.models.organization import Organization as OrgModel
+
+        async with async_session_maker() as db:
+            org_res = await db.execute(
+                select(OrgModel).order_by(asc(OrgModel.created_at)).limit(1)
+            )
+            org = org_res.scalar_one_or_none()
+            if org is not None:
+                db_cfg = await get_org_ldap_config(db, str(org.id))
+                if db_cfg is not None:
+                    return db_cfg
+    except Exception:
+        pass
+    return file_cfg
+
+
+def _dir_to_ldap_config(d: dict):
+    """Build an LDAPConfig from a directory dict (module-level helper).
+
+    Sets url="" so connection.py uses the host/port path.
+    Decrypts bind_password_enc via decrypt_secret.
+    Never raises — caller handles exceptions.
+    """
+    from app.settings.dash_config import LDAPConfig
+    from app.services.email.secrets import decrypt_secret
+
+    return LDAPConfig(
+        enabled=bool(d.get("enabled", True)),
+        url="",  # force host/port path in _build_server
+        host=str(d.get("host") or ""),
+        port=int(d.get("port") or 389),
+        use_ssl=bool(d.get("use_ssl", False)),
+        start_tls=bool(d.get("start_tls", False)),
+        bind_dn=d.get("bind_dn") or None,
+        bind_password=decrypt_secret(d.get("bind_password_enc")),
+        base_dn=d.get("base_dn") or "",
+        user_filter=d.get("user_filter") or "(sAMAccountName={username})",
+        email_attr=d.get("email_attr") or "mail",
+        name_attr=d.get("name_attr") or "cn",
+        user_search_base=d.get("user_search_base") or None,
+        group_search_base=d.get("group_search_base") or None,
+        group_search_filter=d.get("group_search_filter") or "(objectClass=group)",
+        group_name_attribute=d.get("group_name_attribute") or "cn",
+        group_member_attribute=d.get("group_member_attribute") or "member",
+        group_member_format=d.get("group_member_format") or "dn",
+        auto_provision_users=bool(d.get("auto_provision_users", False)),
+        connection_timeout=int(d.get("connection_timeout") or 10),
+        page_size=int(d.get("page_size") or 500),
+    )
+
+
+async def get_effective_ldap_directories() -> list:
+    """Return enabled LDAPConfig objects from the first org's ldap_directories config.
+
+    Falls back to wrapping get_effective_ldap_config() if no directories are stored.
+    Filters to only enabled dirs with a host set.
+    Never raises — returns [] on any error.
+    """
+    from app.settings.dash_config import LDAPConfig
+    from urllib.parse import urlparse
+
+    try:
+        from app.dependencies import async_session_maker
+        from sqlalchemy import asc
+        from app.models.organization import Organization as OrgModel
+
+        async with async_session_maker() as db:
+            org_res = await db.execute(
+                select(OrgModel).order_by(asc(OrgModel.created_at)).limit(1)
+            )
+            org = org_res.scalar_one_or_none()
+            if not org:
+                return []
+            row_res = await db.execute(
+                select(OrganizationSettings).filter(
+                    OrganizationSettings.organization_id == org.id
+                )
+            )
+            row = row_res.scalar_one_or_none()
+            if not row:
+                return []
+            config = row.config or {}
+            dirs_raw = config.get("ldap_directories")
+            if dirs_raw and isinstance(dirs_raw, list) and len(dirs_raw) > 0:
+                result = []
+                for d in dirs_raw:
+                    try:
+                        if not d.get("enabled", True):
+                            continue
+                        host = (d.get("host") or "").strip()
+                        url = (d.get("url") or "").strip()
+                        if not host and not url:
+                            continue
+                        result.append(_dir_to_ldap_config(d))
+                    except Exception as exc:
+                        _svc_logger.warning(f"Skipping bad dir in get_effective_ldap_directories: {exc}")
+                return result
+            # Fall back: wrap the existing single-config resolver
+            single = await get_effective_ldap_config()
+            if single is not None and single.enabled:
+                return [single]
+            return []
+    except Exception as exc:
+        _svc_logger.warning(f"get_effective_ldap_directories failed: {exc}")
+        return []
 
 
 async def get_effective_ldap_logo() -> str:

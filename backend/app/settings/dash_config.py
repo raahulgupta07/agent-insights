@@ -136,6 +136,9 @@ class LDAPConfig(BaseModel):
     """LDAP / Active Directory configuration for group sync and optional bind auth."""
     enabled: bool = False
     url: str = ""                                      # e.g. ldaps://ad.corp.com:636
+    # host/port used by multi-directory path when url is empty
+    host: str = ""
+    port: int = 389
     bind_dn: Optional[str] = None                      # service account DN
     bind_password: Optional[str] = None                # service account password
     use_ssl: bool = True
@@ -145,6 +148,10 @@ class LDAPConfig(BaseModel):
     user_search_filter: str = "(objectClass=person)"
     user_email_attribute: str = "mail"
     user_name_attribute: str = "displayName"
+    # DocSensei-style username-filter (template containing {username})
+    user_filter: str = ""
+    email_attr: str = "mail"
+    name_attr: str = "cn"
     group_search_base: Optional[str] = None            # defaults to base_dn
     group_search_filter: str = "(objectClass=group)"
     group_name_attribute: str = "cn"

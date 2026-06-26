@@ -23,7 +23,7 @@
 		@update:dockWidth="setDockWidth"
 	>
 		<template #left>
-	<div class="flex flex-col h-full overflow-y-hidden bg-[#F6F1EA] relative"
+	<div class="chat-pane flex flex-col h-full overflow-y-hidden bg-[#F6F1EA] relative"
 		:class="{ 'dash-dock': dashboardFirst && !isMobile }"
 		:style="(dashboardFirst && !isMobile) ? { minWidth: 0, overflowX: 'hidden' } : undefined">
 		<!-- Dashboard-first: collapsed chat dock = thin rail (just an expand chevron). -->
@@ -833,39 +833,49 @@
 						<span class="text-[9px] text-gray-400">tap &rarr; generate</span>
 					</div>
 
-					<!-- 2-col compact tiles: icon + tiny badge + label -->
-					<div class="grid grid-cols-2 gap-1.5">
-						<button @click="handleExampleClick('Build a dashboard for: ' + (lastUserQuestion || report?.title || 'this data'))" class="text-left rounded-lg border border-gray-200 p-2 bg-[#F4F7FF] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
-							<div class="flex items-center justify-between"><svg width="15" height="15" fill="none" stroke="#3B6FE0" stroke-width="1.9" viewBox="0 0 24 24"><rect x="3" y="11" width="4" height="9"/><rect x="10" y="6" width="4" height="14"/><rect x="17" y="3" width="4" height="17"/></svg><span class="text-[9px] font-bold leading-none px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">AI</span></div>
-							<div class="mt-1 text-[11px] font-semibold text-[#2C53A8] leading-tight">Dashboard</div>
+					<!-- 3-col compact tiles: icon + absolute badge + label.
+					     Forecast + Anomaly render as dimmed "SOON" cards in-grid. -->
+					<div class="grid grid-cols-3 gap-1.5">
+						<button @click="handleExampleClick('Build a dashboard for: ' + (lastUserQuestion || report?.title || 'this data'))" class="relative text-left rounded-lg border border-gray-200 p-2 bg-[#F4F7FF] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
+							<span class="absolute top-1.5 right-1.5 text-[8px] font-bold leading-none px-1 py-0.5 rounded bg-blue-100 text-blue-700">AI</span>
+							<svg width="15" height="15" fill="none" stroke="#3B6FE0" stroke-width="1.9" viewBox="0 0 24 24"><rect x="3" y="11" width="4" height="9"/><rect x="10" y="6" width="4" height="14"/><rect x="17" y="3" width="4" height="17"/></svg>
+							<div class="mt-1.5 text-[10.5px] font-semibold text-[#2C53A8] leading-tight">Dashboard</div>
 						</button>
-						<button @click="handleExampleClick('Write a narrative report with key findings for: ' + (lastUserQuestion || report?.title || 'this data'))" class="text-left rounded-lg border border-gray-200 p-2 bg-[#F6F4FF] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
-							<div class="flex items-center justify-between"><svg width="15" height="15" fill="none" stroke="#7A5CD0" stroke-width="1.8" viewBox="0 0 24 24"><path d="M6 3h9l5 5v13H6z"/><path d="M15 3v5h5"/></svg><span class="text-[9px] font-bold leading-none px-1.5 py-0.5 rounded bg-violet-100 text-violet-700">AI</span></div>
-							<div class="mt-1 text-[11px] font-semibold text-[#5A41A8] leading-tight">Report</div>
+						<button @click="handleExampleClick('Write a narrative report with key findings for: ' + (lastUserQuestion || report?.title || 'this data'))" class="relative text-left rounded-lg border border-gray-200 p-2 bg-[#F6F4FF] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
+							<span class="absolute top-1.5 right-1.5 text-[8px] font-bold leading-none px-1 py-0.5 rounded bg-violet-100 text-violet-700">AI</span>
+							<svg width="15" height="15" fill="none" stroke="#7A5CD0" stroke-width="1.8" viewBox="0 0 24 24"><path d="M6 3h9l5 5v13H6z"/><path d="M15 3v5h5"/></svg>
+							<div class="mt-1.5 text-[10.5px] font-semibold text-[#5A41A8] leading-tight">Report</div>
 						</button>
-						<button @click="setPanelView('slides', true)" class="text-left rounded-lg border border-gray-200 p-2 bg-[#FFF4EF] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
-							<div class="flex items-center justify-between"><svg width="15" height="15" fill="none" stroke="#D2603A" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="1.5"/><path d="M8 21h8M12 17v4"/></svg><span class="text-[9px] font-bold leading-none px-1.5 py-0.5 rounded bg-[#FEE9DF] text-[#C2541E]">PPT</span></div>
-							<div class="mt-1 text-[11px] font-semibold text-[#C2541E] leading-tight">Slides</div>
+						<button @click="setPanelView('slides', true)" class="relative text-left rounded-lg border border-gray-200 p-2 bg-[#FFF4EF] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
+							<span class="absolute top-1.5 right-1.5 text-[8px] font-bold leading-none px-1 py-0.5 rounded bg-[#FEE9DF] text-[#C2541E]">PPT</span>
+							<svg width="15" height="15" fill="none" stroke="#D2603A" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="1.5"/><path d="M8 21h8M12 17v4"/></svg>
+							<div class="mt-1.5 text-[10.5px] font-semibold text-[#C2541E] leading-tight">Slides</div>
 						</button>
-						<button @click="setPanelView('excel', true)" class="text-left rounded-lg border border-gray-200 p-2 bg-[#EEFAF1] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
-							<div class="flex items-center justify-between"><svg width="15" height="15" fill="none" stroke="#1E9E57" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 8l8 8M16 8l-8 8"/></svg><span class="text-[9px] font-bold leading-none px-1.5 py-0.5 rounded bg-[#D8F3E1] text-[#157A43]">XLS</span></div>
-							<div class="mt-1 text-[11px] font-semibold text-[#157A43] leading-tight">Excel</div>
+						<button @click="setPanelView('excel', true)" class="relative text-left rounded-lg border border-gray-200 p-2 bg-[#EEFAF1] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
+							<span class="absolute top-1.5 right-1.5 text-[8px] font-bold leading-none px-1 py-0.5 rounded bg-[#D8F3E1] text-[#157A43]">XLS</span>
+							<svg width="15" height="15" fill="none" stroke="#1E9E57" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 8l8 8M16 8l-8 8"/></svg>
+							<div class="mt-1.5 text-[10.5px] font-semibold text-[#157A43] leading-tight">Excel</div>
 						</button>
-						<button @click="handleExampleClick('Generate an infographic one-pager for: ' + (lastUserQuestion || report?.title || 'this data'))" class="text-left rounded-lg border border-gray-200 p-2 bg-[#FBEFF6] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
-							<div class="flex items-center justify-between"><svg width="15" height="15" fill="none" stroke="#C13D8C" stroke-width="1.8" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><circle cx="9" cy="8" r="2"/><path d="M13 7h4M7 14h10M7 17h7"/></svg><span class="text-[9px] font-bold leading-none px-1.5 py-0.5 rounded bg-[#F6D9EC] text-[#C13D8C]">&beta;</span></div>
-							<div class="mt-1 text-[11px] font-semibold text-[#A52E72] leading-tight">Infographic</div>
+						<button @click="handleExampleClick('Generate an infographic one-pager for: ' + (lastUserQuestion || report?.title || 'this data'))" class="relative text-left rounded-lg border border-gray-200 p-2 bg-[#FBEFF6] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
+							<span class="absolute top-1.5 right-1.5 text-[8px] font-bold leading-none px-1 py-0.5 rounded bg-[#F6D9EC] text-[#C13D8C]">&beta;</span>
+							<svg width="15" height="15" fill="none" stroke="#C13D8C" stroke-width="1.8" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><circle cx="9" cy="8" r="2"/><path d="M13 7h4M7 14h10M7 17h7"/></svg>
+							<div class="mt-1.5 text-[10.5px] font-semibold text-[#A52E72] leading-tight">Infographic</div>
 						</button>
-						<div class="text-left rounded-lg border border-gray-200 p-2 bg-[#F1EEFB] cursor-default opacity-65">
-							<div class="flex items-center justify-between"><svg width="15" height="15" fill="none" stroke="#6B4FD0" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="19" cy="18" r="2"/><path d="M7 12h6M13 12l4-5M13 12l4 5"/></svg><span class="text-[9px] font-bold leading-none px-1.5 py-0.5 rounded bg-[#E3DBF8] text-[#6B4FD0]">&middot;</span></div>
-							<div class="mt-1 text-[11px] font-semibold text-[#5A41B0] leading-tight">Insight Map</div>
+						<div class="relative text-left rounded-lg border border-gray-200 p-2 bg-[#F1EEFB] cursor-default opacity-65">
+							<span class="absolute top-1.5 right-1.5 text-[8px] font-bold leading-none px-1 py-0.5 rounded bg-[#E3DBF8] text-[#6B4FD0]">&middot;</span>
+							<svg width="15" height="15" fill="none" stroke="#6B4FD0" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="19" cy="18" r="2"/><path d="M7 12h6M13 12l4-5M13 12l4 5"/></svg>
+							<div class="mt-1.5 text-[10.5px] font-semibold text-[#5A41B0] leading-tight">Insight Map</div>
 						</div>
-					</div>
-
-					<!-- slim "Soon" pills -->
-					<div class="flex items-center gap-1.5 mt-2 flex-wrap">
-						<span class="text-[10px] font-bold uppercase tracking-wide text-gray-400 mr-1">Soon</span>
-						<span class="text-[11px] inline-flex items-center gap-1 px-2 py-1 rounded-full border border-gray-200 bg-[#EAF7F4] text-[#147a68] opacity-65 cursor-default"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 17l5-5 4 3 7-8"/></svg>Forecast</span>
-						<span class="text-[11px] inline-flex items-center gap-1 px-2 py-1 rounded-full border border-gray-200 bg-[#FDEFEF] text-[#B83434] opacity-65 cursor-default"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 3l9 16H3z"/></svg>Anomaly</span>
+						<div class="relative text-left rounded-lg border border-gray-200 p-2 bg-[#EAF7F4] cursor-default opacity-65">
+							<span class="absolute top-1.5 right-1.5 text-[8px] font-bold leading-none px-1 py-0.5 rounded bg-[#D5EBE5] text-[#147a68]">SOON</span>
+							<svg width="15" height="15" fill="none" stroke="#147a68" stroke-width="1.9" viewBox="0 0 24 24"><path d="M3 17l5-5 4 3 7-8"/></svg>
+							<div class="mt-1.5 text-[10.5px] font-semibold text-[#147a68] leading-tight">Forecast</div>
+						</div>
+						<div class="relative text-left rounded-lg border border-gray-200 p-2 bg-[#FDEFEF] cursor-default opacity-65">
+							<span class="absolute top-1.5 right-1.5 text-[8px] font-bold leading-none px-1 py-0.5 rounded bg-[#F8DADA] text-[#B83434]">SOON</span>
+							<svg width="15" height="15" fill="none" stroke="#B83434" stroke-width="1.9" viewBox="0 0 24 24"><path d="M12 3l9 16H3z"/></svg>
+							<div class="mt-1.5 text-[10.5px] font-semibold text-[#B83434] leading-tight">Anomaly</div>
+						</div>
 					</div>
 				</div>
 
@@ -918,7 +928,7 @@
 							<span class="text-[10px] font-bold uppercase tracking-wide text-gray-400">Data sources</span>
 							<span class="ms-auto text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{{ (report?.data_sources || []).length }}</span>
 						</summary>
-						<div class="px-3 pb-2 space-y-1 text-[12px]">
+						<div class="px-3 pb-2 space-y-1 text-[12px] max-h-[150px] overflow-y-auto">
 							<div
 								v-for="ds in (report?.data_sources || [])"
 								:key="ds?.id"
@@ -5211,29 +5221,31 @@ details[open] > summary .chev {
    Child message content is rendered by child components -> use :deep().
    ========================================================================= */
 
-/* the whole dock + every descendant may shrink; never force horizontal scroll */
-.dash-dock,
-.dash-dock :deep(*) {
+/* the whole chat pane + every descendant may shrink; never force horizontal
+   scroll. Applies in BOTH the dashboard-first dock AND the chat-first split
+   view so content always reflows to the panel width. */
+.chat-pane,
+.chat-pane :deep(*) {
 	min-width: 0;
 }
-.dash-dock {
+.chat-pane {
 	overflow-x: hidden;
 }
 
-/* long words / URLs break instead of widening the dock */
-.dash-dock :deep(p),
-.dash-dock :deep(li),
-.dash-dock :deep(a),
-.dash-dock :deep(span),
-.dash-dock :deep(.markdown-content),
-.dash-dock :deep(.block-content),
-.dash-dock :deep(code) {
+/* long words / URLs break instead of widening the pane */
+.chat-pane :deep(p),
+.chat-pane :deep(li),
+.chat-pane :deep(a),
+.chat-pane :deep(span),
+.chat-pane :deep(.markdown-content),
+.chat-pane :deep(.block-content),
+.chat-pane :deep(code) {
 	overflow-wrap: anywhere;
 	word-break: break-word;
 }
 
-/* TABLES scroll inside their OWN block, never the dock */
-.dash-dock :deep(table) {
+/* TABLES scroll inside their OWN block, never the pane */
+.chat-pane :deep(table) {
 	display: block;
 	width: max-content;
 	max-width: 100%;
@@ -5241,8 +5253,8 @@ details[open] > summary .chev {
 }
 
 /* neutralize any fixed min-width on composer / message containers that
-   would exceed the dock width */
-.dash-dock :deep([class*="min-w-["]) {
+   would exceed the pane width */
+.chat-pane :deep([class*="min-w-["]) {
 	min-width: 0 !important;
 }
 
@@ -5260,15 +5272,21 @@ details[open] > summary .chev {
 	text-overflow: ellipsis;
 }
 
-/* follow-up chips stack vertically full-width in the narrow dock
-   (chip container carries .dock-followups; force a column of full-width chips) */
-.dash-dock :deep(.dock-followups) {
+/* follow-up chips stack vertically in the narrow dock, each chip auto-fits its
+   text (left-aligned), capped at the column width and wrapping long questions
+   onto multiple lines so nothing is ever clipped. */
+.chat-pane :deep(.dock-followups) {
 	flex-direction: column;
-	align-items: stretch;
+	align-items: flex-start;
 }
-.dash-dock :deep(.dock-followups > button) {
-	width: 100%;
+.chat-pane :deep(.dock-followups > button) {
+	width: auto;
+	max-width: 100%;
 	text-align: start;
+	white-space: normal;
+	overflow-wrap: anywhere;
+	line-height: 1.35;
+	border-radius: 14px;
 }
 </style>
 

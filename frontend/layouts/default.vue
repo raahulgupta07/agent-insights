@@ -32,9 +32,9 @@
         </div>
         <!-- Every other page: contextual left rail (AppRail, self-hides when the
              route has no active nav group) + one scroll container for content. -->
-        <div v-else class="flex h-full overflow-hidden">
+        <div v-else class="flex h-full overflow-hidden bg-[#F1ECE3]">
           <AppRail />
-          <div class="flex-1 min-w-0 h-full overflow-y-auto">
+          <div class="flex-1 min-w-0 h-full overflow-hidden">
             <slot />
           </div>
         </div>
@@ -43,9 +43,6 @@
 
     <!-- Global ⌘K / Ctrl+K command palette -->
     <CommandPalette />
-
-    <!-- Floating City Agent status widget (bottom-right) -->
-    <AgentThinking />
   </div>
 </template>
 
@@ -53,7 +50,6 @@
   import TopNav from '~/components/nav/TopNav.vue'
   import AppRail from '~/components/nav/AppRail.vue'
   import ChatHistoryRail from '~/components/nav/ChatHistoryRail.vue'
-  import AgentThinking from '~/components/agent/AgentThinking.vue'
   import { useCan } from '~/composables/usePermissions'
 
   const route = useRoute()

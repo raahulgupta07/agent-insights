@@ -417,7 +417,7 @@ Versioned feature feed surfaced as a 🔔 bell popover in TopNav (before profile
   `VERSION_HYBRID` + adds a `CHANGELOG_HYBRID.md` entry.
 
 **Current state (2026-06-26):** image `cityagent-analytics:dev` on `:3007`, branch `main`,
-mig head **`agentchan1`**, `VERSION_HYBRID`=**1.27.0** (BAKED + live, healthy, users=2). v1.22
+mig head **`agentchan1`**, `VERSION_HYBRID`=**1.33.0** (v1.30.1 BAKED + live, healthy; **v1.31.0–1.33.0 source-only, deployed via ephemeral `yarn generate` + `docker cp` to `ca-app:/app/frontend/dist`, NOT baked**). **v1.33.0 = Overview design + studio-scroll across Build/Manage/Settings/Workspace/Monitoring + report follow-up chips auto-fit + Outputs panel 3-up + fullscreen artifact fill + toolbar auto-fit (pushed to GitHub main 2026-06-26).** Pre-1.28 local backlog still applies. v1.22
 = full warm-theme sweep (every page + 148 comps). **v1.23.0 BAKED** = Parquet result storage +
 interactive query endpoint (flag `HYBRID_PARQUET_RESULTS` **default ON**) — large step results
 (≥`HYBRID_PARQUET_MIN_ROWS`=2000 rows) offload to compressed Parquet on `ca_uploads`; dashboards
@@ -443,6 +443,44 @@ auto-rollback).
   `grid-cols-2` buttons stay flat + equal. Dashboards/Home (`components/home/RecentReportCard.vue`)
   button CSS `flex:1 1 0; width:0; box-sizing:border-box; white-space:nowrap` — bordered ghost +
   borderless primary now render identical width.
+
+**v1.28–1.30.2 Identity Provider + LDAP overhaul (v1.30.1 BAKED; v1.30.2 source-only):**
+- **v1.28.0 login shows only enabled providers:** `pages/users/sign-in.vue` per-button `v-if` on enabled
+  state; `/api/settings` exposes `ldap_enabled` (+ later `ldap_logo`). Google/Microsoft/Keycloak come
+  via `oidc_providers` (MS+Keycloak stored AS oidc providers, names microsoft/keycloak).
+- **v1.29.0 IdP brand logos + toggles + provider library:** `utils/idpLogos.ts` (preset brand SVGs +
+  `idpLogoSvg`), `utils/idpTemplates.ts` (`IDP_TEMPLATES`), `components/idp/IdpLogoPicker.vue`,
+  `IdpProviderLibraryModal.vue`. `identity-provider.vue` rows = `ssoRows` computed (Google·Microsoft·
+  Okta·Keycloak defaults·custom OIDC) w/ logo + smart 4-state pill (`pillText`/`pillClass`) + inline
+  quick-toggle (saves immediately) + "Add provider" library. Logo picker in every config modal.
+  Backend `logo:str` on Google/OIDC/LDAP (`_clean_logo`=preset key OR data:image ≤400KB, fail-soft "").
+  SCIM has no config object → no logo.
+- **v1.29.1 LDAP LOGIN FIX (root cause):** login `core/auth.py` read FILE config `settings.dash_config.ldap`
+  while the admin UI saves LDAP to DB `OrganizationSettings.config['ldap']` → UI LDAP IGNORED at login
+  (Test worked, login didn't). Fix: `get_effective_ldap_config()` (DB-over-file, own session);
+  `UserManager._do_authenticate`/`_ldap_authenticate` use it. `_build_server` derives use_ssl from URL
+  scheme (no SSL toggle in UI).
+- **v1.30.0 MULTIPLE LDAP directories + username login:** storage `config['ldap_directories']` (list;
+  legacy single `config['ldap']` auto-migrates to id="default"). Backend `find_user_by_username`
+  ({username} filter, `escape_filter_chars`) = DocSensei-style USERNAME login (not email-only);
+  `get_effective_ldap_directories()`; login ITERATES all enabled dirs (username-first → email fallback →
+  first success wins → all-unreachable → local break-glass; binds with the dir's email). Routes
+  **`/api/enterprise/ldap/directories[/{id}][/test]`** (GET/POST/PUT/DELETE/POST-test) on `ldap_admin_router`
+  (prefix `/enterprise/ldap`, mounted `main.py` `enterprise_router` prefix `/api`; EE-gated +
+  manage_identity_providers). Pw Fernet, never returned (`bind_password_set`). FE
+  `components/idp/LdapDirectoriesPanel.vue` (multi-dir list: row toggle/test/configure/delete + "Add
+  LDAP / AD directory") + `LdapDirectoryModal.vue` (DocSensei default fields: name/host/port/bind DN/
+  bind pw/base DN/user filter {username}/email+name attr; Advanced collapsed = ssl/tls/group sync/etc).
+  Replaced the single-LDAP row+modal in identity-provider.vue. Built by 2 parallel agents.
+- **v1.30.1 removed floating robot:** dropped `<RobotAssistant />` (app.vue) + `<AgentThinking />`
+  (layouts/default.vue) — gone from all screens. Components kept, just unmounted.
+- **v1.30.2 LDAP panel render fix (NOT baked):** LANDMINE — Nuxt auto-imports `components/idp/*` with an
+  **`Idp` prefix**, so `LdapDirectoriesPanel.vue`/`LdapDirectoryModal.vue` registered as
+  `IdpLdapDirectoriesPanel`/`IdpLdapDirectoryModal`; bare `<LdapDirectoriesPanel>`/`<LdapDirectoryModal>`
+  tags resolved to nothing → panel invisible. (`IdpLogoPicker` worked only because its filename already
+  starts with `Idp`.) FIX = EXPLICIT imports in `identity-provider.vue` + `LdapDirectoriesPanel.vue`.
+  RULE: any component under `components/<dir>/` whose filename doesn't start with `<Dir>` must be
+  explicitly imported (or referenced with the dir-prefixed name). User stopped the bake — pending.
 
 **v1.24.0 Per-agent Channels + Email/SMTP + Docker build speedups (BAKED + live):**
 - **Channels** + **Email / SMTP** are now their OWN left-rail tabs in the Studio MANAGE group

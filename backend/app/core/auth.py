@@ -72,21 +72,50 @@ class UserManager(BaseUserManager[User, str]):
         return user
 
     async def _do_authenticate(self, credentials) -> Optional[User]:
-        ldap_config = settings.dash_config.ldap
-        if ldap_config.enabled:
-            ldap_result = await self._ldap_authenticate(credentials.username, credentials.password)
+        # Effective LDAP config = DB org settings (set via the admin UI) over the
+        # static file config. Login previously read settings.dash_config.ldap
+        # directly, so UI-configured LDAP was ignored entirely.
+        #
+        # Multi-directory path: iterate all enabled directories. On first success
+        # return that user. "unreachable" dirs are tracked — if ALL were unreachable
+        # we fall through to local auth (break-glass). If any dir actively rejected
+        # credentials we return None immediately.
+        from app.services.organization_settings_service import get_effective_ldap_directories
+        import logging as _logging
+        _auth_logger = _logging.getLogger(__name__)
 
-            if ldap_result == "success":
-                # _ldap_authenticate stores the user; look them up
-                try:
-                    return await self.get_by_email(credentials.username)
-                except exceptions.UserNotExists:
-                    return None
-            elif ldap_result == "unreachable":
-                # LDAP server down — fall back to local auth for everyone
-                return await super().authenticate(credentials)
-            else:
-                # LDAP reachable but auth failed — only superusers get local fallback
+        dirs = await get_effective_ldap_directories()
+        if dirs:
+            successes = []
+            unreachable = []
+            failed = []
+
+            for ldap_config in dirs:
+                result = await self._ldap_authenticate(
+                    credentials.username, credentials.password, ldap_config
+                )
+                if isinstance(result, tuple) and result[0] == "success":
+                    # result is ("success", email_used)
+                    _, email_used = result
+                    try:
+                        return await self.get_by_email(email_used)
+                    except exceptions.UserNotExists:
+                        return None
+                elif result == "success":
+                    # legacy path — use typed username
+                    try:
+                        return await self.get_by_email(credentials.username)
+                    except exceptions.UserNotExists:
+                        return None
+                elif result == "unreachable":
+                    unreachable.append(ldap_config)
+                else:
+                    failed.append(ldap_config)
+
+            # Determine fallback behaviour
+            if failed:
+                # At least one dir was reachable but rejected credentials.
+                # Only superusers get local break-glass.
                 try:
                     local_user = await self.get_by_email(credentials.username)
                     if local_user.is_superuser:
@@ -94,8 +123,14 @@ class UserManager(BaseUserManager[User, str]):
                 except exceptions.UserNotExists:
                     pass
                 return None
+            elif len(unreachable) == len(dirs):
+                # All directories were unreachable — fall through to local auth.
+                _auth_logger.warning("All LDAP directories unreachable; falling back to local auth")
+                return await super().authenticate(credentials)
+            # No dirs matched (empty failed+unreachable = no dirs had the user)
+            return None
 
-        # No LDAP — standard local auth
+        # No LDAP directories configured — standard local auth
         return await super().authenticate(credentials)
 
     async def _user_can_use_local_login(self, user: User) -> bool:
@@ -116,12 +151,22 @@ class UserManager(BaseUserManager[User, str]):
             )
             return result.first() is not None
 
-    async def _ldap_authenticate(self, email: str, password: str) -> str:
+    async def _ldap_authenticate(self, username: str, password: str, ldap_config=None):
         """
         Try LDAP bind auth.
 
+        ``ldap_config`` is the effective config resolved by the caller (DB over
+        file). Falls back to the file config only if not supplied.
+
+        Supports two lookup paths:
+        1. Username-filter path (DocSensei style): if user_filter contains
+           {username}, call find_user_by_username() to get the DN and email from
+           the directory entry.
+        2. Email path (legacy): if user_filter is empty or returns None, fall back
+           to find_user_dn() which searches by email attribute.
+
         Returns:
-            "success" — LDAP bind succeeded and user is ready
+            ("success", email_used) — LDAP bind succeeded and user is ready
             "failed"  — LDAP reachable but credentials rejected
             "unreachable" — could not connect to LDAP server
         """
@@ -129,14 +174,34 @@ class UserManager(BaseUserManager[User, str]):
         import logging
         _logger = logging.getLogger(__name__)
 
-        ldap_config = settings.dash_config.ldap
+        if ldap_config is None:
+            ldap_config = settings.dash_config.ldap
         manager = LDAPConnectionManager(ldap_config)
 
-        try:
-            user_dn = manager.find_user_dn(email)
-        except Exception as e:
-            _logger.warning(f"LDAP server unreachable during user search: {e}")
-            return "unreachable"
+        user_dn = None
+        email_used = username  # default: treat username as email
+        display_name = None
+
+        # Path 1: username-filter (user_filter has {username} placeholder)
+        user_filter = getattr(ldap_config, "user_filter", "") or ""
+        if user_filter and "{username}" in user_filter:
+            try:
+                result = manager.find_user_by_username(username)
+            except Exception as e:
+                _logger.warning(f"LDAP server unreachable during username search: {e}")
+                return "unreachable"
+            if result is not None:
+                user_dn, email_from_dir, display_name = result
+                if email_from_dir:
+                    email_used = email_from_dir
+
+        # Path 2: email-based fallback (legacy find_user_dn)
+        if user_dn is None:
+            try:
+                user_dn = manager.find_user_dn(username)
+            except Exception as e:
+                _logger.warning(f"LDAP server unreachable during user search: {e}")
+                return "unreachable"
 
         if not user_dn:
             return "failed"
@@ -148,10 +213,10 @@ class UserManager(BaseUserManager[User, str]):
             _logger.warning(f"LDAP server unreachable during bind: {e}")
             return "unreachable"
 
-        # Bind succeeded — find or create local user
+        # Bind succeeded — find or create local user using the directory email
         try:
-            await self.get_by_email(email)
-            return "success"
+            await self.get_by_email(email_used)
+            return ("success", email_used)
         except exceptions.UserNotExists:
             if not ldap_config.auto_provision_users:
                 return "failed"
@@ -159,20 +224,21 @@ class UserManager(BaseUserManager[User, str]):
             # Auto-provision: create local user from LDAP
             from fastapi_users.password import PasswordHelper
             ph = PasswordHelper()
+            user_name = display_name or email_used.split("@")[0]
             async with self.user_db.session as session:
                 await self.user_db.create({
-                    "email": email,
-                    "name": email.split("@")[0],
+                    "email": email_used,
+                    "name": user_name,
                     "hashed_password": ph.hash(ph.generate()),
                     "is_active": True,
                     "is_verified": True,
                     "is_superuser": False,
                 })
                 await self._attach_open_memberships(
-                    await self.get_by_email(email), session
+                    await self.get_by_email(email_used), session
                 )
                 await session.commit()
-            return "success"
+            return ("success", email_used)
 
     async def on_after_login(
         self,

@@ -4,22 +4,25 @@
              Each /settings/* tab is its own standalone page (nav lives in the
              top-bar "Settings ▾" dropdown). Title + subtitle come from the
              active tab so every page reads like Monitoring/Queries/etc. -->
-        <div class="flex justify-center px-4 md:px-6 text-sm bg-[#F6F1EA] min-h-full">
-            <div class="w-full max-w-7xl py-2 text-[#1f2328]">
-                <!-- Page heading (per-tab) -->
-                <div class="mb-6 pt-2">
-                    <h1
-                        class="text-2xl font-semibold text-[#1f2328] tracking-tight"
-                        style="font-family: ui-serif, Georgia, 'Times New Roman', serif"
-                    >{{ currentTab ? $t(currentTab.label) : $t('settings.title') }}</h1>
-                    <p v-if="currentTab?.description" class="mt-2 text-[#6b6b6b] leading-relaxed max-w-2xl">
-                        {{ currentTab.description }}
-                    </p>
-                </div>
+        <div class="flex justify-center px-4 md:px-6 text-sm bg-[#F1ECE3] h-full overflow-hidden flex flex-col items-center">
+            <div class="w-full max-w-7xl my-2 text-[#1f2328] flex-1 flex flex-col min-h-0">
+                <!-- Overview-matched card shell: cream gutter + #FBFAF6 card -->
+                <div class="px-6 md:px-8 py-6 bg-[#FBFAF6] border border-[#E9E0D3] rounded-2xl flex-1 overflow-y-auto">
+                    <!-- Page heading (per-tab) -->
+                    <div class="mb-6">
+                        <h1
+                            class="text-2xl font-semibold text-[#1f2328] tracking-tight"
+                            style="font-family: 'Spectral', ui-serif, Georgia, serif"
+                        >{{ currentTab ? $t(currentTab.label) : $t('settings.title') }}</h1>
+                        <p v-if="currentTab?.description" class="mt-2 text-[#6b6b6b] leading-relaxed max-w-2xl">
+                            {{ currentTab.description }}
+                        </p>
+                    </div>
 
-                <!-- Page content -->
-                <div class="bg-white border border-[#E9E0D3] rounded-2xl p-6 md:p-8">
-                    <slot />
+                    <!-- Page content -->
+                    <div class="bg-white border border-[#E9E0D3] rounded-2xl p-6 md:p-8">
+                        <slot />
+                    </div>
                 </div>
             </div>
         </div>

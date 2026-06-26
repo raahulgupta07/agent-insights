@@ -2,7 +2,8 @@
 # Licensed under the Business Source License 1.1
 # See ENTERPRISE_LICENSE for details
 
-from fastapi import APIRouter, Depends, Response
+from typing import Optional
+from fastapi import APIRouter, Depends, Response, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_async_db, get_current_organization
@@ -20,6 +21,11 @@ from app.ee.ldap.schemas import (
 from app.settings.config import settings
 from app.models.user import User
 from app.models.organization import Organization
+from app.schemas.organization_settings_schema import (
+    OrgLdapDirectorySchema,
+    OrgLdapDirectoryUpdate,
+)
+from app.services.organization_settings_service import OrganizationSettingsService
 
 ldap_admin_router = APIRouter(prefix="/enterprise/ldap", tags=["enterprise", "ldap"])
 
@@ -136,3 +142,79 @@ async def test_connection(
             pass
 
     return test_result
+
+
+# ---------------------------------------------------------------------------
+# Multi-directory LDAP routes
+# ---------------------------------------------------------------------------
+
+_svc = OrganizationSettingsService()
+
+
+@ldap_admin_router.get("/directories", response_model=list)
+@require_enterprise(feature="ldap")
+@requires_permission("manage_identity_providers")
+async def list_ldap_directories(
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """List all LDAP directories for this organization."""
+    return await _svc.list_ldap_directories(db, organization)
+
+
+@ldap_admin_router.post("/directories", response_model=OrgLdapDirectorySchema)
+@require_enterprise(feature="ldap")
+@requires_permission("manage_identity_providers")
+async def create_ldap_directory(
+    data: OrgLdapDirectoryUpdate,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Create a new LDAP directory."""
+    return await _svc.upsert_ldap_directory(db, organization, current_user, data, dir_id=None)
+
+
+@ldap_admin_router.put("/directories/{dir_id}", response_model=OrgLdapDirectorySchema)
+@require_enterprise(feature="ldap")
+@requires_permission("manage_identity_providers")
+async def update_ldap_directory(
+    dir_id: str,
+    data: OrgLdapDirectoryUpdate,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Update an existing LDAP directory by id."""
+    return await _svc.upsert_ldap_directory(db, organization, current_user, data, dir_id=dir_id)
+
+
+@ldap_admin_router.delete("/directories/{dir_id}")
+@require_enterprise(feature="ldap")
+@requires_permission("manage_identity_providers")
+async def delete_ldap_directory(
+    dir_id: str,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Delete an LDAP directory by id."""
+    deleted = await _svc.delete_ldap_directory(db, organization, current_user, dir_id)
+    if not deleted:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail=f"Directory '{dir_id}' not found")
+    return {"deleted": True, "id": dir_id}
+
+
+@ldap_admin_router.post("/directories/{dir_id}/test")
+@require_enterprise(feature="ldap")
+@requires_permission("manage_identity_providers")
+async def test_ldap_directory(
+    dir_id: str,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Test connectivity to a specific LDAP directory by id."""
+    return await _svc.test_ldap_directory(db, organization, current_user, dir_id)

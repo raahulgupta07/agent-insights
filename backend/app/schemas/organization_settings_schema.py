@@ -361,3 +361,62 @@ class OrgSsoAuthModeUpdate(BaseModel):
 class OrgSignupEnabledSchema(BaseModel):
     """Read/write shape for the public signup enabled toggle."""
     enabled: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Multi-directory LDAP schemas
+# ---------------------------------------------------------------------------
+
+class OrgLdapDirectorySchema(BaseModel):
+    """Read shape for a single LDAP directory (bind_password is never returned)."""
+    id: str
+    name: str
+    enabled: bool
+    logo: str
+    host: str
+    port: int
+    use_ssl: bool
+    start_tls: bool
+    bind_dn: str
+    bind_password_set: bool  # True if encrypted password is stored
+    base_dn: str
+    user_filter: str
+    email_attr: str
+    name_attr: str
+    user_search_base: str
+    group_search_base: str
+    group_search_filter: str
+    group_name_attribute: str
+    group_member_attribute: str
+    group_member_format: str
+    sync_interval_minutes: int
+    auto_provision_users: bool
+    connection_timeout: int
+    page_size: int
+
+
+class OrgLdapDirectoryUpdate(BaseModel):
+    """Write shape for a single LDAP directory; bind_password only sent when (re)setting it."""
+    name: Optional[str] = None
+    enabled: Optional[bool] = None
+    logo: Optional[str] = None
+    host: Optional[str] = None
+    port: Optional[int] = None
+    use_ssl: Optional[bool] = None
+    start_tls: Optional[bool] = None
+    bind_dn: Optional[str] = None
+    bind_password: Optional[str] = None  # only persisted when non-empty/non-None
+    base_dn: Optional[str] = None
+    user_filter: Optional[str] = None
+    email_attr: Optional[str] = None
+    name_attr: Optional[str] = None
+    user_search_base: Optional[str] = None
+    group_search_base: Optional[str] = None
+    group_search_filter: Optional[str] = None
+    group_name_attribute: Optional[str] = None
+    group_member_attribute: Optional[str] = None
+    group_member_format: Optional[str] = None
+    sync_interval_minutes: Optional[int] = None
+    auto_provision_users: Optional[bool] = None
+    connection_timeout: Optional[int] = None
+    page_size: Optional[int] = None

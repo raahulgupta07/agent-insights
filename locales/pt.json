@@ -72,7 +72,8 @@
     "newPassword": "Nova senha",
     "confirmPassword": "Confirmar nova senha",
     "forgotPassword": "Esqueceu a senha?",
-    "newToBow": "Novo no Dash?",    "alreadyHaveAccount": "Já tem uma conta?",
+    "newToBow": "Novo no Dash?",
+    "alreadyHaveAccount": "Já tem uma conta?",
     "rememberPassword": "Lembrou da senha?",
     "resetPassword": "Redefinir senha",
     "resetPasswordTitle": "Redefinir senha",
@@ -278,7 +279,12 @@
     "columnUser": "Usuário",
     "emptyTitle": "Faça uma pergunta para começar.",
     "emptyTipLabel": "Dica:",
-    "emptyTipBody": "Não sabe o que perguntar? Você pode pedir ao Analista de IA que sugira perguntas sobre um tópico específico."
+    "emptyTipBody": "Não sabe o que perguntar? Você pode pedir ao Analista de IA que sugira perguntas sobre um tópico específico.",
+    "openButton": "Open",
+    "openInChatButton": "Open in chat",
+    "statusLive": "live",
+    "statusDraft": "draft",
+    "scopeAll": "All"
   },
   "traceModal": {
     "title": "Execução do agente",
@@ -844,7 +850,8 @@
       "ldapSubtitle": "Sincronize grupos e associações diretamente do seu servidor LDAP / Active Directory",
       "enterpriseLdap": "A sincronização de diretório LDAP requer uma licença enterprise. Sincronize automaticamente grupos do Active Directory, OpenLDAP e outros servidores LDAP.",
       "ldapNotConfigured": "LDAP não está configurado",
-      "ldapNotConfiguredHint": "Configure o LDAP em seu arquivo dash-config para ativar a sincronização de diretório",      "statusConnected": "Conectado",
+      "ldapNotConfiguredHint": "Configure o LDAP em seu arquivo dash-config para ativar a sincronização de diretório",
+      "statusConnected": "Conectado",
       "statusFailed": "Falha na conexão",
       "statusNotTested": "Não testado",
       "testConnection": "Testar conexão",
@@ -893,7 +900,9 @@
       "integrate": "Integrar",
       "setup": "Configurar",
       "excelAddinName": "Suplemento do Excel",
-      "excelAddinDescription": "Carregue o suplemento Dash diretamente desta instância",      "mcpName": "Servidor Dash MCP",      "mcpDescription": "Ative o endpoint MCP para integração com assistentes de IA como Cursor, Claude e outros"
+      "excelAddinDescription": "Carregue o suplemento Dash diretamente desta instância",
+      "mcpName": "Servidor Dash MCP",
+      "mcpDescription": "Ative o endpoint MCP para integração com assistentes de IA como Cursor, Claude e outros"
     },
     "aiSettings": "Configurações de IA",
     "llm": "LLM",
@@ -955,7 +964,8 @@
     "uploadIcon": "Enviar ícone",
     "iconConstraints": "PNG/JPEG, ≤ 512 KB.",
     "aiAnalystName": "Nome do analista de IA",
-    "showCredit": "Mostrar crédito \"Made with Dash\"",    "language": {
+    "showCredit": "Mostrar crédito \"Made with Dash\"",
+    "language": {
       "title": "Idioma",
       "description": "Define o idioma padrão para toda a organização. Os usuários verão a interface neste idioma e a IA responderá nele.",
       "label": "Idioma da organização",
@@ -1392,6 +1402,7 @@
     "subtitle": "Navegue e gerencie seus painéis e slides",
     "searchPlaceholder": "Buscar painéis…",
     "myDashboards": "Meus painéis",
+    "newDashboard": "Novo painel",
     "sharedWithMe": "Compartilhados comigo",
     "empty": "Nenhum painel encontrado",
     "emptyDescription": "Tente ajustar seu termo de busca ou criar um relatório com um painel.",
@@ -1518,7 +1529,8 @@
   "onboarding": {
     "loading": "Carregando...",
     "skip": "Pular onboarding",
-    "welcome": "Bem-vindo ao Dash! 🎉",    "welcomeSubtitle": "Converse com seus dados, faça análises aprofundadas e crie painéis em segundos",
+    "welcome": "Bem-vindo ao Dash! 🎉",
+    "welcomeSubtitle": "Converse com seus dados, faça análises aprofundadas e crie painéis em segundos",
     "next": "Próximo",
     "fallbackTitle": "Começar",
     "fallbackDescription": "Conclua a próxima etapa da sua configuração",
@@ -1527,7 +1539,8 @@
     "intro1": "Começar é rápido: basta conectar seu modelo e sua fonte de dados, e você estará pronto para fazer sua primeira pergunta.",
     "intro2": "👉 Vamos configurar tudo!",
     "steps": {
-      "onboardingTitle": "Bem-vindo ao Dash! 🎉",      "onboardingDescription": "Converse com seus dados, faça análises aprofundadas e crie painéis em segundos",
+      "onboardingTitle": "Bem-vindo ao Dash! 🎉",
+      "onboardingDescription": "Converse com seus dados, faça análises aprofundadas e crie painéis em segundos",
       "onboardingButton": "Boas-vindas",
       "llmTitle": "Configurar LLM",
       "llmDescription": "Conecte-se a qualquer provedor de LLM e use sua própria chave de API",
@@ -1990,7 +2003,9 @@
     }
   },
   "mcpServerModal": {
-    "title": "Servidor MCP do Dash",    "subtitle": "Conecte Claude, Cursor ou qualquer cliente MCP para consultar seus dados via Servidor MCP do Dash.",    "loading": "Carregando...",
+    "title": "Servidor MCP do Dash",
+    "subtitle": "Conecte Claude, Cursor ou qualquer cliente MCP para consultar seus dados via Servidor MCP do Dash.",
+    "loading": "Carregando...",
     "tabMcpClients": "Clientes MCP",
     "tabOauth": "OAuth",
     "generateToken": "Gerar token",

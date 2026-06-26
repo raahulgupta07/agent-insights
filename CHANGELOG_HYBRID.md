@@ -9,6 +9,65 @@ Bullet rules (this is the user-facing "What's new" feed):
     Hidden from the popover; shown collapsed on the full /changelog page only.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.33.0 — Overview design + studio-scroll across the app, report panel polish  (2026-06-26)
+- Every Build, Manage and Settings page (plus all Workspace tabs and Monitoring) now wears the same Overview look — serif title, rounded cream card, section cards and toolbars — so the whole app reads as one design.
+- The left menu and page card now scroll like the Agent Studio: the menu stays put with its own scroll, the page scrolls inside its rounded card, and there's an even 8px gap on every side that never disappears. The menu card also fills the full height instead of stopping short.
+- Follow-up question chips under a report now fit their text, line up on the left, wrap long questions onto multiple lines, and are never cut off — in both the split view and the docked view.
+- The report's Outputs panel shows three cards per row (Dashboard · Report · Slides · Excel · Infographic · Insight Map) with Forecast and Anomaly as "Soon" cards, and the data-source list scrolls on its own so the whole panel fits one screen.
+- Opening a dashboard or infographic in full screen now fills the screen instead of showing a tiny card in the corner.
+- The artifact toolbar auto-fits — the version picker shrinks and the Share button stays visible instead of being clipped.
+  - Reskin: subagent-applied Overview shell to `pages/{knowledge,memory,queries,evals,workflows}/index.vue`, `pages/{instructions,skills,connectors}.vue`; settings via `layouts/settings.vue`; monitoring via `layouts/monitoring.vue`. Lane accents per page.
+  - Studio-scroll parity: `layouts/default.vue` right wrapper `overflow-y-auto`→`overflow-hidden`; each page root `min-h-full`→`h-full overflow-hidden flex flex-col`, card `flex-1`→`flex-1 overflow-y-auto`. `AppRail.vue` aside `h-full`→`self-stretch min-h-0` (replaced-flex collapse fix → full-height rail). Build/Manage/Settings got `railHeader` + per-item `section` in `useAppNav.ts` to trigger the studio card rail.
+  - `ConsoleInstructions.vue` gained a `fill` prop (`h-[calc(100vh-100px)]`→`h-full min-h-0`) so it fills the page card; `pages/instructions.vue` drops the duplicate band-pill wrapper.
+  - Follow-up chips: report chat root gets an always-on `.chat-pane` class; lifted the dock guards (`min-width:0`, `overflow-wrap`, table in-block scroll, `.dock-followups` auto-fit/left/wrap) from `.dash-dock`-only to `.chat-pane` so split view gets them too (`pages/reports/[id]/index.vue`).
+  - Outputs panel: `grid-cols-2`→`grid-cols-3`, badges absolute, Forecast/Anomaly promoted to in-grid SOON cards; data-sources list `max-h-[150px] overflow-y-auto`.
+  - `ArtifactFrame.vue`: fullscreen iframe `absolute inset-4 w-auto h-auto`→`w-full h-full` (iframe is a replaced element → `width:auto` ignored insets → collapsed to intrinsic 300×150). Toolbar `min-w-0`/`flex-1` on selector, `shrink-0` on action group → no Share clipping.
+
+## v1.32.1 — Workspace Overview framing fix  (2026-06-26)
+- The Workspace Overview now sits in its own rounded panel — matching curved corners, a soft border and an even gap on every side — so it pairs cleanly with the left menu instead of running flush to the window edge.
+  - `pages/workspace/index.vue` root wrapped in the studio-main card (`my-2 me-2 px-6/8 py-6 bg-[#FBFAF6] border border-[#E9E0D3] rounded-2xl min-h-[calc(100%-1rem)]`) on a `#F1ECE3` cream gutter; removed the old `max-w-[1180px]` left-align that left a dead right gap. Full all-tabs design mock at `scratchpad/workspace-all-tabs.html` (Overview/Templates/Reports/Dashboards/Presentations/Spreadsheets/Scheduled).
+
+## v1.32.0 — New Workspace Overview (Auto-pilot design)  (2026-06-26)
+- Workspace now opens on a clean Overview that mirrors the agent Auto-pilot look: a quick "Create" row (new report · dashboard · import), your work organized into four colour-coded lanes (Reports · Dashboards · Presentations · Spreadsheets), and a Library & Schedule row (templates + scheduled). Everything you make shows up here automatically.
+  - New `pages/workspace/index.vue` (readiness-style ring + `#2B2A26` numbered band pills + gradient create cards + 4 tinted lanes `#E7F1EB/#E4F0F4/#ECEAFB/#F6EEDD`, copied from the studio Auto-pilot tokens). Fail-soft fetch from existing endpoints (`/reports`, `/reports?has_artifacts=yes`, `/api/artifacts/presentations`, `/templates`, `/scheduled-tasks`). Added `overview` nav item (first in the Workspace group → `/workspace`).
+
+## v1.31.1 — New brand logo across the app  (2026-06-26)
+- The new circular City Holdings mark replaces the old gradient square — top nav (every page), login header, and the browser-tab favicon. Text stays "City Agent Insights".
+  - Cropped icon from source → `public/assets/logo-mark*.png` + `logo-128.png` + `favicon.ico`/`favicon-32.png`/`apple-touch-icon.png`; TopNav `.cag-mark` + login header swapped CSS-gradient → `<img>`; favicon links added in `nuxt.config.ts`.
+  - Dockerfile durable fix: frontend builder now uses `node:22-bookworm-slim` instead of the nodesource curl|bash apt install — kills the #1 cold-build failure (network download + OOM-from-apt). Fast FE deploy: host `yarn generate` + `docker cp .output/public/. ca-app:/app/frontend/dist` (ephemeral, no image rebuild).
+
+## v1.31.0 — Identity Provider: one unified, add-driven list  (2026-06-26)
+- The Identity Provider page is now one clean list. Nothing is preset — you start empty and click "Add provider" to add Google, Microsoft, Okta, Keycloak, any OIDC, an LDAP / AD directory, or SCIM provisioning. No more rows sitting there disabled.
+- "Add provider" sits at the top-right; LDAP and SCIM are added the same way as everything else.
+- Every entry has the same controls: Configure, an on/off switch, and remove.
+- Removing a provider now asks for confirmation (tick "I understand this can't be undone") so you can't delete one by accident.
+- A "Save changes" button applies your on/off switches and auth-mode choice — flip things freely, then Save once. "Unsaved changes" shows when there's something to save.
+- Removed the public sign-up toggle (no open registration from this page).
+  - `pages/settings/identity-provider.vue` full rewrite → one `methods` computed merging kinds google/oidc/ldap/scim (only existing/added items shown). Add → `IdpProviderLibraryModal` (now 3 groups via `IDP_TEMPLATES.group`: social/directory/provisioning) → per-type config modal (Google `/sso/google`, OIDC `/sso/oidc` full-list, LDAP `LdapDirectoryModal`→`/enterprise/ldap/directories`, SCIM `useScimTokens`). Configure saves immediately; enable/disable + auth-mode are STAGED → `save()` batches PUT sso/oidc + sso/google + changed ldap dirs + sso/auth-mode, then reloads + clears dirty. Delete = double-confirm modal. Explicit imports (idp/ auto-import prefix landmine). Dropped the 4 fixed default rows, separate SCIM + LDAP sections, `useLdapSync`/single-`ldapForm`, public-signup. No backend change.
+
+## v1.30.2 — Fix: LDAP directories panel now actually shows  (2026-06-26)
+- The "LDAP / AD Directories" configuration (add/list/test directories) was invisible — now it renders under the LDAP Directory Sync section.
+  - Root cause: Nuxt auto-imports `components/idp/*` with an `Idp` prefix, so `LdapDirectoriesPanel.vue`/`LdapDirectoryModal.vue` registered as `IdpLdapDirectoriesPanel`/`IdpLdapDirectoryModal`; the bare `<LdapDirectoriesPanel>` / `<LdapDirectoryModal>` tags resolved to nothing and rendered empty. Fix: explicit imports in `identity-provider.vue` and `LdapDirectoriesPanel.vue`.
+
+## v1.30.1 — Removed the floating assistant robot  (2026-06-26)
+- The floating robot widget in the bottom-right corner is gone from every screen.
+  - Removed the global `<RobotAssistant />` mount (`app.vue`) and the `<AgentThinking />` mount + import (`layouts/default.vue`). Components left in the repo, just no longer rendered; activity-store mirrors that fed them are harmless no-ops.
+
+## v1.30.0 — Multiple LDAP / AD directories + username login  (2026-06-26)
+- You can now connect more than one LDAP / Active Directory — add as many directories as you need, each with its own enable switch, Test connection, and Delete.
+- Sign-in setup is simpler: the default form asks only for the essentials (directory name, host, port, bind DN, bind password, base DN, user filter, email & name attribute). Everything else is tucked under "Advanced".
+- Users sign in with their directory username (e.g. the `{username}` in your user filter, like sAMAccountName) — not only their email.
+  - Storage: `config['ldap_directories']` list (each: id, name, enabled, logo, host, port, bind DN, Fernet bind pw, base DN, user_filter, email/name attr + advanced). Legacy single `config['ldap']` auto-migrates to one directory (id "default", host/port/ssl parsed from its url); legacy key left intact.
+  - Backend: `find_user_by_username` ({username} filter, `escape_filter_chars`); `_build_server` host/port path; `get_effective_ldap_directories()` (DB-over-file, own session); login (`UserManager._do_authenticate`) iterates all enabled directories — username-first, email fallback, first success wins, all-unreachable → local break-glass, binds with the directory's email. Routes `GET/POST/PUT/DELETE/POST-test /api/enterprise/ldap/directories[/{id}]` (EE-gated, manage_identity_providers). Passwords never returned (`bind_password_set` flag).
+  - Frontend: `components/idp/LdapDirectoriesPanel.vue` (multi-directory list, per-row toggle/test/configure/delete + "Add LDAP / AD directory") + `LdapDirectoryModal.vue` (DocSensei-style default fields + Advanced collapsible). Replaces the single-LDAP row/modal in `identity-provider.vue`.
+
+## v1.29.1 — Fix: LDAP / Active Directory login now actually uses your saved settings  (2026-06-26)
+- LDAP sign-in was ignoring the directory you configured in Settings, so logins always fell back to local accounts. It now uses the saved LDAP/AD connection — directory users can sign in.
+- LDAPS (secure) servers now connect correctly based on the server URL (ldaps://), even without a separate SSL switch.
+  - Root cause: login (`core/auth.py`) read the static file config `settings.dash_config.ldap`, while the admin UI saves LDAP into `OrganizationSettings.config['ldap']` (DB). Admin "Test connection" worked (it read the DB), but actual login never did → `enabled` was always False → straight to local auth.
+  - Fix: new `get_effective_ldap_config()` resolver (DB-over-file, own session, fail-soft) in `organization_settings_service.py`; `UserManager._do_authenticate`/`_ldap_authenticate` (core/auth.py) now resolve and pass the effective config instead of reading the file directly.
+  - `LDAPConnectionManager._build_server` derives `use_ssl` from the URL scheme (ldaps:// → SSL, ldap:// → plain) since the modal has no SSL toggle — avoids the ldap3 "full ldaps:// URL + use_ssl=False" conflict that silently failed.
+
 ## v1.29.0 — Identity Provider: brand logos, on/off toggles, and a provider library  (2026-06-26)
 - Every sign-in method (Google, Microsoft, Okta, Keycloak, OIDC, LDAP) now shows its real brand logo, on the settings page and on the login screen.
 - Each method has a simple On/Off switch right in the list. Turn one on even before it's fully set up — it just shows an "On · Needs setup" note, and the login button errors politely until you finish.

@@ -1,69 +1,90 @@
 <template>
-    <div class="flex justify-center ps-2 md:ps-4 text-sm bg-[#F6F1EA] min-h-full">
-        <div class="w-full max-w-7xl px-4 ps-0 py-2">
-            <div>
-                <h1
-                    class="text-[32px] font-medium text-[#211B14] tracking-tight flex items-center"
-                    style="font-family: 'Spectral', ui-serif, Georgia, serif"
-                >
-                    <GoBackChevron v-if="isExcel" />
-                    {{ $t('dashboards.title') }}
-                </h1>
-                <p class="mt-2 text-[#6b6b6b] leading-relaxed max-w-2xl">{{ $t('dashboards.subtitle') }}</p>
-            </div>
+  <div class="bg-[#F1ECE3] h-full overflow-hidden flex flex-col">
+    <div class="my-2 me-2 px-6 md:px-8 py-6 text-sm bg-[#FBFAF6] border border-[#E9E0D3] rounded-2xl flex-1 overflow-y-auto">
 
-            <div class="mt-6">
-                <!-- Main tabs (My / Shared) — directly under header, ABOVE search (canonical) -->
-                <div class="border-b border-[#E9E0D3] mb-4">
-                    <nav class="-mb-px flex space-x-6">
-                        <button
-                            class="whitespace-nowrap border-b-2 py-2 px-1 text-sm flex items-center font-medium"
-                            :class="activeFilter === 'my'
-                                ? 'border-[#C2541E] text-[#1f2328]'
-                                : 'border-transparent text-[#6b6b6b] hover:border-[#E9E0D3] hover:text-[#1f2328]'"
-                            @click="setActiveFilter('my')"
-                        >
-                            <span>{{ $t('dashboards.myDashboards') }}</span>
-                        </button>
-                        <button
-                            class="whitespace-nowrap border-b-2 py-2 px-1 text-sm flex items-center font-medium"
-                            :class="activeFilter === 'shared'
-                                ? 'border-[#C2541E] text-[#1f2328]'
-                                : 'border-transparent text-[#6b6b6b] hover:border-[#E9E0D3] hover:text-[#1f2328]'"
-                            @click="setActiveFilter('shared')"
-                        >
-                            <span>{{ $t('dashboards.sharedWithMe') }}</span>
-                        </button>
-                    </nav>
-                </div>
+      <!-- header: title + readiness-style ring -->
+      <div class="flex items-start justify-between gap-4 mb-1">
+        <div>
+          <h2
+            class="text-lg font-semibold text-[#1f2328] flex items-center"
+            style="font-family: 'Spectral', ui-serif, Georgia, serif"
+          >
+            <GoBackChevron v-if="isExcel" />
+            {{ $t('dashboards.title') }}
+          </h2>
+          <p class="text-xs text-[#6b6b6b] mt-0.5 max-w-[560px]">{{ $t('dashboards.subtitle') }}</p>
+        </div>
+        <div class="shrink-0 text-center">
+          <div class="relative w-[54px] h-[54px] mx-auto">
+            <svg width="54" height="54" style="transform:rotate(-90deg)">
+              <circle cx="27" cy="27" r="22" stroke="#ECE7E0" stroke-width="6" fill="none" />
+              <circle cx="27" cy="27" r="22" stroke="#1F6F8B" stroke-width="6" fill="none" stroke-linecap="round" stroke-dasharray="138" :stroke-dashoffset="ringOffset" style="transition:stroke-dashoffset .5s" />
+            </svg>
+            <div class="absolute inset-0 flex items-center justify-center text-[15px] font-semibold text-[#1F6F8B]" style="font-family: ui-serif, Georgia, serif">{{ pagination.total }}</div>
+          </div>
+          <div class="text-[9px] uppercase tracking-wide text-[#9a958c] mt-0.5">boards</div>
+        </div>
+      </div>
 
-                <!-- Search -->
-                <div class="flex flex-col md:flex-row md:items-center gap-3 mb-3">
-                    <div class="flex-1 w-full">
-                        <div class="relative">
-                            <input
-                                v-model="searchTerm"
-                                type="text"
-                                :placeholder="$t('dashboards.searchPlaceholder')"
-                                class="w-full ps-10 pe-4 py-2.5 bg-white border border-[#E9E0D3] rounded-xl text-[#1f2328] placeholder:text-[#9a958c] focus:outline-none focus:ring-2 focus:ring-[#C2541E]/30 focus:border-[#C2541E]"
-                            />
-                            <UIcon
-                                name="i-heroicons-magnifying-glass"
-                                class="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9a958c]"
-                            />
-                        </div>
-                    </div>
-                </div>
+      <!-- toolbar: search · segmented filter · primary -->
+      <div class="flex flex-col md:flex-row md:items-center gap-3 mt-4 mb-4">
+        <div class="relative flex-1 w-full">
+          <input
+            v-model="searchTerm"
+            type="text"
+            :placeholder="$t('dashboards.searchPlaceholder')"
+            class="w-full ps-9 pe-4 py-2 bg-white border border-[#E9E0D3] rounded-xl text-[#1f2328] placeholder:text-[#9a958c] focus:outline-none focus:ring-2 focus:ring-[#1F6F8B]/30 focus:border-[#1F6F8B]"
+          />
+          <UIcon
+            name="i-heroicons-magnifying-glass"
+            class="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9a958c]"
+          />
+        </div>
+
+        <!-- segmented filter (reuses existing scope values) -->
+        <div class="inline-flex rounded-xl border border-[#E9E0D3] bg-white p-0.5 self-start shrink-0">
+          <button
+            type="button"
+            class="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
+            :class="activeFilter === 'my' ? 'bg-[#1F6F8B] text-white' : 'text-[#6b6b6b] hover:text-[#1f2328]'"
+            @click="setActiveFilter('my')"
+          >
+            {{ $t('dashboards.myDashboards') }}
+          </button>
+          <button
+            type="button"
+            class="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
+            :class="activeFilter === 'shared' ? 'bg-[#1F6F8B] text-white' : 'text-[#6b6b6b] hover:text-[#1f2328]'"
+            @click="setActiveFilter('shared')"
+          >
+            {{ $t('dashboards.sharedWithMe') }}
+          </button>
+        </div>
+
+        <!-- primary action -->
+        <button
+          type="button"
+          class="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl bg-[#C2541E] text-white hover:bg-[#A8330F] transition-colors"
+          @click="navigateTo('/reports/new')"
+        >
+          <UIcon name="i-heroicons-plus" class="w-4 h-4" />
+          {{ $t('dashboards.newDashboard') }}
+        </button>
+      </div>
+
+      <!-- band-pill section: YOUR BOARDS -->
+      <div class="relative border border-[#E9E0D3] rounded-2xl bg-white p-4">
+        <span class="absolute -top-2.5 left-4 bg-[#2B2A26] text-white text-[9.5px] font-semibold px-2.5 py-0.5 rounded-full tracking-wide">YOUR BOARDS</span>
 
                 <!-- Loading state -->
-                <div v-if="isLoading" class="mt-4">
-                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                <div v-if="isLoading" class="mt-1">
+                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                         <div
-                            v-for="i in 10"
+                            v-for="i in 9"
                             :key="i"
-                            class="bg-white border border-[#E9E0D3] rounded-2xl overflow-hidden"
+                            class="border border-[#E9E0D3] rounded-xl bg-gradient-to-b from-white to-[#fdfcf9] overflow-hidden"
                         >
-                            <div class="aspect-[4/3] ca-sk !rounded-none"></div>
+                            <div class="h-24 ca-sk !rounded-none"></div>
                             <div class="p-3 space-y-2">
                                 <div class="h-4 ca-sk w-3/4"></div>
                                 <div class="h-3 ca-sk w-1/2"></div>
@@ -74,7 +95,7 @@
 
                 <!-- Cards grid -->
                 <div v-else-if="reports.length > 0">
-                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 ca-stagger">
+                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mt-1 ca-stagger">
                         <RecentReportCard
                             v-for="report in reports"
                             :key="report.id"
@@ -139,26 +160,28 @@
                 </div>
 
                 <!-- Empty state -->
-                <div v-else class="mt-12 flex flex-col items-center text-center">
-                    <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-[#F4EEE5] border border-[#E9E0D3]">
-                        <Icon
-                            name="heroicons:chart-bar-square"
-                            class="h-6 w-6 text-[#C2541E]"
-                        />
-                    </div>
+                <div
+                    v-else
+                    class="border border-dashed border-[#d8cfc0] rounded-xl bg-gradient-to-b from-white to-[#fdfcf9] flex flex-col items-center justify-center text-center py-12 mt-1"
+                >
+                    <span class="w-12 h-12 rounded-xl bg-[#E4F0F4] flex items-center justify-center mb-3">
+                        <Icon name="heroicons:chart-bar-square" class="h-6 w-6 text-[#1F6F8B]" />
+                    </span>
                     <h3
-                        class="mt-3 text-base font-semibold text-[#1f2328]"
+                        class="text-[13px] font-semibold text-[#1f2328]"
                         style="font-family: 'Spectral', ui-serif, Georgia, serif"
                     >
                         {{ $t('dashboards.empty') }}
                     </h3>
-                    <p class="mt-1 text-sm text-[#6b6b6b]">
+                    <p class="text-[11px] text-[#9a958c] mt-1 max-w-[280px]">
                         {{ $t('dashboards.emptyDescription') }}
                     </p>
                 </div>
-            </div>
-        </div>
+
+      </div>
+
     </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -185,6 +208,12 @@ const pagination = ref({
 })
 const searchTerm = ref('')
 const { isExcel } = useExcel()
+
+// header ring fills toward 12 boards (purely visual, blue lane)
+const ringOffset = computed(() => {
+    const pct = Math.min(100, Math.round((pagination.value.total / 12) * 100))
+    return Math.round(138 - 138 * pct / 100)
+})
 
 const visiblePages = computed(() => {
     const total = pagination.value.total_pages

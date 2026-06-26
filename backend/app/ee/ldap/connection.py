@@ -34,13 +34,43 @@ class LDAPConnectionManager:
         return self._ldap3
 
     def _build_server(self):
+        # The admin UI has no explicit SSL toggle, so let the URL scheme drive
+        # it: ldaps:// → SSL, ldap:// → plain. Falls back to the stored use_ssl
+        # flag when the URL carries no scheme. (Passing a full ldaps:// URL AND
+        # use_ssl=False to ldap3 otherwise conflict → silent connect failures.)
+        url = (self.config.url or "").strip()
+        low = url.lower()
+        if low.startswith("ldaps://"):
+            use_ssl = True
+        elif low.startswith("ldap://"):
+            use_ssl = False
+        else:
+            use_ssl = bool(self.config.use_ssl)
+
         tls_config = None
-        if self.config.use_ssl or self.config.start_tls:
+        if use_ssl or self.config.start_tls:
             tls_config = self.ldap3.Tls(validate=ssl.CERT_NONE)
 
+        # Multi-directory path: when url is empty but host is set, build from
+        # host/port/use_ssl (DocSensei-compatible username-filter flow).
+        if not url and getattr(self.config, "host", ""):
+            host = self.config.host.strip()
+            port = int(getattr(self.config, "port", 389) or 389)
+            use_ssl = bool(self.config.use_ssl)
+            if use_ssl or self.config.start_tls:
+                tls_config = self.ldap3.Tls(validate=ssl.CERT_NONE)
+            return self.ldap3.Server(
+                host,
+                port=port,
+                use_ssl=use_ssl,
+                tls=tls_config,
+                get_info=self.ldap3.ALL,
+                connect_timeout=self.config.connection_timeout,
+            )
+
         return self.ldap3.Server(
-            self.config.url,
-            use_ssl=self.config.use_ssl,
+            url,
+            use_ssl=use_ssl,
             tls=tls_config,
             get_info=self.ldap3.ALL,
             connect_timeout=self.config.connection_timeout,
@@ -174,13 +204,78 @@ class LDAPConnectionManager:
         finally:
             conn.unbind()
 
+    def find_user_by_username(self, username: str) -> Optional[tuple]:
+        """Search for a user by username using user_filter template.
+
+        The user_filter field must contain {username} as a placeholder (DocSensei
+        style, e.g. "(sAMAccountName={username})"). The username is escaped to
+        prevent LDAP injection.
+
+        Returns (entry_dn, email, name) or None if not found / filter not set.
+        """
+        user_filter = getattr(self.config, "user_filter", "") or ""
+        if not user_filter or "{username}" not in user_filter:
+            return None
+
+        email_attr = getattr(self.config, "email_attr", None) or getattr(self.config, "user_email_attribute", "mail") or "mail"
+        name_attr = getattr(self.config, "name_attr", None) or getattr(self.config, "user_name_attribute", "cn") or "cn"
+
+        try:
+            from ldap3.utils.conv import escape_filter_chars
+            escaped = escape_filter_chars(username)
+        except Exception:
+            escaped = username
+
+        search_filter = user_filter.replace("{username}", escaped)
+        search_base = self.config.base_dn or ""
+
+        conn = self.get_connection()
+        try:
+            conn.search(
+                search_base=search_base,
+                search_filter=search_filter,
+                search_scope=self.ldap3.SUBTREE,
+                attributes=[email_attr, name_attr],
+                size_limit=1,
+            )
+            if not conn.entries:
+                return None
+            entry = conn.entries[0]
+            user_dn = str(entry.entry_dn)
+            # Safely extract attribute values (ldap3 may return list or scalar)
+            try:
+                email_val = entry[email_attr].value if email_attr in entry else None
+                email = str(email_val) if email_val else None
+            except Exception:
+                email = None
+            try:
+                name_val = entry[name_attr].value if name_attr in entry else None
+                name = str(name_val) if name_val else username
+            except Exception:
+                name = username
+            return (user_dn, email, name)
+        finally:
+            conn.unbind()
+
+    def _server_label(self) -> str:
+        """Return a human-readable server label for test/error output."""
+        url = (self.config.url or "").strip()
+        if url:
+            return url
+        host = getattr(self.config, "host", "") or ""
+        if host:
+            port = int(getattr(self.config, "port", 389) or 389)
+            return f"{host}:{port}"
+        return ""
+
     def test_connection(self) -> Dict[str, Any]:
         """Test LDAP connectivity and return status info."""
+        server_label = self._server_label()
         try:
             conn = self.get_connection()
             server_info = {
                 "connected": True,
-                "server": self.config.url,
+                "server": server_label,
                 "vendor": str(conn.server.info.vendor_name) if conn.server.info and conn.server.info.vendor_name else None,
             }
             conn.unbind()
@@ -188,6 +283,6 @@ class LDAPConnectionManager:
         except Exception as e:
             return {
                 "connected": False,
-                "server": self.config.url,
+                "server": server_label,
                 "error": str(e),
             }

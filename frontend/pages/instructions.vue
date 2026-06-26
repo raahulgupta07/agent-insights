@@ -1,7 +1,7 @@
 <template>
-    <div class="flex justify-center px-4 md:px-6 text-sm bg-[#F6F1EA] min-h-full">
-        <div class="w-full max-w-7xl py-2 h-full">
-            <ConsoleInstructions show-header />
+    <div class="bg-[#F1ECE3] h-full overflow-hidden flex flex-col">
+        <div class="my-2 me-2 px-6 md:px-8 py-6 text-sm bg-[#FBFAF6] border border-[#E9E0D3] rounded-2xl flex-1 min-h-0 flex flex-col overflow-hidden">
+            <ConsoleInstructions show-header fill class="flex-1 min-h-0" />
         </div>
     </div>
 </template>

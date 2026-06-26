@@ -1,5 +1,5 @@
 <template>
-    <div class="flex flex-col h-[calc(100vh-100px)]">
+    <div :class="['flex flex-col', fill ? 'h-full min-h-0' : 'h-[calc(100vh-100px)]']">
         <!-- Optional page header -->
         <div v-if="showHeader" class="flex items-start justify-between gap-4 mb-6 shrink-0">
             <div>
@@ -213,8 +213,12 @@ import type { Instruction } from '~/composables/useInstructionHelpers'
 // Props
 withDefaults(defineProps<{
     showHeader?: boolean
+    // When true, fill the parent's height (flex child) instead of the fixed
+    // 100vh-100px page height — used when embedded inside a card shell.
+    fill?: boolean
 }>(), {
-    showHeader: false
+    showHeader: false,
+    fill: false
 })
 
 // Agent filtering

@@ -1,111 +1,151 @@
 <template>
-  <div class="flex justify-center ps-2 md:ps-4 text-sm bg-[#F6F1EA] min-h-full">
-    <div class="w-full max-w-7xl px-4 ps-0 py-2 text-[#1f2328]">
-      <div>
-        <div class="flex items-start justify-between gap-4">
-          <div>
-            <h1
-              class="text-[32px] font-medium text-[#211B14] tracking-tight flex items-center"
-              style="font-family: 'Spectral', ui-serif, Georgia, serif"
-            >
-              <GoBackChevron v-if="isExcel" />
-              {{ $t('scheduled.title') }}
-            </h1>
-            <p class="mt-2 text-[#6b6b6b] leading-relaxed max-w-2xl">Automatically run prompts on a recurring schedule.</p>
-          </div>
-          <button
-            @click="openNewTask"
-            :disabled="creatingTask"
-            class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl bg-[#C2541E] text-white hover:bg-[#A8330F] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-          >
-            <Spinner v-if="creatingTask" class="w-4 h-4 animate-spin" />
-            <UIcon v-else name="i-heroicons-plus" class="w-4 h-4" />
-            {{ creatingTask ? $t('scheduled.creating') : $t('scheduled.newTask') }}
-          </button>
-        </div>
+  <div class="bg-[#F1ECE3] h-full overflow-hidden flex flex-col">
+    <div class="my-2 me-2 px-6 md:px-8 py-6 text-sm bg-[#FBFAF6] border border-[#E9E0D3] rounded-2xl flex-1 overflow-y-auto">
 
-        <div class="mt-6 flex flex-col md:flex-row md:items-center gap-3">
-          <div class="flex-1 w-full">
-            <div class="relative">
-              <input
-                v-model="searchTerm"
-                type="text"
-                :placeholder="$t('scheduled.searchPlaceholder')"
-                class="w-full ps-10 pe-4 py-2.5 bg-white text-[#1f2328] border border-[#E9E0D3] rounded-xl placeholder:text-[#9a958c] focus:outline-none focus:ring-2 focus:ring-[#C2541E]/40 focus:border-[#C2541E]"
-              />
-              <UIcon
-                name="i-heroicons-magnifying-glass"
-                class="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9a958c]"
-              />
-            </div>
-          </div>
+      <!-- header: title + readiness-style ring -->
+      <div class="flex items-start justify-between gap-4 mb-1">
+        <div>
+          <h2 class="text-lg font-semibold text-[#1f2328] flex items-center" style="font-family: 'Spectral', ui-serif, Georgia, serif">
+            <GoBackChevron v-if="isExcel" />
+            {{ $t('scheduled.title') }}
+          </h2>
+          <p class="text-xs text-[#6b6b6b] mt-0.5 max-w-[480px]">Reports that re-run on a cadence and deliver to a channel or inbox automatically.</p>
         </div>
+        <div class="shrink-0 text-center">
+          <div class="relative w-[54px] h-[54px] mx-auto">
+            <svg width="54" height="54" style="transform:rotate(-90deg)">
+              <circle cx="27" cy="27" r="22" stroke="#ECE7E0" stroke-width="6" fill="none" />
+              <circle cx="27" cy="27" r="22" stroke="#6b6b6b" stroke-width="6" fill="none" stroke-linecap="round" stroke-dasharray="138" :stroke-dashoffset="ringOffset" style="transition:stroke-dashoffset .5s" />
+            </svg>
+            <div class="absolute inset-0 flex items-center justify-center text-[15px] font-semibold text-[#6b6b6b]" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ taskCount }}</div>
+          </div>
+          <div class="text-[9px] uppercase tracking-wide text-[#9a958c] mt-0.5">tasks</div>
+        </div>
+      </div>
+
+      <!-- toolbar: segmented + new -->
+      <div class="flex items-center gap-2 mt-4 mb-4">
+        <div class="flex bg-[#F1ECE3] rounded-lg p-0.5 text-[12px]">
+          <button
+            v-for="opt in statusOptions"
+            :key="opt.value"
+            type="button"
+            @click="statusFilter = opt.value"
+            class="px-3 py-1.5 rounded-md font-medium transition-colors"
+            :class="statusFilter === opt.value ? 'bg-[#6b6b6b] text-white font-semibold' : 'text-[#6b6b6b] hover:text-[#1f2328]'"
+          >{{ opt.label }}</button>
+        </div>
+        <button
+          @click="openNewTask"
+          :disabled="creatingTask"
+          class="ml-auto flex items-center justify-center gap-2 bg-[#C2541E] text-white text-[13px] rounded-lg px-3 py-2 font-semibold hover:bg-[#A8330F] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap shrink-0"
+        >
+          <Spinner v-if="creatingTask" class="w-4 h-4 animate-spin" />
+          <UIcon v-else name="i-heroicons-plus" class="w-4 h-4" />
+          {{ creatingTask ? $t('scheduled.creating') : $t('scheduled.newTask') }}
+        </button>
       </div>
 
       <!-- Loading -->
-      <div v-if="isLoading" class="text-xs text-gray-500 inline-flex items-center">
+      <div v-if="isLoading" class="mt-4 text-xs text-[#9a958c] inline-flex items-center">
         <Spinner class="me-1" /> {{ $t('scheduled.loading') }}
       </div>
 
-      <!-- Empty -->
-      <div v-else-if="tasks.length === 0" class="flex flex-col items-center justify-center py-16 px-4 text-center">
-        <span class="inline-flex w-11 h-11 mb-3 items-center justify-center rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] text-[#C2541E]">
-          <UIcon name="i-heroicons-clock" class="w-6 h-6" />
-        </span>
-        <h3 class="text-[15px] font-semibold text-[#1f2328] mb-1" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ $t('scheduled.empty') }}</h3>
-        <p class="text-sm text-[#9a958c] text-center max-w-sm">
-          {{ $t('scheduled.emptyDescription') }}
-        </p>
-      </div>
+      <!-- section card -->
+      <div v-else class="relative border border-[#E9E0D3] rounded-2xl bg-white p-4">
+        <span class="absolute -top-2.5 left-4 bg-[#2B2A26] text-white text-[9.5px] font-semibold px-2.5 py-0.5 rounded-full tracking-wide">SCHEDULED TASKS</span>
 
-      <!-- Task cards -->
-      <div v-else class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+        <!-- Empty -->
         <div
-          v-for="task in tasks"
-          :key="task.id"
-          class="border border-gray-100 bg-white rounded-lg p-4 hover:shadow-md hover:border-gray-200 transition-all cursor-pointer h-full"
-          @click="openTask(task)"
+          v-if="filteredTasks.length === 0"
+          class="mt-1 flex flex-col items-center justify-center text-center border border-dashed border-[#d8cfc0] rounded-xl bg-gradient-to-b from-white to-[#fdfcf9] py-12"
         >
-          <div class="flex items-start justify-between gap-3">
-            <div class="min-w-0 flex-1">
-              <div class="flex items-center gap-2 mb-1">
-                <span
-                  class="text-[10px] px-1.5 py-0.5 rounded border"
-                  :class="task.is_active
-                    ? 'text-green-700 border-green-200 bg-green-50'
-                    : 'text-gray-700 border-gray-200 bg-gray-50'"
-                >{{ task.is_active ? $t('scheduled.active') : $t('scheduled.paused') }}</span>
-                <span class="text-[11px] text-gray-400">{{ getCronLabel(task.cron_schedule) }}</span>
-                <span v-if="task.last_run_at" class="text-[11px] text-gray-400">&middot; {{ $t('scheduled.lastRun', { time: formatRelativeTime(task.last_run_at) }) }}</span>
-              </div>
-              <div class="text-sm font-medium text-gray-900 mb-1 line-clamp-2">{{ task.prompt?.content || $t('scheduled.untitledTask') }}</div>
-              <div class="flex items-center gap-3 mt-2">
+          <span class="w-12 h-12 rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] flex items-center justify-center text-[#6b6b6b] mb-3">
+            <UIcon name="i-heroicons-clock" class="w-6 h-6" />
+          </span>
+          <div class="text-[13px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ $t('scheduled.empty') }}</div>
+          <div class="text-[11px] text-[#9a958c] mt-1 max-w-[320px]">{{ $t('scheduled.emptyDescription') }}</div>
+        </div>
+
+        <!-- Table -->
+        <table v-else class="w-full text-[12.5px] mt-1">
+          <thead>
+            <tr class="text-left text-[10px] uppercase tracking-wide text-[#9a958c] border-b border-[#EFEDE6]">
+              <th class="py-2 font-semibold">Report</th>
+              <th class="py-2 font-semibold">Cadence</th>
+              <th class="py-2 font-semibold">Delivers to</th>
+              <th class="py-2 font-semibold">Next run</th>
+              <th class="py-2 font-semibold text-right">Active</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="task in filteredTasks"
+              :key="task.id"
+              class="border-b border-[#F3F0E9] last:border-0 hover:bg-[#FCFAF6] transition-colors cursor-pointer"
+              @click="openTask(task)"
+            >
+              <!-- Report -->
+              <td class="py-2.5 pe-3 align-top">
+                <div class="flex items-start gap-2 max-w-[340px]">
+                  <UIcon name="i-heroicons-clock" class="w-4 h-4 text-[#6b6b6b] mt-0.5 shrink-0" />
+                  <div class="min-w-0">
+                    <div class="text-[12.5px] font-medium text-[#1f2328] line-clamp-2">{{ task.prompt?.content || $t('scheduled.untitledTask') }}</div>
+                    <span v-if="task.user_name" class="block text-[10.5px] text-[#9a958c] mt-0.5">{{ $t('scheduled.by', { name: task.user_name }) }}</span>
+                  </div>
+                </div>
+              </td>
+              <!-- Cadence -->
+              <td class="py-2.5 pe-3 align-top text-[12px] text-[#6b6b6b] whitespace-nowrap">{{ getCronLabel(task.cron_schedule) }}</td>
+              <!-- Delivers to -->
+              <td class="py-2.5 pe-3 align-top">
                 <NuxtLink
                   :to="`/reports/${task.report_id}`"
-                  class="text-[11px] text-[#C2541E] hover:text-[#A8330F] flex items-center gap-1"
+                  class="text-[12px] text-[#C2541E] hover:text-[#A8330F] inline-flex items-center gap-1"
                   @click.stop
                 >
-                  <UIcon name="heroicons-chat-bubble-left-right" class="w-3 h-3" />
-                  {{ task.report?.title || $t('scheduled.untitledReport') }}
+                  <UIcon name="i-heroicons-chat-bubble-left-right" class="w-3.5 h-3.5 shrink-0" />
+                  <span class="truncate max-w-[180px]">{{ task.report?.title || $t('scheduled.untitledReport') }}</span>
                 </NuxtLink>
-                <span v-if="task.user_name" class="text-[11px] text-gray-400">{{ $t('scheduled.by', { name: task.user_name }) }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
+              </td>
+              <!-- Next run -->
+              <td class="py-2.5 pe-3 align-top text-[12px] text-[#6b6b6b] whitespace-nowrap">
+                <span v-if="task.last_run_at">{{ $t('scheduled.lastRun', { time: formatRelativeTime(task.last_run_at) }) }}</span>
+                <span v-else class="text-[#9a958c]">—</span>
+              </td>
+              <!-- Active (real enable/disable toggle) -->
+              <td class="py-2.5 align-top text-right">
+                <button
+                  type="button"
+                  @click.stop="toggleActive(task)"
+                  :disabled="togglingId === task.id"
+                  :aria-pressed="task.is_active"
+                  :title="task.is_active ? $t('scheduled.active') : $t('scheduled.paused')"
+                  class="relative inline-flex h-5 w-9 items-center rounded-full align-middle transition-colors disabled:opacity-50"
+                  :class="task.is_active ? 'bg-[#2F6F4F]' : 'bg-[#D8D2C7]'"
+                >
+                  <span
+                    class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform"
+                    :class="task.is_active ? 'translate-x-4' : 'translate-x-0.5'"
+                  ></span>
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <!-- Results summary -->
-      <div v-if="!isLoading && tasks.length > 0" class="mt-6 text-center text-[11px] text-gray-500">
+      <div v-if="!isLoading && tasks.length > 0" class="mt-4 text-center text-[11px] text-[#9a958c]">
         {{ $t(pagination.total === 1 ? 'scheduled.showingOne' : 'scheduled.showingMany', { shown: tasks.length, total: pagination.total }) }}
       </div>
 
       <!-- Load more -->
-      <div v-if="pagination.has_next" class="mt-4 text-center">
+      <div v-if="pagination.has_next" class="mt-3 text-center">
         <button
           @click="loadMore"
           :disabled="isLoadingMore"
-          class="text-xs px-3 py-1.5 rounded border border-gray-200 hover:bg-gray-50 text-gray-600 disabled:opacity-50"
+          class="text-xs px-3 py-1.5 rounded-lg border border-[#E9E0D3] hover:bg-[#FCFAF6] text-[#6b6b6b] disabled:opacity-50"
         >
           <template v-if="isLoadingMore"><Spinner class="w-3 h-3 inline me-1" /> {{ $t('scheduled.loading') }}</template>
           <template v-else>{{ $t('scheduled.loadMore') }}</template>
@@ -142,6 +182,50 @@ const isLoadingMore = ref(false)
 const currentPage = ref(1)
 const pagination = ref({ total: 0, page: 1, limit: 20, total_pages: 0, has_next: false, has_prev: false })
 const searchTerm = ref('')
+// `search` drives the toolbar input (server fetch via searchTerm + client status filter)
+const search = searchTerm
+const togglingId = ref<string | null>(null)
+
+// Segmented status filter (client-side over fetched tasks)
+const statusFilter = ref<'all' | 'active' | 'paused'>('all')
+const statusOptions = computed(() => [
+  { value: 'all' as const, label: t('scheduled.filterAll', 'All') },
+  { value: 'active' as const, label: t('scheduled.active') },
+  { value: 'paused' as const, label: t('scheduled.paused') },
+])
+const filteredTasks = computed(() => {
+  if (statusFilter.value === 'active') return tasks.value.filter((tk: any) => tk.is_active)
+  if (statusFilter.value === 'paused') return tasks.value.filter((tk: any) => !tk.is_active)
+  return tasks.value
+})
+
+// Header ring (count = total scheduled tasks; fill = share that are active)
+const taskCount = computed(() => pagination.value.total || tasks.value.length)
+const ringOffset = computed(() => {
+  const total = tasks.value.length
+  if (!total) return 138
+  const active = tasks.value.filter((tk: any) => tk.is_active).length
+  return Math.round(138 - 138 * (active / total))
+})
+
+// Real enable/disable toggle → PUT /reports/{report_id}/scheduled-prompts/{sp_id}
+const toggleActive = async (task: any) => {
+  if (togglingId.value) return
+  togglingId.value = task.id
+  const next = !task.is_active
+  try {
+    const response: any = await useMyFetch(`/reports/${task.report_id}/scheduled-prompts/${task.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ is_active: next }),
+    })
+    if (response.error?.value) throw new Error('toggle failed')
+    task.is_active = next
+  } catch {
+    toast.add({ title: t('common.error'), description: t('scheduled.createFailed'), color: 'red' })
+  } finally {
+    togglingId.value = null
+  }
+}
 
 // Scheduled prompt modal (shared for create + edit)
 const showModal = ref(false)

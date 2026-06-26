@@ -21,6 +21,10 @@ export interface NavItem {
   permission?: string
   action?: () => void
   children?: NavItem[]
+  // Optional sub-section eyebrow label shown in the rail above this item when
+  // the section changes (e.g. WORKSPACE / OUTPUTS / AUTOMATE). When a group has
+  // no sections the rail renders the group title once (legacy behavior).
+  section?: string
 }
 export interface NavGroup {
   title: string
@@ -28,11 +32,18 @@ export interface NavGroup {
   // When set, the group header is a direct route link (no rail) — used for
   // standalone top-level tabs like Agent Studios.
   direct?: string
+  // When set (alongside sectioned items), the rail renders a studio-style
+  // header card (icon + title + badge + subtitle) on a rounded #FBFAF6 panel.
+  railHeader?: { subtitle?: string; badge?: string; icon?: string }
 }
 
 // ---- Module-level shared state (singletons across all consumers) ----
 // MCP modal lives in TopNav's template; AppRail/TopNav both flip this ref.
 const showMcpModal = ref(false)
+// Per-item rail count badges, keyed by NavItem.key. A page (e.g. Workspace
+// Overview) populates this after fetching; the rail reads it fail-soft (missing
+// key = no badge). Module-level so it survives across the page/rail boundary.
+const railCounts = ref<Record<string, number>>({})
 // "Pack Analytics" settings tab visibility — fetched once, fail-soft.
 const domainPacksEnabled = ref(false)
 let domainPacksLoaded = false
@@ -69,11 +80,20 @@ export function useAppNav() {
     { name: 'features', label: 'Feature Flags', permission: 'manage_settings', icon: 'heroicons-flag' },
   ]
 
+  // Section eyebrow per settings tab → groups the rail like Workspace.
+  const settingsSection: Record<string, string> = {
+    members: 'PEOPLE',
+    models: 'WORKSPACE', ai_settings: 'WORKSPACE', general: 'WORKSPACE',
+    integrations: 'INTEGRATIONS', 'folder-sync': 'INTEGRATIONS', smtp: 'INTEGRATIONS',
+    audit: 'SECURITY', 'identity-provider': 'SECURITY',
+    features: 'ADVANCED', 'pack-analytics': 'ADVANCED',
+  }
+
   const settingsChildren = computed<NavItem[]>(() => {
     const tabs = settingsTabs.filter(tab => useCan(tab.permission))
-    const children = tabs.map(tab => ({ key: `settings-${tab.name}`, label: tab.label, href: `/settings/${tab.name}`, activePath: `/settings/${tab.name}`, icon: tab.icon }))
+    const children = tabs.map(tab => ({ key: `settings-${tab.name}`, label: tab.label, href: `/settings/${tab.name}`, activePath: `/settings/${tab.name}`, icon: tab.icon, section: settingsSection[tab.name] || 'WORKSPACE' }))
     if (domainPacksEnabled.value && useCan('manage_settings')) {
-      children.push({ key: 'settings-pack-analytics', label: 'Pack Analytics', href: '/settings/pack-analytics', activePath: '/settings/pack-analytics', icon: 'heroicons-chart-bar-square' })
+      children.push({ key: 'settings-pack-analytics', label: 'Pack Analytics', href: '/settings/pack-analytics', activePath: '/settings/pack-analytics', icon: 'heroicons-chart-bar-square', section: 'ADVANCED' })
     }
     return children
   })
@@ -89,43 +109,49 @@ export function useAppNav() {
     },
     {
       title: 'nav.workspace',
+      railHeader: { subtitle: 'Everything your agents produce', badge: 'ORG', icon: 'heroicons-squares-2x2' },
       items: [
-        { key: 'templates', href: '/templates', activePath: '/templates', icon: 'heroicons-square-3-stack-3d', label: 'Agent Templates' },
-        { key: 'reports', href: '/reports', activePath: '/reports', icon: 'heroicons-chat-bubble-left-right', label: 'nav.reports' },
-        { key: 'dashboards', href: '/dashboards', activePath: '/dashboards', icon: 'heroicons-chart-bar-square', label: 'nav.dashboards' },
-        { key: 'presentations', href: '/presentations', activePath: '/presentations', icon: 'heroicons-presentation-chart-line', label: 'nav.presentations' },
-        { key: 'spreadsheets', href: '/spreadsheets', activePath: '/spreadsheets', icon: 'heroicons-table-cells', label: 'nav.spreadsheets' },
-        { key: 'scheduled', href: '/scheduled-tasks', activePath: '/scheduled-tasks', icon: 'heroicons-clock', label: 'nav.scheduled' },
+        { key: 'overview', href: '/workspace', activePath: '/workspace', icon: 'heroicons-squares-2x2', label: 'Overview', section: 'WORKSPACE' },
+        { key: 'templates', href: '/templates', activePath: '/templates', icon: 'heroicons-square-3-stack-3d', label: 'Agent Templates', section: 'WORKSPACE' },
+        { key: 'reports', href: '/reports', activePath: '/reports', icon: 'heroicons-chat-bubble-left-right', label: 'nav.reports', section: 'OUTPUTS' },
+        { key: 'dashboards', href: '/dashboards', activePath: '/dashboards', icon: 'heroicons-chart-bar-square', label: 'nav.dashboards', section: 'OUTPUTS' },
+        { key: 'presentations', href: '/presentations', activePath: '/presentations', icon: 'heroicons-presentation-chart-line', label: 'nav.presentations', section: 'OUTPUTS' },
+        { key: 'spreadsheets', href: '/spreadsheets', activePath: '/spreadsheets', icon: 'heroicons-table-cells', label: 'nav.spreadsheets', section: 'OUTPUTS' },
+        { key: 'scheduled', href: '/scheduled-tasks', activePath: '/scheduled-tasks', icon: 'heroicons-clock', label: 'nav.scheduled', section: 'AUTOMATE' },
       ],
     },
     {
       title: 'nav.build',
+      railHeader: { subtitle: 'Teach your agents what they know', badge: 'ORG', icon: 'heroicons-cube' },
       items: [
-        { key: 'knowledge', href: '/knowledge', activePath: '/knowledge', icon: 'heroicons-academic-cap', label: 'nav.knowledge' },
-        { key: 'instructions', href: '/instructions', activePath: '/instructions', icon: 'heroicons-cube', label: 'nav.instructions' },
-        { key: 'queries', href: '/queries', activePath: '/queries', component: LibraryIcon, label: 'nav.queries' },
-        { key: 'skills', href: '/skills', activePath: '/skills', icon: 'heroicons-sparkles', label: 'Skills' },
-        { key: 'memory', href: '/memory', activePath: '/memory', icon: 'heroicons-cpu-chip', label: 'Memory' },
+        { key: 'knowledge', href: '/knowledge', activePath: '/knowledge', icon: 'heroicons-academic-cap', label: 'nav.knowledge', section: 'CONTEXT' },
+        { key: 'instructions', href: '/instructions', activePath: '/instructions', icon: 'heroicons-cube', label: 'nav.instructions', section: 'CONTEXT' },
+        { key: 'queries', href: '/queries', activePath: '/queries', component: LibraryIcon, label: 'nav.queries', section: 'CONTEXT' },
+        { key: 'skills', href: '/skills', activePath: '/skills', icon: 'heroicons-sparkles', label: 'Skills', section: 'CAPABILITIES' },
+        { key: 'memory', href: '/memory', activePath: '/memory', icon: 'heroicons-cpu-chip', label: 'Memory', section: 'CAPABILITIES' },
       ],
     },
     {
       title: 'nav.manage',
+      railHeader: { subtitle: 'Connect, observe, and automate', badge: 'ORG', icon: 'heroicons-adjustments-horizontal' },
       items: [
-        { key: 'connectors', href: '/connectors', activePath: '/connectors', icon: 'heroicons-circle-stack', label: 'Connectors', permission: 'create_data_source' },
-        { key: 'monitoring', href: '/monitoring', activePath: '/monitoring', component: ActivityIcon, label: 'nav.monitoring', adminOnly: true },
-        { key: 'evals', href: '/evals', activePath: '/evals', icon: 'heroicons-check-circle', label: 'nav.evals', permission: 'manage_evals' },
-        { key: 'workflows', href: '/workflows', activePath: '/workflows', icon: 'heroicons-arrow-path', label: 'Workflows', permission: 'manage_settings' },
+        { key: 'connectors', href: '/connectors', activePath: '/connectors', icon: 'heroicons-circle-stack', label: 'Connectors', permission: 'create_data_source', section: 'DATA' },
+        { key: 'monitoring', href: '/monitoring', activePath: '/monitoring', component: ActivityIcon, label: 'nav.monitoring', adminOnly: true, section: 'OBSERVE' },
+        { key: 'evals', href: '/evals', activePath: '/evals', icon: 'heroicons-check-circle', label: 'nav.evals', permission: 'manage_evals', section: 'OBSERVE' },
+        { key: 'workflows', href: '/workflows', activePath: '/workflows', icon: 'heroicons-arrow-path', label: 'Workflows', permission: 'manage_settings', section: 'AUTOMATE' },
         {
           key: 'mcp',
           label: 'nav.mcpServer',
           component: McpIcon,
           permission: 'manage_settings',
+          section: 'AUTOMATE',
           action: () => { if (isMcpEnabled.value) showMcpModal.value = true },
         },
       ],
     },
     {
       title: 'nav.settings',
+      railHeader: { subtitle: 'Workspace configuration', badge: 'ADMIN', icon: 'heroicons-cog-6-tooth' },
       items: settingsChildren.value,
     },
   ])
@@ -140,7 +166,7 @@ export function useAppNav() {
 
   const visibleGroups = computed<NavGroup[]>(() =>
     allGroups.value
-      .map(g => ({ title: g.title, direct: g.direct, items: g.items.filter(itemVisible) }))
+      .map(g => ({ title: g.title, direct: g.direct, railHeader: g.railHeader, items: g.items.filter(itemVisible) }))
       .filter(g => g.items.length > 0)
   )
 
@@ -174,6 +200,7 @@ export function useAppNav() {
     firstHref,
     itemVisible,
     showMcpModal,
+    railCounts,
     loadDomainPacksFlag,
   }
 }

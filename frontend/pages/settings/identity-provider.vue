@@ -2,355 +2,122 @@
   <div class="mt-4 space-y-8">
 
     <!-- ================================================================== -->
-    <!-- SSO Section                                                         -->
+    <!-- Single Sign-On & Directories — one unified, add-driven list         -->
     <!-- ================================================================== -->
     <div>
-      <div class="mb-4">
-        <h2 class="text-sm font-medium text-[#1f2328]">Single Sign-On</h2>
-        <p class="text-xs text-[#6b6b6b] mt-0.5">Let members sign in with Google, Microsoft, or any OIDC provider.</p>
+      <!-- Section header: title/subtitle left · dirty + Add + Save right -->
+      <div class="flex items-start justify-between gap-3 mb-4">
+        <div>
+          <h2 class="text-sm font-medium text-[#1f2328]">Single Sign-On &amp; Directories</h2>
+          <p class="text-xs text-[#6b6b6b] mt-0.5">Everything is added, configured, enabled and removed from one place. Nothing is on until you add it.</p>
+        </div>
+        <div class="flex items-center gap-2.5 flex-shrink-0">
+          <span v-if="dirty" class="text-[11px] font-medium text-[#9A5A12] whitespace-nowrap">● Unsaved changes</span>
+          <button
+            type="button"
+            class="px-3 py-2 text-xs font-medium rounded-lg border border-[#E9E0D3] bg-white text-[#1f2328] hover:bg-[#F4EEE5] transition-colors cursor-pointer whitespace-nowrap"
+            @click="showLibrary = true"
+          >+ Add provider</button>
+          <button
+            type="button"
+            class="px-3 py-2 text-xs font-semibold rounded-lg border transition-colors whitespace-nowrap"
+            :class="dirty
+              ? 'bg-[#C2541E] border-[#C2541E] text-white hover:bg-[#A8330F] cursor-pointer'
+              : 'bg-[#C2541E] border-[#C2541E] text-white opacity-50 cursor-default'"
+            :disabled="!dirty || saving"
+            @click="save"
+          >{{ saving ? 'Saving…' : 'Save changes' }}</button>
+        </div>
       </div>
 
-      <div class="border border-[#E9E0D3] rounded-2xl overflow-hidden bg-white">
+      <!-- EMPTY STATE -->
+      <div
+        v-if="methods.length === 0"
+        class="border border-[#E9E0D3] rounded-2xl overflow-hidden bg-white"
+      >
+        <div class="text-center px-5 py-10">
+          <div class="w-12 h-12 rounded-xl border border-dashed border-[#E9E0D3] bg-[#FBF7F1] flex items-center justify-center mx-auto mb-3 p-2.5 [&_svg]:w-full [&_svg]:h-full" v-html="idpLogoSvg('shield')"></div>
+          <h3 class="text-sm font-medium text-[#1f2328]" style="font-family:'Spectral',ui-serif,Georgia,serif">No sign-in methods yet</h3>
+          <p class="text-xs text-[#9a958c] max-w-sm mx-auto mt-1 mb-4">Add Google, Microsoft, Okta, Keycloak, a generic OIDC provider, an LDAP / AD directory, or SCIM provisioning.</p>
+          <button
+            type="button"
+            class="inline-flex items-center gap-2 text-xs font-medium text-[#C2541E] border border-dashed border-[#E9E0D3] rounded-xl px-4 py-2.5 hover:border-[#C2541E] hover:bg-[#FBEFE4] transition-colors"
+            @click="showLibrary = true"
+          ><span>+</span> Add provider</button>
+        </div>
+      </div>
 
-        <!-- Provider rows: Google · Microsoft · Okta · Keycloak · custom OIDC -->
+      <!-- POPULATED LIST -->
+      <div v-else class="border border-[#E9E0D3] rounded-2xl overflow-hidden bg-white">
         <div
-          v-for="row in ssoRows"
-          :key="row.id"
-          class="flex items-center gap-3 px-5 py-3.5 border-b border-[#E9E0D3]"
+          v-for="m in methods"
+          :key="m.id"
+          class="flex items-center gap-3 px-5 py-3.5 border-b border-[#E9E0D3] last:border-b-0"
         >
-          <span class="w-7 h-7 rounded-md border border-[#E9E0D3] bg-white flex items-center justify-center flex-shrink-0 p-1 [&_svg]:w-full [&_svg]:h-full [&_img]:w-full [&_img]:h-full" v-html="idpLogoSvg(row.logo)"></span>
-          <span class="text-sm font-medium text-[#1f2328] flex-1 truncate">{{ row.name }}</span>
-          <span class="text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap" :class="pillClass(row.enabled, row.configured)">{{ pillText(row.enabled, row.configured) }}</span>
+          <span class="w-8 h-8 rounded-md border border-[#E9E0D3] bg-white flex items-center justify-center flex-shrink-0 p-1.5 [&_svg]:w-full [&_svg]:h-full [&_img]:w-full [&_img]:h-full" v-html="idpLogoSvg(m.logo)"></span>
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-medium text-[#1f2328] truncate">{{ m.name }}</div>
+            <div v-if="m.meta" class="text-[11px] text-[#9a958c] truncate">{{ m.meta }}</div>
+          </div>
+          <span class="text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap" :class="pillClass(m.enabled, m.configured)">{{ pillText(m.enabled, m.configured) }}</span>
           <button
             type="button"
             class="px-3 py-2 text-xs rounded-lg transition-colors cursor-pointer whitespace-nowrap"
-            :class="(row.enabled && !row.configured) ? 'border border-[#e7c79a] text-[#9A5A12] bg-[#FBEEDD] hover:bg-[#f6e3c8]' : 'border border-[#E9E0D3] text-[#1f2328] bg-white hover:bg-[#F4EEE5]'"
-            @click="row.configure()"
-          >{{ (row.enabled && !row.configured) ? 'Set up →' : 'Configure' }}</button>
+            :class="(m.enabled && !m.configured) ? 'border border-[#e7c79a] text-[#9A5A12] bg-[#FBEEDD] hover:bg-[#f6e3c8]' : 'border border-[#E9E0D3] text-[#1f2328] bg-white hover:bg-[#F4EEE5]'"
+            @click="m.configure()"
+          >{{ (m.enabled && !m.configured) ? 'Set up →' : 'Configure' }}</button>
           <button
+            v-if="m.toggle"
             type="button"
             class="relative w-9 h-5 rounded-full transition-colors focus:outline-none flex-shrink-0"
-            :class="row.enabled ? 'bg-[#C2541E]' : 'bg-[#E9E0D3]'"
-            :title="row.enabled ? 'Enabled — click to disable' : 'Disabled — click to enable'"
-            @click="row.toggle()"
+            :class="m.enabled ? 'bg-[#C2541E]' : 'bg-[#E9E0D3]'"
+            :title="m.enabled ? 'Enabled — click to disable' : 'Disabled — click to enable'"
+            @click="m.toggle()"
           >
-            <span class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all" :class="row.enabled ? 'left-[18px]' : 'left-0.5'"></span>
+            <span class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all" :class="m.enabled ? 'left-[18px]' : 'left-0.5'"></span>
           </button>
           <button
-            v-if="row.removable"
             type="button"
-            class="text-xs text-red-400 hover:text-red-600 px-1"
+            class="text-sm text-[#9a958c] hover:text-red-600 hover:bg-red-50 rounded-md px-1.5 py-1 flex-shrink-0"
             title="Remove provider"
-            @click="row.remove && row.remove()"
+            @click="askRemove(m)"
           >&#x2715;</button>
         </div>
+      </div>
 
-        <!-- Add provider (opens the provider library) -->
-        <div class="px-5 py-3.5 border-b border-[#E9E0D3]">
-          <button
-            type="button"
-            class="flex items-center gap-2 text-xs text-[#C2541E] font-medium border border-dashed border-[#E9E0D3] rounded-xl px-4 py-2.5 hover:border-[#C2541E] hover:bg-[#FBEFE4] transition-colors"
-            @click="showLibrary = true"
+      <!-- Auth mode (staged, applied by Save) -->
+      <div class="mt-5 pt-5 border-t border-[#E9E0D3]">
+        <div class="flex items-center gap-6 flex-wrap">
+          <span class="text-xs text-[#6b6b6b] w-28 flex-shrink-0">Auth mode</span>
+          <label
+            v-for="opt in authModeOptions"
+            :key="opt.value"
+            class="flex items-center gap-2 cursor-pointer text-xs text-[#6b6b6b]"
           >
-            <span>+</span>
-            <span>Add provider</span>
-            <span class="text-[#9a958c] font-normal">· Okta · Auth0 · Keycloak · OneLogin · Ping · Generic OIDC …</span>
-          </button>
-        </div>
-
-        <!-- Auth mode -->
-        <div class="px-5 py-3.5 border-b border-[#E9E0D3]">
-          <div class="flex items-center gap-6 flex-wrap">
-            <span class="text-xs text-[#6b6b6b] w-20 flex-shrink-0">Auth mode</span>
-            <label
-              v-for="opt in authModeOptions"
-              :key="opt.value"
-              class="flex items-center gap-2 cursor-pointer text-xs text-[#6b6b6b]"
+            <span
+              class="w-3.5 h-3.5 rounded-full border flex-shrink-0 relative"
+              :class="ssoAuthMode === opt.value ? 'border-[#C2541E]' : 'border-[#E9E0D3]'"
             >
               <span
-                class="w-3.5 h-3.5 rounded-full border flex-shrink-0 relative"
-                :class="ssoAuthMode === opt.value ? 'border-[#C2541E]' : 'border-[#E9E0D3]'"
-              >
-                <span
-                  v-if="ssoAuthMode === opt.value"
-                  class="absolute inset-[3px] rounded-full bg-[#C2541E]"
-                ></span>
-              </span>
-              <input
-                type="radio"
-                :value="opt.value"
-                v-model="ssoAuthMode"
-                class="sr-only"
-                @change="handleAuthModeChange(opt.value)"
-              />
-              {{ opt.label }}
-            </label>
-          </div>
+                v-if="ssoAuthMode === opt.value"
+                class="absolute inset-[3px] rounded-full bg-[#C2541E]"
+              ></span>
+            </span>
+            <input
+              type="radio"
+              :value="opt.value"
+              v-model="ssoAuthMode"
+              class="sr-only"
+              @change="stageAuthMode"
+            />
+            {{ opt.label }}
+          </label>
         </div>
-
-        <!-- Allow public sign-up toggle (Task 3) -->
-        <div class="px-5 py-3.5">
-          <div class="flex items-center gap-4">
-            <span class="text-xs text-[#6b6b6b] flex-1">Allow public sign-up</span>
-            <span class="text-[11px] text-[#9a958c]">Let anyone register without an invite</span>
-            <label class="flex items-center gap-2 cursor-pointer">
-              <button
-                type="button"
-                class="relative w-9 h-5 rounded-full transition-colors focus:outline-none flex-shrink-0"
-                :class="signupEnabled ? 'bg-[#C2541E]' : 'bg-[#E9E0D3]'"
-                @click="handleSignupToggle"
-              >
-                <span
-                  class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all"
-                  :class="signupEnabled ? 'left-[18px]' : 'left-0.5'"
-                ></span>
-              </button>
-              <span class="text-xs text-[#6b6b6b]">{{ signupEnabled ? 'On' : 'Off' }}</span>
-            </label>
-          </div>
-        </div>
-
       </div>
     </div>
 
     <!-- ================================================================== -->
-    <!-- SCIM Provisioning Section                                           -->
-    <!-- ================================================================== -->
-    <div>
-      <div class="mb-4">
-        <h2 class="text-sm font-medium text-[#1f2328]">{{ $t('settings.identityProvider.scimTitle') }}</h2>
-        <p class="text-xs text-[#6b6b6b] mt-0.5">{{ $t('settings.identityProvider.scimSubtitle') }}</p>
-      </div>
-
-      <!-- Enterprise Gate for SCIM -->
-      <template v-if="!hasFeature('scim')">
-        <div class="rounded-lg border border-[#E9E0D3] p-4 bg-[#F4EEE5]">
-          <p class="text-xs text-[#6b6b6b] mb-2">
-            {{ $t('settings.identityProvider.enterpriseScim') }}
-          </p>
-          <a
-            href="https://docs.bagofwords.com/enterprise"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="text-xs text-[#C2541E] hover:text-[#A8330F]"
-          >
-            {{ $t('settings.identityProvider.learnMore') }}
-          </a>
-        </div>
-      </template>
-
-      <template v-else>
-        <!-- SCIM row -->
-        <div class="border border-[#E9E0D3] rounded-2xl overflow-hidden bg-white">
-          <div class="flex items-center gap-3 px-5 py-3.5">
-            <span class="w-7 h-7 rounded-md border border-[#E9E0D3] bg-white flex items-center justify-center flex-shrink-0 p-1 [&_svg]:w-full [&_svg]:h-full" v-html="idpLogoSvg('scim')"></span>
-            <span class="text-sm font-medium text-[#1f2328] flex-1">SCIM Provisioning</span>
-            <span
-              class="text-[11px] font-medium px-2 py-0.5 rounded-full"
-              :class="tokens.length > 0 ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-[#F4EEE5] text-[#6b6b6b] border border-[#E9E0D3]'"
-            >{{ tokens.length > 0 ? 'Active' : 'Not configured' }}</span>
-            <button
-              type="button"
-              class="px-3 py-2 text-xs border border-[#E9E0D3] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4EEE5] transition-colors cursor-pointer"
-              @click="openModal('scim')"
-            >Configure</button>
-          </div>
-        </div>
-      </template>
-    </div>
-
-    <!-- ================================================================== -->
-    <!-- LDAP Directory Sync Section                                         -->
-    <!-- ================================================================== -->
-    <div>
-      <div class="mb-4">
-        <h2 class="text-sm font-medium text-[#1f2328]">{{ $t('settings.identityProvider.ldapTitle') }}</h2>
-        <p class="text-xs text-[#6b6b6b] mt-0.5">{{ $t('settings.identityProvider.ldapSubtitle') }}</p>
-      </div>
-
-      <!-- Enterprise Gate for LDAP -->
-      <template v-if="!hasFeature('ldap')">
-        <div class="rounded-lg border border-[#E9E0D3] p-4 bg-[#F4EEE5]">
-          <p class="text-xs text-[#6b6b6b] mb-2">
-            {{ $t('settings.identityProvider.enterpriseLdap') }}
-          </p>
-          <a
-            href="https://docs.bagofwords.com/enterprise"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="text-xs text-[#C2541E] hover:text-[#A8330F]"
-          >
-            {{ $t('settings.identityProvider.learnMore') }}
-          </a>
-        </div>
-      </template>
-
-      <template v-else>
-        <div class="border border-[#E9E0D3] rounded-2xl overflow-hidden bg-white">
-          <!-- LDAP row -->
-          <div class="flex items-center gap-3 px-5 py-3.5" :class="ldapStatus?.ldap_configured ? 'border-b border-[#E9E0D3]' : ''">
-            <span class="w-7 h-7 rounded-md border border-[#E9E0D3] bg-white flex items-center justify-center flex-shrink-0 p-1 [&_svg]:w-full [&_svg]:h-full [&_img]:w-full [&_img]:h-full" v-html="idpLogoSvg(ldapForm.logo || 'ldap')"></span>
-            <span class="text-sm font-medium text-[#1f2328] flex-1">LDAP Directory Sync</span>
-            <span class="text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap" :class="pillClass(ldapForm.enabled, !!ldapStatus?.ldap_configured)">{{ pillText(ldapForm.enabled, !!ldapStatus?.ldap_configured) }}</span>
-            <button
-              type="button"
-              class="px-3 py-2 text-xs rounded-lg transition-colors cursor-pointer whitespace-nowrap"
-              :class="(ldapForm.enabled && !ldapStatus?.ldap_configured) ? 'border border-[#e7c79a] text-[#9A5A12] bg-[#FBEEDD] hover:bg-[#f6e3c8]' : 'border border-[#E9E0D3] text-[#1f2328] bg-white hover:bg-[#F4EEE5]'"
-              @click="openModal('ldap')"
-            >{{ (ldapForm.enabled && !ldapStatus?.ldap_configured) ? 'Set up →' : 'Configure' }}</button>
-            <button
-              type="button"
-              class="relative w-9 h-5 rounded-full transition-colors focus:outline-none flex-shrink-0"
-              :class="ldapForm.enabled ? 'bg-[#C2541E]' : 'bg-[#E9E0D3]'"
-              :title="ldapForm.enabled ? 'Enabled — click to disable' : 'Disabled — click to enable'"
-              @click="quickToggleLdap()"
-            >
-              <span class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all" :class="ldapForm.enabled ? 'left-[18px]' : 'left-0.5'"></span>
-            </button>
-          </div>
-
-          <!-- Configured status + sync actions (only when connected) -->
-          <template v-if="ldapStatus?.ldap_configured">
-
-            <!-- Connection status -->
-            <div class="p-5 border-b border-[#E9E0D3]">
-              <div class="flex items-center justify-between">
-                <div>
-                  <div class="flex items-center gap-2">
-                    <div
-                      class="w-2 h-2 rounded-full"
-                      :class="ldapTestResult?.connected ? 'bg-green-500' : (ldapTestResult ? 'bg-red-500' : 'bg-[#E9E0D3]')"
-                    ></div>
-                    <span class="text-xs font-medium text-[#6b6b6b]">
-                      {{ ldapTestResult?.connected ? $t('settings.identityProvider.statusConnected') : (ldapTestResult ? $t('settings.identityProvider.statusFailed') : $t('settings.identityProvider.statusNotTested')) }}
-                    </span>
-                  </div>
-                  <p v-if="ldapTestResult?.connected" class="text-[11px] text-[#9a958c] mt-0.5 ms-4">
-                    {{ ldapTestResult.server }}
-                    <template v-if="ldapTestResult.vendor"> · {{ ldapTestResult.vendor }}</template>
-                    <template v-if="ldapTestResult.user_count !== null"> · {{ ldapTestResult.user_count }} users</template>
-                    <template v-if="ldapTestResult.group_count !== null"> · {{ ldapTestResult.group_count }} groups</template>
-                  </p>
-                  <p v-if="ldapTestResult && !ldapTestResult.connected" class="text-[11px] text-red-400 mt-0.5 ms-4">
-                    {{ ldapTestResult.error }}
-                  </p>
-                </div>
-                <button
-                  class="px-3 py-2 text-xs text-[#1f2328] bg-white border border-[#E9E0D3] rounded-lg hover:bg-[#F4EEE5] transition-colors cursor-pointer"
-                  :disabled="ldapLoading"
-                  @click="handleTestConnection"
-                >
-                  {{ ldapLoading ? $t('settings.identityProvider.testing') : $t('settings.identityProvider.testConnection') }}
-                </button>
-              </div>
-            </div>
-
-            <!-- Last sync info -->
-            <div v-if="ldapStatus?.last_sync" class="p-5 border-b border-[#E9E0D3]">
-              <div class="flex items-center justify-between">
-                <div>
-                  <span class="text-xs font-medium text-[#6b6b6b]">{{ $t('settings.identityProvider.lastSync') }}</span>
-                  <p class="text-[11px] text-[#9a958c] mt-0.5">
-                    {{ ldapStatus.last_sync.timestamp ? formatRelativeTime(ldapStatus.last_sync.timestamp) : $t('settings.identityProvider.unknown') }}
-                    {{ $t('settings.identityProvider.lastSyncDetail', {
-                      gCreated: ldapStatus.last_sync.groups_created,
-                      gUpdated: ldapStatus.last_sync.groups_updated,
-                      gRemoved: ldapStatus.last_sync.groups_removed,
-                      mAdded: ldapStatus.last_sync.memberships_added,
-                      mRemoved: ldapStatus.last_sync.memberships_removed,
-                    }) }}
-                  </p>
-                  <p v-if="ldapStatus.last_sync.errors.length" class="text-[11px] text-red-400 mt-0.5">
-                    {{ $t('settings.identityProvider.errorCount', { n: ldapStatus.last_sync.errors.length, first: ldapStatus.last_sync.errors[0] }) }}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <!-- Sync actions -->
-            <div class="p-5">
-              <div class="flex items-center gap-2 flex-wrap">
-                <button
-                  class="px-3 py-2.5 text-xs text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-xl transition-colors cursor-pointer disabled:opacity-65"
-                  :disabled="ldapLoading"
-                  @click="handleSync"
-                >
-                  {{ ldapLoading ? $t('settings.identityProvider.syncing') : $t('settings.identityProvider.syncNow') }}
-                </button>
-                <button
-                  class="px-3 py-2 text-xs text-[#1f2328] bg-white border border-[#E9E0D3] rounded-lg hover:bg-[#F4EEE5] transition-colors cursor-pointer disabled:opacity-65"
-                  :disabled="ldapLoading"
-                  @click="handlePreview"
-                >
-                  {{ $t('settings.identityProvider.previewChanges') }}
-                </button>
-              </div>
-
-              <!-- Sync result flash -->
-              <div v-if="lastSyncResult" class="mt-3 rounded-lg border border-green-200 bg-green-50 p-3">
-                <p class="text-xs text-green-700">
-                  {{ $t('settings.identityProvider.syncCompletedSummary', {
-                    gCreated: lastSyncResult.groups_created,
-                    gUpdated: lastSyncResult.groups_updated,
-                    gRemoved: lastSyncResult.groups_removed,
-                    mAdded: lastSyncResult.memberships_added,
-                    mRemoved: lastSyncResult.memberships_removed,
-                  }) }}
-                  <template v-if="lastSyncResult.users_not_found">
-                    {{ $t('settings.identityProvider.ldapUsersNotFound', { n: lastSyncResult.users_not_found }) }}
-                  </template>
-                </p>
-              </div>
-
-              <!-- Preview results -->
-              <div v-if="ldapPreview" class="mt-3">
-                <div class="rounded-lg border border-[#E9E0D3] overflow-hidden">
-                  <div class="bg-[#F4EEE5] px-3 py-2 border-b border-[#E9E0D3]">
-                    <span class="text-xs font-medium text-[#6b6b6b]">{{ $t('settings.identityProvider.preview') }} </span>
-                    <span class="text-xs text-[#6b6b6b]">
-                      {{ $t('settings.identityProvider.previewSummary', {
-                        create: ldapPreview.groups_to_create,
-                        update: ldapPreview.groups_to_update,
-                        remove: ldapPreview.groups_to_remove,
-                        changes: ldapPreview.total_membership_changes,
-                      }) }}
-                    </span>
-                  </div>
-                  <div v-if="ldapPreview.groups.length" class="max-h-64 overflow-y-auto">
-                    <div
-                      v-for="(group, idx) in ldapPreview.groups"
-                      :key="group.dn"
-                      class="flex items-center px-3 py-2 text-xs"
-                      :class="{ 'border-t border-[#E9E0D3]': idx > 0 }"
-                    >
-                      <span class="flex-1 text-[#6b6b6b] truncate" :title="group.dn">{{ group.name }}</span>
-                      <span class="w-20 text-[#9a958c] text-[11px]">{{ $t('settings.identityProvider.memberCount', { n: group.member_count }) }}</span>
-                      <span class="w-24 text-[11px]" :class="group.exists_in_app ? 'text-[#9a958c]' : 'text-[#C2541E]'">
-                        {{ group.exists_in_app ? $t('settings.identityProvider.groupExists') : $t('settings.identityProvider.groupNew') }}
-                      </span>
-                      <span v-if="group.members_to_add" class="text-[11px] text-green-600 me-2">+{{ group.members_to_add }}</span>
-                      <span v-if="group.members_to_remove" class="text-[11px] text-red-500">-{{ group.members_to_remove }}</span>
-                    </div>
-                  </div>
-                  <div v-else class="py-4 text-center text-xs text-[#9a958c]">
-                    {{ $t('settings.identityProvider.noLdapGroups') }}
-                  </div>
-                </div>
-              </div>
-
-              <!-- LDAP Error -->
-              <div v-if="ldapError" class="mt-3 text-xs text-red-500">
-                {{ ldapError }}
-              </div>
-            </div>
-
-          </template>
-        </div>
-      </template>
-    </div>
-
-    <!-- ================================================================== -->
-    <!-- PROVIDER CONFIG MODALS                                             -->
+    <!-- PROVIDER CONFIG MODALS (immediate persist — NOT staged)            -->
     <!-- ================================================================== -->
 
     <!-- Google Modal -->
@@ -567,7 +334,7 @@
           <input
             v-model="oidcProviders[activeOidcIdx].issuer"
             type="text"
-            placeholder="https://your-idp.example.com"
+            :placeholder="oidcProviders[activeOidcIdx].issuerPattern || 'https://your-idp.example.com'"
             class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
           />
           <span class="text-xs text-[#6b6b6b]">Client ID</span>
@@ -700,190 +467,6 @@
       </div>
     </SettingsProviderConfigModal>
 
-    <!-- LDAP Modal -->
-    <SettingsProviderConfigModal :model-value="activeModal === 'ldap'" title="Configure LDAP Directory Sync" @close="closeModal">
-      <IdpLogoPicker v-model="ldapForm.logo" />
-      <!-- Enable toggle -->
-      <div class="flex items-center justify-between mb-4">
-        <span class="text-sm font-semibold text-[#1f2328]">LDAP Configuration</span>
-        <label class="flex items-center gap-2 cursor-pointer">
-          <button
-            type="button"
-            class="relative w-9 h-5 rounded-full transition-colors focus:outline-none flex-shrink-0"
-            :class="ldapForm.enabled ? 'bg-[#C2541E]' : 'bg-[#E9E0D3]'"
-            @click="ldapForm.enabled = !ldapForm.enabled"
-          >
-            <span
-              class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all"
-              :class="ldapForm.enabled ? 'left-[18px]' : 'left-0.5'"
-            ></span>
-          </button>
-          <span class="text-xs text-[#6b6b6b]">{{ ldapForm.enabled ? 'Enabled' : 'Enable' }}</span>
-        </label>
-      </div>
-
-      <!-- Core fields -->
-      <div class="grid grid-cols-[140px_1fr] gap-x-4 gap-y-2.5 items-center">
-        <span class="text-xs text-[#6b6b6b]">Server URL</span>
-        <input
-          v-model="ldapForm.url"
-          type="text"
-          placeholder="ldaps://ad.corp.com:636"
-          class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
-        />
-        <span class="text-xs text-[#6b6b6b]">Bind DN</span>
-        <input
-          v-model="ldapForm.bind_dn"
-          type="text"
-          placeholder="cn=svc,ou=Services,dc=corp,dc=com"
-          class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
-        />
-        <span class="text-xs text-[#6b6b6b]">Bind password</span>
-        <input
-          v-model="ldapForm.bind_password"
-          type="password"
-          :placeholder="ldapForm.bind_password_set ? 'configured' : 'paste bind password…'"
-          class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
-        />
-        <span class="col-start-2 text-[11px] text-[#9a958c]">Encrypted at rest. Write-only.</span>
-        <span class="text-xs text-[#6b6b6b]">Base DN</span>
-        <input
-          v-model="ldapForm.base_dn"
-          type="text"
-          placeholder="dc=corp,dc=com"
-          class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
-        />
-
-        <!-- Advanced collapsible -->
-        <details class="col-span-2 mt-1">
-          <summary class="cursor-pointer text-xs text-[#C2541E] font-medium list-none py-1 select-none">
-            <span class="inline-flex items-center gap-1">
-              <span>{{ ldapAdvOpen ? '▾' : '▸' }}</span>
-              Advanced (search bases · filters · attributes · member format)
-            </span>
-          </summary>
-          <div
-            class="grid grid-cols-[140px_1fr] gap-x-4 gap-y-2.5 items-center mt-2 bg-[#faf8f3] border border-[#E9E0D3] rounded-xl p-4"
-            @toggle.capture="ldapAdvOpen = !ldapAdvOpen"
-          >
-            <span class="text-xs text-[#6b6b6b]">User search base</span>
-            <input
-              v-model="ldapForm.user_search_base"
-              type="text"
-              placeholder="ou=Users,dc=corp,dc=com"
-              class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
-            />
-            <span class="text-xs text-[#6b6b6b]">Group search base</span>
-            <input
-              v-model="ldapForm.group_search_base"
-              type="text"
-              placeholder="ou=Groups,dc=corp,dc=com"
-              class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
-            />
-            <span class="text-xs text-[#6b6b6b]">User filter</span>
-            <input
-              v-model="ldapForm.user_search_filter"
-              type="text"
-              placeholder="(objectClass=person)"
-              class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
-            />
-            <span class="text-xs text-[#6b6b6b]">Group filter</span>
-            <input
-              v-model="ldapForm.group_search_filter"
-              type="text"
-              placeholder="(objectClass=group)"
-              class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
-            />
-            <span class="text-xs text-[#6b6b6b]">Email attr</span>
-            <input
-              v-model="ldapForm.user_email_attribute"
-              type="text"
-              placeholder="mail"
-              class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
-            />
-            <span class="text-xs text-[#6b6b6b]">Name attr</span>
-            <input
-              v-model="ldapForm.user_name_attribute"
-              type="text"
-              placeholder="cn"
-              class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
-            />
-            <span class="text-xs text-[#6b6b6b]">Group name attr</span>
-            <input
-              v-model="ldapForm.group_name_attribute"
-              type="text"
-              placeholder="cn"
-              class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
-            />
-            <span class="text-xs text-[#6b6b6b]">Member attr</span>
-            <select
-              v-model="ldapForm.group_member_attribute"
-              class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-[#C2541E]"
-            >
-              <option value="member">member (AD / RFC 2256)</option>
-              <option value="memberUid">memberUid (OpenLDAP posixGroup)</option>
-            </select>
-            <span class="text-xs text-[#6b6b6b]">Member format</span>
-            <select
-              v-model="ldapForm.group_member_format"
-              class="w-full border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-[#C2541E]"
-            >
-              <option value="dn">DN (full distinguished name)</option>
-              <option value="uid">UID (username only)</option>
-            </select>
-            <span class="text-xs text-[#6b6b6b]">Sync interval</span>
-            <div class="flex items-center gap-2">
-              <input
-                v-model.number="ldapForm.sync_interval_minutes"
-                type="number"
-                min="5"
-                max="1440"
-                class="w-24 border border-[#E9E0D3] rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-[#C2541E]"
-              />
-              <span class="text-xs text-[#9a958c]">minutes</span>
-            </div>
-            <label class="col-span-2 flex items-center gap-2 cursor-pointer mt-1">
-              <input v-model="ldapForm.auto_provision_users" type="checkbox" class="accent-[#C2541E] w-3.5 h-3.5" />
-              <span class="text-xs text-[#6b6b6b]">Auto-provision users on first login</span>
-            </label>
-          </div>
-        </details>
-      </div>
-
-      <!-- Test result flash -->
-      <div v-if="ldapNewTestResult" class="mt-3 rounded-lg border px-3 py-2 text-xs"
-        :class="ldapNewTestResult.connected
-          ? 'border-green-200 bg-green-50 text-green-700'
-          : 'border-red-200 bg-red-50 text-red-600'"
-      >
-        <template v-if="ldapNewTestResult.connected">
-          Connected
-          <template v-if="ldapNewTestResult.server"> · {{ ldapNewTestResult.server }}</template>
-          <template v-if="ldapNewTestResult.user_count !== null"> · {{ ldapNewTestResult.user_count }} users</template>
-          <template v-if="ldapNewTestResult.group_count !== null"> · {{ ldapNewTestResult.group_count }} groups</template>
-        </template>
-        <template v-else>
-          {{ ldapNewTestResult.error || 'Connection failed' }}
-        </template>
-      </div>
-
-      <!-- Modal footer -->
-      <div class="flex items-center gap-2 mt-5 pt-4 border-t border-[#E9E0D3]">
-        <button
-          type="button"
-          class="px-3 py-2 text-xs border border-[#E9E0D3] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4EEE5] transition-colors cursor-pointer disabled:opacity-65"
-          :disabled="ldapFormTesting"
-          @click="handleLdapTestNew"
-        >{{ ldapFormTesting ? 'Testing…' : 'Test connection' }}</button>
-        <button
-          type="button"
-          class="px-4 py-2.5 text-xs bg-[#C2541E] hover:bg-[#A8330F] text-white rounded-xl font-semibold transition-colors cursor-pointer disabled:opacity-65"
-          :disabled="ldapFormSaving"
-          @click="handleLdapSaveAndClose"
-        >{{ ldapFormSaving ? 'Saving…' : 'Save' }}</button>
-        <button type="button" class="ms-auto px-3 py-2 text-xs border border-[#E9E0D3] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4EEE5] transition-colors cursor-pointer" @click="closeModal">Cancel</button>
-      </div>
-    </SettingsProviderConfigModal>
 
     <!-- ================================================================== -->
     <!-- SCIM Modals (Create + Revoke)                                       -->
@@ -958,17 +541,56 @@
       </div>
     </div>
 
+    <!-- LDAP directory config modal (create / edit) -->
+    <LdapDirectoryModal
+      :open="ldapModalOpen"
+      :directory="ldapEditing"
+      @close="ldapModalOpen = false"
+      @saved="onLdapSaved"
+    />
+
     <!-- Provider library (Add provider) -->
     <IdpProviderLibraryModal :open="showLibrary" @close="showLibrary = false" @select="onLibrarySelect" />
+
+    <!-- DELETE — double-confirm modal -->
+    <div v-if="removeTarget" class="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]" @click.self="cancelRemove">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-[#E9E0D3]">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-[#E9E0D3]">
+          <h3 class="text-sm font-medium text-[#1f2328]" style="font-family:'Spectral',ui-serif,Georgia,serif">Remove provider</h3>
+          <button type="button" class="text-[#9a958c] hover:text-[#1f2328]" @click="cancelRemove">&#x2715;</button>
+        </div>
+        <div class="px-5 py-4">
+          <p class="text-xs text-[#1f2328] mb-3">
+            Remove <b>{{ removeTarget.name }}</b>? This permanently deletes its configuration and members can no longer sign in through it.
+          </p>
+          <label class="flex items-center gap-2 text-xs text-[#6b6b6b] cursor-pointer">
+            <input type="checkbox" v-model="removeAck" class="accent-[#C2541E] w-3.5 h-3.5" />
+            I understand this cannot be undone.
+          </label>
+        </div>
+        <div class="flex justify-end gap-2 px-5 py-4 border-t border-[#E9E0D3]">
+          <button type="button" class="px-3 py-2 text-xs border border-[#E9E0D3] rounded-lg text-[#1f2328] bg-white hover:bg-[#F4EEE5] transition-colors cursor-pointer" @click="cancelRemove">Cancel</button>
+          <button
+            type="button"
+            class="px-3 py-2 text-xs rounded-lg text-white transition-colors"
+            :class="(removeAck && !removing) ? 'bg-red-600 hover:bg-red-700 cursor-pointer' : 'bg-red-600 opacity-50 cursor-default'"
+            :disabled="!removeAck || removing"
+            @click="confirmRemove"
+          >{{ removing ? 'Removing…' : 'Remove' }}</button>
+        </div>
+      </div>
+    </div>
 
   </div>
 </template>
 
 <script setup lang="ts">
 import { useScimTokens, type ScimToken } from '~/ee/composables/useScimTokens'
-import { useLdapSync, type SyncResult as LDAPSyncResult } from '~/ee/composables/useLdapSync'
 import { idpLogoSvg } from '~/utils/idpLogos'
 import { IDP_TEMPLATES, type IdpTemplate } from '~/utils/idpTemplates'
+import IdpProviderLibraryModal from '~/components/idp/IdpProviderLibraryModal.vue'
+import IdpLogoPicker from '~/components/idp/IdpLogoPicker.vue'
+import LdapDirectoryModal from '~/components/idp/LdapDirectoryModal.vue'
 
 definePageMeta({
   auth: true,
@@ -979,8 +601,13 @@ definePageMeta({
 const { hasFeature, license } = useEnterprise()
 const toast = useToast()
 
+// ── Dirty / staged-save tracking ────────────────────────────────────────────
+const dirty = ref(false)
+const saving = ref(false)
+function markDirty() { dirty.value = true }
+
 // ── Modal state ───────────────────────────────────────────────────────────
-type ModalKey = 'google' | 'microsoft' | 'oidc' | 'scim' | 'ldap' | null
+type ModalKey = 'google' | 'microsoft' | 'oidc' | 'scim' | null
 const activeModal = ref<ModalKey>(null)
 const activeOidcIdx = ref<number | null>(null)
 
@@ -997,7 +624,6 @@ function closeModal() {
   // clear transient test results
   ssoGoogleTestResult.value = null
   ssoMicrosoftTestResult.value = null
-  ldapNewTestResult.value = null
 }
 
 // ── SSO state ──────────────────────────────────────────────────────────────
@@ -1008,6 +634,8 @@ const authModeOptions = [
   { value: 'hybrid', label: 'Hybrid' },
   { value: 'sso_only', label: 'SSO only' },
 ]
+let authModeBaseline: string = 'hybrid'
+function stageAuthMode() { markDirty() }
 
 const ssoGoogle = reactive({
   enabled: false,
@@ -1019,6 +647,9 @@ const ssoGoogle = reactive({
 const ssoGoogleSaving = ref(false)
 const ssoGoogleTesting = ref(false)
 const ssoGoogleTestResult = ref<{ ok: boolean; text: string } | null>(null)
+// "Added this session" flags — let a freshly-added Google/SCIM appear before configure.
+const googleAdded = ref(false)
+const scimAdded = ref(false)
 
 const ssoMicrosoft = reactive({
   enabled: false,
@@ -1032,6 +663,7 @@ const ssoMicrosoft = reactive({
 const ssoMicrosoftSaving = ref(false)
 const ssoMicrosoftTesting = ref(false)
 const ssoMicrosoftTestResult = ref<{ ok: boolean; text: string } | null>(null)
+const microsoftAdded = ref(false)
 
 interface OidcProvider {
   name: string
@@ -1039,6 +671,7 @@ interface OidcProvider {
   enabled: boolean
   logo: string
   issuer: string
+  issuerPattern?: string
   client_id: string
   client_secret: string
   client_secret_set: boolean
@@ -1064,14 +697,13 @@ function oidcRedirectUri(name: string) {
   return `/api/auth/${name || '<name>'}/callback`
 }
 
-const ssoLoaded = ref(false)
-
 async function loadSso() {
   try {
     const res = await useMyFetch('/api/organization/sso')
     const data = res.data.value as any
     if (!data) return
     ssoAuthMode.value = data.auth_mode || 'hybrid'
+    authModeBaseline = ssoAuthMode.value
     if (data.google) {
       ssoGoogle.enabled = data.google.enabled ?? false
       ssoGoogle.logo = data.google.logo || 'google'
@@ -1089,6 +721,7 @@ async function loadSso() {
         ssoMicrosoft.client_id = p.client_id || ''
         ssoMicrosoft.client_secret_set = p.client_secret_set ?? false
         ssoMicrosoft.sync_groups = p.sync_groups ?? false
+        microsoftAdded.value = true
       } else {
         providers.push({
           name: p.name || '',
@@ -1096,6 +729,7 @@ async function loadSso() {
           enabled: p.enabled ?? false,
           logo: p.logo || p.name || 'oidc',
           issuer: p.issuer || '',
+          issuerPattern: '',
           client_id: p.client_id || '',
           client_secret: '',
           client_secret_set: p.client_secret_set ?? false,
@@ -1111,6 +745,7 @@ async function loadSso() {
   }
 }
 
+// ── Per-config-modal save (immediate persist — NOT staged) ──────────────────
 async function handleSaveGoogle() {
   ssoGoogleSaving.value = true
   try {
@@ -1119,6 +754,7 @@ async function handleSaveGoogle() {
     const res = await useMyFetch('/api/organization/sso/google', { method: 'PUT', body })
     if (res.status.value === 'success') {
       toast.add({ title: 'Google SSO saved', color: 'green' })
+      googleAdded.value = true
       ssoGoogle.client_secret_set = ssoGoogle.client_secret_set || !!ssoGoogle.client_secret
       ssoGoogle.client_secret = ''
     } else {
@@ -1169,15 +805,20 @@ function buildMicrosoftOidcPayload() {
   return p
 }
 
+// Build the full oidc list to PUT (microsoft only when added/configured).
+function buildAllOidcPayload() {
+  const list: any[] = oidcProviders.value.map(buildOidcPayload)
+  if (microsoftAdded.value) list.unshift(buildMicrosoftOidcPayload())
+  return list
+}
+
 async function handleSaveMicrosoft() {
   ssoMicrosoftSaving.value = true
   try {
-    const msPayload = buildMicrosoftOidcPayload()
-    // Build the full oidc list: replace/add microsoft entry, keep others
-    const others = oidcProviders.value.map(buildOidcPayload)
+    microsoftAdded.value = true
     const res = await useMyFetch('/api/organization/sso/oidc', {
       method: 'PUT',
-      body: { providers: [msPayload, ...others] },
+      body: { providers: buildAllOidcPayload() },
     })
     if (res.status.value === 'success') {
       toast.add({ title: 'Microsoft SSO saved', color: 'green' })
@@ -1233,11 +874,9 @@ function buildOidcPayload(p: OidcProvider) {
 async function handleSaveOidc() {
   ssoOidcSaving.value = true
   try {
-    const msPayload = buildMicrosoftOidcPayload()
-    const others = oidcProviders.value.map(buildOidcPayload)
     const res = await useMyFetch('/api/organization/sso/oidc', {
       method: 'PUT',
-      body: { providers: [msPayload, ...others] },
+      body: { providers: buildAllOidcPayload() },
     })
     if (res.status.value === 'success') {
       toast.add({ title: 'OIDC providers saved', color: 'green' })
@@ -1259,75 +898,6 @@ async function handleSaveOidc() {
 async function handleSaveOidcAndClose() {
   await handleSaveOidc()
   if (!ssoOidcSaving.value) closeModal()
-}
-
-function addOidcProvider() {
-  oidcProviders.value.push({
-    name: '',
-    label: '',
-    enabled: true,
-    logo: 'oidc',
-    issuer: '',
-    client_id: '',
-    client_secret: '',
-    client_secret_set: false,
-    scopesCsv: 'openid,profile,email',
-    sync_groups: false,
-    group_claim: 'groups',
-  })
-  openModal('oidc', oidcProviders.value.length - 1)
-}
-
-function removeOidcProvider(idx: number) {
-  oidcProviders.value.splice(idx, 1)
-  handleSaveOidc()
-}
-
-async function handleAuthModeChange(mode: string) {
-  try {
-    const res = await useMyFetch('/api/organization/sso/auth-mode', { method: 'PUT', body: { mode } })
-    if (res.status.value === 'success') {
-      toast.add({ title: 'Auth mode updated', color: 'green' })
-    } else {
-      toast.add({ title: 'Failed to update auth mode', color: 'red' })
-    }
-  } catch {
-    // ignore
-  }
-}
-
-// ── Task 3: Sign-up toggle ────────────────────────────────────────────────
-const signupEnabled = ref(false)
-const signupSaving = ref(false)
-
-async function loadSignupEnabled() {
-  try {
-    const settings = await $fetch('/api/settings') as any
-    signupEnabled.value = !!(settings?.signup_enabled)
-  } catch {
-    // ignore
-  }
-}
-
-async function handleSignupToggle() {
-  const newVal = !signupEnabled.value
-  signupSaving.value = true
-  try {
-    const res = await useMyFetch('/api/organization/signup-enabled', {
-      method: 'PUT',
-      body: { enabled: newVal },
-    })
-    if (res.status.value === 'success') {
-      signupEnabled.value = newVal
-      toast.add({ title: newVal ? 'Public sign-up enabled' : 'Public sign-up disabled', color: 'green' })
-    } else {
-      toast.add({ title: 'Failed to update sign-up setting', color: 'red' })
-    }
-  } catch {
-    toast.add({ title: 'Failed to update sign-up setting', color: 'red' })
-  } finally {
-    signupSaving.value = false
-  }
 }
 
 // ── SCIM ──────────────────────────────────────────────────────────────────
@@ -1361,6 +931,7 @@ const handleCreateToken = async () => {
   creating.value = false
   if (result) {
     createdToken.value = result.token
+    scimAdded.value = true
   }
 }
 
@@ -1375,166 +946,76 @@ const handleRevoke = async () => {
   createdToken.value = null
 }
 
-// ── LDAP ──────────────────────────────────────────────────────────────────
-const {
-  status: ldapStatus,
-  preview: ldapPreview,
-  testResult: ldapTestResult,
-  loading: ldapLoading,
-  error: ldapError,
-  fetchStatus: fetchLdapStatus,
-  triggerSync,
-  fetchPreview,
-  testConnection,
-} = useLdapSync()
+// ── LDAP directories ────────────────────────────────────────────────────────
+interface LdapDirectory {
+  id: string
+  name: string
+  enabled: boolean
+  logo?: string
+  host: string
+  port: number
+  bind_dn?: string
+  bind_password_set?: boolean
+  base_dn?: string
+  user_filter?: string
+  email_attr?: string
+  name_attr?: string
+  use_ssl?: boolean
+  start_tls?: boolean
+  user_search_base?: string
+  group_search_base?: string
+  group_search_filter?: string
+  group_name_attribute?: string
+  group_member_attribute?: string
+  group_member_format?: string
+  sync_interval_minutes?: number
+  auto_provision_users?: boolean
+  connection_timeout?: number
+  page_size?: number
+}
 
-const lastSyncResult = ref<LDAPSyncResult | null>(null)
-const hasFetchedLdap = ref(false)
+const ldapDirectories = ref<LdapDirectory[]>([])
+const ldapModalOpen = ref(false)
+const ldapEditing = ref<LdapDirectory | null>(null)
+// Staged enable/disable per directory id (applied on Save).
+const ldapStagedEnabled = reactive<Record<string, boolean>>({})
 
-// LDAP config form state
-const ldapForm = reactive({
-  enabled: false,
-  logo: 'ldap',
-  url: '',
-  bind_dn: '',
-  bind_password: '',
-  bind_password_set: false,
-  use_ssl: false,
-  start_tls: false,
-  base_dn: '',
-  user_search_base: '',
-  user_search_filter: '(objectClass=person)',
-  user_email_attribute: 'mail',
-  user_name_attribute: 'cn',
-  group_search_base: '',
-  group_search_filter: '(objectClass=group)',
-  group_name_attribute: 'cn',
-  group_member_attribute: 'member',
-  group_member_format: 'dn',
-  sync_interval_minutes: 60,
-  auto_provision_users: false,
-})
-
-const ldapFormSaving = ref(false)
-const ldapFormTesting = ref(false)
-const ldapNewTestResult = ref<{ connected: boolean; server?: string; vendor?: string; user_count?: number | null; group_count?: number | null; error?: string } | null>(null)
-const ldapAdvOpen = ref(false)
-const ldapFormLoaded = ref(false)
-
-async function loadLdapConfig() {
-  if (ldapFormLoaded.value) return
-  ldapFormLoaded.value = true
+async function loadLdapDirectories() {
+  if (!hasFeature('ldap')) return
   try {
-    const res = await useMyFetch('/api/organization/ldap')
-    const data = res.data.value as any
-    if (!data) return
-    ldapForm.enabled = data.enabled ?? false
-    ldapForm.logo = data.logo || 'ldap'
-    ldapForm.url = data.url || ''
-    ldapForm.bind_dn = data.bind_dn || ''
-    ldapForm.bind_password_set = data.bind_password_set ?? false
-    ldapForm.use_ssl = data.use_ssl ?? false
-    ldapForm.start_tls = data.start_tls ?? false
-    ldapForm.base_dn = data.base_dn || ''
-    ldapForm.user_search_base = data.user_search_base || ''
-    ldapForm.user_search_filter = data.user_search_filter || '(objectClass=person)'
-    ldapForm.user_email_attribute = data.user_email_attribute || 'mail'
-    ldapForm.user_name_attribute = data.user_name_attribute || 'cn'
-    ldapForm.group_search_base = data.group_search_base || ''
-    ldapForm.group_search_filter = data.group_search_filter || '(objectClass=group)'
-    ldapForm.group_name_attribute = data.group_name_attribute || 'cn'
-    ldapForm.group_member_attribute = data.group_member_attribute || 'member'
-    ldapForm.group_member_format = data.group_member_format || 'dn'
-    ldapForm.sync_interval_minutes = data.sync_interval_minutes ?? 60
-    ldapForm.auto_provision_users = data.auto_provision_users ?? false
+    const { data, error } = await useMyFetch<{ directories: LdapDirectory[] } | LdapDirectory[]>(
+      '/enterprise/ldap/directories',
+      { method: 'GET' }
+    )
+    if (error?.value) throw error.value
+    const raw = data.value
+    ldapDirectories.value = Array.isArray(raw) ? raw : (raw?.directories ?? [])
+    // reset staged enable map to live state
+    for (const k of Object.keys(ldapStagedEnabled)) delete ldapStagedEnabled[k]
   } catch {
-    // not yet configured — defaults are fine
+    // not yet configured / no permission — leave empty
   }
 }
 
-function buildLdapPayload() {
-  const p: any = {
-    enabled: ldapForm.enabled,
-    logo: ldapForm.logo,
-    url: ldapForm.url,
-    bind_dn: ldapForm.bind_dn,
-    use_ssl: ldapForm.use_ssl,
-    start_tls: ldapForm.start_tls,
-    base_dn: ldapForm.base_dn,
-    user_search_base: ldapForm.user_search_base,
-    user_search_filter: ldapForm.user_search_filter,
-    user_email_attribute: ldapForm.user_email_attribute,
-    user_name_attribute: ldapForm.user_name_attribute,
-    group_search_base: ldapForm.group_search_base,
-    group_search_filter: ldapForm.group_search_filter,
-    group_name_attribute: ldapForm.group_name_attribute,
-    group_member_attribute: ldapForm.group_member_attribute,
-    group_member_format: ldapForm.group_member_format,
-    sync_interval_minutes: ldapForm.sync_interval_minutes,
-    auto_provision_users: ldapForm.auto_provision_users,
-  }
-  if (ldapForm.bind_password) p.bind_password = ldapForm.bind_password
-  return p
+function ldapEnabledState(dir: LdapDirectory): boolean {
+  return dir.id in ldapStagedEnabled ? ldapStagedEnabled[dir.id] : !!dir.enabled
 }
-
-async function handleLdapSave() {
-  ldapFormSaving.value = true
-  try {
-    const res = await useMyFetch('/api/organization/ldap', { method: 'PUT', body: buildLdapPayload() })
-    if (res.status.value === 'success') {
-      toast.add({ title: 'LDAP configuration saved', color: 'green' })
-      ldapForm.bind_password_set = ldapForm.bind_password_set || !!ldapForm.bind_password
-      ldapForm.bind_password = ''
-      // refresh status so configured/unconfigured UI updates
-      await fetchLdapStatus()
-    } else {
-      toast.add({ title: 'Failed to save LDAP configuration', description: (res.error.value as any)?.data?.detail || 'Error', color: 'red' })
-    }
-  } finally {
-    ldapFormSaving.value = false
-  }
+function stageLdapToggle(dir: LdapDirectory) {
+  ldapStagedEnabled[dir.id] = !ldapEnabledState(dir)
+  markDirty()
 }
-
-async function handleLdapSaveAndClose() {
-  await handleLdapSave()
-  if (!ldapFormSaving.value) closeModal()
+function openLdapConfig(dir: LdapDirectory) {
+  ldapEditing.value = dir
+  ldapModalOpen.value = true
 }
-
-async function handleLdapTestNew() {
-  ldapFormTesting.value = true
-  ldapNewTestResult.value = null
-  try {
-    const res = await useMyFetch('/api/organization/ldap/test', { method: 'POST' })
-    const data = res.data.value as any
-    if (data) {
-      ldapNewTestResult.value = data
-    } else {
-      ldapNewTestResult.value = { connected: false, error: 'No response from server' }
-    }
-  } catch {
-    ldapNewTestResult.value = { connected: false, error: 'Test failed — check LDAP settings' }
-  } finally {
-    ldapFormTesting.value = false
-  }
+function openLdapCreate() {
+  ldapEditing.value = null
+  ldapModalOpen.value = true
 }
-
-const handleTestConnection = async () => {
-  await testConnection()
-}
-
-const handleSync = async () => {
-  lastSyncResult.value = null
-  ldapPreview.value = null
-  const result = await triggerSync()
-  if (result) {
-    lastSyncResult.value = result
-    setTimeout(() => { lastSyncResult.value = null }, 15000)
-  }
-}
-
-const handlePreview = async () => {
-  lastSyncResult.value = null
-  await fetchPreview()
+async function onLdapSaved() {
+  ldapModalOpen.value = false
+  ldapEditing.value = null
+  await loadLdapDirectories()
 }
 
 // ── Shared ────────────────────────────────────────────────────────────────
@@ -1566,27 +1047,7 @@ const formatRelativeTime = (timestamp: string | null) => {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-// ── Init ──────────────────────────────────────────────────────────────────
-watch(
-  () => license.value,
-  (newLicense) => {
-    if (newLicense && hasFeature('scim') && !hasFetchedScim.value) {
-      hasFetchedScim.value = true
-      fetchTokens()
-    }
-    if (newLicense && hasFeature('ldap') && !hasFetchedLdap.value) {
-      hasFetchedLdap.value = true
-      fetchLdapStatus()
-      loadLdapConfig()
-    }
-  },
-  { immediate: true }
-)
-
-// ── Logo + smart-status + provider-library (IdP redesign) ──────────────────
-const showLibrary = ref(false)
-
-// 4-state pill from (enabled × configured)
+// ── Smart-status pill helpers ───────────────────────────────────────────────
 function pillText(enabled: boolean, configured: boolean) {
   if (enabled && configured) return '● On · Ready'
   if (enabled && !configured) return '⚠ On · Needs setup'
@@ -1599,7 +1060,9 @@ function pillClass(enabled: boolean, configured: boolean) {
   return 'bg-[#F4EEE5] text-[#6b6b6b] border border-[#E9E0D3]'
 }
 
-const FIXED_DEFAULT_KEYS = ['okta', 'keycloak']
+// ── Add provider (library) ──────────────────────────────────────────────────
+const showLibrary = ref(false)
+
 function findOidcIdx(name: string) {
   return oidcProviders.value.findIndex(p => (p.name || '').toLowerCase() === name)
 }
@@ -1607,136 +1070,347 @@ function oidcConfigured(p: OidcProvider) {
   return !!(p.client_secret_set || (p.client_id && p.issuer))
 }
 
-async function quickToggleGoogle() {
-  ssoGoogle.enabled = !ssoGoogle.enabled
-  await handleSaveGoogle()
-}
-async function quickToggleMicrosoft() {
-  ssoMicrosoft.enabled = !ssoMicrosoft.enabled
-  await handleSaveMicrosoft()
-}
-async function quickToggleOidc(idx: number) {
-  const p = oidcProviders.value[idx]
-  if (!p) return
-  p.enabled = !p.enabled
-  await handleSaveOidc()
-}
-async function quickToggleLdap() {
-  ldapForm.enabled = !ldapForm.enabled
-  await handleLdapSave()
-}
-
-// Create a provider from a library template (or a default Okta/Keycloak row).
-// enableOnly=true → persist immediately as enabled-but-unconfigured (amber state).
-async function createFromTemplate(key: string, opts: { enableOnly?: boolean } = {}) {
-  const tpl = IDP_TEMPLATES.find(t => t.key === key)
-  const isGeneric = key === 'oidc' || !tpl
+// Push a new oidc provider prefilled from a template + open its config modal.
+function createFromTemplate(tpl: IdpTemplate) {
+  const isGeneric = tpl.key === 'oidc'
   oidcProviders.value.push({
-    name: isGeneric ? '' : key,
-    label: tpl ? tpl.name : '',
+    name: isGeneric ? '' : tpl.key,
+    label: tpl.name,
     enabled: true,
-    logo: tpl ? tpl.logo : 'oidc',
+    logo: tpl.logo,
     issuer: '',
+    issuerPattern: tpl.issuerPattern,
     client_id: '',
     client_secret: '',
     client_secret_set: false,
-    scopesCsv: (tpl ? tpl.scopes : ['openid', 'profile', 'email']).join(','),
+    scopesCsv: tpl.scopes.join(','),
     sync_groups: false,
-    group_claim: tpl ? tpl.groupClaim : 'groups',
+    group_claim: tpl.groupClaim || 'groups',
   })
-  const idx = oidcProviders.value.length - 1
-  if (opts.enableOnly) {
-    await handleSaveOidc()
-  } else {
-    openModal('oidc', idx)
-  }
+  openModal('oidc', oidcProviders.value.length - 1)
 }
 
 function onLibrarySelect(tpl: IdpTemplate) {
   showLibrary.value = false
+  if (tpl.key === 'google') {
+    googleAdded.value = true
+    ssoGoogle.enabled = true
+    openModal('google')
+    return
+  }
+  if (tpl.key === 'microsoft') {
+    microsoftAdded.value = true
+    ssoMicrosoft.enabled = true
+    openModal('microsoft')
+    return
+  }
+  if (tpl.key === 'ldap') {
+    openLdapCreate()
+    return
+  }
+  if (tpl.key === 'scim') {
+    scimAdded.value = true
+    if (!hasFetchedScim.value) { hasFetchedScim.value = true; fetchTokens() }
+    openModal('scim')
+    return
+  }
+  // OIDC family — reuse an existing entry of the same name (non-generic) if present.
   const existing = findOidcIdx(tpl.key)
   if (existing >= 0 && tpl.key !== 'oidc') {
     openModal('oidc', existing)
     return
   }
-  createFromTemplate(tpl.key)
+  createFromTemplate(tpl)
 }
 
-// Default catalog row (Okta/Keycloak): backed by an oidc provider if present.
-function defaultRow(key: string, name: string) {
-  const idx = findOidcIdx(key)
-  if (idx >= 0) {
-    const p = oidcProviders.value[idx]
-    return {
-      id: 'oidc-' + idx,
-      name: p.label || name,
-      logo: p.logo || key,
-      enabled: p.enabled,
-      configured: oidcConfigured(p),
-      removable: true,
-      configure: () => openModal('oidc', idx),
-      toggle: () => quickToggleOidc(idx),
-      remove: () => removeOidcProvider(idx),
-    }
-  }
-  return {
-    id: 'default-' + key,
-    name,
-    logo: key,
-    enabled: false,
-    configured: false,
-    removable: false,
-    configure: () => createFromTemplate(key),
-    toggle: () => createFromTemplate(key, { enableOnly: true }),
-    remove: undefined as undefined | (() => void),
-  }
+// ── Unified row model ────────────────────────────────────────────────────────
+interface MethodRow {
+  id: string
+  name: string
+  logo: string
+  meta?: string
+  enabled: boolean
+  configured: boolean
+  configure: () => void
+  toggle?: () => void
+  remove: () => void | Promise<void>
 }
 
-// All SSO rows in display order: Google · Microsoft · Okta · Keycloak · custom.
-const ssoRows = computed(() => {
-  const rows: any[] = [
-    {
+const methods = computed<MethodRow[]>(() => {
+  const rows: MethodRow[] = []
+
+  // Google — only if configured or just added this session.
+  const googleConfigured = !!(ssoGoogle.client_secret_set || ssoGoogle.client_id)
+  if (googleConfigured || googleAdded.value) {
+    rows.push({
       id: 'google',
       name: 'Google',
       logo: ssoGoogle.logo || 'google',
       enabled: ssoGoogle.enabled,
-      configured: !!(ssoGoogle.client_secret_set || ssoGoogle.client_id),
-      removable: false,
+      configured: googleConfigured,
       configure: () => openModal('google'),
-      toggle: quickToggleGoogle,
-    },
-    {
-      id: 'microsoft',
-      name: 'Microsoft / Entra',
-      logo: ssoMicrosoft.logo || 'microsoft',
-      enabled: ssoMicrosoft.enabled,
-      configured: !!(ssoMicrosoft.client_secret_set || ssoMicrosoft.client_id),
-      removable: false,
-      configure: () => openModal('microsoft'),
-      toggle: quickToggleMicrosoft,
-    },
-    defaultRow('okta', 'Okta'),
-    defaultRow('keycloak', 'Keycloak'),
-  ]
+      toggle: () => { ssoGoogle.enabled = !ssoGoogle.enabled; markDirty() },
+      remove: removeGoogle,
+    })
+  }
+
+  // OIDC entries (Microsoft is an ordinary oidc entry by name).
   oidcProviders.value.forEach((p, idx) => {
-    if (FIXED_DEFAULT_KEYS.includes((p.name || '').toLowerCase())) return
     rows.push({
       id: 'oidc-' + idx,
       name: p.label || p.name || 'Unnamed provider',
       logo: p.logo || p.name || 'oidc',
       enabled: p.enabled,
       configured: oidcConfigured(p),
-      removable: true,
       configure: () => openModal('oidc', idx),
-      toggle: () => quickToggleOidc(idx),
-      remove: () => removeOidcProvider(idx),
+      toggle: () => { p.enabled = !p.enabled; markDirty() },
+      remove: () => removeOidc(idx),
     })
   })
+
+  // Microsoft (stored separately as a reactive object; one row when added/configured).
+  const msConfigured = !!(ssoMicrosoft.client_secret_set || ssoMicrosoft.client_id)
+  if (msConfigured || microsoftAdded.value) {
+    rows.push({
+      id: 'microsoft',
+      name: 'Microsoft / Entra',
+      logo: ssoMicrosoft.logo || 'microsoft',
+      enabled: ssoMicrosoft.enabled,
+      configured: msConfigured,
+      configure: () => openModal('microsoft'),
+      toggle: () => { ssoMicrosoft.enabled = !ssoMicrosoft.enabled; markDirty() },
+      remove: removeMicrosoft,
+    })
+  }
+
+  // LDAP directories.
+  ldapDirectories.value.forEach((dir) => {
+    rows.push({
+      id: 'ldap-' + dir.id,
+      name: dir.name,
+      logo: dir.logo || 'ldap',
+      meta: `LDAP · ${dir.host}:${dir.port}`,
+      enabled: ldapEnabledState(dir),
+      configured: !!(dir.host && dir.bind_dn),
+      configure: () => openLdapConfig(dir),
+      toggle: () => stageLdapToggle(dir),
+      remove: () => removeLdap(dir),
+    })
+  })
+
+  // SCIM — only if tokens exist or added this session. No enable flag → no toggle.
+  if (tokens.value.length > 0 || scimAdded.value) {
+    rows.push({
+      id: 'scim',
+      name: 'SCIM Provisioning',
+      logo: 'scim',
+      meta: 'Provisioning · /scim/v2',
+      enabled: tokens.value.length > 0,
+      configured: tokens.value.length > 0,
+      configure: () => {
+        if (!hasFetchedScim.value) { hasFetchedScim.value = true; fetchTokens() }
+        openModal('scim')
+      },
+      // SCIM has no backend enable flag — toggle omitted (status derived from tokens).
+      remove: removeScim,
+    })
+  }
+
   return rows
 })
 
+// ── Page-level Save: commit staged toggles + auth-mode in one batch ──────────
+async function save() {
+  if (!dirty.value || saving.value) return
+  saving.value = true
+  let anyError = false
+
+  try {
+    // OIDC list (carries microsoft + all oidc enabled states).
+    if (oidcProviders.value.length > 0 || microsoftAdded.value) {
+      try {
+        const res = await useMyFetch('/api/organization/sso/oidc', {
+          method: 'PUT',
+          body: { providers: buildAllOidcPayload() },
+        })
+        if (res.status.value !== 'success') anyError = true
+        else {
+          for (const p of oidcProviders.value) {
+            if (p.client_secret) { p.client_secret_set = true; p.client_secret = '' }
+          }
+        }
+      } catch { anyError = true }
+    }
+
+    // Google enabled state.
+    if (methods.value.some(m => m.id === 'google')) {
+      try {
+        const body: any = { enabled: ssoGoogle.enabled, logo: ssoGoogle.logo, client_id: ssoGoogle.client_id }
+        if (ssoGoogle.client_secret) body.client_secret = ssoGoogle.client_secret
+        const res = await useMyFetch('/api/organization/sso/google', { method: 'PUT', body })
+        if (res.status.value !== 'success') anyError = true
+        else if (ssoGoogle.client_secret) { ssoGoogle.client_secret_set = true; ssoGoogle.client_secret = '' }
+      } catch { anyError = true }
+    }
+
+    // LDAP directories whose enabled changed.
+    for (const dir of ldapDirectories.value) {
+      if (!(dir.id in ldapStagedEnabled)) continue
+      const newEnabled = ldapStagedEnabled[dir.id]
+      if (newEnabled === !!dir.enabled) continue
+      try {
+        const res = await useMyFetch(`/enterprise/ldap/directories/${dir.id}`, {
+          method: 'PUT',
+          body: { enabled: newEnabled },
+        })
+        if (res.status.value !== 'success' && (res.error?.value)) anyError = true
+        else dir.enabled = newEnabled
+      } catch { anyError = true }
+    }
+
+    // Auth mode.
+    if (ssoAuthMode.value !== authModeBaseline) {
+      try {
+        const res = await useMyFetch('/api/organization/sso/auth-mode', { method: 'PUT', body: { mode: ssoAuthMode.value } })
+        if (res.status.value !== 'success') anyError = true
+        else authModeBaseline = ssoAuthMode.value
+      } catch { anyError = true }
+    }
+
+    if (anyError) {
+      toast.add({ title: 'Some changes could not be saved', color: 'red' })
+    } else {
+      toast.add({ title: 'Changes saved', color: 'green' })
+    }
+  } finally {
+    // Reload truth from server + clear dirty.
+    await loadSso()
+    await loadLdapDirectories()
+    dirty.value = false
+    saving.value = false
+  }
+}
+
+// ── DELETE — double-confirm ──────────────────────────────────────────────────
+const removeTarget = ref<MethodRow | null>(null)
+const removeAck = ref(false)
+const removing = ref(false)
+
+function askRemove(m: MethodRow) {
+  removeTarget.value = m
+  removeAck.value = false
+}
+function cancelRemove() {
+  removeTarget.value = null
+  removeAck.value = false
+}
+async function confirmRemove() {
+  if (!removeTarget.value || !removeAck.value || removing.value) return
+  removing.value = true
+  try {
+    await removeTarget.value.remove()
+  } finally {
+    removing.value = false
+    cancelRemove()
+  }
+}
+
+async function removeGoogle() {
+  try {
+    const res = await useMyFetch('/api/organization/sso/google', {
+      method: 'PUT',
+      body: { enabled: false, logo: 'google', client_id: '' },
+    })
+    if (res.status.value === 'success') {
+      googleAdded.value = false
+      ssoGoogle.enabled = false
+      ssoGoogle.client_id = ''
+      ssoGoogle.client_secret = ''
+      ssoGoogle.client_secret_set = false
+      toast.add({ title: 'Google removed', color: 'green' })
+    } else {
+      toast.add({ title: 'Failed to remove Google', color: 'red' })
+    }
+  } catch {
+    toast.add({ title: 'Failed to remove Google', color: 'red' })
+  }
+}
+
+async function removeMicrosoft() {
+  microsoftAdded.value = false
+  ssoMicrosoft.enabled = false
+  ssoMicrosoft.tenant_id = ''
+  ssoMicrosoft.client_id = ''
+  ssoMicrosoft.client_secret = ''
+  ssoMicrosoft.client_secret_set = false
+  // Persist the remaining providers (microsoft now excluded by buildAllOidcPayload).
+  try {
+    const res = await useMyFetch('/api/organization/sso/oidc', {
+      method: 'PUT',
+      body: { providers: buildAllOidcPayload() },
+    })
+    if (res.status.value === 'success') toast.add({ title: 'Microsoft removed', color: 'green' })
+    else toast.add({ title: 'Failed to remove Microsoft', color: 'red' })
+  } catch {
+    toast.add({ title: 'Failed to remove Microsoft', color: 'red' })
+  }
+}
+
+async function removeOidc(idx: number) {
+  oidcProviders.value.splice(idx, 1)
+  try {
+    const res = await useMyFetch('/api/organization/sso/oidc', {
+      method: 'PUT',
+      body: { providers: buildAllOidcPayload() },
+    })
+    if (res.status.value === 'success') toast.add({ title: 'Provider removed', color: 'green' })
+    else toast.add({ title: 'Failed to remove provider', color: 'red' })
+  } catch {
+    toast.add({ title: 'Failed to remove provider', color: 'red' })
+  }
+}
+
+async function removeLdap(dir: LdapDirectory) {
+  try {
+    const { error } = await useMyFetch(`/enterprise/ldap/directories/${dir.id}`, { method: 'DELETE' })
+    if (error?.value) throw error.value
+    delete ldapStagedEnabled[dir.id]
+    toast.add({ title: 'Directory removed', color: 'green' })
+    await loadLdapDirectories()
+  } catch {
+    toast.add({ title: 'Failed to remove directory', color: 'red' })
+  }
+}
+
+async function removeScim() {
+  try {
+    const ids = tokens.value.map(t => t.id)
+    for (const id of ids) {
+      await revokeToken(id)
+    }
+    scimAdded.value = false
+    toast.add({ title: 'SCIM provisioning removed', color: 'green' })
+  } catch {
+    toast.add({ title: 'Failed to remove SCIM provisioning', color: 'red' })
+  }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+watch(
+  () => license.value,
+  (newLicense) => {
+    if (newLicense && hasFeature('scim') && !hasFetchedScim.value) {
+      hasFetchedScim.value = true
+      fetchTokens()
+    }
+    if (newLicense && hasFeature('ldap')) {
+      loadLdapDirectories()
+    }
+  },
+  { immediate: true }
+)
+
 onMounted(() => {
   loadSso()
-  loadSignupEnabled()
 })
 </script>

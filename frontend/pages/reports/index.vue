@@ -1,388 +1,184 @@
 <template>
-    <div class="flex justify-center ps-2 md:ps-4 text-sm bg-[#F6F1EA]">
-        <div class="w-full max-w-7xl px-4 ps-0 py-2 text-[#1f2328]">
-            <div>
-                <h1
-                    class="text-2xl font-semibold tracking-tight flex items-center"
-                    style="font-family: 'Spectral', ui-serif, Georgia, serif"
-                >
+    <div class="bg-[#F1ECE3] h-full overflow-hidden flex flex-col">
+        <div class="my-2 me-2 px-6 md:px-8 py-6 text-sm bg-[#FBFAF6] border border-[#E9E0D3] rounded-2xl flex-1 overflow-y-auto text-[#1f2328]">
+
+            <!-- header: title + subtitle left, readiness ring right -->
+            <div class="flex items-start justify-between gap-4 mb-1">
+                <div class="flex items-start gap-2">
                     <GoBackChevron v-if="isExcel" />
-                    {{ $t('reports.title') }}
-                </h1>
-                <p class="mt-2 text-[#6b6b6b]">{{ $t('reports.subtitle') }}</p>
+                    <div>
+                        <h2
+                            class="text-lg font-semibold text-[#1f2328]"
+                            style="font-family: 'Spectral', ui-serif, Georgia, serif"
+                        >
+                            {{ $t('reports.title') }}
+                        </h2>
+                        <p class="text-xs text-[#6b6b6b] mt-0.5 max-w-[480px]">{{ $t('reports.subtitle') }}</p>
+                    </div>
+                </div>
+                <div class="shrink-0 text-center">
+                    <div class="relative w-[54px] h-[54px] mx-auto">
+                        <svg width="54" height="54" style="transform:rotate(-90deg)">
+                            <circle cx="27" cy="27" r="22" stroke="#ECE7E0" stroke-width="6" fill="none" />
+                            <circle cx="27" cy="27" r="22" stroke="#2F6F4F" stroke-width="6" fill="none" stroke-linecap="round" stroke-dasharray="138" stroke-dashoffset="20" />
+                        </svg>
+                        <div class="absolute inset-0 flex items-center justify-center text-[15px] font-semibold text-[#2F6F4F]" style="font-family: ui-serif, Georgia, serif">{{ pagination.total }}</div>
+                    </div>
+                    <div class="text-[9px] uppercase tracking-wide text-[#9a958c] mt-0.5">reports</div>
+                </div>
             </div>
 
-            <div class="mt-6">
-                <!-- Main tabs (My / Shared) -->
-                <div class="border-b border-[#E9E0D3] mb-4">
-                    <nav class="-mb-px flex space-x-6">
-                        <button
-                            class="whitespace-nowrap border-b-2 py-2 px-1 text-sm flex items-center font-medium"
-                            :class="activeFilter === 'my'
-                                ? 'border-[#C2541E] text-[#1f2328]'
-                                : 'border-transparent text-[#6b6b6b] hover:border-[#E9E0D3] hover:text-[#1f2328]'"
-                            @click="setActiveFilter('my')"
-                        >
-                            <span>{{ $t('reports.myReports') }}</span>
-                        </button>
-                        <button
-                            class="whitespace-nowrap border-b-2 py-2 px-1 text-sm flex items-center font-medium"
-                            :class="activeFilter === 'shared'
-                                ? 'border-[#C2541E] text-[#1f2328]'
-                                : 'border-transparent text-[#6b6b6b] hover:border-[#E9E0D3] hover:text-[#1f2328]'"
-                            @click="setActiveFilter('shared')"
-                        >
-                            <span>{{ $t('reports.sharedWithMe') }}</span>
-                        </button>
-                    </nav>
-                </div>
-
-                <!-- Search + Filters + New Report -->
-                <div class="flex flex-col md:flex-row md:items-center gap-3 mb-3">
-                    <div class="flex-1 w-full">
-                        <div class="relative">
-                            <input
-                                v-model="searchTerm"
-                                type="text"
-                                :placeholder="$t('reports.searchPlaceholder')"
-                                class="w-full ps-10 pe-4 py-2.5 bg-white text-[#1f2328] border border-[#E9E0D3] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#C2541E]/40 focus:border-[#C2541E]"
-                            />
-                            <UIcon
-                                name="i-heroicons-magnifying-glass"
-                                class="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9a958c]"
-                            />
-                        </div>
-                    </div>
-
-                    <div class="flex items-center gap-2 w-full md:w-auto">
-                        <!-- Filters toggle (My reports only) -->
-                        <div v-if="activeFilter === 'my'" class="relative" ref="filtersRef">
-                            <button
-                                @click="showFilters = !showFilters"
-                                class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl border transition-colors"
-                                :class="showFilters || activeFilterCount > 0
-                                    ? 'border-[#C2541E]/40 bg-[#FBEFE4] text-[#A8330F]'
-                                    : 'border-[#E9E0D3] bg-white text-[#1f2328] hover:bg-[#faf8f3]'"
-                            >
-                                <UIcon name="i-heroicons-funnel" class="h-4 w-4" />
-                                <span>{{ $t('reports.filtersButton') }}</span>
-                                <span
-                                    v-if="activeFilterCount > 0"
-                                    class="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[11px] font-semibold rounded-full bg-[#C2541E] text-white"
-                                >
-                                    {{ activeFilterCount }}
-                                </span>
-                                <UIcon
-                                    name="i-heroicons-chevron-up"
-                                    class="h-4 w-4 transition-transform"
-                                    :class="showFilters ? '' : 'rotate-180'"
-                                />
-                            </button>
-
-                            <!-- Filters popover -->
-                            <div
-                                v-if="showFilters"
-                                class="absolute end-0 z-20 mt-2 w-[360px] bg-white border border-[#E9E0D3] rounded-2xl shadow-lg p-4"
-                            >
-                                <div class="space-y-3">
-                                    <div class="flex items-center justify-between gap-3">
-                                        <span class="text-sm text-[#6b6b6b]">{{ $t('reports.filters.typeLabel') }}</span>
-                                        <USelectMenu
-                                            :model-value="typeFilter"
-                                            @update:model-value="setTypeFilter"
-                                            :options="typeFilterOptions"
-                                            value-attribute="value"
-                                            option-attribute="label"
-                                            class="w-48"
-                                        >
-                                            <template #label>
-                                                <span class="text-xs whitespace-nowrap">{{ selectedTypeLabel }}</span>
-                                            </template>
-                                        </USelectMenu>
-                                    </div>
-                                    <div class="flex items-center justify-between gap-3">
-                                        <span class="text-sm text-[#6b6b6b]">{{ $t('reports.filters.statusLabel') }}</span>
-                                        <USelectMenu
-                                            :model-value="statusFilter"
-                                            @update:model-value="setStatusFilter"
-                                            :options="statusFilterOptions"
-                                            value-attribute="value"
-                                            option-attribute="label"
-                                            class="w-48"
-                                        >
-                                            <template #label>
-                                                <span class="text-xs whitespace-nowrap">{{ selectedStatusLabel }}</span>
-                                            </template>
-                                        </USelectMenu>
-                                    </div>
-                                    <div class="flex items-center justify-between gap-3">
-                                        <span class="text-sm text-[#6b6b6b]">{{ $t('reports.filters.scheduleLabel') }}</span>
-                                        <USelectMenu
-                                            :model-value="scheduledFilter"
-                                            @update:model-value="setScheduledFilter"
-                                            :options="scheduleFilterOptions"
-                                            value-attribute="value"
-                                            option-attribute="label"
-                                            class="w-48"
-                                        >
-                                            <template #label>
-                                                <span class="text-xs whitespace-nowrap">{{ selectedScheduleLabel }}</span>
-                                            </template>
-                                        </USelectMenu>
-                                    </div>
-                                    <div class="flex items-center justify-between gap-3">
-                                        <span class="text-sm text-[#6b6b6b]">{{ $t('reports.filters.dataSourceLabel') }}</span>
-                                        <USelectMenu
-                                            :model-value="dataSourceFilter"
-                                            @update:model-value="setDataSourceFilter"
-                                            :options="dataSourceFilterOptions"
-                                            value-attribute="value"
-                                            option-attribute="label"
-                                            class="w-48"
-                                        >
-                                            <template #label>
-                                                <span class="text-xs whitespace-nowrap truncate">{{ selectedDataSourceLabel }}</span>
-                                            </template>
-                                        </USelectMenu>
-                                    </div>
-                                    <div class="flex items-center justify-between gap-3">
-                                        <span class="text-sm text-[#6b6b6b]">{{ $t('reports.filters.artifactsLabel') }}</span>
-                                        <USelectMenu
-                                            :model-value="artifactFilter"
-                                            @update:model-value="setArtifactFilter"
-                                            :options="artifactFilterOptions"
-                                            value-attribute="value"
-                                            option-attribute="label"
-                                            class="w-48"
-                                        >
-                                            <template #label>
-                                                <span class="text-xs whitespace-nowrap">{{ selectedArtifactLabel }}</span>
-                                            </template>
-                                        </USelectMenu>
-                                    </div>
-                                </div>
-                                <div v-if="activeFilterCount > 0" class="mt-4 pt-3 border-t border-[#E9E0D3] flex justify-end">
-                                    <button
-                                        @click="clearFilters"
-                                        class="text-xs font-medium text-[#6b6b6b] hover:text-[#1f2328]"
-                                    >
-                                        {{ $t('reports.filters.clear') }}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Bulk actions dropdown (My reports only) -->
-                        <UDropdown
-                            v-if="activeFilter === 'my'"
-                            :items="actionsDropdownItems"
-                            :popper="{ placement: 'bottom-end' }"
-                        >
-                            <UButton
-                                color="white"
-                                variant="solid"
-                                size="md"
-                                class="border border-[#E9E0D3] text-[#1f2328] hover:bg-[#faf8f3] py-2.5"
-                                trailing-icon="i-heroicons-chevron-down-20-solid"
-                            >
-                                {{ $t('reports.actions') }}
-                            </UButton>
-                        </UDropdown>
-
-                        <!-- Primary "New report" lives in the global TopNav — no duplicate here. -->
-                    </div>
-                </div>
-
-                <!-- Select-all bar (only when there are rows) -->
-                <div
-                    v-if="activeFilter === 'my' && !isLoading && visibleReports.length"
-                    class="flex items-center gap-2 px-1 py-2 text-xs text-[#6b6b6b]"
-                >
+            <!-- Toolbar: search + segmented filter + New report -->
+            <div class="flex flex-col md:flex-row md:items-center gap-2 mt-4 mb-4">
+                <div class="relative flex-1 w-full md:max-w-[420px]">
                     <input
-                        type="checkbox"
-                        :checked="allVisibleSelected"
-                        @change="toggleAllVisible"
-                        class="rounded border-[#E9E0D3] text-[#C2541E] focus:ring-[#C2541E]/40"
+                        v-model="searchTerm"
+                        type="text"
+                        :placeholder="$t('reports.searchPlaceholder')"
+                        class="w-full ps-9 pe-4 py-2 bg-white text-[#1f2328] border border-[#E9E0D3] rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-[#C2541E]/40 focus:border-[#C2541E]"
                     />
-                    <span v-if="selectedIds.size > 0">{{ selectedIds.size }} selected</span>
-                    <span v-else>Select all</span>
+                    <UIcon
+                        name="i-heroicons-magnifying-glass"
+                        class="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9a958c]"
+                    />
                 </div>
 
-                <!-- List -->
-                <div class="mt-1 bg-white border border-[#E9E0D3] rounded-2xl overflow-hidden">
-                    <!-- Loading state -->
-                    <div v-if="isLoading" class="py-16 flex items-center justify-center text-[#6b6b6b]">
-                        <Spinner class="w-4 h-4 me-2" />
-                        <span class="text-sm">{{ $t('common.loading') }}</span>
+                <!-- Segmented scope filter -->
+                <div class="inline-flex items-center bg-[#F1ECE3] rounded-lg p-0.5 shrink-0 text-[12px]">
+                    <button
+                        v-for="opt in scopeOptions"
+                        :key="opt.value"
+                        type="button"
+                        class="px-3 py-1.5 rounded-md transition-colors whitespace-nowrap"
+                        :class="activeFilter === opt.value
+                            ? 'bg-[#2F6F4F] text-white font-semibold'
+                            : 'text-[#6b6b6b] hover:text-[#1f2328]'"
+                        @click="setActiveFilter(opt.value)"
+                    >
+                        {{ opt.label }}
+                    </button>
+                </div>
+
+                <!-- New report -->
+                <button
+                    type="button"
+                    :disabled="creatingReport"
+                    class="md:ms-auto inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-semibold rounded-lg bg-[#C2541E] text-white hover:bg-[#A8330F] transition-colors shrink-0 disabled:opacity-60"
+                    @click="createNewReport"
+                >
+                    <UIcon name="i-heroicons-plus" class="w-4 h-4" />
+                    {{ $t('reports.newReport') }}
+                </button>
+            </div>
+
+            <!-- Loading state -->
+            <div v-if="isLoading" class="py-20 flex items-center justify-center text-[#6b6b6b]">
+                <Spinner class="w-4 h-4 me-2" />
+                <span class="text-sm">{{ $t('common.loading') }}</span>
+            </div>
+
+            <template v-else>
+                <!-- White section card with band pill -->
+                <div class="relative border border-[#E9E0D3] rounded-2xl bg-white p-4">
+                    <span class="absolute -top-2.5 left-4 bg-[#2B2A26] text-white text-[9.5px] font-semibold px-2.5 py-0.5 rounded-full tracking-wide">YOUR REPORTS · NEWEST FIRST</span>
+
+                    <!-- Empty state -->
+                    <div
+                        v-if="visibleReports.length === 0"
+                        class="mt-1 py-12 text-center border border-dashed border-[#d8cfc0] bg-gradient-to-b from-white to-[#fdfcf9] rounded-xl"
+                    >
+                        <span class="inline-flex w-12 h-12 mx-auto mb-3 items-center justify-center rounded-xl bg-[#E7F1EB] text-[#2F6F4F]">
+                            <UIcon name="i-heroicons-document-text" class="h-6 w-6" />
+                        </span>
+                        <h3 class="text-[13px] font-semibold text-[#1f2328]">{{ $t('reports.empty') }}</h3>
+                        <p class="mt-1 text-[11px] text-[#9a958c]">{{ $t('reports.emptyHint') }}</p>
                     </div>
 
-                    <template v-else>
-                        <!-- Empty state (canonical: clay tile + serif title) -->
-                        <div v-if="visibleReports.length === 0" class="py-16 text-center">
-                            <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] text-[#C2541E]">
-                                <Icon name="heroicons:document-text" class="h-6 w-6" />
-                            </span>
-                            <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ $t('reports.empty') }}</h3>
-                            <p class="mt-1 text-sm text-[#9a958c]">{{ $t('reports.emptyHint') }}</p>
-                        </div>
+                    <!-- Card grid -->
+                    <div v-else class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mt-1">
+                        <div
+                            v-for="report in visibleReports"
+                            :key="report.id"
+                            class="group flex flex-col border border-[#E9E0D3] rounded-xl bg-gradient-to-b from-white to-[#fdfcf9] p-3 hover:border-[#2F6F4F]/40 transition-colors"
+                        >
+                            <!-- Title row: icon chip + title + live/draft badge -->
+                            <div class="flex items-center gap-1.5">
+                                <span class="w-7 h-7 rounded-lg bg-[#E7F1EB] flex items-center justify-center text-[#2F6F4F] shrink-0">
+                                    <UIcon :name="reportTypeIcon(report)" class="w-4 h-4" />
+                                </span>
+                                <span
+                                    class="text-[13px] font-semibold text-[#1f2328] truncate cursor-pointer hover:text-[#2F6F4F]"
+                                    @click="goToReport(report)"
+                                >
+                                    {{ report.title }}
+                                </span>
+                                <span
+                                    class="ms-auto shrink-0 inline-flex items-center text-[9px] font-semibold rounded-full px-1.5 py-0.5"
+                                    :class="isReportLive(report)
+                                        ? 'text-[#2F6F4F] bg-[#E7F1EB]'
+                                        : 'text-[#7a756c] bg-[#F4EEE5]'"
+                                >
+                                    {{ isReportLive(report) ? $t('reports.statusLive') : $t('reports.statusDraft') }}
+                                </span>
+                            </div>
 
-                        <!-- Report rows -->
-                        <ul v-else class="divide-y divide-[#f0ede6]">
-                            <li
-                                v-for="report in visibleReports"
-                                :key="report.id"
-                                @click="goToReport(report)"
-                                class="group flex items-center gap-3 py-5 px-4 hover:bg-[#faf8f3] transition-colors cursor-pointer"
-                            >
-                                <!-- Bulk select (My reports) -->
-                                <input
-                                    v-if="activeFilter === 'my'"
-                                    type="checkbox"
-                                    :checked="selectedIds.has(report.id)"
-                                    @change="toggleOne(report.id)"
-                                    @click.stop
-                                    class="rounded border-[#E9E0D3] text-[#C2541E] focus:ring-[#C2541E]/40 opacity-0 group-hover:opacity-100 checked:opacity-100 transition-opacity"
-                                />
-
-                                <!-- Star -->
-                                <UTooltip :text="report.is_starred ? $t('reports.tooltips.unstar') : $t('reports.tooltips.star')">
+                            <!-- Meta row: owner + relative time + star/archive -->
+                            <div class="flex items-center gap-1.5 mt-2">
+                                <span class="text-[10.5px] text-[#9a958c] truncate">
+                                    {{ ownerLabel(report) }}<template v-if="report.created_at"> · {{ relTime(report.created_at) }}</template>
+                                </span>
+                                <UTooltip
+                                    :text="report.is_starred ? $t('reports.tooltips.unstar') : $t('reports.tooltips.star')"
+                                    class="ms-auto"
+                                >
                                     <button
                                         @click.stop="toggleStar(report)"
-                                        class="inline-flex items-center justify-center focus:outline-none"
+                                        class="inline-flex items-center justify-center w-6 h-6 rounded-md hover:bg-[#faf8f3] focus:outline-none"
                                     >
                                         <UIcon
-                                            :name="report.is_starred ? 'heroicons-star-solid' : 'heroicons-star'"
-                                            class="h-[18px] w-[18px] transition-colors"
+                                            :name="report.is_starred ? 'i-heroicons-star-solid' : 'i-heroicons-star'"
+                                            class="h-4 w-4 transition-colors"
                                             :class="report.is_starred ? 'text-yellow-400 hover:text-yellow-500' : 'text-gray-300 hover:text-yellow-400'"
                                         />
                                     </button>
                                 </UTooltip>
+                                <UTooltip
+                                    v-if="canDeleteReport(report)"
+                                    :text="$t('reports.archive')"
+                                >
+                                    <button
+                                        @click.stop="confirmDelete(report.id)"
+                                        class="inline-flex items-center justify-center w-6 h-6 rounded-md text-[#9a958c] hover:text-red-600 hover:bg-[#faf8f3] opacity-0 group-hover:opacity-100 transition-all focus:outline-none"
+                                    >
+                                        <UIcon name="i-heroicons-archive-box" class="w-4 h-4" />
+                                    </button>
+                                </UTooltip>
+                            </div>
 
-                                <!-- Type avatar -->
-                                <div class="shrink-0 h-9 w-9 rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] flex items-center justify-center">
-                                    <Icon :name="reportTypeIcon(report)" class="h-5 w-5 text-[#C2541E]" />
-                                </div>
-
-                                <!-- Title block -->
-                                <div class="min-w-0 flex-1">
-                                    <div class="flex items-center gap-2 flex-wrap">
-                                        <NuxtLink
-                                            v-if="reportLink(report)"
-                                            :to="reportLink(report)"
-                                            @click.stop
-                                            class="font-medium text-[#1f2328] hover:text-[#C2541E] truncate"
-                                        >
-                                            {{ report.title }}
-                                        </NuxtLink>
-                                        <span
-                                            v-else
-                                            @click.stop
-                                            class="font-medium text-[#1f2328] truncate"
-                                        >
-                                            {{ report.title }}
-                                        </span>
-                                        <!-- Visibility badges -->
-                                        <UTooltip v-if="report.artifact_modes?.length > 0" :text="report.artifact_visibility !== 'none' ? $t('reports.dashboardWithVisibility', { visibility: visibilityLabel(report.artifact_visibility) }) : $t('reports.dashboardPrivate')">
-                                            <span class="inline-flex items-center gap-1 text-[11px] font-medium text-[#A8330F] bg-[#FBEFE4] border border-[#ecd8cb] rounded-full px-2 py-px">
-                                                {{ $t('reports.dashboardLabel') }}
-                                                <Icon v-if="report.artifact_visibility !== 'none'" :name="visibilityIcon(report.artifact_visibility)" class="w-3 h-3" />
-                                            </span>
-                                        </UTooltip>
-                                        <UTooltip v-if="report.conversation_visibility !== 'none'" :text="visibilityLabel(report.conversation_visibility)">
-                                            <span class="inline-flex items-center gap-1 text-[11px] font-medium text-[#7a756c] bg-[#F4EEE5] border border-[#E9E0D3] rounded-full px-2 py-px">
-                                                {{ $t('reports.conversationLabel') }}
-                                                <Icon :name="visibilityIcon(report.conversation_visibility)" class="w-3 h-3" />
-                                            </span>
-                                        </UTooltip>
-                                        <!-- Platform icons -->
-                                        <img v-if="report.external_platform?.platform_type === 'slack'" src="/icons/slack.png" class="h-3 inline" />
-                                        <img v-if="report.external_platform?.platform_type === 'teams'" src="/icons/teams.png" class="h-3 inline" />
-                                        <UTooltip v-if="report.external_platform?.platform_type === 'mcp'" :text="$t('reports.tooltips.createdViaMcp')">
-                                            <img src="/icons/mcp.png" class="h-3 inline" />
-                                        </UTooltip>
-                                        <UTooltip v-if="report.external_platform?.platform_type === 'excel'" :text="$t('reports.tooltips.createdViaExcel')">
-                                            <img src="/data_sources_icons/excel.png" class="h-3 inline" />
-                                        </UTooltip>
-                                        <UTooltip v-if="report.cron_schedule && !report.has_scheduled_prompts" :text="$t('reports.tooltips.runningOnSchedule')">
-                                            <Icon name="heroicons:clock" class="h-3.5 w-3.5 text-[#9a958c]" />
-                                        </UTooltip>
-                                    </div>
-                                    <!-- Type sub-label + data sources + metrics -->
-                                    <div class="mt-0.5 flex items-center gap-2 text-xs text-[#6b6b6b] flex-wrap">
-                                        <span class="inline-flex items-center gap-1">
-                                            <Icon :name="reportTypeIcon(report)" class="h-3.5 w-3.5" />
-                                            {{ reportTypeLabel(report) }}
-                                        </span>
-                                        <template v-if="report.data_sources.length">
-                                            <span class="text-[#9a958c]">·</span>
-                                            <span class="inline-flex items-center gap-1.5">
-                                                <UTooltip
-                                                    v-for="data_source in report.data_sources.slice(0, 2)"
-                                                    :key="data_source.id || data_source.name"
-                                                    :text="data_source.name"
-                                                >
-                                                    <DataSourceIcon :type="data_source.type" class="h-3 inline" />
-                                                </UTooltip>
-                                                <UTooltip
-                                                    v-if="report.data_sources.length > 2"
-                                                    :text="report.data_sources.slice(2).map(d => d.name).join(', ')"
-                                                >
-                                                    <span class="text-[11px] text-[#9a958c]">+{{ report.data_sources.length - 2 }}</span>
-                                                </UTooltip>
-                                            </span>
-                                        </template>
-                                        <template v-if="report.query_count || report.artifact_count || report.scheduled_prompt_count || report.instruction_count || report.webhook_count">
-                                            <span class="text-[#9a958c]">·</span>
-                                            <span class="inline-flex items-center gap-1.5 flex-wrap text-[#9a958c]">
-                                                <span v-if="report.query_count" class="inline-flex items-center gap-1">
-                                                    <Icon name="heroicons:chat-bubble-left-right" class="w-3 h-3" />
-                                                    {{ report.query_count }}
-                                                </span>
-                                                <span v-if="report.artifact_count" class="inline-flex items-center gap-1">
-                                                    <Icon name="heroicons:chart-bar-square" class="w-3 h-3" />
-                                                    {{ report.artifact_count }}
-                                                </span>
-                                                <span v-if="report.scheduled_prompt_count" class="inline-flex items-center gap-1">
-                                                    <Icon name="heroicons:clock" class="w-3 h-3" />
-                                                    {{ report.scheduled_prompt_count }}
-                                                </span>
-                                                <span v-if="report.instruction_count" class="inline-flex items-center gap-1">
-                                                    <Icon name="heroicons-academic-cap" class="w-3 h-3" />
-                                                    {{ report.instruction_count }}
-                                                </span>
-                                                <span v-if="report.webhook_count" class="inline-flex items-center gap-1">
-                                                    <Icon name="heroicons-bolt" class="w-3 h-3" />
-                                                    {{ report.webhook_count }}
-                                                </span>
-                                            </span>
-                                        </template>
-                                    </div>
-                                </div>
-
-                                <!-- Right metadata: date -->
-                                <div class="shrink-0 hidden sm:block text-xs text-[#9a958c]">
-                                    {{ formatDate(report.created_at) }}
-                                </div>
-
-                                <!-- Archive action -->
-                                <div class="shrink-0 w-8 flex justify-end">
-                                    <UTooltip v-if="canDeleteReport(report)" :text="$t('reports.archive')">
-                                        <button
-                                            @click.stop="confirmDelete(report.id)"
-                                            class="text-[#9a958c] hover:text-red-600 opacity-0 group-hover:opacity-100 transition-all"
-                                        >
-                                            <Icon name="heroicons:archive-box" class="w-4 h-4" />
-                                        </button>
-                                    </UTooltip>
-                                </div>
-                            </li>
-                        </ul>
-                    </template>
+                            <!-- Actions -->
+                            <div class="grid grid-cols-2 gap-2 mt-3">
+                                <button
+                                    type="button"
+                                    class="box-border whitespace-nowrap inline-flex items-center justify-center py-1.5 text-[12px] font-medium rounded-lg border border-[#E9E0D3] bg-white text-[#1f2328] hover:bg-[#faf8f3] transition-colors"
+                                    @click.stop="goToReport(report)"
+                                >
+                                    {{ $t('reports.openButton') }}
+                                </button>
+                                <button
+                                    type="button"
+                                    class="box-border whitespace-nowrap inline-flex items-center justify-center py-1.5 text-[12px] font-semibold rounded-lg bg-[#2F6F4F] text-white hover:bg-[#27593f] transition-colors"
+                                    @click.stop="goToReportChat(report)"
+                                >
+                                    {{ $t('reports.openInChatButton') }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Pagination -->
                 <div
-                    v-if="!isLoading && visibleReports.length"
+                    v-if="visibleReports.length"
                     class="mt-4 pt-4 border-t border-[#E9E0D3] flex items-center justify-between gap-3"
                 >
                     <div class="flex items-center gap-2 text-xs text-[#6b6b6b]">
@@ -422,7 +218,7 @@
                         </button>
                     </div>
                 </div>
-            </div>
+            </template>
         </div>
     </div>
 </template>
@@ -441,7 +237,7 @@ const { selectedAgentObjects } = useAgent()
 definePageMeta({ auth: true })
 
 const reports = ref<any[]>([])
-const activeFilter = ref<'my' | 'shared' | 'published'>('my')
+const activeFilter = ref<'my' | 'shared' | 'published' | 'all'>('my')
 const currentPage = ref(1)
 const isLoading = ref(true)
 const pagination = ref({
@@ -513,6 +309,45 @@ const reportLink = (report: any): string | null => {
 const goToReport = (report: any) => {
     const link = reportLink(report)
     if (link) router.push(link)
+}
+
+// "Open in chat" — the report IS the conversation; shared reports open the
+// read-only shared view, owned reports open the editing page. Same target as
+// the row click, kept as a distinct handler so the two CTAs can diverge later.
+const goToReportChat = (report: any) => {
+    goToReport(report)
+}
+
+// Segmented scope tabs reuse the page's EXISTING filter values.
+const scopeOptions = computed(() => [
+    { value: 'my' as const, label: t('reports.myReports') },
+    { value: 'shared' as const, label: t('reports.sharedWithMe') },
+    { value: 'all' as const, label: t('reports.scopeAll') },
+])
+
+const ownerLabel = (report: any): string => {
+    const u = report?.user
+    return u?.name || u?.email || ''
+}
+
+// "live" = the report is shared/visible in any way; otherwise "draft" (private).
+const isReportLive = (report: any): boolean => {
+    return (
+        report?.status === 'published' ||
+        (report?.conversation_visibility && report.conversation_visibility !== 'none') ||
+        (report?.artifact_visibility && report.artifact_visibility !== 'none')
+    )
+}
+
+function relTime(ts?: string) {
+    if (!ts) return ''
+    const d = new Date(ts).getTime()
+    if (isNaN(d)) return ''
+    const s = Math.floor((Date.now() - d) / 1000)
+    if (s < 3600) return `${Math.max(1, Math.floor(s / 60))}m ago`
+    if (s < 86400) return `${Math.floor(s / 3600)}h ago`
+    if (s < 604800) return `${Math.floor(s / 86400)}d ago`
+    return `${Math.floor(s / 604800)}w ago`
 }
 
 const formatDate = (iso: string) => {
@@ -621,7 +456,7 @@ const setRowsPerPage = async (limit: number) => {
     await refreshReports()
 }
 
-const setActiveFilter = async (filter: 'my' | 'shared' | 'published') => {
+const setActiveFilter = async (filter: 'my' | 'shared' | 'published' | 'all') => {
     if (activeFilter.value === filter) return
     activeFilter.value = filter
     statusFilter.value = 'all'
@@ -683,7 +518,7 @@ const refreshReports = () => {
     return fetchReports(1, activeFilter.value, searchTerm.value, scheduledFilter.value, statusFilter.value)
 }
 
-const fetchReports = async (page: number = 1, filter: 'my' | 'shared' | 'published' = 'my', search: string = '', scheduled: boolean | null = null, status: string | null = null) => {
+const fetchReports = async (page: number = 1, filter: 'my' | 'shared' | 'published' | 'all' = 'my', search: string = '', scheduled: boolean | null = null, status: string | null = null) => {
     isLoading.value = true
     try {
         const response = await useMyFetch('/reports', {

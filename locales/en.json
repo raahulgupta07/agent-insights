@@ -500,7 +500,12 @@
       "dashboard": "Dashboard",
       "slides": "Slides",
       "deep": "Deep Analytics"
-    }
+    },
+    "openButton": "Open",
+    "openInChatButton": "Open in chat",
+    "statusLive": "live",
+    "statusDraft": "draft",
+    "scopeAll": "All"
   },
   "traceModal": {
     "title": "Agent Execution",
@@ -1760,6 +1765,7 @@
     "subtitle": "Browse and manage your dashboards and slides",
     "searchPlaceholder": "Search dashboards…",
     "myDashboards": "My dashboards",
+    "newDashboard": "New dashboard",
     "sharedWithMe": "Shared with me",
     "empty": "No dashboards found",
     "emptyDescription": "Try adjusting your search term, or create a report with a dashboard.",

@@ -1,72 +1,83 @@
 <template>
-    <div class="flex justify-center px-4 md:px-6 text-sm bg-[#F6F1EA] min-h-full">
-        <div class="w-full max-w-7xl py-2 text-[#1f2328]">
-            <!-- Header -->
-            <div class="flex items-start justify-between gap-4 mb-6">
-                <div>
-                    <h1
-                        class="text-[32px] font-medium text-[#211B14] tracking-tight flex items-center"
-                        style="font-family: 'Spectral', ui-serif, Georgia, serif"
-                    >Workflows</h1>
-                    <p class="mt-2 text-[#6b6b6b] leading-relaxed max-w-2xl">
-                        Multi-step agent pipelines. You trigger; the agent runs each stage; a judge
-                        gate scores every step before it lands.
-                    </p>
+  <div class="bg-[#F1ECE3] h-full overflow-hidden flex flex-col">
+    <div class="my-2 me-2 px-6 md:px-8 py-6 text-sm bg-[#FBFAF6] border border-[#E9E0D3] rounded-2xl flex-1 overflow-y-auto">
+
+      <!-- header: serif title + subtitle + readiness ring -->
+      <div class="flex items-start justify-between gap-4 mb-1">
+        <div>
+          <h1 class="text-2xl font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">Workflows</h1>
+          <p class="text-[#7c7368] mt-0.5 max-w-2xl leading-relaxed">
+            Multi-step agent pipelines. You trigger; the agent runs each stage; a judge gate scores every step before it lands.
+          </p>
+        </div>
+        <div v-if="workflows.length" class="shrink-0 text-center">
+          <div class="relative w-[54px] h-[54px] mx-auto">
+            <svg width="54" height="54" style="transform:rotate(-90deg)">
+              <circle cx="27" cy="27" r="22" stroke="#ECE7E0" stroke-width="6" fill="none" />
+              <circle cx="27" cy="27" r="22" stroke="#5A4FCF" stroke-width="6" fill="none" stroke-linecap="round" stroke-dasharray="138" stroke-dashoffset="0" style="transition:stroke-dashoffset .5s" />
+            </svg>
+            <div class="absolute inset-0 flex items-center justify-center text-[15px] font-semibold text-[#5A4FCF]" style="font-family: ui-serif, Georgia, serif">{{ workflows.length }}</div>
+          </div>
+          <div class="text-[9px] uppercase tracking-wide text-[#9a958c] mt-0.5">pipelines</div>
+        </div>
+      </div>
+
+      <!-- Loading -->
+      <div v-if="loading" class="flex items-center justify-center py-20 text-[#9a958c]">
+        <Icon name="heroicons:arrow-path" class="w-5 h-5 animate-spin me-2" />
+        <span class="text-sm">Loading workflows…</span>
+      </div>
+
+      <!-- Error -->
+      <div v-else-if="error" class="mt-4 rounded-2xl border border-[#E9E0D3] bg-[#FBEFE4] p-4 text-sm text-[#A8330F]">
+        {{ error }}
+        <button
+          type="button"
+          class="ms-2 rounded-lg px-2 py-0.5 text-xs font-medium text-[#C2541E] hover:bg-white/60"
+          @click="fetchWorkflows"
+        >
+          Retry
+        </button>
+      </div>
+
+      <template v-else>
+        <!-- PIPELINES section card -->
+        <div class="relative mt-4 border border-[#E9E0D3] rounded-2xl bg-white p-4">
+          <span class="absolute -top-2.5 left-4 bg-[#2B2A26] text-white text-[9.5px] font-semibold px-2.5 py-0.5 rounded-full tracking-wide">PIPELINES</span>
+
+          <!-- Empty state (flag off / none) -->
+          <div v-if="workflows.length === 0" class="flex flex-col items-center justify-center py-16 text-center">
+            <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#ECEAFB] border border-[#E9E0D3] text-[#5A4FCF]">
+              <UIcon name="i-heroicons-squares-plus" class="w-6 h-6" />
+            </span>
+            <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">No workflows available</h3>
+            <p class="mt-1 text-sm text-[#9a958c] max-w-md leading-relaxed">
+              Enable Workflows in Feature Flags to run multi-step agent pipelines. Each
+              pipeline runs a stage per item and a judge gate scores it before it lands.
+            </p>
+          </div>
+
+          <!-- Workflow card grid -->
+          <div v-else class="mt-1.5 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            <div
+              v-for="wf in workflows"
+              :key="wf.name"
+              class="flex flex-col gap-3 rounded-xl border border-[#E9E0D3] bg-gradient-to-b from-white to-[#fdfcf9] p-4 transition hover:-translate-y-0.5 hover:border-[#5A4FCF] hover:shadow-md h-full"
+            >
+              <!-- Title row -->
+              <div class="flex items-start justify-between gap-2">
+                <div class="flex items-center gap-2 text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">
+                  <span class="w-7 h-7 rounded-lg bg-[#ECEAFB] flex items-center justify-center shrink-0"><Icon name="heroicons:squares-2x2" class="w-[15px] h-[15px] text-[#5A4FCF]" /></span>
+                  {{ wf.label || wf.name }}
                 </div>
-            </div>
-
-            <!-- Loading -->
-            <div v-if="loading" class="flex items-center justify-center py-20 text-[#9a958c]">
-                <Icon name="heroicons:arrow-path" class="w-5 h-5 animate-spin me-2" />
-                <span class="text-sm">Loading workflows…</span>
-            </div>
-
-            <!-- Error -->
-            <div v-else-if="error" class="rounded-2xl border border-[#E9E0D3] bg-[#FBEFE4] p-4 text-sm text-[#A8330F]">
-                {{ error }}
-                <button
-                    type="button"
-                    class="ms-2 rounded-lg px-2 py-0.5 text-xs font-medium text-[#C2541E] hover:bg-white/60"
-                    @click="fetchWorkflows"
+                <span
+                  v-if="wf.max_concurrency"
+                  class="inline-flex items-center gap-1 rounded-full border border-[#E9E0D3] bg-[#ECEAFB] px-2 py-0.5 text-[11px] font-medium text-[#6f67b0] shrink-0"
                 >
-                    Retry
-                </button>
-            </div>
-
-            <template v-else>
-                <!-- Empty state (flag off / none) -->
-                <div v-if="workflows.length === 0" class="flex flex-col items-center justify-center py-20 text-center">
-                    <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] text-[#C2541E]">
-                        <UIcon name="i-heroicons-squares-plus" class="w-6 h-6" />
-                    </span>
-                    <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">No workflows available</h3>
-                    <p class="mt-1 text-sm text-[#9a958c] max-w-md leading-relaxed">
-                        Enable Workflows in Feature Flags to run multi-step agent pipelines. Each
-                        pipeline runs a stage per item and a judge gate scores it before it lands.
-                    </p>
-                </div>
-
-                <!-- Workflow card grid -->
-                <div v-else class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                    <div
-                        v-for="wf in workflows"
-                        :key="wf.name"
-                        class="flex flex-col gap-3 rounded-2xl border border-[#E9E0D3] bg-white p-4 transition hover:-translate-y-0.5 hover:shadow-md h-full"
-                    >
-                        <!-- Title row -->
-                        <div class="flex items-start justify-between gap-2">
-                            <div class="flex items-center gap-2 text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">
-                                <Icon name="heroicons:squares-2x2" class="w-[17px] h-[17px] text-[#C2541E] shrink-0" />
-                                {{ wf.label || wf.name }}
-                            </div>
-                            <span
-                                v-if="wf.max_concurrency"
-                                class="inline-flex items-center gap-1 rounded-full border border-[#E9E0D3] bg-[#F4EEE5] px-2 py-0.5 text-[11px] font-medium text-[#6b6b6b] shrink-0"
-                            >
-                                <Icon name="heroicons:bolt" class="w-3 h-3 text-[#C2541E]" />
-                                {{ wf.max_concurrency }}x
-                            </span>
-                        </div>
+                  <Icon name="heroicons:bolt" class="w-3 h-3 text-[#5A4FCF]" />
+                  {{ wf.max_concurrency }}x
+                </span>
+              </div>
 
                         <!-- Description -->
                         <p class="text-xs text-[#6b6b6b] leading-relaxed line-clamp-3">
@@ -114,7 +125,7 @@
                             <!-- Run button -->
                             <button
                                 type="button"
-                                class="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#C2541E] px-3 py-2 font-medium text-white transition hover:bg-[#A8330F] disabled:opacity-50 disabled:cursor-not-allowed"
+                                class="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#5A4FCF] px-3 py-2 font-medium text-white transition hover:bg-[#4940b0] disabled:opacity-50 disabled:cursor-not-allowed"
                                 :disabled="isRunning(wf.name) || !runState[wf.name].dataSourceId"
                                 @click="runWorkflow(wf)"
                             >
@@ -158,8 +169,9 @@
                         </div>
                     </div>
                 </div>
-            </template>
-        </div>
+            </div>
+        </template>
+      </div>
     </div>
 </template>
 

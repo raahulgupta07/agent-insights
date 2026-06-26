@@ -72,7 +72,8 @@
     "newPassword": "Nytt lösenord",
     "confirmPassword": "Bekräfta nytt lösenord",
     "forgotPassword": "Glömt lösenord?",
-    "newToBow": "Ny på Dash?",    "alreadyHaveAccount": "Har du redan ett konto?",
+    "newToBow": "Ny på Dash?",
+    "alreadyHaveAccount": "Har du redan ett konto?",
     "rememberPassword": "Kommer du ihåg ditt lösenord?",
     "resetPassword": "Återställ lösenord",
     "resetPasswordTitle": "Återställ lösenord",
@@ -278,7 +279,12 @@
     "columnUser": "Användare",
     "emptyTitle": "Ställ en fråga för att komma igång.",
     "emptyTipLabel": "Tips:",
-    "emptyTipBody": "Vet du inte vad du ska fråga? Du kan be AI-analytikern att föreslå frågor om ett specifikt ämne."
+    "emptyTipBody": "Vet du inte vad du ska fråga? Du kan be AI-analytikern att föreslå frågor om ett specifikt ämne.",
+    "openButton": "Open",
+    "openInChatButton": "Open in chat",
+    "statusLive": "live",
+    "statusDraft": "draft",
+    "scopeAll": "All"
   },
   "traceModal": {
     "title": "Agentkörning",
@@ -844,7 +850,8 @@
       "ldapSubtitle": "Synkronisera grupper och medlemskap direkt från din LDAP- / Active Directory-server",
       "enterpriseLdap": "LDAP-katalogsynkronisering kräver en enterprise-licens. Synkronisera grupper automatiskt från Active Directory, OpenLDAP och andra LDAP-servrar.",
       "ldapNotConfigured": "LDAP är inte konfigurerat",
-      "ldapNotConfiguredHint": "Konfigurera LDAP i din dash-config-fil för att aktivera katalogsynkronisering",      "statusConnected": "Ansluten",
+      "ldapNotConfiguredHint": "Konfigurera LDAP i din dash-config-fil för att aktivera katalogsynkronisering",
+      "statusConnected": "Ansluten",
       "statusFailed": "Anslutningen misslyckades",
       "statusNotTested": "Ej testad",
       "testConnection": "Testa anslutning",
@@ -893,7 +900,9 @@
       "integrate": "Integrera",
       "setup": "Konfigurera",
       "excelAddinName": "Excel-tillägg",
-      "excelAddinDescription": "Sidladda Dash-tillägget direkt från den här instansen",      "mcpName": "Dash MCP-server",      "mcpDescription": "Aktivera MCP-slutpunkten för integration med AI-assistenter som Cursor, Claude eller andra"
+      "excelAddinDescription": "Sidladda Dash-tillägget direkt från den här instansen",
+      "mcpName": "Dash MCP-server",
+      "mcpDescription": "Aktivera MCP-slutpunkten för integration med AI-assistenter som Cursor, Claude eller andra"
     },
     "aiSettings": "AI-inställningar",
     "llm": "LLM",
@@ -955,7 +964,8 @@
     "uploadIcon": "Ladda upp ikon",
     "iconConstraints": "PNG/JPEG, ≤ 512 KB.",
     "aiAnalystName": "AI-analytikerns namn",
-    "showCredit": "Visa ”Made with Dash”-credit",    "language": {
+    "showCredit": "Visa ”Made with Dash”-credit",
+    "language": {
       "title": "Språk",
       "description": "Anger standardspråket för hela organisationen. Användare kommer att se gränssnittet på det här språket och AI:n svarar på det.",
       "label": "Organisationens språk",
@@ -1392,6 +1402,7 @@
     "subtitle": "Bläddra och hantera dina instrumentpaneler och bilder",
     "searchPlaceholder": "Sök instrumentpaneler…",
     "myDashboards": "Mina instrumentpaneler",
+    "newDashboard": "Ny instrumentpanel",
     "sharedWithMe": "Delade med mig",
     "empty": "Inga instrumentpaneler hittades",
     "emptyDescription": "Försök att justera söktermen, eller skapa en rapport med en instrumentpanel.",
@@ -1518,7 +1529,8 @@
   "onboarding": {
     "loading": "Laddar...",
     "skip": "Hoppa över introduktion",
-    "welcome": "Välkommen till Dash! 🎉",    "welcomeSubtitle": "Chatta med dina data, kör djupanalyser och skapa instrumentpaneler på några sekunder",
+    "welcome": "Välkommen till Dash! 🎉",
+    "welcomeSubtitle": "Chatta med dina data, kör djupanalyser och skapa instrumentpaneler på några sekunder",
     "next": "Nästa",
     "fallbackTitle": "Kom igång",
     "fallbackDescription": "Slutför nästa steg i din konfiguration",
@@ -1527,7 +1539,8 @@
     "intro1": "Att komma igång går snabbt: anslut bara din modell och din datakälla, så är du redo att ställa din första fråga.",
     "intro2": "👉 Nu sätter vi igång!",
     "steps": {
-      "onboardingTitle": "Välkommen till Dash! 🎉",      "onboardingDescription": "Chatta med dina data, kör djupanalyser och skapa instrumentpaneler på några sekunder",
+      "onboardingTitle": "Välkommen till Dash! 🎉",
+      "onboardingDescription": "Chatta med dina data, kör djupanalyser och skapa instrumentpaneler på några sekunder",
       "onboardingButton": "Välkommen",
       "llmTitle": "Konfigurera LLM",
       "llmDescription": "Anslut till valfri LLM-leverantör och ta med din egen API-nyckel",
@@ -1990,7 +2003,9 @@
     }
   },
   "mcpServerModal": {
-    "title": "Dash MCP-server",    "subtitle": "Anslut Claude, Cursor eller valfri MCP-klient för att fråga dina data via Dash MCP-server.",    "loading": "Laddar...",
+    "title": "Dash MCP-server",
+    "subtitle": "Anslut Claude, Cursor eller valfri MCP-klient för att fråga dina data via Dash MCP-server.",
+    "loading": "Laddar...",
     "tabMcpClients": "MCP-klienter",
     "tabOauth": "OAuth",
     "generateToken": "Generera token",
