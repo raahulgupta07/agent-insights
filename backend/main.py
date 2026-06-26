@@ -70,6 +70,7 @@ from app.routes import (
     metadata_resource,
     dash_settings,
     external_platform,
+    studio_reports,
     external_user_mapping,
     telegram_webhook,
     slack_webhook,
@@ -93,9 +94,11 @@ from app.routes import (
     build,
     connection,
     connection_oauth,
+    connection_files,
     artifact,
     oauth_server,
     rbac,
+    me_groups,
     usage_limits,
     scheduled_prompt,
     excel,
@@ -260,6 +263,7 @@ app.include_router(completion_feedback.router, prefix="/api")
 app.include_router(file.router, prefix="/api")
 app.include_router(organization.router, prefix="/api")
 app.include_router(rbac.router, prefix="/api")
+app.include_router(me_groups.router, prefix="/api")       # hybrid: user-owned groups (gated HYBRID_USER_GROUPS)
 app.include_router(usage_limits.router, prefix="/api")
 app.include_router(text_widget.router, prefix="/api")
 app.include_router(llm.router, prefix="/api")
@@ -269,6 +273,7 @@ app.include_router(branding.router, prefix="/api")
 app.include_router(metadata_resource.router, prefix="/api")
 app.include_router(dash_settings.router, prefix="/api")
 app.include_router(external_platform.router, prefix="/api")
+app.include_router(studio_reports.router, prefix="/api")  # hybrid: per-agent scheduled reports (gated HYBRID_AGENT_REPORTS)
 app.include_router(external_user_mapping.router, prefix="/api")
 app.include_router(slack_webhook.router)
 app.include_router(teams_webhook.router)
@@ -324,6 +329,7 @@ app.include_router(workflows.router)  # workflow runner #5: deterministic batch 
 app.include_router(agent_yaml.router, prefix="/api")
 app.include_router(eval_yaml.router, prefix="/api")
 app.include_router(connection_oauth.router, prefix="/api")
+app.include_router(connection_files.router, prefix="/api")  # per-user file browser (HYBRID_FILE_BROWSER): /api/connections/{id}/files[/ingest]
 app.include_router(artifact.router, prefix="/api")
 app.include_router(excel.router, prefix="/api")
 app.include_router(enterprise_router, prefix="/api")

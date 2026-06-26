@@ -1007,6 +1007,11 @@
                             <StudioTools :studio-id="studioId" :sources="sources" :can-edit="canEdit" />
                         </section>
 
+                        <!-- CONNECTORS (per-agent PRIVATE connectors; self-gates on HYBRID_AGENT_CONNECTORS) -->
+                        <section v-else-if="activeTab === 'connectors'">
+                            <StudioConnectors :studio="studio" :can-edit="canEdit" />
+                        </section>
+
                         <!-- KNOWLEDGE: SEMANTIC -->
                         <section v-else-if="activeTab === 'k_semantic'">
                             <StudioQueries :studio-id="studioId" :sources="sources" :can-edit="canEdit" :forceTab="'semantic'" />
@@ -1177,6 +1182,11 @@
 
                         <section v-else-if="activeTab === 'email'">
                             <StudioEmail :studio-id="studioId" :can-edit="canEdit" />
+                        </section>
+
+                        <!-- REPORTS (scheduled delivery for this agent) — gated by HYBRID_AGENT_REPORTS -->
+                        <section v-else-if="activeTab === 'reports'">
+                            <StudioReports :studio-id="studioId" :sources="sources" :can-edit="canEdit" />
                         </section>
                     </div>
                 </main>
@@ -1374,6 +1384,7 @@ import AddConnectionModal from '~/components/AddConnectionModal.vue'
 import Spinner from '~/components/Spinner.vue'
 // Data Agent parity tabs (additive, flag-gated by the Studios workspace itself).
 import StudioConnection from '~/components/studio/StudioConnection.vue'
+import StudioConnectors from '~/components/studio/StudioConnectors.vue'
 import StudioTables from '~/components/studio/StudioTables.vue'
 import StudioTools from '~/components/studio/StudioTools.vue'
 import StudioQueries from '~/components/studio/StudioQueries.vue'
@@ -1435,6 +1446,31 @@ async function loadPacksFlag() {
         const rows: any[] = Array.isArray(data.value) ? (data.value as any[]) : []
         const row = rows.find((r: any) => r?.env_name === 'HYBRID_DOMAIN_PACKS' || r?.key === 'domain_packs')
         if (row && typeof row.effective === 'boolean') packsEnabled.value = row.effective
+    } catch { /* flag plumbing absent → leave OFF */ }
+}
+
+// Connectors tab (per-agent PRIVATE connectors) — gated by HYBRID_AGENT_CONNECTORS.
+// The StudioConnectors component ALSO self-gates on the same flag, so this is
+// belt-and-suspenders: hide the rail entry too when the flag is off. Fail-soft OFF.
+const connectorsEnabled = ref(false)
+async function loadConnectorsFlag() {
+    try {
+        const { data } = await useMyFetch<any>('/api/organization/hybrid-flags')
+        const rows: any[] = Array.isArray(data.value) ? (data.value as any[]) : []
+        const row = rows.find((r: any) => r?.env_name === 'HYBRID_AGENT_CONNECTORS' || r?.key === 'agent_connectors')
+        if (row && typeof row.effective === 'boolean') connectorsEnabled.value = row.effective
+    } catch { /* flag plumbing absent → leave OFF */ }
+}
+
+// Reports tab (per-agent scheduled report delivery) — gated by HYBRID_AGENT_REPORTS.
+// StudioReports also self-gates; this hides the rail entry too. Fail-soft OFF.
+const reportsEnabled = ref(false)
+async function loadReportsFlag() {
+    try {
+        const { data } = await useMyFetch<any>('/api/organization/hybrid-flags')
+        const rows: any[] = Array.isArray(data.value) ? (data.value as any[]) : []
+        const row = rows.find((r: any) => r?.env_name === 'HYBRID_AGENT_REPORTS' || r?.key === 'agent_reports')
+        if (row && typeof row.effective === 'boolean') reportsEnabled.value = row.effective
     } catch { /* flag plumbing absent → leave OFF */ }
 }
 const loading = ref(true)
@@ -2082,6 +2118,9 @@ const tabs = computed(() => [
     { value: 'sources', label: t('studio.tabSources'), icon: 'i-heroicons-circle-stack', group: 'knowledge' },
     // Connection + Tables now live INSIDE each source card (Design A). Tools/Queries stay.
     { value: 'tools', label: t('studio.tabTools') || 'Tools', icon: 'i-heroicons-wrench-screwdriver', group: 'knowledge' },
+    // Per-agent PRIVATE connectors — owned by you, bound to this agent, non-shareable.
+    // Gated by HYBRID_AGENT_CONNECTORS (per-org flag); hidden when off.
+    ...(connectorsEnabled.value ? [{ value: 'connectors', label: 'Connectors', icon: 'i-heroicons-bolt', group: 'knowledge' }] : []),
     // The 5 knowledge sub-tabs, each mounting StudioQueries pinned to one sub-tab via :forceTab.
     { value: 'k_semantic', label: 'Semantic', icon: 'i-heroicons-rectangle-group', group: 'knowledge' },
     { value: 'k_metrics', label: 'Metrics', icon: 'i-heroicons-variable', group: 'knowledge' },
@@ -2115,6 +2154,9 @@ const tabs = computed(() => [
     { value: 'access', label: 'Access & Members', icon: 'i-heroicons-lock-closed', group: 'manage' },
     { value: 'channels', label: 'Channels', icon: 'i-heroicons-megaphone', group: 'manage' },
     { value: 'email', label: 'Email / SMTP', icon: 'i-heroicons-envelope', group: 'manage' },
+    // Per-agent scheduled reports + delivery. Gated by HYBRID_AGENT_REPORTS
+    // (per-org flag); hidden when off.
+    ...(reportsEnabled.value ? [{ value: 'reports', label: 'Reports', icon: 'i-heroicons-paper-airplane', group: 'manage' }] : []),
     { value: 'members', label: t('studio.tabMembers'), icon: 'i-heroicons-users', group: 'manage' },
 ])
 
@@ -2937,6 +2979,8 @@ onMounted(async () => {
             fetchStudioArtifacts(),
             loadTeachFlag(),
             loadPacksFlag(),
+            loadConnectorsFlag(),
+            loadReportsFlag(),
         ])
     }
 })

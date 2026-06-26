@@ -59,7 +59,16 @@ class Connection(BaseSchema):
     # Organization ownership
     organization_id = Column(String(36), ForeignKey('organizations.id'), nullable=False)
     organization = relationship("Organization", back_populates="connections")
-    
+
+    # Per-agent PRIVATE connectors (HYBRID_AGENT_CONNECTORS, default OFF).
+    #   owner_user_id NULL + studio_id NULL = org-wide connector (unchanged).
+    #   owner_user_id set                   = private to that user.
+    #   studio_id set                       = bound to one agent/studio.
+    owner_user_id = Column(String(36), ForeignKey("users.id"), nullable=True, index=True)
+    studio_id = Column(String(36), ForeignKey("studios.id", ondelete="CASCADE"), nullable=True, index=True)
+    owner = relationship("User", foreign_keys=[owner_user_id])
+    studio = relationship("Studio", foreign_keys=[studio_id])
+
     # Relationships
     connection_tables = relationship(
         "ConnectionTable",

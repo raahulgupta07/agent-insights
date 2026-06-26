@@ -122,7 +122,12 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_AGENT_TEMPLATES": {"label": "Agent Templates", "role": "user", "category": "Agents & Access", "status": "stable"},
     "HYBRID_FOLDER_SYNC": {"label": "Folder Sync (desktop auto-ingest)", "role": "user", "category": "Agents & Access", "status": "stable"},
     "HYBRID_AGENT_ACL": {"label": "Per-Agent Access Control", "role": "user", "category": "Agents & Access", "status": "stable"},
+    "HYBRID_USER_GROUPS": {"label": "User-Owned Groups", "role": "user", "category": "Agents & Access", "status": "stable", "note": "Let any member create personal contact groups and use them as reusable share targets (My Groups)."},
+    "HYBRID_AGENT_CONNECTORS": {"label": "Per-Agent Private Connectors", "role": "user", "category": "Agents & Access", "status": "stable", "note": "Let a connector be private to a user (owner_user_id) or bound to a single agent/studio (studio_id), instead of org-wide. NULL/NULL = org-wide (unchanged)."},
+    "HYBRID_FILE_BROWSER": {"label": "File Browser (SharePoint/OneDrive/Drive)", "role": "user", "category": "Agents & Access", "status": "stable", "note": "Browse a SharePoint/OneDrive/Google Drive connector's folders/files with YOUR own Microsoft/Google sign-in (each user sees only what their identity can read), and ingest picked files as queryable Data Agents."},
     "HYBRID_AGENT_CHANNELS": {"label": "Agent Channels", "role": "user", "category": "Agents & Access", "status": "beta", "note": "Per-agent channels (Slack/Teams/WhatsApp/AI Mailbox/MCP/Telegram) scoped to that agent's pinned data. Config in Studio → Access & Channels. Inbound routing for Slack/Teams/WhatsApp is phase 2 (Telegram routing live)."},
+    "HYBRID_AGENT_REPORTS": {"label": "Scheduled Reports (per-agent)", "role": "user", "category": "Agents & Access", "status": "beta", "note": "Per-agent 'Reports' tab: schedule a prompt/dashboard to run on a cadence and email the result to subscribers, sent from the agent's own SMTP identity. UI only; gates the Studio → Reports tab."},
+    "HYBRID_RICH_REPORT_EMAIL": {"label": "Rich Report Emails", "role": "agent", "category": "Agents & Access", "status": "beta", "note": "Render scheduled/automated report emails from structured results (clean table + sanitized insights + dashboard image/PDF) instead of dumping the raw agent chat. OFF = legacy raw-content email."},
     "HYBRID_QUOTAS": {"label": "Per-Org Quotas", "role": "agent", "category": "Agents & Access", "status": "stable"},
     "HYBRID_DOMAIN_PACKS": {"label": "Domain Packs (Skills)", "role": "agent", "category": "Agents & Access", "status": "stable"},
     "HYBRID_PACK_ROUTER": {"label": "Pack Router", "role": "agent", "category": "Agents & Access", "status": "stable"},
@@ -227,10 +232,54 @@ class HybridFlags:
         return _bool("HYBRID_AGENT_ACL", True)
 
     @property
+    def USER_GROUPS(self) -> bool:
+        # User-owned contact groups: a normal (non-admin) member can create
+        # their OWN groups (owner_user_id set), add org members, and use them
+        # as reusable share targets. Org/admin/LDAP groups (owner_user_id NULL)
+        # are unaffected. Gates the /api/me/groups* + /api/me/contacts router.
+        # Default OFF.
+        return _bool("HYBRID_USER_GROUPS", False)
+
+    @property
+    def AGENT_CONNECTORS(self) -> bool:
+        # Per-agent PRIVATE connectors: a connector can be scoped private to a
+        # user (owner_user_id set) or bound to a single agent/studio (studio_id
+        # set), instead of org-wide. Org-wide connectors (owner_user_id NULL +
+        # studio_id NULL) are unaffected. Default OFF.
+        return _bool("HYBRID_AGENT_CONNECTORS", False)
+
+    @property
     def AGENT_CHANNELS(self) -> bool:
         # Per-agent external channels (Telegram bot bound to one Studio,
         # with member-only audience + verification). Default OFF.
         return _bool("HYBRID_AGENT_CHANNELS", True)
+
+    @property
+    def AGENT_REPORTS(self) -> bool:
+        # Per-agent "Reports" tab: schedule a prompt/dashboard to run on a
+        # cadence and email the result to subscribers from the agent's own SMTP
+        # identity. UI-gating only (Studio → Reports tab + scheduled-report
+        # CRUD routes). Default OFF.
+        return _bool("HYBRID_AGENT_REPORTS", False)
+
+    @property
+    def RICH_REPORT_EMAIL(self) -> bool:
+        # Render scheduled/automated report emails from STRUCTURED results
+        # (clean table + sanitized insights + dashboard image/PDF) via the
+        # universal delivery layer, instead of dumping the raw agent chat
+        # content. OFF = legacy raw-content email (byte-identical old path).
+        # Default OFF.
+        return _bool("HYBRID_RICH_REPORT_EMAIL", False)
+
+    @property
+    def FILE_BROWSER(self) -> bool:
+        # Per-user file browser for the existing SharePoint/OneDrive/Google
+        # Drive connectors: navigate folders/files using THIS user's resolved
+        # per-user credentials (so the source's own ACLs isolate each user),
+        # then ingest picked files as queryable Data Agents. Gates the
+        # /api/connections/{id}/files router only; no agent-loop effect.
+        # Default OFF.
+        return _bool("HYBRID_FILE_BROWSER", False)
 
     # --- Slice 1: foundation -------------------------------------------------
     @property
@@ -734,6 +783,11 @@ class HybridFlags:
             "CODE_ENRICH": self.CODE_ENRICH,
             "AGENT_TEMPLATES": self.AGENT_TEMPLATES,
             "FOLDER_SYNC": self.FOLDER_SYNC,
+            "USER_GROUPS": self.USER_GROUPS,
+            "AGENT_CONNECTORS": self.AGENT_CONNECTORS,
+            "FILE_BROWSER": self.FILE_BROWSER,
+            "AGENT_REPORTS": self.AGENT_REPORTS,
+            "RICH_REPORT_EMAIL": self.RICH_REPORT_EMAIL,
         }
 
 

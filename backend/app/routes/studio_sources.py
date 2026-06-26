@@ -19,16 +19,22 @@ from typing import List, Optional
 from fastapi import APIRouter, BackgroundTasks, Depends
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.auth import current_user
 from app.dependencies import get_async_db, get_current_organization
 from app.errors import AppError, ErrorCode
+from app.models.connection import Connection
 from app.models.data_source import DataSource
 from app.models.organization import Organization
 from app.models.studio import StudioDataSource
 from app.models.user import User
+from app.schemas.connection_schema import ConnectionCreate, ConnectionUpdate
+from app.services.connection_service import ConnectionService
 from app.services.studio_access import resolve_studio_access
+from app.services import private_connector_guard as pcg
 from app.settings.hybrid_flags import flags
 
 router = APIRouter(tags=["studios"])
@@ -212,3 +218,267 @@ async def unpin_studio_source(
     pin.deleted_at = datetime.utcnow()
     await db.commit()
     return {"ok": True, "studio_id": studio_id, "agent_id": agent_id}
+
+
+# --------------------------------------------------------------------------- #
+# Per-agent PRIVATE connectors (HYBRID_AGENT_CONNECTORS)
+# --------------------------------------------------------------------------- #
+# A studio owner/editor can create a connector that is PRIVATE to them and BOUND
+# to this one studio (Connection.owner_user_id + Connection.studio_id set). It is
+# auto-wrapped in a private DataSource (is_public=False, owner=creator) and pinned
+# to the studio. Creator-only + non-shareable invariants live in
+# private_connector_guard; this endpoint is the only way an owned connector is born.
+
+_connection_service = ConnectionService()
+
+
+class StudioConnectorRead(BaseModel):
+    """Result of creating/listing a studio-private connector."""
+    connection_id: str
+    data_source_id: Optional[str] = None
+    studio_id: str
+    name: str
+    type: str
+    owner_user_id: str
+    pinned: bool = False
+
+
+def _require_agent_connectors() -> None:
+    """404 (feature locked) unless HYBRID_AGENT_CONNECTORS is on — mirrors
+    me_groups `_ensure_enabled` / `_require_flag` so the route's existence isn't
+    leaked when the feature is off.
+    """
+    pcg.require_feature_enabled()
+
+
+@router.get("/studios/{studio_id}/connectors", response_model=List[StudioConnectorRead])
+async def list_studio_connectors(
+    studio_id: str,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """List this studio's PRIVATE connectors owned by the caller (creator-only).
+
+    Only the caller's own private connectors for this studio are returned — a
+    private connector is never visible to anyone but its creator.
+    """
+    _require_agent_connectors()
+    await _require_role(db, studio_id, current_user)
+
+    res = await db.execute(
+        select(Connection).where(
+            Connection.studio_id == studio_id,
+            Connection.organization_id == organization.id,
+            Connection.owner_user_id == str(current_user.id),
+        )
+    )
+    rows = list(res.scalars().all())
+    # Owner-filter defensively (studio_id-bound private connectors only).
+    rows = pcg.filter_visible(rows, current_user)
+    return [
+        StudioConnectorRead(
+            connection_id=str(c.id),
+            studio_id=str(c.studio_id),
+            name=c.name,
+            type=c.type,
+            owner_user_id=str(c.owner_user_id),
+            pinned=True,
+        )
+        for c in rows
+    ]
+
+
+@router.post("/studios/{studio_id}/connectors", response_model=StudioConnectorRead)
+async def create_studio_connector(
+    studio_id: str,
+    body: ConnectionCreate,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Create a PRIVATE connector bound to this studio (owner/editor only).
+
+    The connector is creator-only and non-shareable. It is wrapped in a private
+    DataSource and pinned to the studio so the agent can use it immediately.
+    """
+    _require_agent_connectors()
+    await _require_role(db, studio_id, current_user, editor=True)
+
+    # 1. Create the Connection via the existing service (validation, indexing,
+    #    audit). Then stamp ownership + studio binding and persist.
+    connection = await _connection_service.create_connection(
+        db=db,
+        organization=organization,
+        current_user=current_user,
+        name=body.name,
+        type=body.type,
+        config=body.config,
+        credentials=body.credentials,
+        auth_policy=body.auth_policy,
+        allowed_user_auth_modes=body.allowed_user_auth_modes,
+    )
+    # Re-load the ORM row (create_connection returns an eager-loaded copy) and
+    # mark it private + studio-bound. Stamping after creation keeps the service
+    # signature untouched (minimal core edit).
+    conn_row = (await db.execute(
+        select(Connection).where(Connection.id == connection.id)
+    )).scalar_one()
+    conn_row.owner_user_id = str(current_user.id)
+    conn_row.studio_id = str(studio_id)
+    await db.commit()
+    await db.refresh(conn_row)
+
+    # 2. Auto-create a PRIVATE DataSource wrapping this connection and link it
+    #    (same M:N append the data-source service uses). owner=creator,
+    #    is_public=False — never shared.
+    ds = DataSource(
+        name=conn_row.name,
+        organization_id=organization.id,
+        is_public=False,
+        use_llm_sync=False,
+        owner_user_id=current_user.id,
+    )
+    ds.connections.append(conn_row)
+    db.add(ds)
+    try:
+        await db.commit()
+        await db.refresh(ds)
+    except IntegrityError:
+        await db.rollback()
+        # Name clash with an existing data source — fall back to a unique name.
+        ds = DataSource(
+            name=f"{conn_row.name}-{str(conn_row.id)[:8]}",
+            organization_id=organization.id,
+            is_public=False,
+            use_llm_sync=False,
+            owner_user_id=current_user.id,
+        )
+        ds.connections.append(conn_row)
+        db.add(ds)
+        await db.commit()
+        await db.refresh(ds)
+
+    # 3. Pin the DataSource to the studio (reuse the StudioDataSource join +
+    #    bootstrap hook used by pin_studio_source).
+    pin = StudioDataSource(studio_id=str(studio_id), agent_id=str(ds.id))
+    db.add(pin)
+    await db.commit()
+
+    from app.services.studio_bootstrap import schedule_bootstrap_on_source_pin
+    schedule_bootstrap_on_source_pin(background_tasks, str(studio_id))
+
+    return StudioConnectorRead(
+        connection_id=str(conn_row.id),
+        data_source_id=str(ds.id),
+        studio_id=str(studio_id),
+        name=conn_row.name,
+        type=conn_row.type,
+        owner_user_id=str(current_user.id),
+        pinned=True,
+    )
+
+
+async def _load_studio_private_connector(
+    db: AsyncSession, studio_id: str, connection_id: str, user: User, organization
+) -> Connection:
+    """Load a connection that is PRIVATE, owned by `user`, and BOUND to this
+    studio — or raise. 404 when it isn't a private connector of this studio
+    (existence not leaked); 403 when it exists but `user` isn't the owner.
+
+    Eager-loads data_sources (+ their connections) so the DELETE teardown can
+    run without a lazy load in async context.
+    """
+    res = await db.execute(
+        select(Connection)
+        .options(selectinload(Connection.data_sources).options(selectinload(DataSource.connections)))
+        .where(
+            Connection.id == connection_id,
+            Connection.organization_id == organization.id,
+            Connection.studio_id == str(studio_id),
+        )
+    )
+    conn = res.scalar_one_or_none()
+    # Must be a private connector bound to THIS studio. A NULL-owner (org) or
+    # other-studio connection is "not found" here — this surface only serves
+    # studio-private connectors.
+    if conn is None or not pcg.is_private(conn):
+        raise AppError.not_found(
+            "connection.not_found", "Connector not found for this studio"
+        )
+    # CREATOR-ONLY: owned-but-not-by-you → 403 (no admin bypass).
+    pcg.require_owner(conn, user)
+    return conn
+
+
+@router.put("/studios/{studio_id}/connectors/{connection_id}", response_model=StudioConnectorRead)
+async def update_studio_connector(
+    studio_id: str,
+    connection_id: str,
+    body: ConnectionUpdate,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Update a studio-private connector (owner/editor + creator-only).
+
+    Partial update. Blank/absent credentials are DROPPED so the stored secret is
+    preserved — mirrors connection.py PUT's empty-credentials handling (the
+    service only re-encrypts when credentials is non-empty with no None values).
+    """
+    _require_agent_connectors()
+    await _require_role(db, studio_id, current_user, editor=True)
+    await _load_studio_private_connector(db, studio_id, connection_id, current_user, organization)
+
+    updates = body.dict(exclude_unset=True)
+    # Preserve the stored secret when the client sends no (or blank) credentials.
+    # The frontend drops blank credentials before saving; treat an empty/None or
+    # all-blank credentials dict as "keep existing" by not forwarding the key.
+    creds = updates.get("credentials")
+    if creds is None or (isinstance(creds, dict) and not any(
+        (v is not None and v != "") for v in creds.values()
+    )):
+        updates.pop("credentials", None)
+
+    connection = await _connection_service.update_connection(
+        db=db,
+        connection_id=connection_id,
+        organization=organization,
+        current_user=current_user,
+        **updates,
+    )
+    return StudioConnectorRead(
+        connection_id=str(connection.id),
+        data_source_id=None,
+        studio_id=str(studio_id),
+        name=connection.name,
+        type=connection.type,
+        owner_user_id=str(current_user.id),
+        pinned=True,
+    )
+
+
+@router.delete("/studios/{studio_id}/connectors/{connection_id}")
+async def delete_studio_connector(
+    studio_id: str,
+    connection_id: str,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Delete a studio-private connector (owner/editor + creator-only).
+
+    Hard-deletes the connection (Fernet user_credentials / tools cascade), and
+    removes the wrapping private DataSource + its StudioDataSource pin. Reuses
+    the same teardown as studio delete.
+    """
+    _require_agent_connectors()
+    await _require_role(db, studio_id, current_user, editor=True)
+    conn = await _load_studio_private_connector(
+        db, studio_id, connection_id, current_user, organization
+    )
+
+    await pcg.teardown_private_connection(db, conn)
+    await db.commit()
+    return {"ok": True}

@@ -1853,7 +1853,21 @@ class DataSourceService:
 
         # Extract the update data
         update_data = data_source.dict(exclude_unset=True)
-        
+
+        # NON-SHAREABLE: a data source backed by a private (per-agent) connector
+        # can never be made public or given members. Block any share-like change;
+        # leave non-share edits untouched. No-op for org-backed data sources.
+        from app.services import private_connector_guard as _pcg
+        _is_private_backed = any(
+            _pcg.is_private(c) for c in (data_source_db.connections or [])
+        )
+        if _is_private_backed:
+            if update_data.get("is_public") is True:
+                await _pcg.deny_share_data_source(db, data_source_db)
+            _members = update_data.get("member_user_ids")
+            if _members:
+                await _pcg.deny_share_data_source(db, data_source_db)
+
         # Detect if connection-relevant fields are being changed
         connection_fields = {'config', 'credentials', 'auth_policy'}
         connection_updates = {k: update_data.pop(k) for k in list(update_data.keys()) if k in connection_fields}
@@ -3336,6 +3350,19 @@ class DataSourceService:
         """
         # Get data source to verify it exists
         data_source = await self.get_data_source(db, data_source_id, organization)
+
+        # NON-SHAREABLE: if this data source is backed by a private (per-agent)
+        # connector, it can't be shared with another user. Load the ORM row with
+        # its connections so we can inspect owner_user_id. No-op for org-backed
+        # data sources.
+        from app.services import private_connector_guard as _pcg
+        _ds_row = (await db.execute(
+            select(DataSource)
+            .options(selectinload(DataSource.connections).options(lazyload("*")))
+            .filter(DataSource.id == data_source_id)
+        )).scalar_one_or_none()
+        if _ds_row is not None:
+            await _pcg.deny_share_data_source(db, _ds_row)
 
         # Check if membership already exists (legacy table)
         existing = await db.execute(

@@ -443,6 +443,40 @@ async def delete_studio(
     studio, _role = await _require_access(db, studio_id, current_user, minimum="owner")
 
     studio.deleted_at = datetime.utcnow()
+
+    # Per-agent PRIVATE connectors (HYBRID_AGENT_CONNECTORS): a studio soft-delete
+    # must also tear down any connector PRIVATE to and BOUND to this studio,
+    # including its Fernet user_credentials. Studio delete is a SOFT delete, so the
+    # DB-level ondelete=CASCADE on connections.studio_id never fires — clean up
+    # explicitly here. We hard-delete via the ORM so the Connection's
+    # cascade="all, delete-orphan" relationships (user_credentials, user_tables,
+    # connection_tools, indexings, …) are removed too. No-op when there are no
+    # owned connectors bound to this studio.
+    try:
+        from sqlalchemy import select as _select
+        from sqlalchemy.orm import selectinload as _selectinload
+        from app.models.connection import Connection as _Connection
+        from app.models.data_source import DataSource as _DataSource
+        from app.services import private_connector_guard as _pcg
+
+        bound = (await db.execute(
+            _select(_Connection)
+            .options(_selectinload(_Connection.data_sources).options(_selectinload(_DataSource.connections)))
+            .where(
+                _Connection.studio_id == str(studio_id),
+                _Connection.owner_user_id.isnot(None),
+            )
+        )).scalars().all()
+
+        for conn in bound:
+            # Hard-delete each bound private connector + its wrapping private
+            # DataSource + pin (Fernet creds cascade). Shared with the per-agent
+            # DELETE /connectors endpoint.
+            await _pcg.teardown_private_connection(db, conn)
+    except Exception:
+        # Never block a studio delete on private-connector cleanup.
+        pass
+
     await db.commit()
     return {"id": str(studio_id), "deleted": True}
 

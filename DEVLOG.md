@@ -1011,3 +1011,52 @@ Studio MANAGE rail split: **Settings · Access & Members · Channels · Email / 
   (stale-module/phantom-module risk). Why bakes are slow = `nuxt generate` is inherently minutes cold;
   backend-only changes skip it (FE stage cache-hits). Use foreground `DOCKER_BUILDKIT=1 docker build`
   to dodge the cache-stale `:dev` tag.
+
+## 2026-06-26 — v1.37.0 Scheduled reports + universal report-delivery (rich email)
+Per-agent scheduled reports that email a CLEAN, structured result instead of dumping the raw agent
+chat. Built P0→P5 (scaffold → engine → UI → dashboard → artifact → workflow) + format-threading +
+unit tests. Two new flags (default OFF, ON org 55278108): `HYBRID_AGENT_REPORTS` (UI Reports tab),
+`HYBRID_RICH_REPORT_EMAIL` (engine). VERSION_HYBRID 1.36.0→1.37.0.
+- **Universal delivery layer** `backend/app/services/report_delivery/`:
+  - `contract.py` (FROZEN) — `DeliveryContext`/`DeliveryParts`/`InlineImage`/`Attachment`,
+    `register_renderer`/`get_renderer`/`list_modes`, and async DB-aware `classify(ctx)` (priority:
+    explicit `options.format` → workflow source → artifact (model `Artifact`, NOT text-only
+    `StudioArtifact`) → ≥2 widgets = dashboard → result). Single chart-widget stays Mode A.
+  - `extract.py` — `sanitize_chat_content` (strips `**🧠 Planning ✓**`, ``` fences ```,
+    `generate_df` tail, markdown recap tables, "table generated above" refs), `split_intro_and_insights`,
+    `extract_result` (real grid from `steps.data` + clean SELECT lifted from `steps.code`), `latest_narrative`.
+  - `template.py` — shared inline-styled skeleton + zebra `table_html` ($-format heuristic) + `insights_html` + `sql_block`.
+  - `renderers/` — **auto-imported** via `pkgutil.iter_modules` so a new `renderers/<mode>.py` self-registers
+    (zero shared-file edits → parallel-safe). `result.py` (P1), `dashboard.py`+`render_service.py` (P3,
+    Playwright single-page PNG `screenshot(full_page)` + PDF, reuses ReportPdfService HTML build),
+    `artifact.py` (P4, latest `Artifact` → pptx via `soffice --convert-to pdf` → `pdftoppm` page-1 PNG +
+    file attach; pdf direct; screenshot_base64 fallback), `workflow.py` (P5, step timeline ✓/✗ from
+    run summary `log[]` or exec_summary, per-step output attach, cap 10 files/25MB).
+  - `assembler.py` — `build_parts` (classify→renderer, fallback "result") + `deliver` (per-agent SMTP via
+    `studio_id`; inline-cid path builds multipart/related itself; transient-DNS retry ×3).
+- **Rewire** `notification_service.send_scheduled_prompt_results` → rich path under `flags.RICH_REPORT_EMAIL`
+  (legacy raw-content kept when OFF); new `report_format` param threaded from
+  `scheduled_prompt_service.scheduled_run_prompt` (`sp.prompt['format']`) → `DeliveryContext.options['format']`.
+- **Inline cid** added to `email/message_builder.build_email` (`inline_images=[(cid,bytes,subtype)]` →
+  `msg.add_related`); verified multipart/related (html+png).
+- **Reports tab** (gated `HYBRID_AGENT_REPORTS`): `routes/studio_reports.py` (GET/POST/PUT/DELETE/run-now
+  `/api/studios/{id}/scheduled-reports`, reuses `ScheduledPromptService`) + `components/studio/StudioReports.vue`
+  (list/create/edit/pause/delete/send-test-now, format dropdown auto|table|dashboard|artifact|workflow).
+  Per-studio hidden CONTAINER report: marked `report_type='scheduled_container'` (stable vs auto-titler) +
+  created via `report_service.create_report(studio_id=)` so the studio's pinned data sources attach (else
+  agent had no data context → prose-only, no table). Format stashed in `ScheduledPrompt.prompt` JSON (no migration).
+- **Workflow delivery hook**: `routes/workflows.py` optional `notify` on run → `assembler.deliver` with
+  `options={source:'workflow', workflow_run:summary}` (opt-in, flag-gated, fail-soft; subsystem has NO persisted run table).
+- **LANDMINE FIX (latent, v1.24):** `email_client_resolver.ResolvedOutbound.uses_smtp_config` listed only
+  `ai_mailbox`/`org_smtp` — NOT `studio_smtp`. So every per-agent send via `_resolved_send` silently fell to the
+  (absent) global fastapi-mail client → `ok=False`. Added `studio_smtp`. Per-agent SMTP (e.g. an agent on
+  Office 365) now actually sends.
+- **LANDMINE:** scheduled run-now 404 on 2nd call — the completion AUTO-TITLER renames the container report, so
+  title-based lookup/get-or-create broke + spawned duplicate containers. Fix = stable `report_type` marker, never title.
+- **LANDMINE:** transient `[Errno -5] No address associated with hostname` on SMTP connect from the server's event
+  loop — Docker embedded DNS saturates while the agent fires many concurrent OpenRouter calls. Mitigated by the
+  ×3 retry in `assembler.deliver` (standalone in-container sends always resolved).
+- E2E verified live (org 55278108, studio rrr=35a1ea36…, sender = the agent's own Office 365 mailbox):
+  result table email + full dashboard email (258KB inline PNG + 352KB PDF) + workflow timeline email all
+  `ok=True` to a real inbox; artifact preview pipeline proven (58KB PNG + 47KB pptx). 17 unit tests pass
+  (`pytest tests/unit/test_report_delivery.py --noconftest`). Built by parallel subagents on disjoint files.

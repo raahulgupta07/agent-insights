@@ -40,8 +40,13 @@ class ResolvedOutbound:
 
     @property
     def uses_smtp_config(self) -> bool:
-        """True when we should send via build_email + sender (not fastapi-mail)."""
-        return self.source in ("ai_mailbox", "org_smtp")
+        """True when we should send via build_email + sender (not fastapi-mail).
+
+        ``studio_smtp`` (per-agent custom SMTP) also uses this transport — it was
+        missing here, so per-agent sends via ``_resolved_send`` silently fell back
+        to the global fastapi-mail client (and failed when none is configured).
+        """
+        return self.source in ("ai_mailbox", "org_smtp", "studio_smtp")
 
     @property
     def uses_global(self) -> bool:

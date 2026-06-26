@@ -64,6 +64,21 @@
         </div>
       </div>
 
+      <!-- Browse files — per-user file picker for document connectors
+           (SharePoint / OneDrive / Google Drive). Opens the file browser, which
+           handles its own Microsoft sign-in + flag self-gate. -->
+      <div v-if="isDocConnector" class="py-3 border-t border-gray-100">
+        <button
+          @click="showFileBrowser = true"
+          class="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-white rounded-lg hover:opacity-90"
+          style="background:#C2541E;"
+        >
+          <UIcon name="heroicons-folder-open" class="w-3.5 h-3.5" />
+          Browse files
+        </button>
+        <p class="text-[11px] text-gray-400 mt-1.5 text-center">🔒 You'll only see files you can access — pick &amp; ingest.</p>
+      </div>
+
       <!-- Indexing block — service-principal run (live progress / logs / reindex).
            Admin-only: this is the shared catalog index, not the viewer's. -->
       <div v-if="canUpdateDataSource" class="py-3 border-t border-gray-100">
@@ -366,6 +381,15 @@
     :dataSource="connectionAsDataSource"
     @saved="handleCredentialsSaved"
   />
+
+  <!-- Per-user file browser (document connectors). Explicit-imported above. -->
+  <FileBrowserModal
+    v-if="isDocConnector"
+    v-model="showFileBrowser"
+    :connection="connection"
+    :organization-id="connection?.organization_id"
+    @ingested="onFilesIngested"
+  />
 </template>
 
 <script setup lang="ts">
@@ -374,6 +398,9 @@ import ConnectForm from '~/components/datasources/ConnectForm.vue'
 import UserDataSourceCredentialsModal from '~/components/UserDataSourceCredentialsModal.vue'
 import ConnectionIndexingProgress from '~/components/ConnectionIndexingProgress.vue'
 import AddMCPModal from '~/components/AddMCPModal.vue'
+// Explicit import — a component in components/connectors/ named FileBrowserModal.vue
+// auto-registers as <ConnectorsFileBrowserModal>; import it so <FileBrowserModal> resolves.
+import FileBrowserModal from '~/components/connectors/FileBrowserModal.vue'
 import { useCan } from '~/composables/usePermissions'
 import { isIndexingActive, type ConnectionIndexing } from '~/composables/useConnectionStatus'
 import { useEnterprise } from '~/ee/composables/useEnterprise'
@@ -477,6 +504,15 @@ const disconnecting = ref(false)
 const connectionAsDataSource = computed(() =>
   props.connection ? { ...props.connection, connections: [props.connection] } : null
 )
+
+// ── Per-user file browser (document connectors only) ────────────────────────
+const DOC_CONNECTOR_TYPES = ['sharepoint', 'onedrive', 'google_drive']
+const isDocConnector = computed(() => DOC_CONNECTOR_TYPES.includes(props.connection?.type))
+const showFileBrowser = ref(false)
+function onFilesIngested() {
+  // Refresh counts/state after files become new data sources.
+  emit('updated')
+}
 
 const _TOOL_PROVIDER_TYPES = ['mcp', 'custom_api', 'onedrive', 'google_drive']
 const isToolProvider = computed(() => _TOOL_PROVIDER_TYPES.includes(props.connection?.type))

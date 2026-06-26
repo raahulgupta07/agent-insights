@@ -88,6 +88,20 @@ async def _user_can_access_connection(
     return False
 
 
+async def _guard_private_owner(db, connection_id, organization, current_user):
+    """CREATOR-ONLY guard for a private (per-agent) connector.
+
+    Loads the connection and raises 403 if it is owned by someone other than
+    `current_user` (no admin bypass). No-op for org connectors. Used by the
+    mutate/test/reindex/tables routes that delegate the fetch to the service so
+    the ownership check happens BEFORE any side effect.
+    """
+    from app.services import private_connector_guard as _pcg
+    connection = await connection_service.get_connection(db, connection_id, organization)
+    _pcg.require_owner(connection, current_user)
+    return connection
+
+
 # ==================== Routes ====================
 
 @router.get("", response_model=List[ConnectionSchema])
@@ -104,6 +118,14 @@ async def list_connections(
     with an explicit grant).
     """
     connections = await connection_service.get_connections(db, organization)
+
+    # Per-agent PRIVATE connectors (HYBRID_AGENT_CONNECTORS): a connection with
+    # owner_user_id set is creator-only — exclude everyone else's private ones
+    # BEFORE the permission filter, so even an admin never lists another user's
+    # private connector. Org connectors (NULL owner) are untouched. No-op when
+    # there are no owned connectors (e.g. flag never enabled).
+    from app.services import private_connector_guard as _pcg
+    connections = _pcg.filter_visible(connections, current_user)
 
     # Filter by user access unless admin
     resolved = await resolve_permissions(db, str(current_user.id), str(organization.id))
@@ -283,6 +305,11 @@ async def get_connection(
     """Get connection details. Non-admins get a redacted view (no config/credentials) and must have access to at least one linked data source."""
     connection = await connection_service.get_connection(db, connection_id, organization)
 
+    # CREATOR-ONLY: a private connector is visible to its owner only (no admin
+    # bypass). No-op for org connectors.
+    from app.services import private_connector_guard as _pcg
+    _pcg.require_owner(connection, current_user)
+
     is_admin = await _is_org_admin(db, current_user, organization)
     if not is_admin:
         if not await _user_can_access_connection(db, current_user, connection):
@@ -339,6 +366,7 @@ async def update_connection(
     organization: Organization = Depends(get_current_organization)
 ):
     """Update a connection."""
+    await _guard_private_owner(db, connection_id, organization, current_user)
     updates = data.dict(exclude_unset=True)
     connection = await connection_service.update_connection(
         db=db,
@@ -372,6 +400,7 @@ async def delete_connection(
     organization: Organization = Depends(get_current_organization)
 ):
     """Delete a connection. Fails if connection is linked to any agents."""
+    await _guard_private_owner(db, connection_id, organization, current_user)
     return await connection_service.delete_connection(
         db=db,
         connection_id=connection_id,
@@ -407,6 +436,7 @@ async def test_connection(
     organization: Organization = Depends(get_current_organization)
 ):
     """Test a connection, optionally with override credentials/config."""
+    await _guard_private_owner(db, connection_id, organization, current_user)
     result = await connection_service.test_connection(
         db=db,
         connection_id=connection_id,
@@ -502,7 +532,7 @@ async def set_connection_query_identity(
     if identity not in VALID_IDENTITIES:
         raise HTTPException(status_code=400, detail="query_identity must be 'self' or 'service_account'")
 
-    connection = await connection_service.get_connection(db, connection_id, organization)
+    connection = await _guard_private_owner(db, connection_id, organization, current_user)
     if (connection.auth_policy or "system_only") != "user_required" or not supports_user_token(connection):
         raise HTTPException(status_code=400, detail="This connection does not support query-identity selection")
     if not await is_admin_or_owner(db, connection, current_user):
@@ -554,7 +584,7 @@ async def refresh_connection_schema(
     to observe progress. Idempotent — re-firing while a job is running returns
     the in-flight row.
     """
-    connection = await connection_service.get_connection(db, connection_id, organization)
+    connection = await _guard_private_owner(db, connection_id, organization, current_user)
     row = await indexing_service.start(db=db, connection=connection)
     progress = _indexing_to_progress(row)
     return {
@@ -578,7 +608,7 @@ async def reindex_connection(
     Pass `?force=true` to cancel any stuck row and start fresh.
     """
     from datetime import datetime
-    connection = await connection_service.get_connection(db, connection_id, organization)
+    connection = await _guard_private_owner(db, connection_id, organization, current_user)
     if force:
         existing = await indexing_service.get_active(db, connection_id)
         if existing is not None:
@@ -662,6 +692,14 @@ async def _ensure_can_read_connection(db, organization, current_user, connection
     connection backs a data source the user can access (public DS or DS grant).
     Raises 403 otherwise.
     """
+    # CREATOR-ONLY: a private connector is creator-only — owner passes, anyone
+    # else (incl. admins) is 403'd here BEFORE the org-permission fallthrough.
+    # No-op for org connectors.
+    from app.services import private_connector_guard as _pcg
+    if _pcg.is_private(connection):
+        _pcg.require_owner(connection, current_user)
+        return
+
     resolved = await resolve_permissions(db, str(current_user.id), str(organization.id))
     if FULL_ADMIN in resolved.org_permissions or resolved.has_org_permission("manage_connections"):
         return
@@ -714,7 +752,7 @@ async def refresh_connection_tools(
     organization: Organization = Depends(get_current_organization),
 ):
     """Refresh/discover tools for an MCP or Custom API connection."""
-    connection = await connection_service.get_connection(db, connection_id, organization)
+    connection = await _guard_private_owner(db, connection_id, organization, current_user)
     tools = await connection_service.refresh_tools(db, connection, current_user)
     return [
         ConnectionToolSchema(
@@ -767,7 +805,7 @@ async def batch_update_connection_tools(
     organization: Organization = Depends(get_current_organization),
 ):
     """Batch enable/disable tools."""
-    await connection_service.get_connection(db, connection_id, organization)
+    await _guard_private_owner(db, connection_id, organization, current_user)
     tools = await connection_service.batch_update_tools(db, data.tool_ids, data.is_enabled)
     return [
         ConnectionToolSchema(
@@ -795,7 +833,7 @@ async def update_tool(
     organization: Organization = Depends(get_current_organization),
 ):
     """Enable/disable a tool or update its policy."""
-    await connection_service.get_connection(db, connection_id, organization)
+    await _guard_private_owner(db, connection_id, organization, current_user)
     tool = await connection_service.update_connection_tool(
         db, tool_id, is_enabled=data.is_enabled, policy=data.policy
     )

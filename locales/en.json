@@ -1151,7 +1151,7 @@
     "subtitle": "Manage workspace identity and preferences",
     "general": "General",
     "license": "License",
-    "membersTab": "Access",
+    "membersTab": "Access & Members",
     "identityProviderTab": "Identity Provider",
     "smtpTab": "SMTP",
     "identityProvider": {

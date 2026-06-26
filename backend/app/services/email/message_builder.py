@@ -49,10 +49,15 @@ def build_email(
     in_reply_to: Optional[str] = None,
     references: Optional[Sequence[str]] = None,
     attachments: Optional[List[Tuple[str, bytes, str]]] = None,
+    inline_images: Optional[List[Tuple[str, bytes, str]]] = None,
 ) -> EmailMessage:
     """Construct an ``EmailMessage`` with threading + optional attachments.
 
     ``attachments`` is a list of ``(filename, content_bytes, mime_type)``.
+    ``inline_images`` is a list of ``(cid, content_bytes, mime_subtype)`` embedded
+    as ``multipart/related`` parts so an HTML body can reference them via
+    ``<img src="cid:{cid}">`` (used by the dashboard report renderer for the
+    inline hero image). Only meaningful with an HTML body.
     ``references`` is the ordered list of ancestor Message-IDs; the conversation
     root should be first. When ``in_reply_to`` is set the subject is prefixed
     with ``Re:`` if it isn't already.
@@ -81,6 +86,17 @@ def build_email(
     msg["X-DASH-Mailer"] = "dash-analyst"
 
     msg.set_content(body, subtype=body_subtype)
+
+    # Inline images → multipart/related parts referenced by cid in the HTML body.
+    # add_related on a message that already has content promotes it to
+    # multipart/related with the body as the root part.
+    for cid, content, mime_subtype in inline_images or []:
+        msg.add_related(
+            content,
+            maintype="image",
+            subtype=(mime_subtype or "png"),
+            cid=f"<{cid.strip('<>')}>",
+        )
 
     for filename, content, mime_type in attachments or []:
         maintype, _, subtype = (mime_type or "application/octet-stream").partition("/")

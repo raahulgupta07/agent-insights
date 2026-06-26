@@ -22,6 +22,7 @@
         <MembersComponent v-if="activeTab === 'members'" :organization="organization" />
         <RolesManager v-if="activeTab === 'roles'" :organization="organization" />
         <GroupsManager v-if="activeTab === 'groups'" :organization="organization" />
+        <MyGroupsManager v-if="activeTab === 'mygroups'" :organization="organization" />
         <QuotaPoliciesManager v-if="activeTab === 'quotas'" :organization="organization" />
         <SignupPolicyManager v-if="activeTab === 'signup'" :organization="organization" />
     </div>
@@ -36,16 +37,29 @@ const { organization } = useOrganization()
 const activeTab = ref('members')
 const { hasFeature } = useEnterprise()
 
+// HYBRID_USER_GROUPS flag → "My Groups" tab (user-owned reusable share targets).
+// Fetched fail-soft; tab hidden until confirmed effective.
+const userGroupsEnabled = ref(false)
+onMounted(async () => {
+    try {
+        const { data } = await useMyFetch<any[]>('/organization/hybrid-flags')
+        const row = (data.value as any[] || []).find(r => r?.env_name === 'HYBRID_USER_GROUPS')
+        userGroupsEnabled.value = !!row?.effective
+    } catch { userGroupsEnabled.value = false }
+})
+
 const tabs = computed(() => [
     { key: 'members', label: t('settings.membersTabs.members') },
     { key: 'roles', label: t('settings.membersTabs.roles'), permission: 'manage_roles', feature: 'custom_roles' },
     { key: 'groups', label: t('settings.membersTabs.groups'), permission: 'manage_groups', feature: 'custom_roles' },
+    { key: 'mygroups', label: 'My Groups', flag: true },
     { key: 'quotas', label: t('settings.membersTabs.quotas'), permission: 'manage_settings', feature: 'usage_limits' },
     { key: 'signup', label: t('settings.membersTabs.signup'), permission: 'full_admin_access', feature: 'domain_signup' },
 ])
 
 const visibleTabs = computed(() =>
     tabs.value.filter((tab) => {
+        if ((tab as any).flag && !userGroupsEnabled.value) return false
         if (tab.feature && !hasFeature(tab.feature)) return false
         if (tab.permission && !useCan(tab.permission)) return false
         return true

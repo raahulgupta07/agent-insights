@@ -278,6 +278,9 @@ class ScheduledPromptService:
                         report_url=report_url,
                         exec_summary=exec_summary,
                         locale=_locale_from_org(organization),
+                        # honor the user's chosen report format (stored in the
+                        # scheduled prompt's JSON); None/"auto" → auto-detect.
+                        report_format=(sp.prompt or {}).get("format") if isinstance(sp.prompt, dict) else None,
                     )
                 )
 

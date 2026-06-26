@@ -291,7 +291,40 @@ async def create_resource_grant(
     await _require_resource_manage(
         db, current_user, organization_id, data.resource_type, data.resource_id
     )
+    # NON-SHAREABLE: a private (per-agent) connector — or a data source backed
+    # by one — can never be granted to another principal. No-op for org
+    # connectors / unrelated resource types.
+    await _deny_share_private_connector(db, data.resource_type, data.resource_id)
     return await rbac_service.create_resource_grant(db, organization_id, data)
+
+
+async def _deny_share_private_connector(
+    db: AsyncSession, resource_type: str, resource_id: str
+) -> None:
+    """Raise 403 if `resource_type`/`resource_id` points at a private connector
+    (or a data source wrapping one). Inert for org connectors and other types.
+    """
+    from sqlalchemy.orm import selectinload
+    from app.services import private_connector_guard as _pcg
+    from app.models.connection import Connection
+
+    if resource_type == "connection":
+        conn = (
+            await db.execute(select(Connection).where(Connection.id == resource_id))
+        ).scalar_one_or_none()
+        if conn is not None:
+            _pcg.deny_share(conn)
+    elif resource_type == "data_source":
+        from app.models.data_source import DataSource
+        ds = (
+            await db.execute(
+                select(DataSource)
+                .options(selectinload(DataSource.connections))
+                .where(DataSource.id == resource_id)
+            )
+        ).scalar_one_or_none()
+        if ds is not None:
+            await _pcg.deny_share_data_source(db, ds)
 
 
 async def _load_grant_or_404(db: AsyncSession, org_id: str, grant_id: str) -> ResourceGrant:

@@ -310,6 +310,46 @@ class GraphDriveClient(DataSourceClient):
         )
         return results
 
+    def list_children(self, folder_id: Optional[str] = None) -> List[dict]:
+        """Browse ONE folder level: return BOTH subfolders and files.
+
+        `list_files`/`_walk` exist to build the queryable catalog, so they DROP
+        every folder (only leaf files are returned). A file browser needs the
+        folders to navigate, so this method surfaces both — each entry carries a
+        clear ``is_folder`` flag (Graph: a child has a ``folder`` facet vs a
+        ``file`` facet). Non-recursive by design: one click = one level.
+
+        `folder_id=None` lists the connection's scoped root (after `folder_path`).
+        Extension filtering is applied to FILES only — folders are always shown
+        so the user can drill into them regardless of the allow-list.
+        """
+        # OneDrive enumeration goes through /me/drive, which only works with a
+        # delegated user token (mirrors list_files). Without one, return empty
+        # rather than letting Graph 400 on an app-only /me request.
+        if self.mode == "onedrive" and not self._user_token_provided and not folder_id:
+            return []
+        drive_id = self._resolve_drive_id()
+        item_id = folder_id or self._resolve_root_item_id()
+        out: List[dict] = []
+        for entry in self._list_children(drive_id, item_id):
+            is_folder = "folder" in entry
+            name = entry.get("name", "")
+            if not is_folder and not self._allowed(name):
+                continue
+            out.append({
+                "id": entry["id"],
+                "name": name,
+                "is_folder": is_folder,
+                "mime_type": (entry.get("file") or {}).get("mimeType"),
+                "size": entry.get("size"),
+                "modified_at": entry.get("lastModifiedDateTime"),
+                "web_url": entry.get("webUrl"),
+                "drive_id": drive_id,
+            })
+        # Folders first, then files; alphabetical within each group.
+        out.sort(key=lambda e: (not e["is_folder"], (e["name"] or "").lower()))
+        return out
+
     def _looks_like_filename(self, value: str) -> bool:
         """Graph item IDs are opaque alphanumeric tokens (~36 chars, no dots
         or slashes). Filenames almost always have a `.ext` and may include
@@ -381,6 +421,24 @@ class GraphDriveClient(DataSourceClient):
         if ext in TEXT_EXTS:
             return content.decode("utf-8", errors="replace")
         return content
+
+    def read_file_bytes(self, file_id: str, max_bytes: Optional[int] = None) -> tuple:
+        """Fetch a file's RAW bytes + its original filename, no parsing.
+
+        ``read_file`` returns a parsed DataFrame/text for tabular/text types,
+        which is wrong for the ingest lane (it needs the real file bytes to hand
+        to ``file_service.upload_file``). This returns ``(name, content_bytes)``.
+        Accepts an opaque Graph item id OR a filename/path (resolved defensively
+        like ``read_file``).
+        """
+        drive_id = self._resolve_drive_id()
+        resolved_id = self._resolve_item_id(drive_id, file_id)
+        meta = self._get(f"/drives/{drive_id}/items/{resolved_id}")
+        name = meta.get("name", "") or file_id
+        content = self._get_bytes(f"/drives/{drive_id}/items/{resolved_id}/content")
+        if max_bytes and len(content) > max_bytes:
+            content = content[:max_bytes]
+        return name, content
 
     def search_files(self, query: str, **_) -> List[dict]:
         drive_id = self._resolve_drive_id()

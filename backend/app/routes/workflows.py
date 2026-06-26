@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -56,10 +57,127 @@ def _workflow_meta(name: str) -> dict:
     }
 
 
+class NotifySubscriber(BaseModel):
+    # type='email' → use `address`; type='user' → resolve `id` → users.email
+    type: str = "email"
+    address: Optional[str] = None
+    id: Optional[str] = None
+
+
+class NotifyConfig(BaseModel):
+    """OPT-IN delivery hook. When present (and HYBRID_RICH_REPORT_EMAIL is on)
+    the run summary is emailed via the universal report-delivery layer. Absent =
+    behaviour is exactly as before (no email, no extra work)."""
+    subscribers: List[NotifySubscriber] = []
+    studio_id: Optional[str] = None  # routes via the agent's own SMTP identity
+    title: Optional[str] = None      # email subject/title override
+
+
 class RunWorkflowRequest(BaseModel):
     data_source_id: str
     max_tables: int = 25
     use_llm_judge: bool = False
+    # OPTIONAL — omit for unchanged behaviour.
+    notify: Optional[NotifyConfig] = None
+
+
+async def _resolve_subscriber_emails(
+    subscribers: List[NotifySubscriber],
+    *,
+    db: AsyncSession,
+    organization: Organization,
+) -> List[str]:
+    """Resolve subscriber descriptors → a de-duped list of email addresses.
+
+    ``email`` subscribers contribute their address directly; ``user``
+    subscribers are looked up in ``users`` (org-scoped via Membership) →
+    ``User.email``. Fail-soft: a bad/unknown subscriber is skipped, never
+    raises into the send path."""
+    emails: list[str] = []
+    user_ids: list[str] = []
+    for sub in subscribers:
+        if (sub.type or "email").lower() == "email":
+            if sub.address:
+                emails.append(sub.address.strip())
+        elif (sub.type or "").lower() == "user" and sub.id:
+            user_ids.append(sub.id)
+
+    if user_ids:
+        try:
+            from app.models.membership import Membership
+
+            rows = (
+                await db.execute(
+                    select(User.email)
+                    .join(Membership, Membership.user_id == User.id)
+                    .where(
+                        User.id.in_(user_ids),
+                        Membership.organization_id == organization.id,
+                    )
+                )
+            ).scalars().all()
+            emails.extend([e for e in rows if e])
+        except Exception:  # noqa: BLE001 — never break the run on a lookup fail
+            logger.warning("workflow notify: user-id email lookup failed", exc_info=True)
+
+    # de-dupe, preserve order, drop empties
+    seen: set[str] = set()
+    out: list[str] = []
+    for e in emails:
+        if e and e not in seen:
+            seen.add(e)
+            out.append(e)
+    return out
+
+
+async def _maybe_notify(
+    summary: dict,
+    notify: NotifyConfig,
+    *,
+    name: str,
+    db: AsyncSession,
+    organization: Organization,
+) -> bool:
+    """Email the workflow run summary via the universal report-delivery layer.
+
+    Flag-gated (HYBRID_RICH_REPORT_EMAIL) and fully fail-soft: ANY failure here
+    is logged and swallowed so the workflow run itself is never affected. Returns
+    True only if a delivery was attempted and reported success."""
+    from app.settings.hybrid_flags import flags
+
+    if not flags.RICH_REPORT_EMAIL:
+        return False
+
+    try:
+        recipient_emails = await _resolve_subscriber_emails(
+            notify.subscribers, db=db, organization=organization
+        )
+        if not recipient_emails:
+            logger.info("workflow notify: no recipient emails resolved, skipping")
+            return False
+
+        from app.services.report_delivery.assembler import deliver
+        from app.services.report_delivery.contract import DeliveryContext
+
+        label = (summary or {}).get("label") if isinstance(summary, dict) else None
+        ctx = DeliveryContext(
+            # No persisted report for a workflow run → synthetic stable id. The
+            # renderer's narrative/extract helpers find nothing for it (fine) and
+            # build the body from options['workflow_run'].
+            report_id=f"workflow:{name}",
+            organization_id=organization.id,
+            studio_id=notify.studio_id,
+            title=notify.title or label or _humanize(name),
+            options={
+                "source": "workflow",
+                "workflow_run": summary,
+                "format": "workflow",
+            },
+        )
+        return await deliver(ctx, recipient_emails, db=db)
+    except Exception:  # noqa: BLE001 — email must NEVER fail the workflow run
+        logger.warning("workflow notify: delivery failed (run unaffected)", exc_info=True)
+        return False
 
 
 @router.get("")
@@ -147,4 +265,15 @@ async def run_workflow(
         "summary": summary,
         "finished_at": datetime.utcnow().isoformat(),
     }
+
+    # OPT-IN delivery hook: email the run summary via the universal report-delivery
+    # layer. Only fires when `notify` is supplied AND the flag is on; fully
+    # fail-soft (never affects the run). Default path = unchanged.
+    if body.notify is not None:
+        notified = await _maybe_notify(
+            summary, body.notify, name=name, db=db, organization=organization
+        )
+        if isinstance(summary, dict):
+            summary = {**summary, "notified": notified}
+
     return summary

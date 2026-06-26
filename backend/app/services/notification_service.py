@@ -437,6 +437,7 @@ class NotificationService:
         report_url: str,
         exec_summary: Optional[dict] = None,
         locale: Optional[str] = None,
+        report_format: Optional[str] = None,
     ):
         """Send notification after a scheduled prompt execution completes.
 
@@ -445,9 +446,10 @@ class NotificationService:
         if not subscribers:
             return
 
-        # Resolve subscriber emails + the report's org (for Org SMTP routing).
+        # Resolve subscriber emails + the report's org/studio (for SMTP routing).
         recipient_emails = []
         organization_id = None
+        studio_id = None
         try:
             from app.dependencies import async_session_maker
             from app.models.user import User
@@ -456,6 +458,7 @@ class NotificationService:
             async with async_session_maker() as db:
                 rep = await db.get(Report, report_id)
                 organization_id = rep.organization_id if rep else None
+                studio_id = getattr(rep, "studio_id", None) if rep else None
                 for sub in subscribers:
                     if sub.get("type") == "email" and sub.get("address"):
                         recipient_emails.append(sub["address"])
@@ -469,6 +472,41 @@ class NotificationService:
 
         if not recipient_emails:
             return
+
+        # Rich delivery: render the email from STRUCTURED results (clean table +
+        # sanitized insights, + dashboard image/PDF in later phases) instead of
+        # dumping the raw agent chat. Per-agent SMTP identity is preserved
+        # (studio_id threaded through). Flag OFF → legacy path below, unchanged.
+        try:
+            from app.settings.hybrid_flags import flags as _hflags
+            if _hflags.RICH_REPORT_EMAIL:
+                from app.dependencies import async_session_maker
+                from app.services.report_delivery.contract import DeliveryContext
+                from app.services.report_delivery.assembler import deliver as _rich_deliver
+
+                ctx = DeliveryContext(
+                    report_id=report_id,
+                    organization_id=organization_id,
+                    studio_id=studio_id,
+                    title=report_title or "Report",
+                    report_url=report_url,
+                    locale=locale,
+                    exec_summary=exec_summary or {},
+                    # User's explicit format choice from the scheduled report
+                    # (table/dashboard/artifact/workflow) overrides auto-detect.
+                    # "auto"/None → classify() sniffs the report.
+                    options=(
+                        {"format": report_format}
+                        if report_format and report_format.lower() != "auto"
+                        else {}
+                    ),
+                )
+                async with async_session_maker() as rich_db:
+                    ok = await _rich_deliver(ctx, recipient_emails, db=rich_db)
+                logger.info("Rich report email sent (ok=%s) to %s for report %s", ok, recipient_emails, report_id)
+                return
+        except Exception as e:  # noqa: BLE001 — never break the legacy path
+            logger.warning("Rich report email failed, falling back to legacy: %s", e)
 
         effective_locale = _valid_locale(locale)
         summary_html = ""
