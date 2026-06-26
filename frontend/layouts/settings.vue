@@ -4,10 +4,9 @@
              Each /settings/* tab is its own standalone page (nav lives in the
              top-bar "Settings ▾" dropdown). Title + subtitle come from the
              active tab so every page reads like Monitoring/Queries/etc. -->
-        <div class="flex justify-center px-4 md:px-6 text-sm bg-[#F1ECE3] h-full overflow-hidden flex flex-col items-center">
-            <div class="w-full max-w-7xl my-2 text-[#1f2328] flex-1 flex flex-col min-h-0">
-                <!-- Overview-matched card shell: cream gutter + #FBFAF6 card -->
-                <div class="px-6 md:px-8 py-6 bg-[#FBFAF6] border border-[#E9E0D3] rounded-2xl flex-1 overflow-y-auto">
+        <div class="text-sm bg-[#F1ECE3] h-full overflow-hidden flex flex-col text-[#1f2328]">
+                <!-- Overview-matched card shell: 8px gutter + #FBFAF6 card, flush to the rail like every other page -->
+                <div class="my-2 me-2 px-6 md:px-8 py-6 bg-[#FBFAF6] border border-[#E9E0D3] rounded-2xl flex-1 overflow-y-auto">
                     <!-- Page heading (per-tab) -->
                     <div class="mb-6">
                         <h1
@@ -24,7 +23,6 @@
                         <slot />
                     </div>
                 </div>
-            </div>
         </div>
     </NuxtLayout>
 </template>

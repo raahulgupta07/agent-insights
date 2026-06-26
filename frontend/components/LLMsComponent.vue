@@ -1,50 +1,50 @@
 <template>
     <div>
-        <!-- Only show controls when there are models -->
-        <div v-if="models.length > 0" class="flex justify-between items-center mb-2">
-            <div class="w-1/2">
+        <!-- Toolbar: search + Integrate -->
+        <div class="flex justify-between items-center gap-3 mb-5">
+            <div class="flex-1 max-w-md">
                 <input
                     type="text"
                     v-model="searchQuery"
                     :placeholder="$t('settings.llms.searchPlaceholder')"
-                    class="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-[#C2541E] focus:border-[#C2541E] w-full"
+                    class="border border-[#E9E0D3] rounded-lg px-3 py-1.5 text-sm focus:ring-[#C2541E] focus:border-[#C2541E] w-full"
                 >
             </div>
-            <div class="space-x-2">
-                <button 
-                    v-if="useCan('manage_llm_settings')"
-                    @click="providerModalOpen = true" 
-                    class="bg-[#C2541E] hover:bg-[#A8330F] text-white text-sm px-3 py-1.5 rounded-md"
-                >
-                    {{ $t('settings.llms.integrateModels') }}
-                </button>
-            </div>
+            <button
+                v-if="useCan('manage_llm_settings')"
+                @click="providerModalOpen = true"
+                class="bg-[#C2541E] hover:bg-[#A8330F] text-white text-sm px-3 py-1.5 rounded-lg shrink-0"
+            >
+                {{ $t('settings.llms.integrateModels') }}
+            </button>
         </div>
-        <div v-if="models.length > 0" class="bg-white rounded-lg shadow">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
+
+        <!-- ===== SECTION 1 · PRECONFIGURED ===== -->
+        <div class="relative border border-[#E9E0D3] rounded-2xl bg-white p-4 mb-5">
+            <span class="absolute -top-2.5 left-4 bg-[#2B2A26] text-white text-[9.5px] font-semibold px-2.5 py-0.5 rounded-full tracking-wide">PRECONFIGURED</span>
+            <p class="text-xs text-[#7c7368] mb-3 mt-1">Ship-ready models we set up for you. The default and small-default can't be turned off.</p>
+            <table v-if="preconfiguredModels.length" class="min-w-full divide-y divide-[#F0EAE0]">
+                <thead>
                     <tr>
-                        <th class="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase tracking-wider">{{ $t('settings.llms.colModel') }}</th>
-                        <th class="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase tracking-wider">{{ $t('settings.llms.colProvider') }}</th>
-                        <th class="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase tracking-wider">{{ $t('settings.llms.colStatus') }}</th>
-                        <th class="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase tracking-wider" v-if="useCan('manage_llm_settings')">{{ $t('settings.llms.colActions') }}</th>
+                        <th class="px-3 py-2 text-start text-[11px] font-semibold text-[#7c7368] uppercase tracking-wide">{{ $t('settings.llms.colModel') }}</th>
+                        <th class="px-3 py-2 text-start text-[11px] font-semibold text-[#7c7368] uppercase tracking-wide">{{ $t('settings.llms.colProvider') }}</th>
+                        <th class="px-3 py-2 text-start text-[11px] font-semibold text-[#7c7368] uppercase tracking-wide">{{ $t('settings.llms.colStatus') }}</th>
+                        <th class="px-3 py-2 text-start text-[11px] font-semibold text-[#7c7368] uppercase tracking-wide" v-if="useCan('manage_llm_settings')">{{ $t('settings.llms.colActions') }}</th>
                     </tr>
                 </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                    <tr v-for="model in filteredModels" :key="model.id" class="hover:bg-gray-50">
-                        <td class="px-6 py-4 whitespace-nowrap">
+                <tbody class="divide-y divide-[#F0EAE0]">
+                    <tr v-for="model in preconfiguredModels" :key="model.id" class="hover:bg-[#FBF8F2]">
+                        <td class="px-3 py-3 whitespace-nowrap">
                             <div class="flex items-center">
-                                <div class="flex-shrink-0 h-10 w-10 flex items-center justify-center">
-                                    <LLMProviderIcon :provider="model.provider.provider_type" :icon="true" class="h-6 w-6" />
+                                <div class="flex-shrink-0 h-9 w-9 flex items-center justify-center">
+                                    <LLMProviderIcon :provider="model.provider.provider_type" :icon="true" class="h-5 w-5" />
                                 </div>
-                                <div class="ms-4">
+                                <div class="ms-3">
                                     <div class="text-sm font-medium text-gray-900">
                                         {{ model.name }}
                                         <span v-if="model.is_default" class="text-xs bg-[#C2541E] text-white px-1.5 py-0.5 rounded-md">{{ $t('settings.llms.badgeDefault') }}</span>
                                         <span v-if="model.is_small_default" class="text-xs bg-green-500 text-white px-1.5 py-0.5 rounded-md ms-1">
-                                            <UTooltip :text="$t('settings.llms.smallDefaultTooltip')">
-                                            {{ $t('settings.llms.badgeSmallDefault') }}
-                                        </UTooltip>
+                                            <UTooltip :text="$t('settings.llms.smallDefaultTooltip')">{{ $t('settings.llms.badgeSmallDefault') }}</UTooltip>
                                         </span>
                                     </div>
                                     <div v-if="model.model_id !== model.name" class="text-xs text-gray-500">
@@ -53,40 +53,82 @@
                                 </div>
                             </div>
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {{ model.provider.name }}
+                        <td class="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{{ model.provider.name }}</td>
+                        <td class="px-3 py-3 whitespace-nowrap text-sm">
+                            <UToggle v-model="model.is_enabled" @change="toggleModel(model.id, $event)" :disabled="!useCan('manage_llm_settings') || model.is_default || model.is_small_default" />
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm">
-                            <UToggle 
-                                v-model="model.is_enabled" 
-                                @change="toggleModel(model.id, $event)" 
-                                :disabled="!useCan('manage_llm_settings') || model.is_default || model.is_small_default" 
-                            />
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm" v-if="useCan('manage_llm_settings')">
+                        <td class="px-3 py-3 whitespace-nowrap text-sm" v-if="useCan('manage_llm_settings')">
                             <UDropdown :items="getDropdownItems(model)">
-                                <UButton class="text-gray-500 hover:text-gray-900 font-medium transition-colors duration-150" color="white" label="" trailing-icon="i-heroicons-ellipsis-vertical" />
+                                <UButton class="text-gray-500 hover:text-gray-900" color="white" label="" trailing-icon="i-heroicons-ellipsis-vertical" />
                             </UDropdown>
                         </td>
                     </tr>
                 </tbody>
             </table>
+            <p v-else class="text-xs text-[#9a958c] py-2">No models match your search.</p>
         </div>
 
-        <!-- Empty state -->
-        <div v-else class="text-center py-12 bg-white rounded-lg mt-20">
-            <div class="w-48 mx-auto mb-4 flex items-center justify-center">
-                <UIcon name="heroicons-cube-transparent" class="w-12 h-12 text-gray-400" />
+        <!-- ===== SECTION 2 · YOUR MODELS ===== -->
+        <div class="relative border border-[#E9E0D3] rounded-2xl bg-white p-4">
+            <span class="absolute -top-2.5 left-4 bg-[#2B2A26] text-white text-[9.5px] font-semibold px-2.5 py-0.5 rounded-full tracking-wide">YOUR MODELS</span>
+            <p class="text-xs text-[#7c7368] mb-3 mt-1">Models you connect with your own provider and API key.</p>
+            <table v-if="customModels.length" class="min-w-full divide-y divide-[#F0EAE0]">
+                <thead>
+                    <tr>
+                        <th class="px-3 py-2 text-start text-[11px] font-semibold text-[#7c7368] uppercase tracking-wide">{{ $t('settings.llms.colModel') }}</th>
+                        <th class="px-3 py-2 text-start text-[11px] font-semibold text-[#7c7368] uppercase tracking-wide">{{ $t('settings.llms.colProvider') }}</th>
+                        <th class="px-3 py-2 text-start text-[11px] font-semibold text-[#7c7368] uppercase tracking-wide">{{ $t('settings.llms.colStatus') }}</th>
+                        <th class="px-3 py-2 text-start text-[11px] font-semibold text-[#7c7368] uppercase tracking-wide" v-if="useCan('manage_llm_settings')">{{ $t('settings.llms.colActions') }}</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-[#F0EAE0]">
+                    <tr v-for="model in customModels" :key="model.id" class="hover:bg-[#FBF8F2]">
+                        <td class="px-3 py-3 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0 h-9 w-9 flex items-center justify-center">
+                                    <LLMProviderIcon :provider="model.provider.provider_type" :icon="true" class="h-5 w-5" />
+                                </div>
+                                <div class="ms-3">
+                                    <div class="text-sm font-medium text-gray-900">
+                                        {{ model.name }}
+                                        <span v-if="model.is_default" class="text-xs bg-[#C2541E] text-white px-1.5 py-0.5 rounded-md">{{ $t('settings.llms.badgeDefault') }}</span>
+                                        <span v-if="model.is_small_default" class="text-xs bg-green-500 text-white px-1.5 py-0.5 rounded-md ms-1">
+                                            <UTooltip :text="$t('settings.llms.smallDefaultTooltip')">{{ $t('settings.llms.badgeSmallDefault') }}</UTooltip>
+                                        </span>
+                                    </div>
+                                    <div v-if="model.model_id !== model.name" class="text-xs text-gray-500">
+                                        {{ $t('settings.llms.modelIdLabel') }}: {{ model.model_id }}
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{{ model.provider.name }}</td>
+                        <td class="px-3 py-3 whitespace-nowrap text-sm">
+                            <UToggle v-model="model.is_enabled" @change="toggleModel(model.id, $event)" :disabled="!useCan('manage_llm_settings') || model.is_default || model.is_small_default" />
+                        </td>
+                        <td class="px-3 py-3 whitespace-nowrap text-sm" v-if="useCan('manage_llm_settings')">
+                            <UDropdown :items="getDropdownItems(model)">
+                                <UButton class="text-gray-500 hover:text-gray-900" color="white" label="" trailing-icon="i-heroicons-ellipsis-vertical" />
+                            </UDropdown>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <!-- empty: invite to add -->
+            <div v-else class="border border-dashed border-[#E9E0D3] rounded-xl p-6 text-center bg-gradient-to-b from-white to-[#fdfcf9]">
+                <div class="mx-auto mb-2 flex items-center justify-center w-9 h-9 rounded-lg bg-[#F4EEE5] text-[#C2541E]">
+                    <UIcon name="heroicons-plus" class="w-5 h-5" />
+                </div>
+                <p class="text-sm text-gray-700">{{ searchQuery ? 'No custom models match your search.' : 'No custom models yet.' }}</p>
+                <p v-if="!searchQuery" class="text-xs text-[#9a958c] mt-1 mb-3">Connect your own provider and key to add models here.</p>
+                <button
+                    v-if="useCan('manage_llm_settings') && !searchQuery"
+                    @click="providerModalOpen = true"
+                    class="bg-[#C2541E] text-white text-sm px-3 py-1.5 rounded-lg hover:bg-[#A8330F]"
+                >
+                    {{ $t('settings.llms.integrateModels') }}
+                </button>
             </div>
-            <h3 class="text-lg font-medium text-gray-900 mb-2">{{ $t('settings.llms.emptyTitle') }}</h3>
-            <p class="text-sm text-gray-500 mb-6">{{ $t('settings.llms.emptyHint') }}</p>
-            <button
-                v-if="useCan('manage_llm_settings')"
-                @click="providerModalOpen = true"
-                class="bg-[#C2541E] text-white text-sm px-4 py-2 rounded-md hover:bg-[#A8330F] transition-colors"
-            >
-                {{ $t('settings.llms.integrateModels') }}
-            </button>
         </div>
 
         <!-- Provider Modal -->
@@ -132,12 +174,30 @@ const editProviderId = ref<string | null>(null);
 const filteredModels = computed<Model[]>(() => {
     const query = searchQuery.value.toLowerCase();
     if (!query) return models.value;
-    
+
     return models.value.filter(model => {
-        return model.name.toLowerCase().includes(query) || 
+        return model.name.toLowerCase().includes(query) ||
                model.provider.name.toLowerCase().includes(query);
     });
 });
+
+// Seeded ("preconfigured") models = the set we ship via seed_openrouter.py.
+// Anything not in this set (or flagged default) is treated as user-added.
+// NOTE: keep in sync with seed_openrouter.py; a backend `is_preconfigured`
+// flag would be more durable than this id list.
+const PRECONFIGURED_MODEL_IDS = new Set<string>([
+    'anthropic/claude-haiku-4.5',
+    'anthropic/claude-sonnet-4.6',
+    'anthropic/claude-sonnet-4',
+    'openai/gpt-4o-mini',
+    'openai/gpt-5.4-mini',
+]);
+
+const isPreconfigured = (m: Model) =>
+    m.is_default || m.is_small_default || PRECONFIGURED_MODEL_IDS.has(m.model_id);
+
+const preconfiguredModels = computed<Model[]>(() => filteredModels.value.filter(isPreconfigured));
+const customModels = computed<Model[]>(() => filteredModels.value.filter(m => !isPreconfigured(m)));
 
 const getModels = async () => {
   const response = await useMyFetch<Model[]>('/llm/models', {

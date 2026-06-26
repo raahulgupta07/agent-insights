@@ -9,6 +9,14 @@ Bullet rules (this is the user-facing "What's new" feed):
     Hidden from the popover; shown collapsed on the full /changelog page only.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.33.1 — Settings layout flush + rail dedupe + LLM two-section split  (2026-06-26)
+- The Settings pages now sit flush against the left menu with the same even gap as every other page (they used to float centered with a big empty band between the menu and the panel).
+- The Settings menu no longer shows "Integrations" twice — Channels, Folder Sync and SMTP are now grouped together under one Integrations heading.
+- The LLM settings page is split into two clear sections: "Preconfigured" (the ready-to-use models we ship) and "Your models" (anything you connect with your own provider and key).
+  - `layouts/settings.vue`: dropped `flex justify-center`/`max-w-7xl`/`items-center` → standard page shell (`bg-[#F1ECE3] h-full overflow-hidden flex flex-col` + card `my-2 me-2 flex-1 overflow-y-auto`) so the card is flush after AppRail.
+  - `useAppNav.ts`: reordered `settingsTabs` so `smtp` sits next to `integrations`/`folder-sync` → the section eyebrow no longer repeats (eyebrow renders on section *change*; SMTP after the SECURITY group caused a 2nd INTEGRATIONS header).
+  - `components/LLMsComponent.vue`: `preconfiguredModels`/`customModels` computeds split by `isPreconfigured = is_default || is_small_default || model_id ∈ PRECONFIGURED_MODEL_IDS` (the seed_openrouter.py set: haiku-4.5, sonnet-4.6, sonnet-4, gpt-4o-mini, gpt-5.4-mini). Two band-pill section cards; custom section shows a dashed add-state when empty. FE-only split — keep the id set in sync with the seed, or add a backend `is_preconfigured` flag for durability.
+
 ## v1.33.0 — Overview design + studio-scroll across the app, report panel polish  (2026-06-26)
 - Every Build, Manage and Settings page (plus all Workspace tabs and Monitoring) now wears the same Overview look — serif title, rounded cream card, section cards and toolbars — so the whole app reads as one design.
 - The left menu and page card now scroll like the Agent Studio: the menu stays put with its own scroll, the page scrolls inside its rounded card, and there's an even 8px gap on every side that never disappears. The menu card also fills the full height instead of stopping short.
