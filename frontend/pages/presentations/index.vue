@@ -131,22 +131,22 @@
                             <!-- Two actions: Open (split) + Open in chat -->
                             <div class="mt-auto pt-2 grid grid-cols-2 gap-2">
                                 <button
-                                    class="inline-flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg bg-[#C2541E] text-white hover:bg-[#A8330F] transition-colors"
+                                    class="box-border inline-flex items-center justify-center gap-1 min-w-0 px-2 py-1.5 text-xs font-medium rounded-lg whitespace-nowrap bg-[#C2541E] text-white hover:bg-[#A8330F] transition-colors"
                                     :title="slideCount(p) === 0
                                         ? 'Open the slide workspace — generate & edit slides with chat'
                                         : 'Open the slide workspace — view & edit slides with chat'"
                                     @click.stop="openSlides(p)"
                                 >
-                                    <Icon name="heroicons:presentation-chart-line" class="h-3.5 w-3.5" />
-                                    {{ slideCount(p) === 0 ? 'Open & generate' : 'Open' }}
+                                    <Icon name="heroicons:presentation-chart-line" class="h-3.5 w-3.5 shrink-0" />
+                                    {{ slideCount(p) === 0 ? 'Generate' : 'Open' }}
                                 </button>
                                 <button
-                                    class="inline-flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg border border-[#E9E0D3] text-[#1f2328] hover:bg-[#F4EEE5] transition-colors"
+                                    class="box-border inline-flex items-center justify-center gap-1 min-w-0 px-2 py-1.5 text-xs font-medium rounded-lg whitespace-nowrap border border-[#E9E0D3] text-[#1f2328] hover:bg-[#F4EEE5] transition-colors"
                                     title="Open the underlying conversation"
                                     @click.stop="openInChat(p)"
                                 >
-                                    <Icon name="heroicons:chat-bubble-left-right" class="h-3.5 w-3.5" />
-                                    Open in chat
+                                    <Icon name="heroicons:chat-bubble-left-right" class="h-3.5 w-3.5 shrink-0" />
+                                    Chat
                                 </button>
                             </div>
                         </div>

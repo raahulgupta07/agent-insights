@@ -162,7 +162,8 @@ const badgeStyle = computed(() => {
 .rrc-by { font-size: 12px; color: #9A8F80; margin-bottom: 12px; }
 
 .rrc-ghost, .rrc-prim {
-  flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  flex: 1 1 0; width: 0; min-width: 0; box-sizing: border-box; white-space: nowrap;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   border-radius: 9px; padding: 8px; cursor: pointer;
   font-size: 12.5px; font-weight: 600; transition: .15s; font-family: inherit;
 }

@@ -9,6 +9,12 @@ Bullet rules (this is the user-facing "What's new" feed):
     Hidden from the popover; shown collapsed on the full /changelog page only.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.27.0 — Tidier card buttons on Decks and Dashboards  (2026-06-26)
+- The Open / Chat buttons on deck cards no longer wrap onto two lines — they sit flat and are the same size.
+- The Chat / Dashboard buttons on dashboard cards are now exactly the same width.
+  - Presentations cards (`pages/presentations/index.vue`): shortened labels (Open & generate → Generate, Open in chat → Chat), added `whitespace-nowrap` + `box-border` + `min-w-0` so the two-column grid buttons stay single-line and equal.
+  - `components/home/RecentReportCard.vue` (Dashboards + Home grids): button CSS `flex: 1 1 0; width: 0; box-sizing: border-box; white-space: nowrap` so the bordered ghost and borderless primary render identical width.
+
 ## v1.26.0 — Channels: use the org default or a custom connection  (2026-06-26)
 - For every channel (Slack, Teams, WhatsApp, AI Mailbox, Telegram, MCP) you can now choose: use the organization's shared connection, or set up a custom one just for this agent — same choice you already have for Email.
 - Channels default to the organization's connection, so an agent works out of the box with nothing to configure. Switch to "Custom for this agent" only when you want its own app, bot, or number.
