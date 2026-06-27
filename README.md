@@ -14,6 +14,58 @@ An **Agent Studio** wraps a set of pinned data sources (file uploads or warehous
 
 ---
 
+## Two ways to install
+
+| Way | Effort | When |
+|---|---|---|
+| **A. `docker pull` from GHCR** (no build) | ~5 min | normal install — pull a prebuilt image. See **`DEPLOY-GHCR.md`**. |
+| **B. Build from source** (this section) | ~15–25 min first build | you want to build/modify it yourself, or no GHCR access. |
+
+> **Quick path for most installs is A (`docker pull`)** — `DEPLOY-GHCR.md` is the OpenWebUI-style guide.
+> Build-from-source (B) is below.
+
+---
+
+## B. Engineer quick start — build from source
+
+**Prereqs:** Docker + Docker Compose, **≥10 GB RAM** given to Docker (the frontend `nuxt generate`
+needs a 6 GB Node heap — less = OOM/exit-134), ~15 GB free disk, ports `3007`/`5439`/`6399` free.
+
+```bash
+# 1. clone
+git clone git@github.com:raahulgupta07/rahulai-dash.git
+cd rahulai-dash
+
+# 2. config
+cp .env.example .env
+#    Edit .env and set AT LEAST:
+#      DASH_ENCRYPTION_KEY  -> generate ONCE, keep stable forever (decrypts saved keys):
+#         python3 -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())"
+#      DASH_ADMIN_EMAIL / DASH_ADMIN_PASSWORD / DASH_ADMIN_NAME  -> first-boot admin
+#      APP_PORT=3007  (or any free host port) + DASH_BASE_URL=http://<host>:3007
+
+# 3. build + run (self-contained Dockerfile; first build ~15–25 min)
+bash scripts/build.sh                                   # pre-pulls bases (retry) + builds the image
+docker compose -f docker-compose.build.yaml up -d
+#    (or in one shot:  docker compose -f docker-compose.build.yaml up -d --build)
+
+# 4. verify
+curl http://localhost:3007/health                       # {"status":"ok"}
+```
+
+Open `http://<host>:3007`, log in with the admin you set, then **Settings → Models** and paste the
+**OpenRouter API key** (it is never baked into the image).
+
+**Rebuild after a code change:** `bash scripts/build.sh && docker compose -f docker-compose.build.yaml up -d --force-recreate app`
+(code-change rebuilds are seconds–2 min thanks to the cached base + BuildKit cache mounts).
+
+> Notes: the app listens on **3000 inside** the container — the `http://0.0.0.0:3000` log line is normal;
+> you reach it on the host `APP_PORT`. Data persists in the `ca_postgres_data` / `ca_uploads` volumes
+> (survives rebuilds). **Never** `docker compose down -v` — that wipes the DB. Stack runs ONLY on
+> `docker-compose.build.yaml` (a plain `docker-compose.yaml` is a different project = empty DB).
+
+---
+
 ## Deploy
 
 Clean machine, no pre-step, no external image — the runtime base is folded into
