@@ -3,12 +3,31 @@
 # Set environment variables
 export ENVIRONMENT=production
 
-# Generate DASH_ENCRYPTION_KEY if not provided (must happen BEFORE workers fork)
+# Resolve DASH_ENCRYPTION_KEY (must happen BEFORE workers fork).
+# Precedence: explicit env/.env  >  key persisted on the uploads volume  >  generate once.
+# The persisted file lives on the durable `ca_uploads` volume, so an auto-generated
+# key SURVIVES restarts/rebuilds — saved (encrypted) API keys keep decrypting. This
+# makes the key fully automatic: no .env edit required for a fresh install.
+DASH_SECRET_FILE="${DASH_ENCRYPTION_KEY_FILE:-/app/backend/uploads/.dash_encryption.key}"
 if [ -z "$DASH_ENCRYPTION_KEY" ]; then
-    export DASH_ENCRYPTION_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
-    echo "⚠️  WARNING: No DASH_ENCRYPTION_KEY provided. Generated a temporary key."
-    echo "⚠️  Users will be logged out if the container restarts!"
-    echo "⚠️  For production, set: -e DASH_ENCRYPTION_KEY=<your-persistent-key>"
+    if [ -s "$DASH_SECRET_FILE" ]; then
+        export DASH_ENCRYPTION_KEY="$(cat "$DASH_SECRET_FILE")"
+        echo "🔑 Loaded persisted DASH_ENCRYPTION_KEY from $DASH_SECRET_FILE"
+    else
+        export DASH_ENCRYPTION_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+        mkdir -p "$(dirname "$DASH_SECRET_FILE")"
+        # write atomically + lock down perms
+        ( umask 177; printf '%s' "$DASH_ENCRYPTION_KEY" > "$DASH_SECRET_FILE.tmp" ) \
+            && mv -f "$DASH_SECRET_FILE.tmp" "$DASH_SECRET_FILE"
+        echo "🔑 No DASH_ENCRYPTION_KEY provided — generated one and persisted it to $DASH_SECRET_FILE (stable across restarts)."
+    fi
+else
+    # Explicit key wins. Mirror it to the volume so an accidental later unset still resolves.
+    if [ ! -s "$DASH_SECRET_FILE" ]; then
+        mkdir -p "$(dirname "$DASH_SECRET_FILE")"
+        ( umask 177; printf '%s' "$DASH_ENCRYPTION_KEY" > "$DASH_SECRET_FILE.tmp" ) \
+            && mv -f "$DASH_SECRET_FILE.tmp" "$DASH_SECRET_FILE" 2>/dev/null || true
+    fi
 fi
 
 # =============================================================================

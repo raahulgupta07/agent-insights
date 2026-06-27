@@ -9,6 +9,10 @@ Bullet rules (this is the user-facing "What's new" feed):
     Hidden from the popover; shown collapsed on the full /changelog page only.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.44.1 — Auto-persistent encryption key  (2026-06-27)
+- **Zero-config install.** You no longer have to generate an encryption key before first boot — the app makes one automatically and remembers it, so saved API keys keep working across restarts.
+  - `start.sh`: `DASH_ENCRYPTION_KEY` precedence = explicit env/.env > key persisted at `/app/backend/uploads/.dash_encryption.key` (on the durable `ca_uploads` volume) > generate-once-and-persist (umask 177, atomic write, perms 600). Removes the old "temporary key → users logged out on restart" footgun (`config.py:76` only set it in-process). Explicit env still wins and is mirrored to the volume. Override path via `DASH_ENCRYPTION_KEY_FILE`. No compose/volume change (reuses existing `ca_uploads`).
+
 ## v1.44.0 — Personal groups (My Groups)  (2026-06-27)
 - **Make your own contact groups.** Any member can now create personal groups of people — open **My Groups** in the sidebar, name a group, add members, done. No admin needed.
 - **Share agents to your groups.** When you give people access to an agent, your personal groups show up in the picker (tagged "mine") right alongside org and AD/LDAP groups — pick one and everyone in it gets access.
