@@ -1194,42 +1194,19 @@
                         </section>
 
                         <!-- MEMBERS / SHARE -->
-                        <section v-else-if="activeTab === 'members'">
-                            <div class="flex items-start justify-between mb-4">
-                                <div>
-                                    <h2 class="text-lg font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ $t('studio.membersTitle') }}</h2>
-                                    <p class="text-xs text-[#6b6b6b] mt-0.5">{{ $t('studio.membersHint') }}</p>
-                                </div>
-                                <button type="button" class="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-lg px-3.5 py-1.5 transition-colors" @click="showShare = true">
-                                    <UIcon name="i-heroicons-share" class="w-3.5 h-3.5" />
-                                    {{ $t('studio.shareTitle') }}
-                                </button>
-                            </div>
-                            <p class="text-xs text-[#6b6b6b]">
-                                {{ $t('studio.shareScope') }}: <span class="font-medium text-[#1f2328]">{{ scopeLabel }}</span>
-                            </p>
-                            <button type="button" class="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-[#6b6b6b] bg-white border border-[#E9E0D3] rounded-lg px-3 py-1.5 hover:bg-[#faf8f3] hover:border-[#dcd9cf] transition-colors" @click="showShare = true">
-                                <UIcon name="i-heroicons-users" class="w-3.5 h-3.5 text-[#9a958c]" />
-                                {{ $t('studio.tabMembers') }}
-                            </button>
-
-                            <div v-if="role === 'owner'" class="mt-8 pt-4 border-t border-[#E9E0D3]">
-                                <UButton color="red" variant="outline" size="xs" icon="i-heroicons-trash" :loading="deleting" @click="deleteStudio">
-                                    {{ $t('studio.deleteStudio') }}
-                                </UButton>
-                            </div>
-                        </section>
-
-                        <!-- ACCESS & CHANNELS -->
+                        <!-- ACCESS & CHANNELS (the old 'members' tab was merged in here) -->
                         <section v-else-if="activeTab === 'access'">
                             <StudioAccess
                                 :studio-id="studioId"
                                 :studio="studio"
                                 :sources="sources"
                                 :can-edit="canEdit"
+                                :is-owner="role === 'owner'"
+                                :deleting="deleting"
                                 :owner-user-id="String(studio?.owner_user_id || '')"
                                 @share-updated="onShareUpdated"
                                 @config-updated="onConfigUpdated"
+                                @delete-studio="deleteStudio"
                             />
                         </section>
 
@@ -1543,7 +1520,11 @@ const loadingChats = ref(false)
 // via the studio-header button; it is just no longer the default surface.
 // Persist the active tab in the URL (?tab=) so a refresh keeps you on the same
 // sub-screen instead of resetting to Auto-pilot.
-const activeTab = ref(typeof route.query.tab === 'string' ? route.query.tab : 'autopilot')
+const activeTab = ref((() => {
+    const q = typeof route.query.tab === 'string' ? route.query.tab : 'autopilot'
+    // 'members' tab merged into 'access' — redirect any old deep-link.
+    return q === 'members' ? 'access' : q
+})())
 watch(activeTab, (t) => {
     router.replace({ query: { ...route.query, tab: t } })
 })
@@ -2303,7 +2284,8 @@ const tabs = computed(() => [
     // Per-agent scheduled reports + delivery. Gated by HYBRID_AGENT_REPORTS
     // (per-org flag); hidden when off.
     ...(reportsEnabled.value ? [{ value: 'reports', label: 'Reports', icon: 'i-heroicons-paper-airplane', group: 'manage' }] : []),
-    { value: 'members', label: t('studio.tabMembers'), icon: 'i-heroicons-users', group: 'manage' },
+    // NOTE: the old 'members' tab was merged into 'access' (Access & Members).
+    // Deep-links to ?tab=members are redirected in the activeTab init below.
 ])
 
 // Group the tabs into the left-rail sections. Group headers are literal English

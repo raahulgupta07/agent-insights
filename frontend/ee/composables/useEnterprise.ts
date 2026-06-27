@@ -57,8 +57,9 @@ export const useEnterprise = () => {
   const isExpired = computed(() => license.value?.tier === 'expired')
 
   // Fork un-gate: features free for all tiers (mirror backend COMMUNITY_FEATURES).
-  // Empty this to restore EE gating for audit logs / SCIM / LDAP.
-  const COMMUNITY_FEATURES = ['audit_logs', 'scim', 'ldap']
+  // custom_roles added so the Roles + Groups tabs (and group-based agent sharing)
+  // work without a license. Empty this to restore EE gating.
+  const COMMUNITY_FEATURES = ['audit_logs', 'scim', 'ldap', 'custom_roles']
 
   const hasFeature = (feature: string): boolean => {
     if (COMMUNITY_FEATURES.includes(feature)) return true

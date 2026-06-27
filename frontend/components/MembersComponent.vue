@@ -18,7 +18,7 @@
             </div>
             <div class="flex items-center justify-end gap-2 w-full md:w-auto">
                 <UButton
-                    v-if="useCan('add_organization_members')"
+                    v-if="isSuperuser && useCan('add_organization_members')"
                     color="gray"
                     variant="outline"
                     size="xs"
@@ -28,7 +28,7 @@
                     Import
                 </UButton>
                 <UButton
-                    v-if="useCan('add_organization_members')"
+                    v-if="isSuperuser && useCan('add_organization_members')"
                     color="primary"
                     variant="solid"
                     size="xs"
@@ -139,6 +139,7 @@
                             </th>
                             <th class="px-4 py-2 text-start text-xs font-medium text-gray-500">{{ $t('settings.members.colUser') }}</th>
                             <th class="px-4 py-2 text-start text-xs font-medium text-gray-500">{{ $t('settings.members.colRole') }}</th>
+                            <th class="px-4 py-2 text-start text-xs font-medium text-gray-500">Source</th>
                             <th class="px-4 py-2 text-start text-xs font-medium text-gray-500">{{ $t('settings.members.colGroups') }}</th>
                             <th v-if="showQuotaColumn" class="px-4 py-2 text-start text-xs font-medium text-gray-500">{{ $t('quotaPolicies.colQuota') }}</th>
                             <th class="px-4 py-2 text-start text-xs font-medium text-gray-500">{{ $t('settings.members.colStatus') }}</th>
@@ -225,6 +226,20 @@
                                             {{ member.role?.charAt(0).toUpperCase() + member.role?.slice(1) }}
                                         </UBadge>
                                     </template>
+                                </td>
+                                <td class="px-4 py-2">
+                                    <div v-if="member.auth_sources?.length" class="flex flex-wrap gap-1 max-w-[14rem]">
+                                        <span
+                                            v-for="(src, i) in member.auth_sources"
+                                            :key="i"
+                                            class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium whitespace-nowrap"
+                                            :class="authSourceMeta(src).cls"
+                                        >
+                                            <UIcon :name="authSourceMeta(src).icon" class="h-3 w-3" />
+                                            {{ authSourceMeta(src).label }}
+                                        </span>
+                                    </div>
+                                    <span v-else class="text-gray-300 text-sm">—</span>
                                 </td>
                                 <td class="px-4 py-2 whitespace-nowrap">
                                     <div class="flex gap-1 items-center">
@@ -624,6 +639,11 @@ import { useEnterprise } from '~/ee/composables/useEnterprise'
 
 const { t } = useI18n()
 
+// Current-session user — `useAuth().data` carries the session payload whose shape
+// is declared in nuxt.config.ts `sessionDataType` (includes top-level `is_superuser`).
+const { data: currentUser } = useAuth()
+const isSuperuser = computed(() => !!(currentUser.value as any)?.is_superuser)
+
 interface MemberUser {
     id: string
     name?: string
@@ -640,6 +660,7 @@ interface Member {
     email?: string
     role?: string
     roles?: { id: string; name: string; source?: string }[]
+    auth_sources?: string[]
     note?: string | null
     created_at: string
     invite_expires_at?: string | null
@@ -711,7 +732,8 @@ const usagePolicies = ref<UsagePolicySummary[]>([])
 const { hasFeature } = useEnterprise()
 const showQuotaColumn = computed(() => hasFeature('usage_limits') && useCan('manage_settings'))
 const canBulkActions = computed(() => useCan('update_organization_members') || useCan('remove_organization_members'))
-const membersColspan = computed(() => 8 + (showQuotaColumn.value ? 1 : 0) + (useCan('remove_organization_members') ? 1 : 0) + (canBulkActions.value ? 1 : 0))
+// Base = 9 fixed columns (User, Role, Source, Groups, Status, Note, External Platforms, Last Login, Last Seen).
+const membersColspan = computed(() => 9 + (showQuotaColumn.value ? 1 : 0) + (useCan('remove_organization_members') ? 1 : 0) + (canBulkActions.value ? 1 : 0))
 
 // Filters
 const statusFilter = ref<'all' | 'active' | 'pending'>('all')
@@ -774,6 +796,25 @@ function getDirectRoleIds(member: Member): string[] {
 function cap(name?: string): string {
     if (!name) return ''
     return name.charAt(0).toUpperCase() + name.slice(1)
+}
+
+// Auth provenance badge styling. Backend sends `auth_sources: string[]` with values
+// "local" | "ldap" | "sso:<provider>" | "scim" (a merged user can carry several).
+// Warm-palette pills matching the rest of this table.
+function authSourceMeta(src: string): { label: string; cls: string; icon: string } {
+    if (src === 'ldap') {
+        return { label: 'LDAP', cls: 'text-[#2F6F8B] bg-[#E4EEF2]', icon: 'i-heroicons-shield-check' }
+    }
+    if (src === 'scim') {
+        return { label: 'SCIM', cls: 'text-[#9A6B12] bg-[#F6ECD6]', icon: 'i-heroicons-arrows-right-left' }
+    }
+    if (src?.startsWith('sso:')) {
+        const provider = src.slice(4)
+        const pretty = provider ? provider.charAt(0).toUpperCase() + provider.slice(1) : ''
+        return { label: pretty ? `SSO·${pretty}` : 'SSO', cls: 'text-[#5B4B9A] bg-[#ECE8F7]', icon: 'i-heroicons-globe-alt' }
+    }
+    // "local" + any unknown fall back to a neutral grey pill.
+    return { label: src === 'local' ? 'Local' : (cap(src) || '—'), cls: 'text-gray-600 bg-gray-100', icon: 'i-heroicons-key' }
 }
 
 // In-table selects read as plain badges, not form fields: borderless, a

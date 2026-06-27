@@ -77,6 +77,9 @@ class MembershipSchema(MembershipCreate):
     user: Optional[UserSchema] = None
     email: Optional[str] = None
     roles: List[RoleSummarySchema] = []  # resolved from role_assignments
+    # How this member authenticates: subset of ["ldap","sso:<provider>","scim","local"].
+    # Empty for pending invites with no User row yet.
+    auth_sources: List[str] = []
     # Outcome of the invite email on creation: "sent" | "failed" |
     # "skipped_no_smtp" | None (not an invite / not applicable).
     invite_email_status: Optional[str] = None

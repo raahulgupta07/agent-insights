@@ -41,7 +41,10 @@ ENTERPRISE_DATASOURCES = []
 # (community included). has_feature() and require_enterprise() treat these as always
 # available. Mirrors the ENTERPRISE_DATASOURCES un-gate above. Empty this set to
 # restore the original EE gating for audit logs / SCIM / LDAP.
-COMMUNITY_FEATURES = {"audit_logs", "scim", "ldap"}
+# Fork un-gate: free for all tiers. custom_roles added so org Groups + RBAC
+# (used by HYBRID_GROUP_ACCESS agent sharing) work without a license — the
+# operator manages their own users/groups; same posture as audit_logs/scim/ldap.
+COMMUNITY_FEATURES = {"audit_logs", "scim", "ldap", "custom_roles"}
 
 # Public key for license verification (RS256).
 #

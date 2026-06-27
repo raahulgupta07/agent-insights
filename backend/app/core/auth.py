@@ -1,3 +1,4 @@
+import os
 import uuid
 import logging
 from datetime import datetime, timezone, timedelta
@@ -38,6 +39,17 @@ from app.schemas.organization_schema import OrganizationCreate
 from app.core.telemetry import telemetry
 
 SECRET = settings.dash_config.encryption_key
+
+
+def _oauth_trust_email() -> bool:
+    """Whether SSO logins may be auto-linked to an existing local/LDAP user that
+    merely shares the same email.
+
+    Env-backed boolean ``OAUTH_TRUST_EMAIL`` (default **TRUE** to preserve the
+    historical behavior — zero regression when unset). When FALSE, the email
+    merge in ``oauth_callback`` only proceeds with a verified-email signal (see
+    the security note there)."""
+    return os.getenv("OAUTH_TRUST_EMAIL", "true").strip().lower() in ("1", "true", "yes")
 
 
 DEFAULT_ORG_NAME = "Main Org"
@@ -543,6 +555,40 @@ class UserManager(BaseUserManager[User, str]):
             # If OAuth account doesn't exist, check if user exists by email
             try:
                 user = await self.get_by_email(account_email)
+                # ── SECURITY: email-based SSO → existing-account linking ──────────
+                # We are about to LINK this SSO identity to a pre-existing
+                # local/LDAP user that merely SHARES the same email. If the IdP
+                # asserts an UNVERIFIED email, this is an account-takeover vector:
+                # an attacker can pre-register a local account on a victim's email
+                # (or vice-versa) and have the victim's SSO login silently link to
+                # — and grant access on — that account.
+                #
+                # OAUTH_TRUST_EMAIL (env, default TRUE) gates the merge:
+                #   True  → keep historical behavior (link unconditionally).
+                #   False → only link when a verified-email signal is reachable;
+                #           otherwise refuse the blind link with a 403.
+                # Default TRUE => zero behavior change when the flag is unset.
+                if not _oauth_trust_email():
+                    # The callback does not receive the IdP's raw `email_verified`
+                    # claim today; fastapi-users may pass `is_verified_by_default`
+                    # (and we also honor an explicit `email_verified` kwarg if a
+                    # provider ever supplies one). Absent any such signal, do NOT
+                    # silently link.
+                    email_verified = bool(
+                        kwargs.get("is_verified_by_default")
+                        or kwargs.get("email_verified")
+                    )
+                    if not email_verified:
+                        raise HTTPException(
+                            status_code=403,
+                            detail={
+                                "code": "email_linking_disabled",
+                                "message": (
+                                    "Email-based account linking is disabled; "
+                                    "contact an admin to link this SSO identity."
+                                ),
+                            },
+                        )
                 # User exists, let's link the OAuth account
                 async with self.user_db.session as session:
                     oauth_account = OAuthAccount(

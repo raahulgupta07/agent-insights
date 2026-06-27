@@ -124,6 +124,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_AGENT_ACL": {"label": "Per-Agent Access Control", "role": "user", "category": "Agents & Access", "status": "stable"},
     "HYBRID_USER_GROUPS": {"label": "User-Owned Groups", "role": "user", "category": "Agents & Access", "status": "stable", "note": "Let any member create personal contact groups and use them as reusable share targets (My Groups)."},
     "HYBRID_AGENT_CONNECTORS": {"label": "Per-Agent Private Connectors", "role": "user", "category": "Agents & Access", "status": "stable", "note": "Let a connector be private to a user (owner_user_id) or bound to a single agent/studio (studio_id), instead of org-wide. NULL/NULL = org-wide (unchanged)."},
+    "HYBRID_GROUP_ACCESS": {"label": "Group-Based Agent Access", "role": "user", "category": "Agents & Access", "status": "stable", "note": "Share an agent/studio to a GROUP (incl. AD/LDAP-synced groups) — every group member gets access and the agent auto-appears in their studios list + chat dropdown. Reuses ResourceGrant (resource_type='studio', principal_type='group'). Default OFF."},
     "HYBRID_FILE_BROWSER": {"label": "File Browser (SharePoint/OneDrive/Drive)", "role": "user", "category": "Agents & Access", "status": "stable", "note": "Browse a SharePoint/OneDrive/Google Drive connector's folders/files with YOUR own Microsoft/Google sign-in (each user sees only what their identity can read), and ingest picked files as queryable Data Agents."},
     "HYBRID_AGENT_CHANNELS": {"label": "Agent Channels", "role": "user", "category": "Agents & Access", "status": "beta", "note": "Per-agent channels (Slack/Teams/WhatsApp/AI Mailbox/MCP/Telegram) scoped to that agent's pinned data. Config in Studio → Access & Channels. Inbound routing for Slack/Teams/WhatsApp is phase 2 (Telegram routing live)."},
     "HYBRID_AGENT_REPORTS": {"label": "Scheduled Reports (per-agent)", "role": "user", "category": "Agents & Access", "status": "beta", "note": "Per-agent 'Reports' tab: schedule a prompt/dashboard to run on a cadence and email the result to subscribers, sent from the agent's own SMTP identity. UI only; gates the Studio → Reports tab."},
@@ -248,6 +249,15 @@ class HybridFlags:
         # set), instead of org-wide. Org-wide connectors (owner_user_id NULL +
         # studio_id NULL) are unaffected. Default OFF.
         return _bool("HYBRID_AGENT_CONNECTORS", False)
+
+    @property
+    def GROUP_ACCESS(self) -> bool:
+        # Group-based agent/studio access: share a studio to a GROUP via
+        # ResourceGrant(resource_type='studio', principal_type='group'). Every
+        # member of the granted group (incl. AD/LDAP-synced groups) resolves to
+        # viewer/editor and the studio auto-appears in their list + chat
+        # dropdown. Off => no group resolution (owner/member/org only). Default OFF.
+        return _bool("HYBRID_GROUP_ACCESS", False)
 
     @property
     def AGENT_CHANNELS(self) -> bool:
@@ -796,6 +806,7 @@ class HybridFlags:
             "FOLDER_SYNC": self.FOLDER_SYNC,
             "USER_GROUPS": self.USER_GROUPS,
             "AGENT_CONNECTORS": self.AGENT_CONNECTORS,
+            "GROUP_ACCESS": self.GROUP_ACCESS,
             "FILE_BROWSER": self.FILE_BROWSER,
             "AGENT_REPORTS": self.AGENT_REPORTS,
             "RICH_REPORT_EMAIL": self.RICH_REPORT_EMAIL,

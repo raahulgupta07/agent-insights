@@ -129,6 +129,7 @@ export function useAppNav() {
         { key: 'queries', href: '/queries', activePath: '/queries', component: LibraryIcon, label: 'nav.queries', section: 'CONTEXT' },
         { key: 'skills', href: '/skills', activePath: '/skills', icon: 'heroicons-sparkles', label: 'Skills', section: 'CAPABILITIES' },
         { key: 'memory', href: '/memory', activePath: '/memory', icon: 'heroicons-cpu-chip', label: 'Memory', section: 'CAPABILITIES' },
+        { key: 'my-groups', href: '/settings/my-groups', activePath: '/settings/my-groups', icon: 'heroicons-user-group', label: 'My Groups', section: 'ACCESS' },
       ],
     },
     {

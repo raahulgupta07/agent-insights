@@ -14,12 +14,85 @@ flag is enforced at the route layer); it only performs DB lookups.
 """
 from __future__ import annotations
 
-from typing import Optional
+from typing import List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.studio import Studio, StudioMember
+
+
+# Role precedence so the *strongest* group grant wins when a user is in several
+# granted groups. A group grant is at most "editor" — group sharing never
+# confers ownership.
+_ROLE_RANK = {"viewer": 1, "editor": 2, "owner": 3}
+
+
+def _perms_to_role(permissions) -> str:
+    """Map a ResourceGrant.permissions JSON list to a Studio role.
+
+    'write'/'edit'/'manage' anywhere in the list -> editor, otherwise viewer.
+    """
+    perms = {str(p).lower() for p in (permissions or [])}
+    if perms & {"write", "edit", "manage"}:
+        return "editor"
+    return "viewer"
+
+
+async def user_group_ids(db: AsyncSession, user) -> List[str]:
+    """Return the ids of every (non-deleted) group the user belongs to.
+
+    Includes AD/LDAP/OIDC-synced groups — they are ordinary Group rows whose
+    membership the sync service maintains. Used by both the single-studio
+    resolver and the /studios list query.
+    """
+    uid = getattr(user, "id", None)
+    if uid is None:
+        return []
+    from app.models.group_membership import GroupMembership
+
+    rows = await db.execute(
+        select(GroupMembership.group_id).where(
+            GroupMembership.user_id == str(uid),
+            GroupMembership.deleted_at.is_(None),
+        )
+    )
+    return [r[0] for r in rows.all()]
+
+
+async def group_granted_studio_roles(db: AsyncSession, user) -> dict:
+    """Return {studio_id: role} for every studio shared to one of the user's
+    groups via ResourceGrant(resource_type='studio', principal_type='group').
+
+    Strongest grant wins per studio. Empty dict when the GROUP_ACCESS flag is
+    off or the user is in no granted group. Flag is read here so callers stay
+    simple and a flag flip is global.
+    """
+    from app.settings.hybrid_flags import flags
+
+    if not flags.GROUP_ACCESS:
+        return {}
+    gids = await user_group_ids(db, user)
+    if not gids:
+        return {}
+
+    from app.models.resource_grant import ResourceGrant
+
+    rows = await db.execute(
+        select(ResourceGrant.resource_id, ResourceGrant.permissions).where(
+            ResourceGrant.resource_type == "studio",
+            ResourceGrant.principal_type == "group",
+            ResourceGrant.principal_id.in_(gids),
+            ResourceGrant.deleted_at.is_(None),
+        )
+    )
+    out: dict = {}
+    for resource_id, permissions in rows.all():
+        role = _perms_to_role(permissions)
+        cur = out.get(str(resource_id))
+        if cur is None or _ROLE_RANK[role] > _ROLE_RANK[cur]:
+            out[str(resource_id)] = role
+    return out
 
 
 async def resolve_studio_access(
@@ -64,6 +137,15 @@ async def resolve_studio_access(
     member = member_result.scalar_one_or_none()
     if member is not None and member.role:
         return member.role
+
+    # 2.5 Group grant (HYBRID_GROUP_ACCESS). A studio shared to one of the
+    # user's groups (incl. AD/LDAP-synced) resolves to viewer/editor. No-op when
+    # the flag is off. Checked before org-scope so an explicit group grant can
+    # raise a user above plain org-viewer (e.g. editor).
+    group_roles = await group_granted_studio_roles(db, user)
+    granted = group_roles.get(str(studio_id))
+    if granted:
+        return granted
 
     # 3. Org-shared -> viewer for any member of the same org.
     user_org_id = getattr(user, "organization_id", None)

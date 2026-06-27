@@ -61,9 +61,6 @@
                                     <div class="flex items-center gap-2">
                                         <Icon name="heroicons:user-group" class="h-5 w-5 text-gray-400" />
                                         <span class="text-sm font-medium text-gray-900">{{ group.name }}</span>
-                                        <UBadge v-if="group.external_provider" size="xs" color="gray">
-                                            {{ group.external_provider }}
-                                        </UBadge>
                                     </div>
                                 </td>
                                 <td class="px-4 py-2 text-xs text-gray-400">
@@ -142,10 +139,14 @@
                                     </USelectMenu>
                                 </td>
                                 <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
-                                    <UBadge v-if="group.external_provider" size="xs" color="primary" variant="subtle">
-                                        {{ group.external_provider }}
-                                    </UBadge>
-                                    <span v-else class="text-gray-400 italic">{{ $t('groupsManager.manual') }}</span>
+                                    <span
+                                        class="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium"
+                                        :class="groupSource(group).cls"
+                                        :title="group.external_provider ? `Managed by ${group.external_provider} sync` : ''"
+                                    >
+                                        <UIcon :name="groupSource(group).icon" class="h-3.5 w-3.5" />
+                                        {{ groupSource(group).label }}
+                                    </span>
                                 </td>
                                 <td class="px-4 py-2 whitespace-nowrap">
                                     <div class="flex gap-2">
@@ -235,7 +236,11 @@
                 <p class="text-sm text-gray-500 mb-4">{{ $t('groupsManager.manageMembersHint') }}</p>
 
                 <!-- Add member -->
-                <div v-if="useCan('manage_groups')" class="flex gap-2 mb-4">
+                <div
+                    v-if="useCan('manage_groups')"
+                    class="flex gap-2 mb-4"
+                    :title="selectedGroup?.external_provider ? `Managed by ${selectedGroup.external_provider} sync` : ''"
+                >
                     <USelectMenu
                         v-model="memberToAdd"
                         :options="addableMemberOptions"
@@ -245,11 +250,12 @@
                         :placeholder="$t('groupsManager.addMemberPlaceholder')"
                         class="flex-1"
                         size="sm"
+                        :disabled="!!selectedGroup?.external_provider"
                     />
                     <UButton
                         color="primary"
                         size="sm"
-                        :disabled="!memberToAdd"
+                        :disabled="!memberToAdd || !!selectedGroup?.external_provider"
                         @click="addMember"
                     >
                         {{ $t('groupsManager.add') }}
@@ -293,6 +299,8 @@
                             size="xs"
                             color="red"
                             icon="i-heroicons-x-mark"
+                            :disabled="!!selectedGroup?.external_provider"
+                            :title="selectedGroup?.external_provider ? `Managed by ${selectedGroup.external_provider} sync` : ''"
                             @click="removeMember(member.user_id || member.membership_id || '')"
                         />
                     </div>
@@ -351,6 +359,26 @@ interface RoleInfo {
 function cap(name?: string): string {
     if (!name) return ''
     return name.charAt(0).toUpperCase() + name.slice(1)
+}
+
+// Where a group came from. external_provider is free-text set by the directory
+// sync (AD/LDAP/Okta/SCIM); null/empty = an in-app (Local) group.
+interface SourceBadge {
+    label: string
+    icon: string
+    cls: string
+}
+const BLUE_CLS = 'text-[#2F6F8B] bg-[#E4EEF2]'
+const AMBER_CLS = 'text-[#9A6B1E] bg-[#F7ECD6]'
+const LOCAL_CLS = 'text-[#9a958c] bg-[#F0EEE6]'
+function groupSource(group: GroupData): SourceBadge {
+    const provider = (group.external_provider || '').toLowerCase()
+    if (!provider) return { label: 'Local', icon: 'i-heroicons-user-group', cls: LOCAL_CLS }
+    if (provider.includes('scim')) return { label: 'SCIM', icon: 'i-heroicons-shield-check', cls: AMBER_CLS }
+    if (provider.includes('okta')) return { label: 'Okta', icon: 'i-heroicons-shield-check', cls: BLUE_CLS }
+    if (provider.includes('ldap')) return { label: 'LDAP', icon: 'i-heroicons-shield-check', cls: BLUE_CLS }
+    if (provider.includes('azure') || provider.includes('ad')) return { label: 'AD', icon: 'i-heroicons-shield-check', cls: BLUE_CLS }
+    return { label: 'Synced', icon: 'i-heroicons-shield-check', cls: BLUE_CLS }
 }
 
 // In-table selects render as plain badges, not form fields: borderless, a

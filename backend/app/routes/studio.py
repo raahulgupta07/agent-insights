@@ -44,7 +44,7 @@ from app.schemas.studio import (
     StudioResponse,
     StudioUpdate,
 )
-from app.services.studio_access import resolve_studio_access
+from app.services.studio_access import resolve_studio_access, group_granted_studio_roles
 
 router = APIRouter(tags=["studios"])
 
@@ -360,12 +360,21 @@ async def list_studios(
     )
     member_ids = [row[0] for row in member_ids_result.all()]
 
+    # Group-granted studios (HYBRID_GROUP_ACCESS): a studio shared to one of the
+    # caller's groups (incl. AD/LDAP-synced) is visible here too, so a shared
+    # agent auto-appears in the studios list AND the chat agent dropdown (both
+    # source from this endpoint). Empty when the flag is off.
+    group_roles = await group_granted_studio_roles(db, current_user)
+    group_ids = list(group_roles.keys())
+
     visible = or_(
         Studio.owner_user_id == uid,
         Studio.share_scope == "org",
     )
     if member_ids:
         visible = or_(visible, Studio.id.in_(member_ids))
+    if group_ids:
+        visible = or_(visible, Studio.id.in_(group_ids))
 
     result = await db.execute(
         select(Studio)
@@ -682,6 +691,200 @@ async def remove_member(
     member.deleted_at = datetime.utcnow()
     await db.commit()
     return {"studio_id": str(studio_id), "user_id": str(user_id), "removed": True}
+
+
+# --------------------------------------------------------------------------- #
+# GROUP GRANTS (HYBRID_GROUP_ACCESS): share a studio to a GROUP. Reuses the
+# generic ResourceGrant table (resource_type='studio', principal_type='group').
+# Owner-only mutate; viewer+ may list. No-op surface (404/empty) when flag off.
+# --------------------------------------------------------------------------- #
+def _ensure_group_access() -> None:
+    from app.settings.hybrid_flags import flags
+
+    if not flags.GROUP_ACCESS:
+        raise AppError.not_found(
+            ErrorCode.ENTITY_NOT_FOUND, "Group access is not enabled."
+        )
+
+
+_GRANT_PERMS = ("read", "write")
+
+
+class GroupGrantRequest(BaseModel):
+    group_id: str
+    permission: str = "read"  # 'read' -> viewer, 'write' -> editor
+
+
+@router.get("/studios/{studio_id}/group-grants")
+async def list_group_grants(
+    studio_id: str,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+) -> list[dict]:
+    """List the groups this studio is shared to (viewer+). [] when flag off."""
+    _ensure_enabled()
+    from app.settings.hybrid_flags import flags
+
+    if not flags.GROUP_ACCESS:
+        return []
+    await _require_access(db, studio_id, current_user, minimum="viewer")
+
+    from app.models.resource_grant import ResourceGrant
+    from app.models.group import Group
+    from app.models.group_membership import GroupMembership
+    from sqlalchemy import func
+
+    rows = await db.execute(
+        select(ResourceGrant).where(
+            ResourceGrant.resource_type == "studio",
+            ResourceGrant.resource_id == str(studio_id),
+            ResourceGrant.principal_type == "group",
+            ResourceGrant.deleted_at.is_(None),
+        )
+    )
+    grants = rows.scalars().all()
+    if not grants:
+        return []
+
+    gids = [g.principal_id for g in grants]
+    groups_res = await db.execute(
+        select(Group).where(Group.id.in_(gids), Group.deleted_at.is_(None))
+    )
+    groups_by_id = {str(g.id): g for g in groups_res.scalars().all()}
+
+    counts_res = await db.execute(
+        select(GroupMembership.group_id, func.count(GroupMembership.id))
+        .where(
+            GroupMembership.group_id.in_(gids),
+            GroupMembership.deleted_at.is_(None),
+        )
+        .group_by(GroupMembership.group_id)
+    )
+    count_by_gid = {str(gid): int(c) for gid, c in counts_res.all()}
+
+    out = []
+    for gr in grants:
+        g = groups_by_id.get(str(gr.principal_id))
+        if g is None:
+            continue  # group deleted out from under the grant — skip
+        perms = {str(p).lower() for p in (gr.permissions or [])}
+        permission = "write" if perms & {"write", "edit", "manage"} else "read"
+        out.append({
+            "group_id": str(g.id),
+            "name": g.name,
+            "permission": permission,
+            "role": "editor" if permission == "write" else "viewer",
+            "member_count": count_by_gid.get(str(g.id), 0),
+            "external_provider": g.external_provider,
+        })
+    return out
+
+
+@router.post("/studios/{studio_id}/group-grants")
+async def add_group_grant(
+    studio_id: str,
+    payload: GroupGrantRequest,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+) -> dict:
+    """Share a studio to a group (owner only). Idempotent upsert of permission."""
+    _ensure_enabled()
+    _ensure_group_access()
+    await _require_access(db, studio_id, current_user, minimum="owner")
+
+    permission = (payload.permission or "read").lower()
+    if permission not in _GRANT_PERMS:
+        raise AppError.bad_request(
+            ErrorCode.VALIDATION, "permission must be 'read' or 'write'."
+        )
+
+    from app.models.group import Group
+    from app.models.resource_grant import ResourceGrant
+
+    # Group must exist in THIS org.
+    grp = await db.execute(
+        select(Group).where(
+            Group.id == payload.group_id,
+            Group.organization_id == str(organization.id),
+            Group.deleted_at.is_(None),
+        )
+    )
+    group = grp.scalar_one_or_none()
+    if group is None:
+        raise AppError.not_found(
+            ErrorCode.ENTITY_NOT_FOUND, "No group with that id in this organization."
+        )
+
+    # Reuse an existing (incl. soft-deleted) grant row -> idempotent.
+    existing = await db.execute(
+        select(ResourceGrant).where(
+            ResourceGrant.resource_type == "studio",
+            ResourceGrant.resource_id == str(studio_id),
+            ResourceGrant.principal_type == "group",
+            ResourceGrant.principal_id == str(payload.group_id),
+        )
+    )
+    # Permissions stored as a JSON list (ResourceGrant.permissions). "read" =>
+    # viewer, "write" => editor (resolver maps write/edit/manage -> editor).
+    perm_list = ["read", "write"] if permission == "write" else ["read"]
+
+    grant = existing.scalar_one_or_none()
+    if grant is not None:
+        grant.permissions = perm_list
+        grant.deleted_at = None
+    else:
+        grant = ResourceGrant(
+            organization_id=str(organization.id),
+            resource_type="studio",
+            resource_id=str(studio_id),
+            principal_type="group",
+            principal_id=str(payload.group_id),
+            permissions=perm_list,
+        )
+        db.add(grant)
+
+    await db.commit()
+    return {
+        "studio_id": str(studio_id),
+        "group_id": str(payload.group_id),
+        "permission": permission,
+        "granted": True,
+    }
+
+
+@router.delete("/studios/{studio_id}/group-grants/{group_id}")
+async def remove_group_grant(
+    studio_id: str,
+    group_id: str,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+) -> dict:
+    """Revoke a studio's group share (owner only, soft-delete)."""
+    _ensure_enabled()
+    _ensure_group_access()
+    await _require_access(db, studio_id, current_user, minimum="owner")
+
+    from app.models.resource_grant import ResourceGrant
+
+    result = await db.execute(
+        select(ResourceGrant).where(
+            ResourceGrant.resource_type == "studio",
+            ResourceGrant.resource_id == str(studio_id),
+            ResourceGrant.principal_type == "group",
+            ResourceGrant.principal_id == str(group_id),
+            ResourceGrant.deleted_at.is_(None),
+        )
+    )
+    grant = result.scalar_one_or_none()
+    if grant is None:
+        raise AppError.not_found(ErrorCode.ENTITY_NOT_FOUND, "Group grant not found.")
+
+    grant.deleted_at = datetime.utcnow()
+    await db.commit()
+    return {"studio_id": str(studio_id), "group_id": str(group_id), "removed": True}
 
 
 # --------------------------------------------------------------------------- #

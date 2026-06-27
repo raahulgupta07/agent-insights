@@ -14,9 +14,11 @@
                 <span v-if="savingScope" class="text-[10px] text-[#9a958c] inline-flex items-center gap-1"><Spinner class="h-3 w-3" /> saving…</span>
             </div>
             <p class="text-[11px] text-[#6b6b6b] mb-3">Current access: <span class="font-medium text-[#1f2328]">{{ scopeLabel }}</span></p>
+
+            <!-- OpenWebUI-style 2-state: Private vs Public. Link is an advanced option below. -->
             <div class="space-y-2">
                 <label
-                    v-for="opt in scopeOptions"
+                    v-for="opt in primaryScopeOptions"
                     :key="opt.value"
                     class="flex items-start gap-2 rounded-xl border p-2.5 transition-colors"
                     :class="[
@@ -32,29 +34,124 @@
                         class="mt-0.5 text-[#C2541E] focus:ring-[#C2541E]"
                         @change="setScope(opt.value)"
                     />
-                    <span>
-                        <span class="block text-xs font-medium text-[#1f2328]">{{ opt.label }}</span>
-                        <span class="block text-[11px] text-[#9a958c]">{{ opt.hint }}</span>
+                    <span class="flex items-start gap-1.5">
+                        <UIcon :name="opt.icon" class="w-4 h-4 mt-0.5 shrink-0 text-[#9a958c]" />
+                        <span>
+                            <span class="block text-xs font-medium text-[#1f2328]">{{ opt.label }}</span>
+                            <span class="block text-[11px] text-[#9a958c]">{{ opt.hint }}</span>
+                        </span>
                     </span>
                 </label>
             </div>
 
-            <!-- Share link (when scope === link and a token exists) -->
-            <div v-if="scope === 'link' && shareToken" class="mt-3">
-                <label class="block text-[11px] font-medium text-[#6b6b6b] mb-1">Share link</label>
-                <div class="flex items-center gap-2">
-                    <UInput :model-value="shareUrl" readonly size="sm" class="flex-1" @focus="(e: any) => e.target.select()" />
-                    <UButton color="gray" variant="outline" size="xs" icon="i-heroicons-clipboard" @click="copyLink">Copy</UButton>
+            <!-- Advanced: share-by-link (anyone with the link, no sign-in) -->
+            <div class="mt-3 pt-3 border-t border-[#F0EEE6]">
+                <button
+                    type="button"
+                    class="inline-flex items-center gap-1 text-[11px] font-medium text-[#9a958c] hover:text-[#6b6b6b]"
+                    @click="showLinkAdvanced = !showLinkAdvanced"
+                >
+                    <UIcon :name="showLinkAdvanced ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'" class="w-3.5 h-3.5" />
+                    Advanced — share by link
+                    <span v-if="scope === 'link'" class="ml-1 text-[9px] uppercase tracking-wide text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">active</span>
+                </button>
+
+                <div v-if="showLinkAdvanced" class="mt-2 rounded-xl border border-[#E9E0D3] bg-[#FAF8F3] p-2.5">
+                    <label
+                        class="flex items-start gap-2 cursor-pointer"
+                        :class="canEdit ? '' : 'opacity-70 cursor-default'"
+                    >
+                        <input
+                            type="radio"
+                            :value="'link'"
+                            :checked="scope === 'link'"
+                            :disabled="!canEdit || savingScope"
+                            class="mt-0.5 text-[#C2541E] focus:ring-[#C2541E]"
+                            @change="setScope('link')"
+                        />
+                        <span>
+                            <span class="block text-xs font-medium text-[#1f2328]">Link — anyone with the link</span>
+                            <span class="block text-[11px] text-[#9a958c]">Share a link; no sign-in needed to view. Bypasses members & groups.</span>
+                        </span>
+                    </label>
+
+                    <!-- Share link (when scope === link and a token exists) -->
+                    <div v-if="scope === 'link' && shareToken" class="mt-3">
+                        <label class="block text-[11px] font-medium text-[#6b6b6b] mb-1">Share link</label>
+                        <div class="flex items-center gap-2">
+                            <UInput :model-value="shareUrl" readonly size="sm" class="flex-1" @focus="(e: any) => e.target.select()" />
+                            <UButton color="gray" variant="outline" size="xs" icon="i-heroicons-clipboard" @click="copyLink">Copy</UButton>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- MEMBERS (only when Scoped) -->
+        <!-- ACCESS (only when Private): groups + people -->
         <div v-if="scope === 'private'" class="rounded-2xl border border-[#E9E0D3] bg-white p-4 mb-3">
-            <h3 class="text-sm font-semibold text-[#1f2328] flex items-center gap-1.5 mb-1" style="font-family: 'Spectral', ui-serif, Georgia, serif">
-                <UIcon name="i-heroicons-users" class="w-4 h-4 text-[#C2541E]" /> Members
-            </h3>
-            <p class="text-[11px] text-[#6b6b6b] mb-3">Only these people can open and use the agent.</p>
+            <div class="flex items-center justify-between mb-1">
+                <h3 class="text-sm font-semibold text-[#1f2328] flex items-center gap-1.5" style="font-family: 'Spectral', ui-serif, Georgia, serif">
+                    <UIcon name="i-heroicons-users" class="w-4 h-4 text-[#C2541E]" /> Access
+                </h3>
+                <button
+                    v-if="canEdit && groupAccessEnabled"
+                    type="button"
+                    class="inline-flex items-center gap-1 text-[11px] font-semibold text-[#C2541E] hover:text-[#A8330F]"
+                    @click="openPicker"
+                >
+                    <UIcon name="i-heroicons-plus" class="w-3.5 h-3.5" /> Add access
+                </button>
+            </div>
+            <p class="text-[11px] text-[#6b6b6b] mb-3">Groups and people who can open and use the agent.</p>
+
+            <!-- GROUPS (HYBRID_GROUP_ACCESS) -->
+            <div v-if="groupAccessEnabled" class="mb-4">
+                <span class="text-[10px] uppercase tracking-wide text-[#9a958c] font-medium">Groups</span>
+                <div v-if="loadingGrants" class="flex items-center py-3 text-[#9a958c]">
+                    <Spinner class="h-3.5 w-3.5" /><span class="ms-2 text-[11px]">Loading…</span>
+                </div>
+                <ul v-else-if="groupGrants.length" class="mt-1.5 divide-y divide-[#F0EEE6] border border-[#F0EEE6] rounded-xl overflow-hidden">
+                    <li v-for="g in groupGrants" :key="g.group_id" class="flex items-center justify-between px-3 py-2 bg-white">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <UIcon
+                                :name="g.external_provider ? 'i-heroicons-shield-check' : 'i-heroicons-user-group'"
+                                class="w-4 h-4 shrink-0"
+                                :class="g.external_provider ? 'text-[#2F6F8B]' : 'text-[#9a958c]'"
+                            />
+                            <span class="text-xs font-medium text-[#1f2328] truncate">{{ g.name }}</span>
+                            <span class="text-[10px] text-[#9a958c] shrink-0">·{{ g.member_count }}</span>
+                            <span
+                                v-if="g.external_provider"
+                                class="text-[9px] uppercase tracking-wide text-[#2F6F8B] bg-[#E4EEF2] px-1.5 py-0.5 rounded shrink-0"
+                            >AD</span>
+                        </div>
+                        <div class="flex items-center gap-2 shrink-0">
+                            <USelectMenu
+                                v-if="canEdit"
+                                :model-value="g.permission"
+                                :options="permOptions"
+                                value-attribute="value"
+                                option-attribute="label"
+                                size="2xs"
+                                class="w-24"
+                                @update:model-value="(p: string) => changeGroupPerm(g, p)"
+                            />
+                            <span v-else class="text-[11px] text-[#9a958c]">{{ g.permission === 'write' ? 'Editor' : 'Viewer' }}</span>
+                            <button
+                                v-if="canEdit"
+                                class="text-[#9a958c] hover:text-red-500"
+                                title="Revoke group access"
+                                @click="revokeGroup(g)"
+                            >
+                                <UIcon name="i-heroicons-x-mark" class="w-4 h-4" />
+                            </button>
+                        </div>
+                    </li>
+                </ul>
+                <p v-else class="mt-1.5 text-[11px] text-[#9a958c]">No groups yet — use <b>Add access</b> to share with a team or AD group.</p>
+            </div>
+
+            <span v-if="groupAccessEnabled" class="text-[10px] uppercase tracking-wide text-[#9a958c] font-medium">People</span>
 
             <!-- Add member -->
             <div v-if="canEdit" class="flex items-center gap-2 mb-3">
@@ -157,6 +254,32 @@
             </ul>
         </div>
 
+        <!-- DANGER ZONE (owner only) — merged in from the old Members & Share tab -->
+        <div v-if="isOwner" class="mt-8 pt-4 border-t border-[#E9E0D3]">
+            <UButton color="red" variant="outline" size="xs" icon="i-heroicons-trash" :loading="deleting" @click="emit('delete-studio')">
+                {{ $t('studio.deleteStudio') }}
+            </UButton>
+        </div>
+
+        <!-- Add-access group picker (HYBRID_GROUP_ACCESS) -->
+        <StudioAccessPicker
+            v-if="groupAccessEnabled"
+            v-model="showPicker"
+            :studio-id="studioId"
+            :organization-id="orgId"
+            :granted-group-ids="grantedGroupIds"
+            @added="loadGroupGrants"
+            @create-group="onCreateGroup"
+        />
+
+        <!-- Inline create-group (P5) -->
+        <StudioCreateGroup
+            v-if="groupAccessEnabled"
+            v-model="showCreateGroup"
+            :organization-id="orgId"
+            @created="onGroupCreated"
+        />
+
     </div>
 </template>
 
@@ -179,11 +302,14 @@ const props = defineProps<{
     sources: Source[]
     canEdit: boolean
     ownerUserId: string
+    isOwner?: boolean
+    deleting?: boolean
 }>()
 
 const emit = defineEmits<{
     'share-updated': [payload: { share_scope: string; share_token: string | null }]
     'config-updated': [config: Record<string, any>]
+    'delete-studio': []
 }>()
 
 const { t } = useI18n()
@@ -194,12 +320,15 @@ const scope = ref(props.studio?.share_scope || 'private')
 const shareToken = ref<string | null>(props.studio?.share_token ?? null)
 const savingScope = ref(false)
 
-const scopeOptions = [
-    { value: 'org', label: 'Master — everyone in the org', hint: 'Any member of your organization can open and use this agent.' },
-    { value: 'private', label: 'Scoped — only chosen members', hint: 'Only people you add below can use it.' },
-    { value: 'link', label: 'Link — anyone with the link', hint: 'Share a link; no sign-in needed to view.' },
+// OpenWebUI-style 2-state primary toggle. 'private' = members + groups below;
+// 'org' surfaces as "Public" (everyone in the org). 'link' lives in Advanced.
+const primaryScopeOptions = [
+    { value: 'private', label: 'Private — members & groups', hint: 'Only the people and groups you grant below can open and use this agent.', icon: 'i-heroicons-lock-closed' },
+    { value: 'org', label: 'Public — everyone in the org', hint: 'Any member of your organization can open and use this agent.', icon: 'i-heroicons-globe-alt' },
 ]
-const scopeLabel = computed(() => scopeOptions.find(o => o.value === scope.value)?.label.split(' — ')[0] || scope.value)
+const showLinkAdvanced = ref((props.studio?.share_scope || 'private') === 'link')
+const scopeLabelMap: Record<string, string> = { private: 'Private', org: 'Public', link: 'Link' }
+const scopeLabel = computed(() => scopeLabelMap[scope.value] || scope.value)
 
 const shareUrl = computed(() => {
     if (!shareToken.value) return ''
@@ -319,6 +448,86 @@ const removeMember = async (m: Member) => {
     }
 }
 
+// ---- GROUP ACCESS (HYBRID_GROUP_ACCESS) --------------------------------
+const { organization, ensureOrganization } = useOrganization()
+const orgId = computed(() => organization.value?.id || '')
+const groupAccessEnabled = ref(false)
+const groupGrants = ref<any[]>([])
+const loadingGrants = ref(false)
+const showPicker = ref(false)
+const permOptions = [
+    { value: 'read', label: 'Viewer' },
+    { value: 'write', label: 'Editor' },
+]
+const grantedGroupIds = computed(() => groupGrants.value.map(g => String(g.group_id)))
+
+const loadGroupAccessFlag = async () => {
+    try {
+        const { data } = await useMyFetch<any[]>('/organization/hybrid-flags')
+        const rows = (data.value as any[]) || []
+        const row = rows.find(r => r?.env_name === 'HYBRID_GROUP_ACCESS')
+        groupAccessEnabled.value = !!row?.effective
+    } catch {
+        groupAccessEnabled.value = false
+    }
+}
+
+const loadGroupGrants = async () => {
+    if (!groupAccessEnabled.value) return
+    loadingGrants.value = true
+    try {
+        const { data, error } = await useMyFetch<any[]>(`/studios/${props.studioId}/group-grants`, { method: 'GET' })
+        if (error?.value) throw error.value
+        groupGrants.value = (data.value as any[]) || []
+    } catch (e) {
+        console.error('Failed to load group grants:', e)
+        groupGrants.value = []
+    } finally {
+        loadingGrants.value = false
+    }
+}
+
+const openPicker = () => { showPicker.value = true }
+
+const changeGroupPerm = async (g: any, permission: string) => {
+    if (!permission || permission === g.permission) return
+    try {
+        const { error } = await useMyFetch(`/studios/${props.studioId}/group-grants`, {
+            method: 'POST',
+            body: { group_id: g.group_id, permission },
+        })
+        if (error?.value) throw error.value
+        await loadGroupGrants()
+    } catch (e) {
+        console.error('Failed to change group permission:', e)
+        toast.add({ title: t('studio.actionFailed') || 'Action failed', color: 'red' })
+    }
+}
+
+const revokeGroup = async (g: any) => {
+    if (!window.confirm(`Revoke access for "${g.name}"?`)) return
+    try {
+        const { error } = await useMyFetch(`/studios/${props.studioId}/group-grants/${g.group_id}`, { method: 'DELETE' })
+        if (error?.value) throw error.value
+        toast.add({ title: 'Group access revoked', color: 'green', icon: 'i-heroicons-check-circle' })
+        await loadGroupGrants()
+    } catch (e) {
+        console.error('Failed to revoke group:', e)
+        toast.add({ title: t('studio.actionFailed') || 'Action failed', color: 'red' })
+    }
+}
+
+// Create-group (P5): open the inline modal. On success, refresh the granted
+// list and the picker's group list (picker reloads when reopened).
+const showCreateGroup = ref(false)
+const onCreateGroup = () => { showPicker.value = false; showCreateGroup.value = true }
+const onGroupCreated = async () => {
+    showCreateGroup.value = false
+    // Reopen the picker so the new group shows in its list.
+    await loadGroupGrants()
+    showPicker.value = true
+}
+
 // ---- MODEL -------------------------------------------------------------
 const models = ref<any[]>([])
 const loadingModels = ref(false)
@@ -374,8 +583,11 @@ watch(() => props.studio, (s) => {
     shareToken.value = s?.share_token ?? null
 })
 
-onMounted(() => {
+onMounted(async () => {
     fetchMembers()
     loadModels()
+    await ensureOrganization()
+    await loadGroupAccessFlag()
+    if (groupAccessEnabled.value) await loadGroupGrants()
 })
 </script>
