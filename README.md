@@ -66,6 +66,87 @@ Open `http://<host>:3007`, log in with the admin you set, then **Settings → Mo
 
 ---
 
+## C. Step-by-step install (hand-edited `.env`, no scripted seds)
+
+For an operator who edits `.env` in a text editor and runs Docker by hand.
+
+### 1. Clone
+```bash
+git clone git@github.com:raahulgupta07/rahulai-dash.git
+cd rahulai-dash
+```
+
+### 2. Create your `.env`
+```bash
+cp .env.example .env
+nano .env        # or: vi .env
+```
+
+### 3. Edit only these lines in `.env` (leave everything else as-is)
+
+| Line / key | Default | Set it to |
+|---|---|---|
+| `ENVIRONMENT` | `development` | `production` |
+| `APP_PORT` | `3007` | the host port for the web app (any free port) |
+| `POSTGRES_PORT` | `5439` | host port for the database (change only if 5439 is busy) |
+| `REDIS_PORT` | `6399` | host port for the cache (change only if 6399 is busy) |
+| `DASH_BASE_URL` | `http://localhost:3007` | `http://YOUR_SERVER_IP:<APP_PORT>` — **must match APP_PORT** |
+| `DASH_ENCRYPTION_KEY` | *(empty)* | **leave empty** — auto-generated + persisted on first boot |
+| `DASH_ADMIN_EMAIL` | *(commented)* | remove the `#`, set e.g. `admin@cityagent.io` |
+| `DASH_ADMIN_PASSWORD` | *(commented)* | remove the `#`, set a strong password |
+| `DASH_ADMIN_NAME` | *(commented)* | remove the `#`, set e.g. `Administrator` |
+
+**Ports:** only change the host (left) number — the container's internal ports (`3000` app, `5432` db, `6379` redis) are fixed and must NOT change. If you change `APP_PORT`, change `DASH_BASE_URL` to match.
+**Commented lines:** a leading `#` means the line is ignored — delete the `#` to activate `DASH_ADMIN_*`.
+**Encryption key:** leaving it empty is safe now — the app generates one on first boot and stores it on the durable `ca_uploads` volume, so it survives restarts/rebuilds. (For a critical prod box you may still paste a fixed key here; an explicit key always wins.)
+
+Save in nano: `Ctrl+O`, `Enter`, `Ctrl+X`.
+
+### 4. Pre-pull one image (prevents a build-time network flake)
+```bash
+docker pull docker/dockerfile:1.7
+# if it errors, just run it again until it succeeds
+```
+
+### 5. Build (first time ~15–25 min)
+```bash
+bash scripts/build.sh
+```
+
+### 6. Start
+```bash
+docker compose -f docker-compose.build.yaml up -d
+```
+
+### 7. Verify
+```bash
+sleep 45
+curl http://localhost:<APP_PORT>/health      # expect: {"status":"ok"}
+```
+
+### 8. Log in + finish in the browser
+1. Open `http://YOUR_SERVER_IP:<APP_PORT>`, log in with the `DASH_ADMIN_*` you set.
+2. **Settings → Models** → paste the **OpenRouter API key** (required; nothing AI works without it).
+3. **Settings → Feature Flags** → enable `HYBRID_USER_GROUPS`, `HYBRID_GROUP_ACCESS`, `HYBRID_STUDIOS` (+ any Intelligence flags).
+
+### Everyday commands
+```bash
+docker compose -f docker-compose.build.yaml ps              # status
+docker compose -f docker-compose.build.yaml logs -f app     # logs
+docker compose -f docker-compose.build.yaml stop            # stop (keeps data)
+docker compose -f docker-compose.build.yaml up -d           # start
+
+# update to newer code later:
+git pull && bash scripts/build.sh
+docker compose -f docker-compose.build.yaml up -d --force-recreate app
+```
+
+### Two rules — never break
+1. Always pass `-f docker-compose.build.yaml` on every command (a plain `docker compose up` = different project = empty DB).
+2. **Never** `docker compose down -v` — the `-v` deletes the database volume (all data gone).
+
+---
+
 ## Deploy
 
 Clean machine, no pre-step, no external image — the runtime base is folded into
