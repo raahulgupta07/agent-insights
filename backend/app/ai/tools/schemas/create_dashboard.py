@@ -38,7 +38,7 @@ class SemanticBlockOutput(BaseModel):
     
     # For text blocks
     content: Optional[str] = None
-    variant: Optional[Literal["title", "subtitle", "paragraph", "insight", "summary"]] = None
+    variant: Optional[Literal["title", "subtitle", "paragraph", "insight", "summary", "callout"]] = None
     
     # For card/section blocks
     title: Optional[str] = None

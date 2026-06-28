@@ -50,6 +50,41 @@ def _derive_auth_sources(user) -> list[str]:
         sources.append("local")
     return sources
 
+
+def _mask_email(email: str | None) -> str | None:
+    """Mask a member email for non-admin viewers: keep first char + domain.
+    'admin@cityagent.io' -> 'a***@cityagent.io'. None/blank passthrough.
+    """
+    if not email or "@" not in email:
+        return email
+    local, _, domain = email.partition("@")
+    head = local[0] if local else ""
+    return f"{head}***@{domain}"
+
+
+def _redact_member_for_viewer(member) -> None:
+    """In-place PII redaction of a member row for a NON-admin viewer who is
+    not this member. Keeps name + role + status + groups (the user's ask);
+    hides email + note + external platforms + login timestamps.
+    """
+    member.email = _mask_email(getattr(member, "email", None))
+    if getattr(member, "user", None) is not None:
+        member.user.email = _mask_email(getattr(member.user, "email", None))
+    # Auth sources / invite plumbing are operator-only signals.
+    member.auth_sources = []
+    if "note" in dir(member):
+        member.note = None
+    if "invite_email_status" in dir(member):
+        member.invite_email_status = None
+    if "invite_expires_at" in dir(member):
+        member.invite_expires_at = None
+    if "last_login" in dir(member):
+        member.last_login = None
+    if "last_seen" in dir(member):
+        member.last_seen = None
+    if "external_platforms" in dir(member):
+        member.external_platforms = []
+
 @router.post("/organizations", response_model=OrganizationSchema)
 async def create_organization(organization: OrganizationCreate, db: AsyncSession = Depends(get_async_db), current_user: User = Depends(current_user)):
     return await organization_service.create_organization(db, organization, current_user)
@@ -144,6 +179,21 @@ async def get_members(organization_id: str, db: AsyncSession = Depends(get_async
     user_by_membership_id = {m.id: m.user for m in result.scalars().all()}
     for member in members:
         member.auth_sources = _derive_auth_sources(user_by_membership_id.get(member.id))
+
+    # PII redaction: a non-admin viewer sees other members' name/role/status/
+    # groups but NOT their email / note / login info. Own row stays full.
+    from app.core.permission_resolver import resolve_permissions, FULL_ADMIN
+    resolved = await resolve_permissions(db, str(current_user.id), str(organization.id))
+    is_admin = (
+        FULL_ADMIN in resolved.org_permissions
+        or resolved.has_org_permission("manage_members")
+        or bool(getattr(current_user, "is_superuser", False))
+    )
+    if not is_admin:
+        for member in members:
+            member_user_id = getattr(getattr(member, "user", None), "id", None)
+            if str(member_user_id) != str(current_user.id):
+                _redact_member_for_viewer(member)
     return members
 
 @router.delete("/organizations/{organization_id}/members/{membership_id}", status_code=204)

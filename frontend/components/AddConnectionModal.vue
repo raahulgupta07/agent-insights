@@ -115,20 +115,68 @@
           @saved="handleToolProviderSaved"
           @cancel="backToSelect"
         />
-        <ConnectForm
-          v-else
-          @success="handleConnectionSuccess"
-          :initialType="selectedDataSource?.type"
-          :initialName="selectedDataSource?.title"
-          :allowNameEdit="true"
-          :forceShowSystemCredentials="true"
-          :showRequireUserAuthToggle="true"
-          :initialRequireUserAuth="false"
-          :showTestButton="true"
-          :showLLMToggle="false"
-          :hideHeader="true"
-          mode="create_connection_only"
-        />
+        <template v-else>
+          <!-- Visibility selector — any member can choose who can use this connection.
+               Hidden when deferSharing: created Private, shared later from the table. -->
+          <div v-if="!deferSharing" class="mb-4">
+            <div class="text-xs font-medium text-[#6b6b6b] mb-1.5">Who can use this connection?</div>
+            <div class="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                @click="visibility = 'private'"
+                :class="[
+                  'rounded-lg border px-3 py-2 text-start transition',
+                  visibility === 'private' ? 'border-[#1F6F8B] bg-[#E4F0F4]' : 'border-[#E9E0D3] bg-white hover:border-[#1F6F8B]'
+                ]"
+              >
+                <div class="text-[13px] font-semibold text-[#1f2328]">🔒 Private</div>
+                <div class="text-[11px] text-[#6b6b6b]">Only you</div>
+              </button>
+              <button
+                type="button"
+                @click="visibility = 'shared'"
+                :class="[
+                  'rounded-lg border px-3 py-2 text-start transition',
+                  visibility === 'shared' ? 'border-[#1F6F8B] bg-[#E4F0F4]' : 'border-[#E9E0D3] bg-white hover:border-[#1F6F8B]'
+                ]"
+              >
+                <div class="text-[13px] font-semibold text-[#1f2328]">👥 Shared</div>
+                <div class="text-[11px] text-[#6b6b6b]">Specific people / groups</div>
+              </button>
+              <button
+                type="button"
+                @click="visibility = 'org'"
+                :class="[
+                  'rounded-lg border px-3 py-2 text-start transition',
+                  visibility === 'org' ? 'border-[#1F6F8B] bg-[#E4F0F4]' : 'border-[#E9E0D3] bg-white hover:border-[#1F6F8B]'
+                ]"
+              >
+                <div class="text-[13px] font-semibold text-[#1f2328]">🌐 Org-wide</div>
+                <div class="text-[11px] text-[#6b6b6b]">Everyone in the org</div>
+              </button>
+            </div>
+            <p v-if="visibility === 'shared'" class="mt-2 text-[11px] text-[#6b6b6b]">
+              After it's created, you'll pick exactly who can use it.
+            </p>
+          </div>
+
+          <ConnectForm
+            @success="handleConnectionSuccess"
+            :scope="scope"
+            :visibility="visibility"
+            :studioId="studioId"
+            :initialType="selectedDataSource?.type"
+            :initialName="selectedDataSource?.title"
+            :allowNameEdit="true"
+            :forceShowSystemCredentials="true"
+            :showRequireUserAuthToggle="true"
+            :initialRequireUserAuth="false"
+            :showTestButton="true"
+            :showLLMToggle="false"
+            :hideHeader="true"
+            mode="create_connection_only"
+          />
+        </template>
       </div>
 
       <!-- Step 3: Indexing progress -->
@@ -204,11 +252,33 @@ import { isIndexingActive, type ConnectionIndexing } from '~/composables/useConn
 const props = defineProps<{
   modelValue: boolean
   initialSelectedType?: string
+  canCreateShared?: boolean
+  // When set, a personal connector created here is bound to this studio/agent
+  // (sent as studio_id) so it appears in that agent's "My Connectors" tab.
+  studioId?: string
+  // Per-agent connector catalog: show only "Individual" (own-credential) types —
+  // exclude admin-OAuth connectors that need an org-level app registration.
+  individualOnly?: boolean
+  // Create the connection as PRIVATE and skip the visibility selector; sharing
+  // is set afterward from the connectors table.
+  deferSharing?: boolean
 }>()
+
+// 3-level visibility — any member can self-service pick the level:
+//   private = only me · shared = specific users/groups · org = everyone.
+// Default to 'org' on the admin connectors page (canCreateShared), else 'private'
+// (studio / personal context). Legacy `scope` is derived for the backend
+// (private → personal, shared/org → shared); the backend uses `visibility` as
+// the source of truth and derives the rest.
+const visibility = ref<'private' | 'shared' | 'org'>(props.deferSharing ? 'private' : (props.canCreateShared ? 'org' : 'private'))
+const scope = computed<'shared' | 'personal'>(() => (visibility.value === 'private' ? 'personal' : 'shared'))
 
 const emit = defineEmits<{
   (e: 'update:modelValue', value: boolean): void
   (e: 'created', connection: any): void
+  // Fired after a connection is created with visibility='shared' so the parent
+  // can open the grant picker (ManageConnectionAccessModal) for it.
+  (e: 'shareRequested', connection: any): void
 }>()
 
 const isOpen = computed({
@@ -258,9 +328,17 @@ const integrationEntries = computed(() =>
   dataSources.value.filter((d: any) => d.is_connection === false)
 )
 
+// Admin-OAuth connector types that need an org-level app registration — hidden
+// from the per-agent "Individual" catalog (individualOnly). Keeps own-credential
+// variants (ms_fabric_user, powerbi_report_server, custom_api) + all DBs/files.
+const ADMIN_OAUTH_TYPES = new Set(['sharepoint', 'onedrive', 'google_drive', 'ms_fabric', 'powerbi', 'mcp'])
+
 const filteredDataSources = computed(() => {
   // Single grid combining both groups (existing UI behaviour).
-  const all = [...dataSourceEntries.value, ...integrationEntries.value]
+  let all = [...dataSourceEntries.value, ...integrationEntries.value]
+  if (props.individualOnly) {
+    all = all.filter((ds: any) => !ADMIN_OAUTH_TYPES.has(ds.type))
+  }
   if (!searchQuery.value.trim()) return all
   const query = searchQuery.value.toLowerCase()
   return all.filter((ds: any) =>
@@ -344,6 +422,7 @@ function handleToolProviderSaved(connection: any) {
     color: 'green',
   })
   emit('created', connection)
+  if (visibility.value === 'shared' && connection) emit('shareRequested', connection)
   isOpen.value = false
 }
 
@@ -427,6 +506,7 @@ function finishConnect() {
   // schema is in place.
   if (createdConnection.value) {
     emit('created', createdConnection.value)
+    if (visibility.value === 'shared') emit('shareRequested', createdConnection.value)
     if (indexingState.value?.status === 'completed') {
       toast.add({
         title: t('data.connectionCreated'),
@@ -441,6 +521,7 @@ function finishConnect() {
 
 function reset() {
   step.value = 'select'
+  visibility.value = props.deferSharing ? 'private' : (props.canCreateShared ? 'org' : 'private')
   searchQuery.value = ''
   selectedDataSource.value = null
   createdConnection.value = null

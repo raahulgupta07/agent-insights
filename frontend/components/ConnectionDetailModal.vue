@@ -332,7 +332,7 @@
   </UModal>
 
   <!-- Edit Connection Modal -->
-  <UModal v-model="showEditModal" :ui="{ width: 'sm:max-w-xl' }">
+  <UModal v-model="showEditModal" :ui="{ width: 'sm:max-w-xl lg:max-w-5xl' }">
     <UCard>
       <template #header>
         <div class="flex items-center justify-between">

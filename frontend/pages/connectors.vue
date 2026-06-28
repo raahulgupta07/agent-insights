@@ -14,7 +14,7 @@
                     </p>
                 </div>
                 <div class="flex items-center gap-3 shrink-0">
-                    <div v-if="canCreateDataSource && connections.length > 0" class="text-center">
+                    <div v-if="connections.length > 0" class="text-center">
                         <div class="relative w-[54px] h-[54px] mx-auto">
                             <svg width="54" height="54" style="transform:rotate(-90deg)">
                                 <circle cx="27" cy="27" r="22" stroke="#ECE7E0" stroke-width="6" fill="none" />
@@ -25,7 +25,6 @@
                         <div class="text-[9px] uppercase tracking-wide text-[#9a958c] mt-0.5">connected</div>
                     </div>
                     <button
-                        v-if="canCreateDataSource"
                         @click="selectedDataSourceType = undefined; showAddConnectionModal = true"
                         class="inline-flex items-center gap-2 rounded-lg bg-[#C2541E] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#A8330F] transition-colors whitespace-nowrap shrink-0"
                     >
@@ -35,20 +34,7 @@
                 </div>
             </div>
 
-            <!-- Admin-only gate -->
-            <div v-if="!canCreateDataSource" class="flex flex-col items-center justify-center py-20 text-center">
-                <span class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#E4F0F4] border border-[#E9E0D3] text-[#1F6F8B]">
-                    <UIcon name="heroicons-lock-closed" class="w-6 h-6" />
-                </span>
-                <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">Admins only</h3>
-                <p class="mt-1 text-sm text-[#9a958c] max-w-md leading-relaxed">
-                    Connectors are configured by your organization admins. You can use the configured
-                    sources by pinning them inside a Studio.
-                </p>
-            </div>
-
-            <template v-else>
-                <!-- Loading -->
+            <!-- Loading -->
                 <div v-if="loading" class="flex items-center justify-center py-20">
                     <Spinner class="w-6 h-6 text-[#1F6F8B] animate-spin" />
                 </div>
@@ -79,41 +65,47 @@
                         </button>
                     </div>
 
-                    <!-- Connection cards (when connections exist) -->
+                    <!-- ALL CONNECTORS — shared table -->
                     <div v-if="connections.length > 0" class="relative mt-5 border border-[#E9E0D3] rounded-2xl bg-white p-4 mb-6">
-                        <span class="absolute -top-2.5 left-4 bg-[#2B2A26] text-white text-[9.5px] font-semibold px-2.5 py-0.5 rounded-full tracking-wide">CONNECTIONS</span>
-                        <p class="text-xs text-[#6b6b6b] mt-1 mb-3">Live data sources configured for your organization. Open one to manage or test it:</p>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                            <button
-                                v-for="conn in connections"
-                                :key="conn.id"
-                                @click="openConnectionDetail(conn)"
-                                class="flex flex-col gap-3 rounded-xl border border-[#E9E0D3] bg-gradient-to-b from-white to-[#fdfcf9] p-3 text-start cursor-pointer transition hover:border-[#1F6F8B] min-h-[120px]"
-                            >
-                                <div class="flex items-center justify-between gap-2 rounded-lg border border-[#E9E0D3] bg-[#E4F0F4] px-3 py-2">
-                                    <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-white border border-[#E9E0D3]">
-                                        <DataSourceIcon class="h-4" :type="conn.type" />
-                                    </span>
-                                    <span class="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium"
-                                        :class="isConnectionHealthy(conn) ? 'border-[#d7ebde] bg-[#eef6f0] text-[#3f9e6a]' : 'border-red-200 bg-red-50 text-red-600'">
-                                        <span :class="['w-1.5 h-1.5 rounded-full', isConnectionHealthy(conn) ? 'bg-[#3f9e6a]' : 'bg-red-500']"></span>
-                                        {{ isConnectionHealthy(conn) ? 'Connected' : 'Error' }}
-                                    </span>
-                                </div>
-                                <div class="text-[13px] font-semibold text-[#1f2328] truncate">
-                                    {{ conn.name }}
-                                </div>
-                                <p class="text-[11px] text-[#6b6b6b] leading-relaxed capitalize">{{ conn.type }}</p>
-                                <div class="mt-auto border-t border-[#F0EAE0] pt-2 text-[10px] text-[#9a958c] flex items-center gap-1.5">
-                                    <UIcon name="heroicons-film" class="w-3 h-3" />
-                                    Pin in a Studio to use
-                                </div>
-                            </button>
+                        <span class="absolute -top-2.5 left-4 bg-[#2B2A26] text-white text-[9.5px] font-semibold px-2.5 py-0.5 rounded-full tracking-wide">CONNECTORS</span>
+
+                        <!-- Toolbar: filter chips + search -->
+                        <div class="flex flex-wrap items-center justify-between gap-3 mt-1 mb-3">
+                            <div class="inline-flex rounded-lg border border-[#E9E0D3] bg-white p-0.5 text-[11.5px]">
+                                <button
+                                    v-for="f in (['all','mine','shared','org'] as const)"
+                                    :key="f"
+                                    type="button"
+                                    @click="rowFilter = f"
+                                    :class="['px-2.5 py-1 rounded-md transition capitalize', rowFilter === f ? 'bg-[#FBEFE4] text-[#C2541E] font-semibold' : 'text-[#6b6b6b] hover:text-[#1f2328]']"
+                                >{{ f }}</button>
+                            </div>
+                            <div class="relative">
+                                <UIcon name="heroicons-magnifying-glass" class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9a958c]" />
+                                <input
+                                    v-model="search"
+                                    type="text"
+                                    placeholder="Search connectors…"
+                                    class="w-[220px] rounded-lg border border-[#E9E0D3] bg-white pl-8 pr-3 py-1.5 text-[12.5px] text-[#1f2328] placeholder:text-[#9a958c] focus:outline-none focus:border-[#1F6F8B]"
+                                />
+                            </div>
                         </div>
+
+                        <ConnectorsTable
+                            :rows="tableRows"
+                            context="org"
+                            @share="openSharing"
+                            @edit="onEdit"
+                            @delete="onDelete"
+                            @test="onTest"
+                        />
+                        <p v-if="tableRows.length === 0" class="text-xs text-[#9a958c] border border-dashed border-[#E9E0D3] rounded-lg px-3 py-5 text-center mt-2">
+                            No connectors match this filter.
+                        </p>
                     </div>
 
-                    <!-- Empty state - pick a type -->
-                    <div v-else class="relative mt-5 border border-[#E9E0D3] rounded-2xl bg-white p-4 mb-6">
+                    <!-- Empty state - pick a type (no connections at all) -->
+                    <div v-if="connections.length === 0" class="relative mt-5 border border-[#E9E0D3] rounded-2xl bg-white p-4 mb-6">
                         <span class="absolute -top-2.5 left-4 bg-[#2B2A26] text-white text-[9.5px] font-semibold px-2.5 py-0.5 rounded-full tracking-wide">CONNECT A SOURCE</span>
                         <p class="text-xs text-[#6b6b6b] mt-1 mb-3">Pick a data source type to configure your first connection:</p>
                         <DataSourceGrid
@@ -124,7 +116,6 @@
                         />
                     </div>
                 </template>
-            </template>
 
             <!-- Modals -->
             <ConnectionDetailModal
@@ -135,7 +126,22 @@
             <AddConnectionModal
                 v-model="showAddConnectionModal"
                 :initial-selected-type="selectedDataSourceType"
+                :can-create-shared="canCreateDataSource"
+                :individual-only="false"
+                :defer-sharing="true"
                 @created="handleConnectionCreated"
+                @share-requested="onShareRequested"
+            />
+            <!-- Per-row sharing (Private/Shared/Org + grants) -->
+            <ConnectorSharingPanel
+                v-model="showSharing"
+                :connection="sharingConn"
+                @saved="refreshConnections"
+            />
+            <!-- Kept for legacy grant flows (e.g. share-requested from create) -->
+            <ManageConnectionAccessModal
+                v-model="showAccessModal"
+                :connection="accessConnection"
             />
             <UploadSpreadsheetModal
                 :open="showUploadModal"
@@ -149,6 +155,7 @@
 <script lang="ts" setup>
 import ConnectionDetailModal from '~/components/ConnectionDetailModal.vue'
 import AddConnectionModal from '~/components/AddConnectionModal.vue'
+import ManageConnectionAccessModal from '~/components/ManageConnectionAccessModal.vue'
 import UploadSpreadsheetModal from '~/components/data/UploadSpreadsheetModal.vue'
 import DataSourceGrid from '~/components/datasources/DataSourceGrid.vue'
 import DataSourceIcon from '~/components/DataSourceIcon.vue'
@@ -157,6 +164,19 @@ import { useCan } from '~/composables/usePermissions'
 
 const canCreateDataSource = computed(() => useCan('create_data_source'))
 
+const { data: currentUser } = useAuth()
+const currentUserId = computed(() => String((currentUser.value as any)?.id ?? ''))
+function isOwner(conn: any): boolean {
+  return !!conn?.owner_user_id && String(conn.owner_user_id) === currentUserId.value
+}
+// Admin can edit/share/delete any connector; reuses the manage-connections
+// permission (same gate the old "Manage access" affordance used) + superuser.
+const isAdmin = computed(() =>
+  !!(currentUser.value as any)?.is_superuser || canCreateDataSource.value
+)
+
+const toast = useToast()
+
 const loading = ref(false)
 const connections = ref<any[]>([])
 const selectedConnection = ref<any>(null)
@@ -164,6 +184,47 @@ const showConnectionModal = ref(false)
 const showAddConnectionModal = ref(false)
 const showUploadModal = ref(false)
 const selectedDataSourceType = ref<string | undefined>(undefined)
+const showAccessModal = ref(false)
+const accessConnection = ref<any>(null)
+
+// Per-row sharing panel (Private/Shared/Org + grants).
+const showSharing = ref(false)
+const sharingConn = ref<{ id: string; name: string; visibility: string } | null>(null)
+
+// Table filter affordance.
+const search = ref('')
+const rowFilter = ref<'all' | 'mine' | 'shared' | 'org'>('all')
+
+// Rows for the shared <ConnectorsTable context="org" />.
+const tableRows = computed(() => {
+    const q = search.value.trim().toLowerCase()
+    return connections.value
+        .filter((conn: any) => {
+            // Filter chips: mine = I own it; shared = visibility shared;
+            // org = org-wide (no owner / visibility org).
+            const vis = connVisibility(conn)
+            if (rowFilter.value === 'mine' && !isOwner(conn)) return false
+            if (rowFilter.value === 'shared' && vis !== 'shared') return false
+            if (rowFilter.value === 'org' && vis !== 'org') return false
+            if (q) {
+                const hay = `${conn.name ?? ''} ${conn.type ?? ''}`.toLowerCase()
+                if (!hay.includes(q)) return false
+            }
+            return true
+        })
+        .map((conn: any) => ({
+            id: conn.id,
+            name: conn.name,
+            type: conn.type,
+            owner_user_id: conn.owner_user_id ?? null,
+            visibility: connVisibility(conn),
+            active: false,
+            last_synced_at: conn.last_synced_at ?? null,
+            agent_count: conn.agent_count ?? 0,
+            is_org: !conn.owner_user_id,
+            can_edit: isOwner(conn) || isAdmin.value,
+        }))
+})
 
 async function refreshConnections() {
     loading.value = true
@@ -190,6 +251,113 @@ function openConnectionDetail(conn: any) {
     selectedConnection.value = conn
     showConnectionModal.value = true
 }
+function openManageAccess(conn: any) {
+    accessConnection.value = conn
+    showAccessModal.value = true
+}
+
+// Resolve the full fetched connection from a table row (rows carry a subset).
+function connById(row: any): any {
+    return connections.value.find((c: any) => String(c.id) === String(row?.id)) || row
+}
+
+// ── ConnectorsTable row events ───────────────────────────────────────────────
+function openSharing(row: any) {
+    sharingConn.value = { id: row.id, name: row.name, visibility: row.visibility }
+    showSharing.value = true
+}
+function onEdit(row: any) {
+    // Reuse the existing detail/edit modal.
+    openConnectionDetail(connById(row))
+}
+async function onDelete(row: any) {
+    if (!row?.id) return
+    if (!confirm(`Delete connector "${row.name}"? This cannot be undone.`)) return
+    try {
+        const res = await useMyFetch(`/connections/${row.id}`, { method: 'DELETE' })
+        if ((res.error as any)?.value) {
+            toast.add({ title: (res.error as any).value?.data?.detail || 'Failed to delete connector', color: 'red' })
+            return
+        }
+        toast.add({ title: 'Connector deleted', color: 'green' })
+        await refreshConnections()
+    } catch (e: any) {
+        toast.add({ title: e?.data?.detail || e?.message || 'Failed to delete connector', color: 'red' })
+    }
+}
+async function onTest(row: any) {
+    if (!row?.id) return
+    try {
+        const res = await useMyFetch(`/connections/${row.id}/test`, { method: 'POST' })
+        if ((res.error as any)?.value) {
+            toast.add({ title: (res.error as any).value?.data?.detail || 'Connection test failed', color: 'red' })
+            return
+        }
+        const ok = (res.data as any)?.value?.success !== false
+        toast.add({ title: ok ? 'Connection OK' : 'Connection test failed', color: ok ? 'green' : 'red' })
+    } catch (e: any) {
+        toast.add({ title: e?.data?.detail || e?.message || 'Connection test failed', color: 'red' })
+    }
+}
+
+// ── Visibility (3-level: private | shared | org) ─────────────────────────────
+function connVisibility(conn: any): 'private' | 'shared' | 'org' {
+    const v = conn?.visibility
+    if (v === 'private' || v === 'shared' || v === 'org') return v
+    // Fallback: no owner = org-wide; owned = private.
+    return conn?.owner_user_id ? 'private' : 'org'
+}
+function visBadge(conn: any): { label: string; style: string } {
+    switch (connVisibility(conn)) {
+        case 'org':
+            return { label: '🌐 Org-wide', style: 'background:#ECF1EC;color:#2F6F4F;border:1px solid #d4e3d4;' }
+        case 'shared':
+            return { label: '👥 Shared', style: 'background:#E4F0F4;color:#1F6F8B;border:1px solid #cfe2e8;' }
+        default:
+            return { label: '🔒 Private', style: 'background:#FBF3E2;color:#8a6d3b;border:1px solid #ECDCBB;' }
+    }
+}
+
+const visibilityBusyId = ref<string | null>(null)
+
+async function setVisibility(conn: any, level: 'private' | 'shared' | 'org') {
+    if (visibilityBusyId.value) return
+    visibilityBusyId.value = conn.id
+    try {
+        const res = await useMyFetch(`/connections/${conn.id}/visibility`, {
+            method: 'PATCH',
+            body: JSON.stringify({ visibility: level }),
+            headers: { 'Content-Type': 'application/json' },
+        })
+        if ((res.error as any)?.value) {
+            toast.add({ title: (res.error as any).value?.data?.detail || 'Failed to update visibility', color: 'red' })
+            return
+        }
+        toast.add({ title: level === 'org' ? 'Published org-wide' : level === 'private' ? 'Made private' : 'Sharing updated', color: 'green' })
+        await refreshConnections()
+    } catch (e: any) {
+        toast.add({ title: e?.data?.detail || e?.message || 'Failed to update visibility', color: 'red' })
+    } finally {
+        visibilityBusyId.value = null
+    }
+}
+
+// Share… = set visibility to 'shared' then open the grant picker.
+async function shareConn(conn: any) {
+    await setVisibility(conn, 'shared')
+    accessConnection.value = { id: conn.id, name: conn.name }
+    showAccessModal.value = true
+}
+
+// AddConnectionModal asks us to open the grant picker after a shared-visibility
+// connection was created.
+function onShareRequested(conn: any) {
+    const cid = conn?.id || conn?.connection_id
+    if (!cid) return
+    accessConnection.value = { id: cid, name: conn?.name || 'connection' }
+    showAccessModal.value = true
+    refreshConnections()
+}
 function handleDataSourceSelect(ds: any) {
     selectedDataSourceType.value = ds.type
     showAddConnectionModal.value = true
@@ -207,6 +375,6 @@ function handleSpreadsheetCreated(_ds: any) {
 }
 
 onMounted(() => {
-    if (canCreateDataSource.value) refreshConnections()
+    refreshConnections()
 })
 </script>

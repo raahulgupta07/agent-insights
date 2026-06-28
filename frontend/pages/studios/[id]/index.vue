@@ -367,6 +367,9 @@
                                 </div>
                             </div>
 
+                            <!-- SELF-LEARNING (per-agent cadence; master = STUDIO_LEARN_DAEMON_ENABLED) -->
+                            <StudioSelfLearn v-if="studio?.id" :studio-id="studio.id" :can-edit="canEdit" />
+
                             <!-- DETAILS (shown once trained) -->
                             <template v-if="sources.length">
 

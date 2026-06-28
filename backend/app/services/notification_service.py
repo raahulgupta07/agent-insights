@@ -473,6 +473,39 @@ class NotificationService:
         if not recipient_emails:
             return
 
+        # Sense-Making threshold breach (flag-gated, best-effort). Reuses the
+        # already-stored sense_making card (NO LLM). This file's only in-app
+        # mechanism is email dispatch (the IN_APP channel is a future stub and a
+        # persisted Notification row does not exist here), so forcing a real
+        # in-app emit would be invasive — we emit a clearly-marked structured
+        # logger.info per the task. The breach also surfaces in the email body
+        # via the report_delivery "Decision" lead block (T5a). Never breaks send.
+        try:
+            from app.settings.hybrid_flags import flags as _sm_flags
+            if _sm_flags.SENSE_MAKING:
+                from app.dependencies import async_session_maker
+                from app.ai.knowledge.sense_maker import get_stored_sense_making
+
+                async with async_session_maker() as _sm_db:
+                    _sm = await get_stored_sense_making(_sm_db, report_id)
+                _alerts = (
+                    [a for a in (_sm.get("alerts") or []) if isinstance(a, dict)]
+                    if isinstance(_sm, dict) else []
+                )
+                if _alerts:
+                    _a = _alerts[0]
+                    logger.info(
+                        "SENSE_MAKING alert (report %s): ⚠ %s %s vs %s (severity=%s, action=%s)",
+                        report_id,
+                        _a.get("metric") or _a.get("rule") or "metric",
+                        _a.get("value"),
+                        _a.get("threshold"),
+                        _a.get("severity"),
+                        _a.get("action"),
+                    )
+        except Exception as _e:  # noqa: BLE001 — never break the delivery flow
+            logger.warning("SENSE_MAKING alert log failed for report %s: %s", report_id, _e)
+
         # Rich delivery: render the email from STRUCTURED results (clean table +
         # sanitized insights, + dashboard image/PDF in later phases) instead of
         # dumping the raw agent chat. Per-agent SMTP identity is preserved

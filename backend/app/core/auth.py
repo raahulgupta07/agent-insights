@@ -228,6 +228,9 @@ class UserManager(BaseUserManager[User, str]):
         # Bind succeeded — find or create local user using the directory email
         try:
             await self.get_by_email(email_used)
+            # Existing LDAP user: make sure they're in an org (older provisions
+            # may predate auto-join, leaving them stranded on /organizations/new).
+            await self._ensure_user_in_org(email_used)
             return ("success", email_used)
         except exceptions.UserNotExists:
             if not ldap_config.auto_provision_users:
@@ -250,7 +253,79 @@ class UserManager(BaseUserManager[User, str]):
                     await self.get_by_email(email_used), session
                 )
                 await session.commit()
+            # Attach to the primary org if no invite matched — otherwise the UI
+            # sends the freshly-provisioned LDAP user to create a new org.
+            await self._ensure_user_in_org(email_used)
             return ("success", email_used)
+
+    async def _ensure_user_in_org(self, email: str) -> None:
+        """Guarantee an externally-authenticated user lands in an organization.
+
+        Shared by every external identity provider (LDAP, Google, Microsoft,
+        Keycloak, generic SSO/OIDC). These users authenticate globally, but the
+        UI routes any user without a membership to ``/organizations/new``. When
+        no pending invite / domain-invite / first-user-org path attached them,
+        auto-join the user to the PRIMARY org (the oldest organization — the
+        same one whose DB settings drive the effective auth config). Mirrors the
+        LDAP sync path (``_ensure_org_memberships``): role='member' plus a
+        matching system RoleAssignment. Best-effort, never raises into the login
+        flow. No-op once the user already has a membership, or if no org exists
+        yet (the first-user bootstrap owns that case).
+        """
+        try:
+            from sqlalchemy import func, asc
+            from app.dependencies import async_session_maker
+            from app.models.role import Role
+            from app.models.role_assignment import RoleAssignment
+            async with async_session_maker() as session:
+                user = (await session.execute(
+                    select(User).where(func.lower(User.email) == email.lower())
+                )).scalar_one_or_none()
+                if user is None:
+                    return
+                existing = (await session.execute(
+                    select(Membership).where(
+                        Membership.user_id == user.id,
+                        Membership.deleted_at.is_(None),
+                    )
+                )).scalars().first()
+                if existing is not None:
+                    return  # already in an org — nothing to do
+                org = (await session.execute(
+                    select(Organization).order_by(asc(Organization.created_at)).limit(1)
+                )).scalar_one_or_none()
+                if org is None:
+                    return  # no org exists yet
+                session.add(Membership(
+                    user_id=user.id,
+                    organization_id=org.id,
+                    role="member",
+                ))
+                try:
+                    system_role = (await session.execute(
+                        select(Role).where(
+                            Role.name == "member",
+                            Role.is_system == True,
+                            Role.organization_id.is_(None),
+                            Role.deleted_at.is_(None),
+                        )
+                    )).scalar_one_or_none()
+                    if system_role:
+                        session.add(RoleAssignment(
+                            organization_id=org.id,
+                            role_id=system_role.id,
+                            principal_type="user",
+                            principal_id=user.id,
+                        ))
+                except Exception:
+                    pass
+                await session.commit()
+                import logging
+                logging.getLogger(__name__).info(
+                    f"LDAP login: auto-joined {email} to org {org.id} as member"
+                )
+        except Exception:
+            pass
 
     async def on_after_login(
         self,
@@ -550,6 +625,8 @@ class UserManager(BaseUserManager[User, str]):
         try:
             # First try to get user by OAuth account
             user = await self.get_by_oauth_account(oauth_name, account_id)
+            # Returning SSO user: rescue any orphan with no org membership.
+            await self._ensure_user_in_org(user.email)
             return user
         except exceptions.UserNotExists:
             # If OAuth account doesn't exist, check if user exists by email
@@ -602,6 +679,8 @@ class UserManager(BaseUserManager[User, str]):
                     )
                     session.add(oauth_account)
                     await session.commit()
+                # Linked SSO to an existing account — ensure it has an org too.
+                await self._ensure_user_in_org(user.email)
                 return user
             except exceptions.UserNotExists:
                 # User doesn't exist at all, create new user with OAuth
@@ -673,6 +752,10 @@ class UserManager(BaseUserManager[User, str]):
                     await session.refresh(user)
                     # Auto-create organization for the first uninvited user
                     await self._ensure_org_for_first_uninvited_user(session, user)
+                # If no invite / domain-invite / first-user-org attached this
+                # OAuth/OIDC user, auto-join the primary org (same rule as LDAP)
+                # so they don't get dumped on /organizations/new.
+                await self._ensure_user_in_org(account_email)
                 # New OAuth/OIDC sign-up → welcome email (best-effort).
                 self._fire_welcome_email(user.id)
                 return user
@@ -700,6 +783,18 @@ class UserManager(BaseUserManager[User, str]):
         if total_users != 1 or total_orgs != 0:
             return
 
+        # First-run bootstrap: this is the very first account on the server.
+        # Elevate it to a real global super-admin (the public register router uses
+        # safe=True so it can't set privileged flags itself). This mirrors what
+        # scripts/seed_admin.py does for the env path, so the UI first-run signup
+        # produces an identical super-admin. Runs ONLY when users==1 & orgs==0,
+        # so it can never re-fire once the admin exists.
+        user.is_active = True
+        user.is_verified = True
+        user.is_superuser = True
+        session.add(user)
+        await session.flush()
+
         org_name = DEFAULT_ORG_NAME
         description = DEFAULT_ORG_DESCRIPTION
 
@@ -709,6 +804,7 @@ class UserManager(BaseUserManager[User, str]):
             OrganizationCreate(name=org_name, description=description),
             user,
         )
+        await session.commit()
 
     async def on_after_forgot_password(
         self, user: User, token: str, request: Optional[Request] = None

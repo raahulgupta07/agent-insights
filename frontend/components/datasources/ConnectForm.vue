@@ -194,7 +194,14 @@ const props = defineProps<{
   forceShowSystemCredentials?: boolean,
   showRequireUserAuthToggle?: boolean,
   initialRequireUserAuth?: boolean,
-  hideHeader?: boolean
+  hideHeader?: boolean,
+  scope?: string,
+  // 3-level visibility: 'private' (only me) | 'shared' (specific users/groups) |
+  // 'org' (everyone). Sent alongside scope on create; backend derives the rest.
+  visibility?: string,
+  // When set (+ scope='personal'), binds the new connector to this studio/agent
+  // so it lands in that agent's "My Connectors" tab. Sent as studio_id on create.
+  studioId?: string
 }>()
 const emit = defineEmits<{ (e: 'submitted', payload: any): void; (e: 'success', dataSource: any): void; (e: 'change:type', type: string): void; (e: 'change:auth', authType: string | null): void }>()
 
@@ -563,7 +570,10 @@ async function onSubmit() {
         type: selectedType.value,
         config: { ...formData.config, auth_type: selectedAuth.value || undefined },
         credentials: showSystemCredentialFields.value ? cleanCredentials(formData.credentials) : {},
-        auth_policy: auth_policy.value
+        auth_policy: auth_policy.value,
+        scope: props.scope || 'shared',
+        ...(props.visibility ? { visibility: props.visibility } : {}),
+        ...(props.studioId ? { studio_id: props.studioId } : {})
       }
       const res = await useMyFetch('/connections', { method: 'POST', body: JSON.stringify(connectionPayload), headers: { 'Content-Type': 'application/json' } })
       if ((res.status as any)?.value === 'success') {

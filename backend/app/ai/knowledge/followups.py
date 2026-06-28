@@ -178,6 +178,63 @@ def _default_infer(model: Any):
     return infer
 
 
+def _shorten(s: Any, n: int = 70) -> str:
+    """Trim a finding fragment to a chip-friendly length (no trailing punctuation)."""
+    t = _clean(s).rstrip(".!?, ")
+    return (t[: n - 1].rstrip() + "…") if len(t) > n else t
+
+
+async def _seed_followups_from_sense_making(
+    db: AsyncSession, report_id: str, existing: List[str]
+) -> List[str]:
+    """PREPEND 1-2 follow-up chips derived from the stored sense_making findings.
+
+    Reuses the already-persisted card (NO LLM). Self-gates on ``flags.SENSE_MAKING``
+    (OFF → unchanged). Each chip is concise (<90 chars), and the merged list is
+    de-duplicated case-insensitively. NEVER raises (caller also guards)."""
+    if not getattr(flags, "SENSE_MAKING", False):
+        return existing
+    try:
+        from app.ai.knowledge.sense_maker import get_stored_sense_making
+
+        sm = await get_stored_sense_making(db, report_id)
+        if not isinstance(sm, dict):
+            return existing
+        findings = [f for f in (sm.get("findings") or []) if isinstance(f, dict)]
+        if not findings:
+            return existing
+
+        chips: List[str] = []
+        for f in findings[:2]:
+            what = _shorten(f.get("what"), 60)
+            if what:
+                chips.append(f"Why did {what} happen?")
+            nw = f.get("now_what")
+            action = _shorten(nw.get("action"), 60) if isinstance(nw, dict) else ""
+            if action:
+                chips.append(f"Drill into: {action}")
+
+        # Keep at most 2 derived chips; bound each to <90 chars.
+        chips = [c[:89].rstrip() if len(c) > 89 else c for c in chips][:2]
+        if not chips:
+            return existing
+
+        merged: List[str] = []
+        seen: set = set()
+        for q in chips + list(existing):
+            q = _clean(q)
+            if not q:
+                continue
+            key = q.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(q)
+        return merged
+    except Exception:  # noqa: BLE001
+        return existing
+
+
 async def generate_followups(
     db: AsyncSession,
     *,
@@ -385,6 +442,17 @@ async def generate_followups(
             return {"ok": False, "error": f"llm error: {e}", "followups": []}
 
         followups = _parse_followup_list(raw or "")[:max_n]
+
+        # Sense-Making seeding (flag-gated, fail-soft): PREPEND 1-2 chips derived
+        # from the top stored findings so the user can act on the decision layer.
+        # No sm / flag OFF / any error → existing suggestions returned unchanged.
+        try:
+            followups = await _seed_followups_from_sense_making(
+                db, report_id, followups
+            )
+        except Exception:  # noqa: BLE001 — never alter the happy path on error
+            pass
+
         return {"ok": True, "followups": followups, "source": source}
 
     except Exception as e:  # noqa: BLE001 - never raise into the caller

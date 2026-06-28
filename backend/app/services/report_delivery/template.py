@@ -103,6 +103,110 @@ def sql_block(sql: Optional[str]) -> str:
     )
 
 
+# ---------------------------------------------------------------------------
+# Sense-Making "Decision" lead block (flag-gated by the caller). Pure render —
+# takes the already-stored sense_making card and produces an inline-styled box
+# that LEADS the email (above the chart/result). Fail-soft: returns "" on junk.
+# ---------------------------------------------------------------------------
+
+# severity → (accent line/label colour, soft background)
+_SEV_COLORS = {
+    "critical": ("#B42318", "#FDF1F0"),
+    "high": ("#B42318", "#FDF1F0"),
+    "warning": ("#C2541E", "#FBF0E8"),
+    "medium": ("#C2541E", "#FBF0E8"),
+    "info": ("#3A6B8A", "#EEF4F8"),
+    "low": ("#5b6770", "#F3F2EF"),
+}
+
+
+def _short(s, n: int = 140) -> str:
+    s = str(s or "").strip()
+    return (s[: n - 1].rstrip() + "…") if len(s) > n else s
+
+
+def sense_making_lead_html(sm: dict) -> str:
+    """Render the sense_making card into a top-of-email "Decision" box.
+
+    Uses: headline.text/.severity, the #1 finding's now_what.action, and the
+    first alert as a one-liner. Inline CSS only (email-safe). Returns "" if the
+    card has no usable headline/finding (so the caller prepends nothing)."""
+    try:
+        if not isinstance(sm, dict):
+            return ""
+        headline = sm.get("headline") if isinstance(sm.get("headline"), dict) else {}
+        htext = _short(headline.get("text"), 160)
+        severity = str(headline.get("severity") or "").lower()
+
+        findings = [f for f in (sm.get("findings") or []) if isinstance(f, dict)]
+        action = ""
+        if findings:
+            nw = findings[0].get("now_what")
+            if isinstance(nw, dict):
+                action = _short(nw.get("action"), 160)
+
+        alerts = [a for a in (sm.get("alerts") or []) if isinstance(a, dict)]
+        alert_line = ""
+        if alerts:
+            a = alerts[0]
+            metric = _h.escape(_short(a.get("metric") or a.get("rule") or "metric", 60))
+            val = _h.escape(_short(a.get("value"), 40))
+            thr = _h.escape(_short(a.get("threshold"), 40))
+            alert_line = f"{metric} {val} vs {thr}".strip()
+
+        # Need at least a headline or an action to bother leading with a box.
+        if not htext and not action and not alert_line:
+            return ""
+
+        line, bg = _SEV_COLORS.get(severity, (ACCENT, "#FBF0E8"))
+        sev_label = severity.upper() if severity else "DECISION"
+
+        parts: list[str] = [
+            f"<div style='font-family:Segoe UI,Arial,sans-serif;max-width:640px;"
+            f"margin:0 auto 14px;'>"
+            f"<div style='border-left:4px solid {line};background:{bg};border-radius:8px;"
+            f"padding:14px 16px'>"
+            f"<div style='font-size:11px;font-weight:600;letter-spacing:.6px;"
+            f"text-transform:uppercase;color:{line};margin:0 0 5px'>"
+            f"Decision · {_h.escape(sev_label)}</div>"
+        ]
+        if htext:
+            parts.append(
+                f"<div style='font-size:16px;font-weight:600;color:#211B14;"
+                f"line-height:1.35;margin:0 0 8px'>{_h.escape(htext)}</div>"
+            )
+        if action:
+            parts.append(
+                f"<div style='font-size:13.5px;color:#333;margin:0 0 4px;line-height:1.5'>"
+                f"<b style='color:{ACCENT}'>Recommended action:</b> {_h.escape(action)}</div>"
+            )
+        if alert_line:
+            parts.append(
+                f"<div style='font-size:12.5px;color:#8a2b12;margin:8px 0 0'>"
+                f"⚠ {alert_line}</div>"
+            )
+        parts.append("</div></div>")
+        return "".join(parts)
+    except Exception:
+        return ""
+
+
+def sense_making_subject_tag(sm: dict) -> str:
+    """A short action prefix for the email subject, e.g. ``⚠ Action: <headline> · ``.
+
+    Returns "" if there's no usable headline (caller leaves the subject as-is)."""
+    try:
+        headline = sm.get("headline") if isinstance(sm, dict) else None
+        if not isinstance(headline, dict):
+            return ""
+        htext = _short(headline.get("text"), 60)
+        if not htext:
+            return ""
+        return f"⚠ Action: {htext} · "
+    except Exception:
+        return ""
+
+
 def skeleton(*, title: str, meta: str, inner_html: str, report_url: Optional[str], footer: str) -> str:
     """Wrap a renderer's inner_html in the shared shell."""
     link = ""

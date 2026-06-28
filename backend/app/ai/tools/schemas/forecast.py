@@ -62,3 +62,11 @@ class ForecastOutput(BaseModel):
     date_column: str = ""
     value_column: str = ""
     message: Optional[str] = None
+    method: Optional[str] = Field(
+        None,
+        description="Engine used: 'ets' (Holt-Winters), 'ets_trend', or 'linear' (fallback).",
+    )
+    narrative: Optional[str] = Field(
+        None,
+        description="Optional plain-English insight about the forecast (LLM, fail-soft).",
+    )

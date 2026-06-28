@@ -114,8 +114,10 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_PROACTIVE_INSIGHTS": {"label": "Proactive Insights + Anomaly", "role": "user", "category": "Intelligence", "status": "stable"},
     "HYBRID_COLUMN_INTEL": {"label": "Column Intel (pre-train profiler)", "role": "agent", "category": "Intelligence", "status": "stable"},
     "HYBRID_COMPLIANCE_GATE": {"label": "Compliance & Quality Scan", "role": "user", "category": "Intelligence", "status": "stable"},
+    "HYBRID_SENSE_MAKING": {"label": "Sense-Making / Decision Layer", "role": "user", "category": "Intelligence", "status": "experimental", "note": "Adds a Decision card (so-what/now-what) above answers. Default OFF."},
+    "HYBRID_AUTO_MODEL": {"label": "Auto Model Selection", "role": "user", "category": "Intelligence", "status": "experimental", "note": "Pick 'Auto' in the model picker and a complexity classifier routes each question to the cheapest capable model (Fast/Balanced/Reason). Heuristic first; a cheap LLM tie-break only on ambiguous questions. Fail-soft to the org default. Default OFF."},
     "HYBRID_CODE_ENRICH": {"label": "Code Enrich (pipeline logic)", "role": "agent", "category": "Intelligence", "status": "experimental", "note": "Extra LLM cost on train."},
-    "HYBRID_FORECAST": {"label": "Forecasting Tool", "role": "user", "category": "Intelligence", "status": "needs_dep", "note": "Needs Prophet baked into the image — flag alone errors."},
+    "HYBRID_FORECAST": {"label": "Forecasting Tool", "role": "user", "category": "Intelligence", "status": "stable", "note": "Holt-Winters/ETS (statsmodels) + LLM narrative. No heavy dep."},
     "HYBRID_SEMANTIC_SEARCH": {"label": "Hybrid Search (FTS + embeddings)", "role": "agent", "category": "Intelligence", "status": "experimental", "note": "Uses your OpenRouter key for embeddings (text-embedding-3-small). After enabling, click Rebuild search index."},
 
     # --- Agents & Access --------------------------------------------------
@@ -130,6 +132,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_AGENT_REPORTS": {"label": "Scheduled Reports (per-agent)", "role": "user", "category": "Agents & Access", "status": "beta", "note": "Per-agent 'Reports' tab: schedule a prompt/dashboard to run on a cadence and email the result to subscribers, sent from the agent's own SMTP identity. UI only; gates the Studio → Reports tab."},
     "HYBRID_RICH_REPORT_EMAIL": {"label": "Rich Report Emails", "role": "agent", "category": "Agents & Access", "status": "beta", "note": "Render scheduled/automated report emails from structured results (clean table + sanitized insights + dashboard image/PDF) instead of dumping the raw agent chat. OFF = legacy raw-content email."},
     "HYBRID_ONECLICK_ARTIFACTS": {"label": "One-click Dashboard / Slides / Excel", "role": "user", "category": "Agents & Access", "status": "beta", "note": "On a report's right panel, turns the empty Dashboard/Slides/Excel states into one-click builders: 'Generate dashboard' (real page artifact), 'Generate slide deck' (python-pptx deck + previews + .pptx) from the report's existing charts, and an auto-filled Excel workbook. Reuses the chat create_artifact pipeline."},
+    "HYBRID_AUTO_ARTIFACT": {"label": "Auto-build Dashboard from chat", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "When a chat turn produces a dataset (the agent ran create_data → ≥1 chart) but makes NO artifact, automatically build a dashboard (page artifact) in the background so the Outputs panel isn't empty. Reuses the one-click create_artifact pipeline. Idempotent (only when the report has zero artifacts) + fully fail-soft. Default OFF."},
     "HYBRID_QUOTAS": {"label": "Per-Org Quotas", "role": "agent", "category": "Agents & Access", "status": "stable"},
     "HYBRID_DOMAIN_PACKS": {"label": "Domain Packs (Skills)", "role": "agent", "category": "Agents & Access", "status": "stable"},
     "HYBRID_PACK_ROUTER": {"label": "Pack Router", "role": "agent", "category": "Agents & Access", "status": "stable"},
@@ -180,6 +183,23 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "EVAL_SCHEDULE_ENABLED": {"label": "Eval Schedule Daemon", "role": "agent", "category": "Daemons", "status": "daemon", "note": "Applies after a container restart."},
     "JOIN_MINE_ENABLED": {"label": "Join Mining Daemon", "role": "agent", "category": "Daemons", "status": "daemon", "note": "Applies after a container restart."},
     "STUDIO_LEARN_DAEMON_ENABLED": {"label": "Studio Learn Daemon", "role": "agent", "category": "Daemons", "status": "daemon", "note": "Applies after a container restart."},
+}
+
+# Flags hidden from the Feature-Flags UI (and rejected by the PUT route). These
+# are KNOWN-UNSTABLE features that livelock the agent loop — we don't want anyone
+# enabling them from the UI. The flag code still exists and defaults OFF; this
+# only removes the toggle. To re-expose after a redesign, drop the name here.
+#   - HYBRID_SKILLS    : sandbox skill exec — livelocks; use Domain Packs instead.
+#   - HYBRID_SUBAGENTS : subagent fan-out — instability source (livelocks).
+#   - HYBRID_RECURSIVE : no-op unless Subagents is on, so hide it with them.
+#   - HYBRID_CONTEXT_COMPACT_LLM : LLM-summarize path is a TODO(compress-llm) stub —
+#       falls back to deterministic truncate, so the toggle does NOTHING today. Hide
+#       until wired so the UI doesn't promise a no-op. Re-expose when implemented.
+HIDDEN_FLAGS: set[str] = {
+    "HYBRID_SKILLS",
+    "HYBRID_SUBAGENTS",
+    "HYBRID_RECURSIVE",
+    "HYBRID_CONTEXT_COMPACT_LLM",
 }
 
 # Stable, browser-facing order of the UI sections.
@@ -301,6 +321,17 @@ class HybridFlags:
         # Gates POST /api/reports/{id}/{dashboard,slides}/generate + the FE
         # buttons only; no agent-loop effect. Default OFF.
         return _bool("HYBRID_ONECLICK_ARTIFACTS", False)
+
+    @property
+    def AUTO_ARTIFACT(self) -> bool:
+        # Auto-build a dashboard (page artifact) in the BACKGROUND after a
+        # successful chat turn that produced a dataset (create_data → ≥1
+        # visualization/step) but made NO artifact — so the Outputs panel isn't
+        # empty. Reuses the one-click create_artifact pipeline
+        # (report_slides._generate_artifact, mode='page'). Idempotent (skips when
+        # the report already has any artifact) + fail-soft (never affects the
+        # chat response). No agent-loop effect. Default OFF.
+        return _bool("HYBRID_AUTO_ARTIFACT", False)
 
     # --- Slice 1: foundation -------------------------------------------------
     @property
@@ -501,6 +532,13 @@ class HybridFlags:
         # Phase 6: nightly join-mining daemon (leader-gated). NOTE: no HYBRID_
         # prefix — matches EVAL_SCHEDULE_ENABLED naming convention. Default OFF.
         return _bool("JOIN_MINE_ENABLED")
+
+    @property
+    def STUDIO_LEARN_DAEMON(self) -> bool:
+        # Org master switch for the per-studio self-learn daemon. Reads the
+        # override layer (DB toggle / env), so the Feature-Flags UI toggle works
+        # without a compose env var. Per-studio cadence is stored on the studio.
+        return _bool("STUDIO_LEARN_DAEMON_ENABLED")
 
     # --- Slice 4: scale harden ----------------------------------------------
     @property
@@ -710,6 +748,17 @@ class HybridFlags:
         return _bool("HYBRID_PROACTIVE_INSIGHTS", True)
 
     @property
+    def SENSE_MAKING(self) -> bool:
+        # F10: post-answer decision layer — deterministic signals + 1 cheap LLM → sense_making card. OFF.
+        return _bool("HYBRID_SENSE_MAKING")
+
+    @property
+    def AUTO_MODEL(self) -> bool:
+        # Auto model selection: a complexity classifier routes each question to the
+        # cheapest capable model (FAST/BALANCED/REASON). Sentinel model_id "auto". OFF.
+        return _bool("HYBRID_AUTO_MODEL")
+
+    @property
     def FORECAST(self) -> bool:
         # Wave1 P3: Prophet forecast tool (df[date,value] → forecast df). OFF.
         return _bool("HYBRID_FORECAST")
@@ -770,6 +819,7 @@ class HybridFlags:
             "INSIGHT_DAEMON": self.INSIGHT_DAEMON,
             "JOIN_GRAPH": self.JOIN_GRAPH,
             "JOIN_MINE_ENABLED": self.JOIN_MINE_ENABLED,
+            "STUDIO_LEARN_DAEMON": self.STUDIO_LEARN_DAEMON,
             "QUOTAS": self.QUOTAS,
             "SEMANTIC_LAYER": self.SEMANTIC_LAYER,
             "METRICS_CATALOG": self.METRICS_CATALOG,
@@ -797,6 +847,8 @@ class HybridFlags:
             "TEACH_BOX": self.TEACH_BOX,
             "PROFILE_V2": self.PROFILE_V2,
             "PROACTIVE_INSIGHTS": self.PROACTIVE_INSIGHTS,
+            "SENSE_MAKING": self.SENSE_MAKING,
+            "AUTO_MODEL": self.AUTO_MODEL,
             "FORECAST": self.FORECAST,
             "GOLDEN_QUERIES": self.GOLDEN_QUERIES,
             "VERIFIED_METRICS": self.VERIFIED_METRICS,
@@ -811,6 +863,7 @@ class HybridFlags:
             "AGENT_REPORTS": self.AGENT_REPORTS,
             "RICH_REPORT_EMAIL": self.RICH_REPORT_EMAIL,
             "ONECLICK_ARTIFACTS": self.ONECLICK_ARTIFACTS,
+            "AUTO_ARTIFACT": self.AUTO_ARTIFACT,
         }
 
 

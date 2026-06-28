@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import datetime, timezone, timedelta
 from typing import Any, Callable, Optional
 
 logger = logging.getLogger(__name__)
@@ -33,17 +34,111 @@ STUDIO_LEARN_JOB_ID = "hybrid_studio_learn"
 # How many studios to process per tick (bounded so one tick can't run away).
 _DEFAULT_MAX_STUDIOS_PER_TICK = 50
 
+# Per-studio cadence → minimum spacing (for 6h) / period semantics.
+_CADENCES = {"6h", "daily", "weekly", "monthly", "off"}
+
 
 def daemon_enabled() -> bool:
-    """True only when ``STUDIO_LEARN_DAEMON_ENABLED`` is a truthy env value.
+    """True when the org master switch ``STUDIO_LEARN_DAEMON_ENABLED`` is on.
 
-    Default OFF — a fresh deploy never runs the learning daemon until this is
-    explicitly enabled (CLAUDE.md HARD RULE 4).
+    Reads the override layer (DB toggle / env) via ``flags`` so the Feature-Flags
+    UI toggle works without a compose env var. Default OFF — a fresh deploy never
+    runs the learning daemon until explicitly enabled (CLAUDE.md HARD RULE 4).
+    Falls back to a raw-env read if the flags module is somehow unavailable.
     """
-    raw = os.environ.get("STUDIO_LEARN_DAEMON_ENABLED")
-    if raw is None:
+    try:
+        from app.settings.hybrid_flags import flags
+        return bool(flags.STUDIO_LEARN_DAEMON)
+    except Exception:
+        raw = os.environ.get("STUDIO_LEARN_DAEMON_ENABLED")
+        return bool(raw) and raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+# --------------------------------------------------------------------------
+# Per-studio cadence helpers (read studio.config['self_learn']).
+# --------------------------------------------------------------------------
+def get_self_learn_cfg(studio: Any) -> dict:
+    """Return the studio's self-learn config dict (defaults when unset)."""
+    cfg = {}
+    try:
+        cfg = dict((getattr(studio, "config", None) or {}).get("self_learn", {}) or {})
+    except Exception:
+        cfg = {}
+    cadence = cfg.get("cadence", "daily")
+    if cadence not in _CADENCES:
+        cadence = "daily"
+    enabled = bool(cfg.get("enabled", False)) and cadence != "off"
+    try:
+        hour = int(cfg.get("hour_utc", 0))
+    except (TypeError, ValueError):
+        hour = 0
+    hour = min(23, max(0, hour))
+    return {
+        "enabled": enabled,
+        "cadence": cadence,
+        "hour_utc": hour,
+        "last_run_at": cfg.get("last_run_at"),
+    }
+
+
+def _parse_iso(s: Optional[str]) -> Optional[datetime]:
+    if not s:
+        return None
+    try:
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
+def is_due(cfg: dict, now: Optional[datetime] = None) -> bool:
+    """True when a studio's self-learn cadence is due to run at ``now`` (UTC)."""
+    if not cfg.get("enabled"):
         return False
-    return raw.strip().lower() in {"1", "true", "yes", "on"}
+    now = now or datetime.now(timezone.utc)
+    last = _parse_iso(cfg.get("last_run_at"))
+    cadence = cfg.get("cadence", "daily")
+    hour = int(cfg.get("hour_utc", 0))
+
+    if cadence == "6h":
+        return last is None or (now - last) >= timedelta(hours=6)
+
+    # daily / weekly / monthly all gate on the chosen UTC hour.
+    if now.hour < hour:
+        return False
+    if last is None:
+        return True
+    if cadence == "daily":
+        return last.date() < now.date()
+    if cadence == "weekly":
+        return (now - last) >= timedelta(days=7)
+    if cadence == "monthly":
+        return (now.year, now.month) != (last.year, last.month)
+    return False
+
+
+def next_run_estimate(cfg: dict, now: Optional[datetime] = None) -> Optional[str]:
+    """Rough next-run ISO string for UI display (best-effort, not exact)."""
+    if not cfg.get("enabled"):
+        return None
+    now = now or datetime.now(timezone.utc)
+    if is_due(cfg, now):
+        return now.replace(microsecond=0).isoformat()
+    last = _parse_iso(cfg.get("last_run_at"))
+    cadence = cfg.get("cadence", "daily")
+    hour = int(cfg.get("hour_utc", 0))
+    base = last or now
+    if cadence == "6h":
+        nxt = base + timedelta(hours=6)
+    elif cadence == "daily":
+        nxt = (now + timedelta(days=1)).replace(hour=hour, minute=0, second=0, microsecond=0)
+    elif cadence == "weekly":
+        nxt = (base + timedelta(days=7)).replace(hour=hour, minute=0, second=0, microsecond=0)
+    elif cadence == "monthly":
+        nxt = (base + timedelta(days=30)).replace(hour=hour, minute=0, second=0, microsecond=0)
+    else:
+        return None
+    return nxt.replace(microsecond=0).isoformat()
 
 
 def _max_studios_per_tick() -> int:
@@ -102,13 +197,20 @@ async def run_studio_learn_tick(session_maker: Optional[Callable[[], Any]] = Non
         if not flags.STUDIOS:
             return 0
 
+        from sqlalchemy.orm.attributes import flag_modified
+
+        now = datetime.now(timezone.utc)
         async with maker() as db:
             res = await db.execute(
                 select(Studio)
                 .where(Studio.deleted_at.is_(None))
                 .order_by(Studio.created_at.asc())
             )
-            studios = list(res.scalars().all())[: _max_studios_per_tick()]
+            all_studios = list(res.scalars().all())
+            # Only studios whose OWN cadence is due this tick (per-agent control).
+            due = [s for s in all_studios if is_due(get_self_learn_cfg(s), now)]
+            studios = due[: _max_studios_per_tick()]
+            ran = 0
             for studio in studios:
                 try:
                     counts = await improve_studio(db, studio)
@@ -117,9 +219,26 @@ async def run_studio_learn_tick(session_maker: Optional[Callable[[], Any]] = Non
                         + (counts or {}).get("rules", 0)
                         + (counts or {}).get("suggested", 0)
                     )
+                    # Stamp last_run_at on the studio config so cadence advances
+                    # even when a tick proposes nothing (don't re-run all day).
+                    new_cfg = dict(getattr(studio, "config", None) or {})
+                    sl = dict(new_cfg.get("self_learn", {}) or {})
+                    sl["last_run_at"] = now.replace(microsecond=0).isoformat()
+                    new_cfg["self_learn"] = sl
+                    studio.config = new_cfg
+                    flag_modified(studio, "config")
+                    ran += 1
                 except Exception:
                     # One bad studio must not abort the sweep.
                     continue
+            if ran:
+                try:
+                    await db.commit()
+                except Exception as e:
+                    logger.warning("studio_learn commit failed: %s", e)
+            logger.info(
+                "studio_learn tick: %d due, %d ran, %d item(s)", len(due), ran, total
+            )
     except Exception as e:
         logger.warning("studio_learn run_studio_learn_tick failed: %s", e)
         return total
@@ -161,7 +280,10 @@ def register_studio_learn_daemon(scheduler: Any, is_scheduler_leader: bool) -> b
 
 
 def _registration_interval_hours() -> int:
+    # Tick HOURLY so per-studio cadences (6h/daily/weekly/monthly) resolve at
+    # 1-hour granularity. Each studio's own cadence + last_run_at decides whether
+    # it actually runs on a given tick — the tick itself is just the clock.
     try:
-        return max(1, int(os.environ.get("STUDIO_LEARN_INTERVAL_HOURS", 6)))
+        return max(1, int(os.environ.get("STUDIO_LEARN_INTERVAL_HOURS", 1)))
     except (TypeError, ValueError):
-        return 6
+        return 1

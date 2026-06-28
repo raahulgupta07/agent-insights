@@ -272,23 +272,90 @@ The **OpenRouter LLM key is NOT an env var** — it is entered from the UI (Sett
 
 ---
 
-## Upgrade (existing deploy → new version)
+## Install & update
 
-Schema migrations + the front-end bundle are baked into the image and applied on boot, so an upgrade is a rebuild:
+The stack is **one image** built from this repo — `cityagent-analytics:dev` — run via **`docker-compose.build.yaml`** (the only supported compose file; the plain `docker-compose.yaml` is a different project = empty DB). Schema migrations + the compiled front-end bundle are baked into the image and applied on boot.
+
+### Fresh installation (from zero)
+
+**Prerequisites:** Docker + Docker Compose; give Docker **≥10 GB RAM** for the first build (the `nuxt generate` front-end stage forces a 6 GB Node heap); git. First-ever build (base image + app) is ~20 min; later code-change rebuilds are seconds–2 min (BuildKit cache + vendored deps).
 
 ```bash
-cd /opt/rahulai-dash          # your checkout
-git pull                      # get the new code
-docker compose up -d --build  # rebuild + recreate (runs `alembic upgrade head` on start)
-docker compose logs -f ca-app # watch boot: migrations + "Loaded N hybrid flag override(s)"
+# 1. Get the code
+git clone <repo> && cd "CityAgent Analytics"
+
+# 2. Create .env from the template
+cp .env.example .env
+
+# 3. Set a Fernet encryption key (REQUIRED — encrypts every stored OpenRouter/SMTP secret)
+python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+#   -> paste the output into .env as:  DASH_ENCRYPTION_KEY=<that value>
+#   KEEP IT FOREVER. Changing it later orphans all stored secrets.
+
+# 4. (optional) edit .env:
+#    APP_PORT=3007 / POSTGRES_PORT=5439 / REDIS_PORT=6399   (host ports)
+#    DASH_BASE_URL=http://localhost:3007                    (MUST match your published port/domain)
+#    DASH_ADMIN_EMAIL / DASH_ADMIN_PASSWORD / DASH_ADMIN_NAME  (headless super-admin seed)
+#    OPENROUTER_API_KEY=sk-or-...                           (auto-lights the seeded models; else set it in the UI later)
+
+# 5. Build the image (pre-pulls base images with retry, builds cityagent-analytics:dev)
+bash scripts/build.sh
+
+# 6. Start the stack (Postgres 18 + Redis + app; runs `alembic upgrade head` on boot)
+docker compose -f docker-compose.build.yaml up -d
+
+# 7. Verify
+curl localhost:3007/health                               # -> {"status":"ok"}
+docker compose -f docker-compose.build.yaml logs -f ca-app   # watch: migrations + "Loaded N hybrid flag override(s)"
 ```
 
-Notes:
-- **Migrations run automatically** in `start.sh` (`alembic upgrade head`, with retries) before uvicorn — no manual step. Current head: `agentchan1`.
-- **Back up Postgres first** on a real deploy: `docker exec ca-postgres pg_dump -U dash dash > backup_$(date +%F).sql`.
-- **Keep `DASH_ENCRYPTION_KEY` unchanged** across upgrades — a new key orphans every stored OpenRouter/SMTP secret.
-- **New feature flags default OFF.** Enable per-org from **Settings → Upgrades** (or the org's `hybrid_overrides`), then restart. See [Feature flags](#feature-flags).
-- **Roll back:** check out the previous tag/commit and `docker compose up -d --build` again. Alembic downgrades are not guaranteed — restore the DB dump if a migration must be reversed.
+**First sign-in** — open **http://localhost:3007**:
+- If you set `DASH_ADMIN_*` in `.env`, that super-admin is seeded on boot — just log in.
+- Otherwise the sign-in page shows a **"Create super-admin"** form (zero-user install); the first user created becomes the global super-admin + org owner. Sign-up then locks.
+
+**Make the agent answer** — set the LLM key (OpenRouter only):
+- If you put `OPENROUTER_API_KEY` in `.env`, the 5 seeded models light up automatically.
+- Otherwise go to **Settings → Models**, paste your OpenRouter key into the seeded provider, and the preset models enable.
+
+**Add data to try it** — open a Studio → **Auto-pilot → Upload file** (`.csv`/`.xlsx`) or pin a connector; or load the built-in Chinook demo (`POST /api/data_sources/demos/chinook`). Then ask a question in chat.
+
+### Update to a new version
+
+Two lanes — pick by what changed.
+
+**A · Full rebuild (clean, durable — production):**
+```bash
+git pull
+bash scripts/build.sh                                              # rebuild image (BuildKit cache; secs–2min if only code changed)
+docker compose -f docker-compose.build.yaml up -d --force-recreate # recreate; `alembic upgrade head` runs on boot
+docker compose -f docker-compose.build.yaml logs -f ca-app         # watch: migrations + "Loaded N hybrid flag override(s)"
+```
+🔴 **Never `--force-recreate` onto a stale/un-rebuilt image** — DB ahead of image migrations = broken app. Rebuild first, or use lane B.
+
+**B · Hot update + bake (fast dev iteration, no full rebuild):**
+```bash
+# front-end change:
+bash scripts/fe-sync.sh                                            # nuxt generate + docker cp -> ca-app:/app/frontend/dist (live, no restart)
+
+# back-end change (.py):
+docker cp <file> ca-app:/app/backend/app/...
+docker exec ca-app /opt/venv/bin/python -m py_compile /app/backend/app/...   # verify
+docker restart ca-app                                             # restart KEEPS cp'd files (force-recreate REVERTS to image)
+
+# make it durable (so a force-recreate keeps it):
+docker cp VERSION_HYBRID        ca-app:/app/VERSION_HYBRID         # version files are read per-request (What's-new bell)
+docker cp CHANGELOG_HYBRID.md   ca-app:/app/CHANGELOG_HYBRID.md
+docker commit ca-app cityagent-analytics:dev                      # bake the running container into the image
+docker tag    cityagent-analytics:dev cityagent-analytics:v1.58.0 # version tag = rollback point
+```
+
+### Notes
+- **Migrations run automatically** in `start.sh` (`alembic upgrade head`, retried) before uvicorn — no manual step. Current head: **`connvis1`**.
+- **Every shipped change bumps `VERSION_HYBRID`** + prepends a `CHANGELOG_HYBRID.md` entry (surfaced as the 🔔 What's-new bell). These two files are read from the container per-request — `fe-sync.sh` does **not** copy them, so `docker cp` both on every version bump (lane B) or rebuild (lane A bakes them).
+- **Back up Postgres first** on a real deploy: `docker exec ca-postgres pg_dump -U dash dash > backup_$(date +%F).sql`. **Never `docker compose down -v`** (drops the volume).
+- **Keep `DASH_ENCRYPTION_KEY` unchanged** across updates — a new key orphans every stored OpenRouter/SMTP secret (Fernet).
+- **New feature flags default OFF.** Enable per-org from **Settings → Feature Flags** (writes `organization_settings.config.hybrid_overrides`), then **`docker restart ca-app`** — the app runs `--workers 4`, so one restart is needed to converge a flag change across all workers.
+- **Roll back:** `docker tag cityagent-analytics:v<prev> cityagent-analytics:dev && docker compose -f docker-compose.build.yaml up -d --force-recreate ca-app` (versioned image tags are your rollback points). Alembic downgrades are not guaranteed — restore the DB dump if a migration must be reversed.
 
 ---
 
@@ -309,13 +376,17 @@ A 3-step flow on `studios/[id]` (`activeTab='autopilot'`):
 2. **Route** — four lanes (**Data · Knowledge · Skill · Rule/Instruction**) show what the agent is made of, drawn from the studio's real sources / docs / instructions / examples. Pasted methods or rules go through **Teach**, which classifies them into a lane with a confidence score (re-route if wrong).
 3. **Train** — one **Auto-train everything** button, disabled until ≥1 source is added.
 
-### Connector model — one source of truth
+### Connector model — owned connections with 3-level visibility
 
-**Org library = the single home for connections; an agent only references (pins) them.**
+**Every connection has an owner (its creator) and a visibility; an agent only references (pins) connections.** The **Connectors** page (`Manage → Connectors`) is open to **all members** and lists, as a table, the connections you created + ones shared to you + org-wide ones.
 
-- **Create** a connection (any of 46 types) → it lands in the **org registry** (credentials stored once, Fernet-encrypted). The same shared modal is reachable from **Manage → Connectors** and from a Studio's **+ New connection**.
-- **Manage** (edit / test / rotate creds / delete) → **Manage → Connectors** only.
-- **Use** in an agent → pin from the org library; pinning scopes one connection (and a table subset) to that agent. No agent ever stores credentials.
+- **Create** a connection (any of 46 types) → it lands in the org with `owner_user_id = you` and **visibility `private`** by default (credentials stored once, Fernet-encrypted). The shared modal is reachable from **Manage → Connectors** and a Studio's **+ New connection**.
+- **Share** from the table — a per-row badge (🔒 Private / 👥 Shared / 🌐 Org-wide) opens a sharing panel:
+  - **Private** — only you (the owner) and super admins.
+  - **Shared** — you + specific users/groups you grant (writes `resource_grants`).
+  - **Org-wide** — every member of the org. Self-service, no admin approval (audit-logged).
+- **Manage** (edit / test / rotate creds / delete) → the **owner** of a connection, or any **super admin** (full override, incl. others' private connections). Credentials are never returned to the browser. Authz is enforced by a single `guard_owned_connection` dependency on every connector mutate route.
+- **Use** in an agent → pin a connection you can see; pinning scopes it (and a table subset) to that agent. Queries run under the connection's `auth_policy` (e.g. `system_only`) so a member can query a shared connection's data without ever seeing its credentials. No agent stores credentials.
 - **N of one type** is fine: connector *type* is a template, each connection is a **named instance**. Ten Postgres = ten named rows. Blank names auto-derive `Postgres · host/db` so they stay distinct.
 
 ---

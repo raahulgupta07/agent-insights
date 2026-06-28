@@ -65,6 +65,18 @@ class LLMService:
         """Create a new custom LLM provider"""
         logger.info("Creating LLM provider: name=%s, type=%s, org_id=%s, user_id=%s", provider_data.name, provider_data.provider_type, organization.id, current_user.id)
 
+        # Upsert guard: if a matching provider already exists (the shipped preset
+        # OpenRouter/custom provider, matched by base_url / name / sole preset of
+        # this type), update ITS key + models instead of inserting a duplicate
+        # that would orphan the preconfigured models. This is what lets the user
+        # "configure OpenRouter from the UI" and have the default models appear.
+        existing = await self._find_upsert_target(db, organization, provider_data)
+        if existing is not None:
+            logger.info("Upserting key/models onto existing provider id=%s (no duplicate)", existing.id)
+            return await self._apply_key_and_models_to_existing(
+                db, organization, current_user, existing, provider_data
+            )
+
         models = provider_data.models
         del provider_data.models
         del provider_data.config
@@ -145,9 +157,14 @@ class LLMService:
         
         if not provider:
             raise HTTPException(status_code=404, detail="Provider not found")
-        
-        if provider.is_preset:
-            raise HTTPException(status_code=400, detail="Cannot update preset providers")
+
+        # Preset providers ship with the model catalog but a BLANK key. The whole
+        # point is that the operator pastes their key from the UI. So we allow
+        # preset providers to accept credential (api_key) + base_url + model
+        # enable-state changes here — this function never mutates name or
+        # provider_type, and deletion stays blocked in delete_provider(). This is
+        # what makes "configure OpenRouter from the UI" work on the shipped
+        # provider instead of forcing a duplicate.
 
         update_data = provider_data.dict(exclude_unset=True)
         models = provider_data.models
@@ -158,8 +175,15 @@ class LLMService:
         await self._update_models(db, organization, provider, current_user, models)
 
         # Allow updating provider additional_config (e.g., base_url) without requiring api_key
+        key_was_blank = self._provider_key_is_blank(provider)
         if credentials is not None:
             self._set_provider_credentials(provider, credentials)
+
+        # B2: when a provider gains a real key (blank -> set), auto-enable its
+        # preset models so the default / preconfigured set lights up the instant
+        # the key is saved — no extra clicks.
+        if key_was_blank and not self._provider_key_is_blank(provider):
+            await self._enable_preset_models(db, provider)
 
         db.add(provider)
         try:
@@ -534,8 +558,140 @@ class LLMService:
 
         await db.commit()
 
+    async def _apply_key_and_models_to_existing(
+        self,
+        db: AsyncSession,
+        organization: Organization,
+        current_user: User,
+        provider: LLMProvider,
+        provider_data,
+    ):
+        """Fold a 'create' onto an existing provider: set its key/base_url, add
+        only genuinely-new models (by model_id), and auto-enable preset models on
+        the first real key. Never duplicates the provider or its existing models.
+        Uses the create-side model helper (dict-shaped payloads).
+        """
+        credentials = getattr(provider_data, "credentials", None)
+        incoming = getattr(provider_data, "models", None) or []
+
+        key_was_blank = self._provider_key_is_blank(provider)
+        if credentials is not None:
+            self._set_provider_credentials(provider, credentials)
+
+        # Add only models whose model_id isn't already on this provider.
+        existing_rows = (await db.execute(
+            select(LLMModel).filter(LLMModel.provider_id == provider.id)
+        )).scalars().all()
+        existing_ids = {m.model_id for m in existing_rows}
+        new_models = [
+            m for m in incoming
+            if isinstance(m, dict) and m.get("model_id") and m["model_id"] not in existing_ids
+        ]
+        if new_models:
+            # _create_models commits internally and binds to this provider.
+            await self._create_models(db, organization, provider, current_user, new_models)
+
+        # B2: first real key -> light up the preset/default models.
+        if key_was_blank and not self._provider_key_is_blank(provider):
+            await self._enable_preset_models(db, provider)
+
+        db.add(provider)
+        await db.commit()
+        await db.refresh(provider)
+        logger.info("Provider %s updated via upsert (key set=%s, +%d models)",
+                    provider.id, not self._provider_key_is_blank(provider), len(new_models))
+        return provider
+
+    async def _find_upsert_target(self, db: AsyncSession, organization: Organization, provider_data):
+        """Find an existing provider that a 'create' should fold into.
+
+        Matches within the org on provider_type, then prefers (in order): same
+        base_url, same name, or the sole preset provider of a custom/openrouter
+        type. Returns None when there's nothing to upsert onto (genuine new
+        provider). Best-effort — never raises.
+        """
+        try:
+            ptype = getattr(provider_data, "provider_type", None)
+            if not ptype:
+                return None
+            name = getattr(provider_data, "name", None)
+            creds = getattr(provider_data, "credentials", None) or {}
+            base_url = creds.get("base_url") if isinstance(creds, dict) else None
+
+            # OpenRouter and a "custom" provider pointed at openrouter.ai are the
+            # SAME thing — the shipped seed may be either type across versions. So
+            # for this family we search both types and default the base_url to the
+            # OpenRouter endpoint when the card didn't send one.
+            OPENROUTER_DEFAULT = "https://openrouter.ai/api/v1"
+            family = {ptype}
+            if ptype in ("openrouter", "custom"):
+                family |= {"openrouter", "custom"}
+                if not base_url and ptype == "openrouter":
+                    base_url = OPENROUTER_DEFAULT
+
+            rows = (await db.execute(
+                select(LLMProvider).filter(
+                    LLMProvider.organization_id == organization.id,
+                    LLMProvider.provider_type.in_(list(family)),
+                )
+            )).unique().scalars().all()
+            if not rows:
+                return None
+            # 1) base_url match (strongest signal for OpenRouter/custom)
+            if base_url:
+                nb = str(base_url).rstrip("/")
+                for p in rows:
+                    pbase = (p.additional_config or {}).get("base_url")
+                    if pbase and str(pbase).rstrip("/") == nb:
+                        return p
+            # 2) same name
+            if name:
+                for p in rows:
+                    if p.name == name:
+                        return p
+            # 3) the single shipped preset of the openrouter/custom family
+            presets = [p for p in rows if getattr(p, "is_preset", False)]
+            if len(presets) == 1 and ptype in ("custom", "openrouter"):
+                return presets[0]
+            # 4) exactly one provider in the family — fold onto it (the shipped seed)
+            if len(rows) == 1 and ptype in ("custom", "openrouter"):
+                return rows[0]
+        except Exception:
+            return None
+        return None
+
+    def _provider_key_is_blank(self, provider: LLMProvider) -> bool:
+        """True if the provider has no usable API key yet (blank/undecryptable).
+
+        Used to detect the blank->set transition so we only auto-enable models on
+        the FIRST real key, never overriding later user toggles.
+        """
+        try:
+            key, _ = provider.decrypt_credentials()
+            return not (key and str(key).strip())
+        except Exception:
+            return True
+
+    async def _enable_preset_models(self, db: AsyncSession, provider: LLMProvider) -> None:
+        """Enable the provider's preset (ship-ready) models.
+
+        Called when a provider first receives a real key. Only flips PRESET models
+        that are currently disabled — custom models and user-disabled choices are
+        left alone. The caller commits.
+        """
+        try:
+            res = await db.execute(
+                select(LLMModel).filter(LLMModel.provider_id == provider.id)
+            )
+            for m in res.scalars().all():
+                if getattr(m, "is_preset", False) and not m.is_enabled:
+                    m.is_enabled = True
+                    db.add(m)
+        except Exception as exc:
+            logger.warning("Could not auto-enable preset models for provider %s: %r", provider.id, exc)
+
     def _set_provider_credentials(
-        self, 
+        self,
         provider: LLMProvider,
         credentials: dict
     ):

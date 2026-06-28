@@ -77,7 +77,7 @@ class DashboardBlockSpec(BaseModel):
     
     # For text_widget blocks
     content: Optional[str] = None
-    variant: Optional[Literal["title", "subtitle", "paragraph", "insight", "summary"]] = None
+    variant: Optional[Literal["title", "subtitle", "paragraph", "insight", "summary", "callout"]] = None
     
     # For card/container/section blocks (nesting)
     children: Optional[List["DashboardBlockSpec"]] = None

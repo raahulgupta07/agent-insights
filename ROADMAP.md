@@ -2,8 +2,9 @@
 
 > Living plan. How the platform becomes **one product** instead of a pile of features.
 > Companion to `CLAUDE.md` (codebase map + landmines) and `DEVLOG.md` (shipped history).
-> Last updated: 2026-06-26 · current `VERSION_HYBRID` 1.37.0.
-> F09 (Universal Ingest Brain) added 2026-06-26 — supersedes F06; see §9.
+> Last updated: 2026-06-27 · current `VERSION_HYBRID` 1.44.0.
+> F09 (Universal Ingest Brain) added 2026-06-26 — supersedes F06; see §3.
+> F10 (Sense-Making / Decision Layer) added 2026-06-27 — turns analysis output from "here's the data" → "here's the insight → here's the move"; see §3.
 
 ---
 
@@ -75,9 +76,10 @@ Each gap maps to exactly one slot in §0. None is a new app.
 | F07 | Marketing connectors (GA/GSC) | **DataSource type** | connector framework | 2 API adapters + OAuth |
 | F08 | One-click text analysis | **agent tool** `analyze_text` | OpenRouter client | batch tool → derived column |
 | F09 | Universal Ingest Brain (any file → one brain) ★ | **DataSource pipeline** + brain | SpreadsheetClient, smart_upload, sheetsense, knowledge_proposer, brain_graph, OpenRouter vision | 6-stage ingest + ColumnProfile + unify-to-one-brain (absorbs F06) |
+| F10 | Sense-Making / Decision Layer (data → insight → move) ★★ | **post-completion enricher** | `compute_insights` (anomaly/spike/threshold), OpenRouter client, `CompletionV2Schema` (JSON), `ProactiveInsightsChips` slot | `sense_maker` service + `sense_making` schema field + Decision card |
 
-**Two of eight touch the agent's tool list (F01, F08). Four are pure DataSource adapters
-(F04–F07). Two are presentation config (F02, F03).** That's the whole surface area.
+**Two touch the agent's tool list (F01, F08). Four are pure DataSource adapters (F04–F07). Two are
+presentation config (F02, F03). One is a post-answer enricher (F10).** That's the whole surface area.
 
 ---
 
@@ -264,6 +266,69 @@ Storage = existing model chain (DataSource→Connection→ConnectionTable→Data
 - **P2** PDF/Word/image ingest via pdfplumber + camelot + OpenRouter vision (no GPU).
 - **P3** unify into the ONE org brain + auto-learn-on-ingest trigger + cross-source join proposals.
 
+### F10 · Sense-Making / Decision Layer — data → insight → move  ★★ flagship
+**The problem:** today every answer is **"what happened"** — raw rows, a chart, and a free-text
+narrative (`completion.content`). Decision-makers don't want raw analysis or even interpretation; they
+want **sense-making**: what it *means* + what to *do next*. F10 upgrades the analyst from "here's the
+data" → "here's the insight → here's the recommended business move."
+
+**Current state (audited 2026-06-27):**
+| Have | Where | Gap |
+|---|---|---|
+| Raw data | `step.data.rows/columns` + `info` (min/max/mean/unique) | — |
+| Chart | `step.view`/`data_model` → `RenderVisual`/`RenderTable`/`RenderCount` | — |
+| Narrative | `completion.content` (markdown) | interpretation, not a decision; jargon-prone |
+| Insights | `step.data._insights[]` (flag `HYBRID_PROACTIVE_INSIGHTS`, `ai/knowledge/insights.py`) | DESCRIPTIVE only — z-score/IQR outliers + spikes as `{kind,column,message,severity}` chips; no meaning, no action, no cause, no confidence |
+
+Missing: **so-what** (business meaning) · **now-what** (ranked action) · confidence + supporting data ·
+likely-cause for anomalies · the single most important thing this week (lead) · plain-language one-liner.
+
+**The idea — a 3-layer output on every answer:** `what happened` (have) → `so what` (why it matters,
+domain context) → `now what` (recommended move, ranked by impact). Plus: anomaly cause hypotheses,
+threshold→alert triggers, a confidence + evidence per recommendation, and a headline that leads with
+the #1 thing.
+
+**New `sense_making` object on `CompletionV2Schema` (JSON, no migration):**
+```jsonc
+"sense_making": {
+  "headline":  { "text", "severity":"critical|watch|positive|neutral", "confidence":"high|med|low", "metric" },
+  "findings": [{                                  // ranked by impact_rank (1 = act first)
+     "what", "so_what",
+     "now_what": { "action", "impact_rank", "confidence", "evidence":[…] },
+     "kind":"anomaly|trend_change|threshold|opportunity|risk",
+     "cause_hypothesis", "plain_language" }],
+  "alerts": [{ "rule","metric","value","threshold","severity","action" }],  // thresholds breached
+  "generated_by":"hybrid", "model"
+}
+```
+
+**Mechanism (hybrid — the key design choice):**
+1. Deterministic `compute_insights()` (exists) detects anomalies/spikes/thresholds from the real df —
+   **facts, not guesses.**
+2. New `ai/knowledge/sense_maker.py` feeds those signals + the question + result schema to a **cheap LLM**
+   (haiku) that writes `so_what`/`now_what`/`cause_hypothesis`/`plain_language`, ranks by impact, picks
+   the headline. Grounded in step 1 → low hallucination.
+3. Confidence DERIVED from signal strength + row count, not the model's mood.
+
+- **Where:** new step in `services/completion_service.create_completion()` AFTER the agent run (sees ALL
+  steps → can pick THE most important across the whole answer). Per-completion, not per-step. Fail-soft.
+- **FE:** new **Decision card** at top of `CompletionMessageComponent.vue` (headline + ranked findings +
+  alert chips), reusing the `ProactiveInsightsChips` slot.
+- **What can break:**
+  - 🔴 **Hallucinated recommendation** — LLM invents a "so what" the data doesn't support. Mitigate: feed
+    ONLY deterministically-detected signals + actual aggregates; require every `now_what.evidence[]` to
+    reference a real step/column/value; never let it cite a number not in the result.
+  - 🟠 **Cost per answer** — one extra cheap call. Cap to one haiku call; cache by (result hash + question);
+    skip entirely when no signal + tiny result. Gate behind the flag (default OFF = byte-identical today).
+  - 🟠 **Over-claiming confidence** — derive confidence from n-rows/signal strength, not the LLM. Low-row
+    results clamp to "low".
+  - 🟠 **Narrative duplication** — Decision card vs `completion.content` saying the same thing. Card is the
+    lead (sense-making); narrative stays the detail. Don't double-render the headline.
+- **Flag:** `HYBRID_SENSE_MAKING` (default OFF; can extend/replace the `HYBRID_PROACTIVE_INSIGHTS` chip path).
+- **Phases:** **P1** schema field + `sense_maker` (hybrid: existing detection → haiku enrich) + API verify ·
+  **P2** Decision card UI · **P3** threshold/alert rules config (per-agent thresholds → trigger) + deliver
+  through `report_delivery` so scheduled emails LEAD with the move, not the chart.
+
 ---
 
 ## 4. Cross-cutting: what connects everything (the glue work)
@@ -306,6 +371,9 @@ These are the integrations that make the 8 cohere into one product. Do them once
 | Vision/camelot in request path | F09 | 🟠 med | run in worker, stream progress; cache by content hash |
 | Cross-source join false-positive | F09 unify | 🟠 med | propose-only + review gate |
 | GPU dependency creep | F09 parsers | 🟠 med | CPU libs default; vision via OpenRouter; Docling optional-only |
+| Hallucinated recommendation | F10 sense-maker | 🔴 high | feed only deterministic signals + real aggregates; every `now_what.evidence[]` must cite a real step/column/value |
+| Over-claimed confidence | F10 | 🟠 med | confidence DERIVED from row-count/signal strength, not the LLM; low-row → clamp "low" |
+| Extra LLM cost per answer | F10 | 🟠 med | one haiku call, cache by (result hash + question), skip when no signal + tiny result, flag-gated |
 
 **Standing deploy landmines (from v1.37):**
 - Stack runs ONLY on `docker-compose.build.yaml` (plain compose = different project = empty DB).
@@ -341,6 +409,11 @@ PHASE R3 — ingest breadth  (each independent, parallelizable)
 
 PHASE R4 — analysis surface
   F08 analyze_text (agent tool + dataset toolbar)
+  F10 Sense-Making / Decision Layer  ★★  (data → insight → move)
+        P1 sense_making schema field + sense_maker (hybrid detect→haiku enrich) + API verify
+        P2 Decision card UI (headline + ranked findings + alert chips)
+        P3 per-agent threshold/alert rules + deliver via report_delivery (emails LEAD with the move)
+        └─ reuses compute_insights (detection exists); no migration (JSON on completion); flag-gated
 
 PHASE R5 — cohesion + GTM
   §4.1 unified Add-data modal (consolidate R3 entry points)

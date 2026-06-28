@@ -22,32 +22,56 @@
       <!-- LEFT: sign in -->
       <div class="cai-left">
         <section style="max-width:470px; width:100%;">
-          <h1 class="cai-h1">
+
+          <!-- first-run badge (only when no users exist yet) -->
+          <div v-if="needsSetup" style="display:inline-flex; align-items:center; gap:7px; margin-bottom:14px; padding:5px 12px 5px 9px; border:1px solid #E6DCCE; border-radius:999px; background:#FCFAF6; font-size:11.5px; font-weight:600; letter-spacing:.04em; color:#8A7F70;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-4z" stroke="#A8330F" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" stroke="#A8330F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            FIRST-RUN SETUP
+          </div>
+
+          <h1 v-if="needsSetup" class="cai-h1">
+            Welcome,<br>create your <span style="font-style:italic; color:#A8330F;">super-admin</span>
+          </h1>
+          <h1 v-else class="cai-h1">
             {{ greeting }},<br>sign in to <span style="font-style:italic; color:#A8330F;">City Agent Insights</span>
           </h1>
-          <p style="margin:0 0 22px; font-size:15px; line-height:1.5; color:#6E6356; max-width:390px;">
+          <p v-if="needsSetup" style="margin:0 0 22px; font-size:15px; line-height:1.5; color:#6E6356; max-width:400px;">
+            This is the first account on this server — it becomes the owner. Sign-up locks automatically once it's created.
+          </p>
+          <p v-else style="margin:0 0 22px; font-size:15px; line-height:1.5; color:#6E6356; max-width:390px;">
             Your data intelligence — answered with the source query, every time.
           </p>
 
           <p v-if="error_message" v-html="error_message" style="margin:0 0 16px; color:#C2410C; font-size:13.5px; white-space:pre-line;"></p>
 
           <!-- form -->
-          <form v-if="showForm" @submit.prevent="signInWithCredentials()" style="display:flex; flex-direction:column; gap:10px;">
+          <form v-if="showForm" @submit.prevent="needsSetup ? createAdmin() : signInWithCredentials()" style="display:flex; flex-direction:column; gap:10px;">
+            <label v-if="needsSetup" class="cai-field" style="display:flex; flex-direction:column; gap:3px; background:#FFFFFF; border:1px solid #E4D9CA; border-radius:12px; padding:9px 15px;">
+              <span style="font-size:11px; font-weight:600; letter-spacing:.03em; color:#9A8F80;">FULL NAME</span>
+              <input id="adminName" type="text" v-model="adminName" placeholder="Admin" autocomplete="name"
+                style="border:none; outline:none; background:transparent; font-family:inherit; font-size:15px; color:#1A1611; padding:1px 0;" />
+            </label>
             <label class="cai-field" style="display:flex; flex-direction:column; gap:3px; background:#FFFFFF; border:1px solid #E4D9CA; border-radius:12px; padding:9px 15px;">
               <span style="font-size:11px; font-weight:600; letter-spacing:.03em; color:#9A8F80;">EMAIL</span>
-              <input id="email" type="email" v-model="email" placeholder="you@company.com" autocomplete="username"
+              <input id="email" type="email" v-model="email" placeholder="you@company.com" :autocomplete="needsSetup ? 'email' : 'username'"
                 style="border:none; outline:none; background:transparent; font-family:inherit; font-size:15px; color:#1A1611; padding:1px 0;" />
             </label>
 
             <label class="cai-field" style="position:relative; display:flex; flex-direction:column; gap:3px; background:#FFFFFF; border:1px solid #E4D9CA; border-radius:12px; padding:9px 15px;">
               <span style="font-size:11px; font-weight:600; letter-spacing:.03em; color:#9A8F80;">PASSWORD</span>
-              <input id="password" :type="showPw ? 'text' : 'password'" v-model="password" placeholder="••••••••••" autocomplete="current-password"
+              <input id="password" :type="showPw ? 'text' : 'password'" v-model="password" placeholder="••••••••••" :autocomplete="needsSetup ? 'new-password' : 'current-password'"
                 style="border:none; outline:none; background:transparent; font-family:inherit; font-size:15px; color:#1A1611; padding:1px 50px 1px 0;" />
               <button type="button" @click="showPw = !showPw"
                 style="position:absolute; right:13px; top:50%; transform:translateY(-50%); border:none; background:#F4EEE5; color:#8A7F70; font-family:inherit; font-size:12px; font-weight:600; padding:5px 11px; border-radius:8px; cursor:pointer;">{{ showPw ? 'Hide' : 'Show' }}</button>
             </label>
 
-            <div style="display:flex; align-items:center; justify-content:space-between; padding:1px 2px 3px;">
+            <!-- password hint (setup only) -->
+            <div v-if="needsSetup" style="display:flex; gap:14px; padding:1px 2px 4px; font-size:12.5px; color:#7A7064;">
+              <span style="display:inline-flex; align-items:center; gap:5px;"><span style="color:#3FA86B;">✓</span> 8+ characters</span>
+              <span style="display:inline-flex; align-items:center; gap:5px;"><span style="color:#3FA86B;">✓</span> any character allowed</span>
+            </div>
+
+            <div v-if="!needsSetup" style="display:flex; align-items:center; justify-content:space-between; padding:1px 2px 3px;">
               <button type="button" @click="rememberMe = !rememberMe" style="display:flex; align-items:center; gap:9px; border:none; background:none; cursor:pointer; font-family:inherit; padding:0;">
                 <span style="width:18px; height:18px; border-radius:6px; display:flex; align-items:center; justify-content:center; transition:.15s;"
                   :style="{ background: rememberMe ? '#C2541E' : '#FFFFFF', border: '1.5px solid ' + (rememberMe ? '#C2541E' : '#CFC4B4') }">
@@ -60,23 +84,35 @@
 
             <button type="submit" :disabled="isSubmitting" class="cai-primary"
               style="border:none; background:#1A1611; color:#fff; font-family:inherit; font-size:15px; font-weight:600; padding:14px; border-radius:12px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:9px; box-shadow:0 10px 24px -12px rgba(26,22,17,.7);">
-              <template v-if="isSubmitting"><Spinner class="h-5 w-5" />{{ $t('auth.loggingIn') }}</template>
+              <template v-if="isSubmitting"><Spinner class="h-5 w-5" />{{ needsSetup ? 'Creating admin…' : $t('auth.loggingIn') }}</template>
               <template v-else>
-                Continue with email
+                {{ needsSetup ? 'Create admin & sign in' : 'Continue with email' }}
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12h13M13 6l6 6-6 6" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
               </template>
             </button>
           </form>
 
+          <!-- setup-only: lock note + pointer to Settings for the LLM key -->
+          <template v-if="needsSetup">
+            <p style="margin:16px 0 0; font-size:12.5px; color:#A89C8C; display:flex; align-items:center; gap:7px;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="9" rx="2" stroke="#A89C8C" stroke-width="1.8"/><path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="#A89C8C" stroke-width="1.8"/></svg>
+              This screen appears only once — registration closes after this account.
+            </p>
+            <div style="margin-top:14px; display:flex; align-items:flex-start; gap:10px; padding:11px 14px; background:#FBF7F1; border:1px solid #ECE3D5; border-radius:13px;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="flex-shrink:0; margin-top:1px;"><circle cx="12" cy="12" r="9" stroke="#A8330F" stroke-width="1.8"/><path d="M12 8h.01M11 12h1v4h1" stroke="#A8330F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span style="font-size:12.5px; line-height:1.45; color:#7A7064;">After sign-in, add your <strong style="color:#5C534A;">OpenRouter key</strong> in <strong style="color:#5C534A;">Settings → Models</strong> to power answers.</span>
+            </div>
+          </template>
+
           <!-- divider (only if at least one provider is enabled) -->
-          <div v-if="showProviders" style="display:flex; align-items:center; gap:14px; margin:16px 0 12px;">
+          <div v-if="showProviders && !needsSetup" style="display:flex; align-items:center; gap:14px; margin:16px 0 12px;">
             <span style="flex:1; height:1px; background:#E6DCCE;"></span>
             <span style="font-size:11.5px; font-weight:600; letter-spacing:.06em; color:#A89C8C;">OR CONTINUE WITH</span>
             <span style="flex:1; height:1px; background:#E6DCCE;"></span>
           </div>
 
           <!-- google + microsoft (each shown only when admin-enabled) -->
-          <div v-if="showSocial" style="display:grid; gap:10px;" :style="{ gridTemplateColumns: `repeat(${socialCols}, 1fr)` }">
+          <div v-if="showSocial && !needsSetup" style="display:grid; gap:10px;" :style="{ gridTemplateColumns: `repeat(${socialCols}, 1fr)` }">
             <button v-if="showGoogle" type="button" @click="signInWithGoogle" :disabled="loadingProvider !== null" class="cai-prov"
               style="display:flex; align-items:center; justify-content:center; gap:10px; background:#FCFAF6; border:1px solid #E4D9CA; border-radius:11px; padding:11px; cursor:pointer; font-family:inherit; font-size:14px; font-weight:600; color:#352F27;">
               <Spinner v-if="loadingProvider === 'google'" class="h-4 w-4" />
@@ -92,7 +128,7 @@
           </div>
 
           <!-- enterprise (only if SSO / Keycloak / LDAP enabled) -->
-          <div v-if="showEnterprise" style="margin-top:12px; padding:12px 14px; background:#FBF7F1; border:1px solid #ECE3D5; border-radius:13px;">
+          <div v-if="showEnterprise && !needsSetup" style="margin-top:12px; padding:12px 14px; background:#FBF7F1; border:1px solid #ECE3D5; border-radius:13px;">
             <div style="display:flex; align-items:center; gap:8px; margin-bottom:9px;">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-4z" stroke="#A8330F" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" stroke="#A8330F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
               <span style="font-size:11.5px; font-weight:600; letter-spacing:.04em; color:#8A7F70;">ENTERPRISE SIGN-IN</span>
@@ -138,7 +174,13 @@
         <div style="position:relative; flex:1; min-height:0; display:flex; flex-direction:column; justify-content:center; padding:18px 2px;">
 
           <!-- question prompt (persists across scenes 2-3) -->
-          <div v-if="showQuestion" style="align-self:flex-end; max-width:84%; margin-bottom:14px; background:#2C211A; border:1px solid rgba(255,255,255,.07); color:#E8DDD2; font-size:14px; line-height:1.45; padding:10px 15px; border-radius:14px 14px 5px 14px; animation:cai-rise .4s cubic-bezier(.2,.8,.2,1) both;">{{ question }}</div>
+          <div v-if="showQuestion" style="align-self:flex-end; max-width:84%; margin-bottom:9px; background:#2C211A; border:1px solid rgba(255,255,255,.07); color:#E8DDD2; font-size:14px; line-height:1.45; padding:10px 15px; border-radius:14px 14px 5px 14px; animation:cai-rise .4s cubic-bezier(.2,.8,.2,1) both;">{{ question }}</div>
+
+          <!-- Auto model routing chip (real v1.47 Auto picker) -->
+          <div v-if="showModel" style="align-self:flex-end; margin-bottom:14px; display:inline-flex; align-items:center; gap:7px; font-size:11.5px; color:#C2854F; background:rgba(214,112,55,.1); border:1px solid rgba(214,112,55,.28); padding:4px 11px; border-radius:999px; animation:cai-pop .3s both;">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M13 2L4 14h6l-1 8 9-12h-6z" fill="#D67037"/></svg>
+            <span>Auto → <strong style="color:#E8C9A8; font-weight:700;">{{ modelPick.tier }}</strong> · {{ modelPick.name }}</span>
+          </div>
 
           <!-- SCENE 1: pick a source -->
           <div v-if="scene === 1" style="animation:cai-fade .45s both;">
@@ -179,8 +221,8 @@
             </div>
           </div>
 
-          <!-- SCENE 3: result -->
-          <div v-else style="background:linear-gradient(135deg,#D67037,#B8431A); border-radius:15px 15px 15px 5px; padding:16px 17px; color:#fff; animation:cai-glow 3.2s ease-in-out infinite, cai-rise .4s cubic-bezier(.2,.8,.2,1) both; align-self:flex-start; max-width:90%;">
+          <!-- SCENE 3: answer + Decision -->
+          <div v-else-if="scene === 3" style="background:linear-gradient(135deg,#D67037,#B8431A); border-radius:15px 15px 15px 5px; padding:16px 17px; color:#fff; animation:cai-glow 3.2s ease-in-out infinite, cai-rise .4s cubic-bezier(.2,.8,.2,1) both; align-self:flex-start; max-width:92%;">
             <div style="display:flex; align-items:flex-end; gap:7px; height:64px; margin-bottom:13px;">
               <span v-for="(bar, bi) in chartBars" :key="bi" style="flex:1; min-width:0; border-radius:5px 5px 2px 2px; background:rgba(255,255,255,.9); transition:height .65s cubic-bezier(.2,.8,.2,1);" :style="{ height: bar.h, transitionDelay: bar.delay }"></span>
             </div>
@@ -189,6 +231,54 @@
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M4 7V5a2 2 0 0 1 2-2h2M4 17v2a2 2 0 0 0 2 2h2M20 7V5a2 2 0 0 0-2-2h-2M20 17v2a2 2 0 0 1-2 2h-2" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
               {{ delta }}
             </div>
+            <div v-if="decision.text" style="margin-top:13px; padding-top:12px; border-top:1px solid rgba(255,255,255,.2); display:flex; align-items:flex-start; gap:9px; animation:cai-fade .45s both;">
+              <span style="flex-shrink:0; font-size:10px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; background:rgba(0,0,0,.28); padding:3px 8px; border-radius:6px;">{{ decision.tone }}</span>
+              <span style="font-size:13px; line-height:1.4; opacity:.97;">{{ decision.text }}</span>
+            </div>
+          </div>
+
+          <!-- SCENE 4: build dashboard -->
+          <div v-else-if="scene === 4" style="animation:cai-rise .4s cubic-bezier(.2,.8,.2,1) both;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="1.5" stroke="#C2854F" stroke-width="2"/><rect x="13" y="3" width="8" height="5" rx="1.5" stroke="#C2854F" stroke-width="2"/><rect x="13" y="10" width="8" height="11" rx="1.5" stroke="#C2854F" stroke-width="2"/><rect x="3" y="13" width="8" height="8" rx="1.5" stroke="#C2854F" stroke-width="2"/></svg>
+              <span style="font-size:13.5px; color:#CABBAC; font-weight:600;">Building your dashboard</span>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:9px; margin-bottom:9px;">
+              <div v-for="(k, ki) in kpis" :key="ki" style="background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:11px; padding:11px 12px; animation:cai-pop .35s both;" :style="{ animationDelay: (ki * 0.12) + 's' }">
+                <span style="display:block; font-size:10.5px; color:#8A7868; margin-bottom:5px;">{{ k.label }}</span>
+                <span style="display:block; font-size:18px; font-weight:700; color:#F1E6DB;">{{ k.val }}</span>
+              </div>
+            </div>
+            <div style="background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:13px;">
+              <div style="display:flex; align-items:flex-end; gap:6px; height:52px;">
+                <span v-for="(bar, bi) in chartBars" :key="bi" style="flex:1; min-width:0; border-radius:4px 4px 1px 1px; background:linear-gradient(180deg,#D67037,#B8431A); transition:height .6s cubic-bezier(.2,.8,.2,1);" :style="{ height: bar.h, transitionDelay: bar.delay }"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- SCENE 5: generate slide deck -->
+          <div v-else-if="scene === 5" style="animation:cai-rise .4s cubic-bezier(.2,.8,.2,1) both;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="13" rx="2" stroke="#C2854F" stroke-width="2"/><path d="M9 21h6M12 17v4" stroke="#C2854F" stroke-width="2" stroke-linecap="round"/></svg>
+              <span style="font-size:13.5px; color:#CABBAC; font-weight:600;">Generating the slide deck</span>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:9px;">
+              <div v-for="(s, si) in slides" :key="si" style="background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.09); border-radius:9px; padding:10px; display:flex; flex-direction:column; gap:6px; min-height:88px; animation:cai-pop .35s both;" :style="{ animationDelay: (si * 0.14) + 's' }">
+                <span style="height:5px; width:68%; border-radius:3px; background:#D67037;"></span>
+                <span style="height:4px; width:92%; border-radius:3px; background:rgba(255,255,255,.14);"></span>
+                <span style="height:4px; width:60%; border-radius:3px; background:rgba(255,255,255,.1);"></span>
+                <span style="margin-top:auto; font-size:10px; color:#9A8678; font-weight:600;">{{ s }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- SCENE 6: scheduled + emailed -->
+          <div v-else style="display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:13px; padding:16px 0; animation:cai-rise .4s cubic-bezier(.2,.8,.2,1) both;">
+            <span style="width:52px; height:52px; border-radius:50%; background:linear-gradient(135deg,#D67037,#B8431A); display:flex; align-items:center; justify-content:center; box-shadow:0 0 0 6px rgba(214,112,55,.12); animation:cai-pop .4s both;">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M4 7l8 6 8-6M4 7v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V7M4 7a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+            <span style="font-size:15px; font-weight:600; color:#F1E6DB;">Scheduled &amp; delivered</span>
+            <span style="font-size:12.5px; color:#9A8678; line-height:1.5;">Emailed to your team — clean report,<br/>every Monday at 8:00am</span>
           </div>
         </div>
 
@@ -222,6 +312,10 @@ const route = useRoute()
 const googleSignIn = ref(false)
 const googleLogo = ref('google')
 const signupEnabled = ref(false)
+// First-run: server has zero users -> show the create-super-admin form instead
+// of login. Flips to false forever once the first account exists. Fail-closed.
+const needsSetup = ref(false)
+const adminName = ref('Admin')
 const oidcProviders = ref<{ name: string; enabled: boolean; logo?: string }[]>([])
 const loadingProvider = ref<string | null>(null)
 const authMode = ref<'hybrid'|'local_only'|'sso_only'>('hybrid')
@@ -254,7 +348,8 @@ const rememberMe = ref(true)
 const revealForm = ref(false)
 const localOverride = computed(() => route.query.local === 'true')
 // Form is shown unless the deployment is SSO-only (then it's revealed via Admin/LDAP).
-const showForm = computed(() => authMode.value !== 'sso_only' || localOverride.value || revealForm.value)
+// First-run setup always forces the form (must be able to create the admin).
+const showForm = computed(() => needsSetup.value || authMode.value !== 'sso_only' || localOverride.value || revealForm.value)
 
 // Load the design fonts (Spectral serif heading + Hanken Grotesk body) for this page.
 useHead({
@@ -303,41 +398,87 @@ const error_message = ref('')
 const { signIn, getSession } = useAuth();
 
 // ===================== right-panel "agent at work" showcase =====================
-const sources = [
-  { name: 'Postgres', sub: 'primary db' },
-  { name: 'Stripe', sub: 'billing' },
-  { name: 'GA4', sub: 'analytics' },
-  { name: 'Warehouse', sub: 'snowflake' },
-]
+// Each turn mirrors the REAL end-to-end app flow: connect a real connector type →
+// Auto model routing → plan + run SQL → answer + Decision → build dashboard →
+// build slide deck → schedule + email. Connector names are real catalog types
+// (data_source_registry.py). Kept snappy so the whole loop stays tight.
 const turns = [
-  { q: 'Top 5 artists by revenue this quarter?', pick: 0,
+  {
+    q: 'Top 5 artists by revenue this quarter?',
+    sources: [
+      { name: 'Postgres', sub: 'primary db' },
+      { name: 'Snowflake', sub: 'warehouse' },
+      { name: 'BigQuery', sub: 'analytics' },
+      { name: 'SharePoint', sub: 'files' },
+    ],
+    pick: 0,
+    model: { tier: 'Balanced', name: 'claude-sonnet' },
     tasks: ['Scan invoice_line · 4.2M rows', 'Join track ⋈ artist', 'Aggregate revenue', 'Rank top 5'],
-    a: 'Rock leads with +$11.2K this quarter.', delta: '+12% QoQ', chart: [52, 68, 44, 90, 76] },
-  { q: 'Which customers churned in May?', pick: 1,
+    a: 'Rock leads with +$11.2K this quarter.', delta: '+12% QoQ',
+    decision: { tone: 'Act', text: 'Lean budget into the Rock catalog before Q-end.' },
+    chart: [52, 68, 44, 90, 76],
+    kpis: [{ label: 'Revenue', val: '$92.4K' }, { label: 'Top genre', val: 'Rock' }, { label: 'QoQ', val: '+12%' }],
+    slides: ['Revenue', 'Top 5', 'Next steps'],
+  },
+  {
+    q: 'Which customers churned in May?',
+    sources: [
+      { name: 'MySQL', sub: 'app db' },
+      { name: 'Redshift', sub: 'warehouse' },
+      { name: 'MongoDB', sub: 'events' },
+      { name: 'Databricks', sub: 'lakehouse' },
+    ],
+    pick: 1,
+    model: { tier: 'Fast', name: 'claude-haiku' },
     tasks: ['Load subscriptions', 'Flag lapsed accounts', 'Compute lost MRR', 'Group by plan'],
-    a: '23 accounts lapsed → −$4.8K MRR.', delta: '−4.8K MRR', chart: [80, 72, 58, 46, 30] },
-  { q: "Forecast next month's signups.", pick: 2,
+    a: '23 accounts lapsed → −$4.8K MRR.', delta: '−4.8K MRR',
+    decision: { tone: 'Watch', text: 'Pro plan drove 70% of churn — trigger a win-back.' },
+    chart: [80, 72, 58, 46, 30],
+    kpis: [{ label: 'Churned', val: '23' }, { label: 'Lost MRR', val: '−$4.8K' }, { label: 'Worst plan', val: 'Pro' }],
+    slides: ['Churn', 'By plan', 'Win-back'],
+  },
+  {
+    q: "Forecast next month's signups.",
+    sources: [
+      { name: 'BigQuery', sub: 'analytics' },
+      { name: 'ClickHouse', sub: 'events' },
+      { name: 'MS Fabric', sub: 'lakehouse' },
+      { name: 'Power BI', sub: 'datasets' },
+    ],
+    pick: 2,
+    model: { tier: 'Reason', name: 'claude-opus' },
     tasks: ['Read events.signup', 'Build 12-month series', 'Fit trend model', 'Project next period'],
-    a: '≈ 1,420 signups expected, up 9%.', delta: '+9% MoM', chart: [40, 55, 50, 70, 82, 95] },
+    a: '≈ 1,420 signups expected, up 9%.', delta: '+9% MoM',
+    decision: { tone: 'Plan', text: 'Staff support for ~130 extra signups next month.' },
+    chart: [40, 55, 50, 70, 82, 95],
+    kpis: [{ label: 'Forecast', val: '1,420' }, { label: 'MoM', val: '+9%' }, { label: 'Confidence', val: '±6%' }],
+    slides: ['Trend', 'Forecast', 'Capacity'],
+  },
 ]
 
 const scene = ref(1)
+const activeSources = ref<{ name: string; sub: string }[]>([])
 const pickedSource = ref<number | null>(null)
 const connecting = ref(false)
 const question = ref('')
 const showQuestion = ref(false)
+const showModel = ref(false)
+const modelPick = ref<{ tier: string; name: string }>({ tier: '', name: '' })
 const tasks = ref<{ label: string; status: string }[]>([])
 const chart = ref<number[]>([])
 const chartGrown = ref(false)
 const resultText = ref('')
 const streaming = ref(false)
 const delta = ref('')
+const decision = ref<{ tone?: string; text?: string }>({})
+const kpis = ref<{ label: string; val: string }[]>([])
+const slides = ref<string[]>([])
 
 let mounted = true
 let timers: ReturnType<typeof setTimeout>[] = []
 const wait = (ms: number) => new Promise<void>(r => { const tm = setTimeout(r, ms); timers.push(tm) })
 
-const sourceTiles = computed(() => sources.map((src, idx) => {
+const sourceTiles = computed(() => activeSources.value.map((src, idx) => {
   const picked = idx === pickedSource.value
   return {
     name: src.name, sub: src.sub, picked,
@@ -357,51 +498,78 @@ const chartBars = computed(() => (chart.value || []).map((h, idx) => ({
   h: chartGrown.value ? h + '%' : '0%',
   delay: (idx * 0.06) + 's',
 })))
-const connectName = computed(() => pickedSource.value != null ? sources[pickedSource.value].name : '')
-const statusLine = computed(() => scene.value === 1 ? 'live · connecting to your data'
-  : scene.value === 2 ? 'live · running the query'
-  : 'live · answered from your data')
+const connectName = computed(() => pickedSource.value != null && activeSources.value[pickedSource.value] ? activeSources.value[pickedSource.value].name : '')
+const statusLine = computed(() => {
+  switch (scene.value) {
+    case 1: return 'live · connecting to your data'
+    case 2: return 'live · running the query'
+    case 3: return 'live · answered from your data'
+    case 4: return 'live · building your dashboard'
+    case 5: return 'live · generating the slide deck'
+    default: return 'live · scheduled & emailed'
+  }
+})
 
 async function runShowcase(i: number) {
   if (!mounted) return
   const turn = turns[i % turns.length]
 
-  // SCENE 1 — pick a source
-  scene.value = 1; pickedSource.value = null; connecting.value = false
-  question.value = turn.q; showQuestion.value = false
+  // SCENE 1 — pick a real connector
+  scene.value = 1; activeSources.value = turn.sources; pickedSource.value = null; connecting.value = false
+  question.value = turn.q; showQuestion.value = false; showModel.value = false
   tasks.value = []; chart.value = turn.chart; chartGrown.value = false
   resultText.value = ''; streaming.value = false; delta.value = ''
+  decision.value = {}; kpis.value = []; slides.value = []
   await wait(750); if (!mounted) return
   pickedSource.value = turn.pick
-  await wait(750); if (!mounted) return
+  await wait(700); if (!mounted) return
   connecting.value = true
-  await wait(800); if (!mounted) return
+  await wait(750); if (!mounted) return
 
-  // SCENE 2 — progress checklist
+  // SCENE 2 — ask + Auto model routing + plan/run SQL checklist
   tasks.value = turn.tasks.map((label, idx) => ({ label, status: idx === 0 ? 'active' : 'pending' }))
   scene.value = 2; showQuestion.value = true
-  await wait(700)
+  await wait(380); if (!mounted) return
+  modelPick.value = turn.model; showModel.value = true   // Auto → tier · model
+  await wait(560)
   for (let k = 0; k < turn.tasks.length; k++) {
     if (!mounted) return
     tasks.value = tasks.value.map((x, idx) =>
       idx <= k ? { ...x, status: 'done' } : (idx === k + 1 ? { ...x, status: 'active' } : x))
-    await wait(620)
+    await wait(560)
   }
-  await wait(450); if (!mounted) return
+  await wait(380); if (!mounted) return
 
-  // SCENE 3 — result
+  // SCENE 3 — answer (streamed) + Decision
   scene.value = 3; resultText.value = ''; streaming.value = true; chartGrown.value = false
   await wait(120); if (!mounted) return
   chartGrown.value = true
-  await wait(350)
+  await wait(320)
   for (let c = 1; c <= turn.a.length; c++) {
     if (!mounted) return
     resultText.value = turn.a.slice(0, c)
-    await wait(22)
+    await wait(20)
   }
   if (!mounted) return
   streaming.value = false; delta.value = turn.delta
-  await wait(2600)
+  await wait(550); if (!mounted) return
+  decision.value = turn.decision   // So-what callout
+  await wait(2300); if (!mounted) return
+
+  // SCENE 4 — build dashboard (KPI tiles + chart)
+  scene.value = 4; kpis.value = turn.kpis; chartGrown.value = false
+  await wait(160); if (!mounted) return
+  chartGrown.value = true
+  await wait(2300); if (!mounted) return
+
+  // SCENE 5 — generate slide deck
+  scene.value = 5; slides.value = turn.slides
+  await wait(2100); if (!mounted) return
+
+  // SCENE 6 — schedule + email
+  scene.value = 6
+  await wait(2400); if (!mounted) return
+
   runShowcase(i + 1)
 }
 
@@ -444,6 +612,7 @@ onMounted(async () => {
     googleSignIn.value = !!(settings as any)?.google_oauth?.enabled
     googleLogo.value = (settings as any)?.google_oauth?.logo || 'google'
     signupEnabled.value = !!(settings as any)?.signup_enabled
+    needsSetup.value = !!(settings as any)?.needs_setup
     const hv = (settings as any)?.hybrid_version
     if (hv) hybridVersion.value = hv
   } catch (_) {}
@@ -483,6 +652,33 @@ function persistRedirectForOAuth() {
       sessionStorage.removeItem(OAUTH_REDIRECT_STORAGE_NAME)
     }
   } catch (_) {}
+}
+
+// First-run: create the super-admin, then sign in with the same credentials.
+// Uses the existing public register router — its first-user path (user_count==0)
+// allows creation and on_after_register elevates this account to super-admin +
+// owner. After it exists, needs_setup is false on next load, so this is one-shot.
+async function createAdmin() {
+  isSubmitting.value = true
+  error_message.value = ''
+  try {
+    await $fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: email.value,
+        password: password.value,
+        name: adminName.value || 'Admin',
+      }),
+    })
+  } catch (error: any) {
+    error_message.value = extractErrorMessage(error, 'Could not create the admin account.')
+    isSubmitting.value = false
+    return
+  }
+  // Account created — sign straight in with the same credentials.
+  needsSetup.value = false
+  await signInWithCredentials()
 }
 
 async function signInWithCredentials() {

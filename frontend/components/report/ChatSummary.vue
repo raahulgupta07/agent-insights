@@ -8,25 +8,44 @@
       <h2 class="text-sm font-semibold text-gray-900">Outputs</h2>
     </div>
 
-    <div class="max-w-xl mx-auto px-4 py-4 space-y-6">
+    <!-- Generating: while a run is in progress and no output content has landed yet,
+         show the SAME warm shimmer the dashboard uses instead of a blank panel.
+         Swaps to the real content the instant an answer / decision arrives. -->
+    <DashboardSkeleton v-if="showGeneratingSkeleton" mode="page" />
 
-      <!-- Empty state -->
-      <div v-if="!hasAnything" class="flex flex-col items-center justify-center h-64 text-gray-400">
-        <Icon name="heroicons-document-text" class="w-8 h-8 mb-2" />
-        <span class="text-sm">No items yet</span>
-      </div>
+    <div v-else class="max-w-xl mx-auto px-4 py-4 space-y-6">
 
-      <!-- Answer (latest agent text answer) -->
-      <section v-if="hasAnswer">
-        <div class="rounded-xl border border-[#E9E0D3] bg-white shadow-sm px-4 py-3.5">
-          <div class="flex items-center gap-2 mb-2">
-            <span class="inline-flex items-center text-[10px] font-semibold uppercase tracking-wide text-[#A8330F] bg-[#F6EFEA] px-2 py-0.5 rounded">Answer</span>
-          </div>
-          <div class="markdown-content text-[13px] text-[#33373c] leading-relaxed">
-            <MarkdownRender :content="props.latestAnswer || ''" :final="true" :render-code-blocks-as-pre="true" />
-          </div>
+      <!-- Pinned Session Summary: a synthesis rolled up across every turn, sits
+           ABOVE the per-turn feed. Renders its own empty/build-prompt state when
+           there is no summary yet. Fail-soft over missing fields. -->
+      <SessionSummaryCard
+        :summary="sessionSummary"
+        :stale="sessionSummaryStale"
+        :loading="sessionSummaryLoading"
+        @refresh="emit('refreshSessionSummary')"
+      />
+
+      <!-- Per-turn feed: Question + Answer + Decision + artifact chips per turn,
+           newest on top. Replaces the single latest-answer/decision view. -->
+      <OutputsFeed
+        :messages="messages"
+        :artifacts="artifactList"
+        @openArtifact="(p:any) => emit('openArtifact', p)"
+        @retryArtifact="(p:any) => emit('retryArtifact', p)"
+      />
+
+      <!-- P4: skeleton while the latest decision is still computing (the in-progress
+           turn). Shown above the feed sections so the panel never has a silent gap. -->
+      <div v-if="senseMakingPending && !senseMaking" class="rounded-xl border border-[#E9DFD0] bg-[#FBF7F0] px-3.5 py-3">
+        <div class="flex items-center gap-2">
+          <span class="text-[#C2541E] animate-pulse">◆</span>
+          <span class="text-[10.5px] font-semibold tracking-wide text-[#C2541E]">DECISION</span>
+          <span class="text-[10.5px] text-[#9A8F80]">· Reading the result… forming a decision</span>
+          <span class="inline-block w-2.5 h-2.5 ml-0.5 rounded-full border-2 border-[#E8C9B5] border-t-[#C2541E] animate-spin"></span>
         </div>
-      </section>
+        <div class="mt-2 h-2.5 w-3/4 rounded bg-[#EEE4D6] animate-pulse"></div>
+        <div class="mt-1.5 h-2.5 w-1/2 rounded bg-[#EEE4D6] animate-pulse"></div>
+      </div>
 
       <!-- Scheduled Tasks -->
       <section v-if="scheduledPrompts.length > 0">
@@ -36,35 +55,6 @@
             <ScheduledTaskCard :scheduled-prompt="sp" @click="emit('editScheduledPrompt', sp)" />
           </li>
         </ul>
-      </section>
-
-      <!-- Artifacts -->
-      <section v-if="artifactList.length > 0">
-        <h3 class="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">Artifacts</h3>
-        <ul class="space-y-1.5">
-          <li
-            v-for="art in visibleArtifacts"
-            :key="art.id"
-            class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-white border border-gray-100 shadow-sm hover:shadow cursor-pointer transition-all"
-            @click="emit('openArtifact', { artifactId: art.id })"
-          >
-            <Icon name="heroicons:squares-plus" class="w-4 h-4 flex-shrink-0 text-[#C2541E]" />
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-1.5">
-                <span class="text-sm text-gray-700 truncate">{{ art.title || 'Untitled' }}</span>
-                <span v-if="art.id === artifactList[0]?.id" class="inline-flex items-center text-[10px] font-medium text-[#A8330F] bg-[#F6EFEA] px-1.5 py-0.5 rounded">Default</span>
-              </div>
-              <div v-if="art.mode" class="text-[11px] text-gray-400 mt-0.5">{{ art.mode }}</div>
-            </div>
-          </li>
-        </ul>
-        <button
-          v-if="artifactList.length > 3 && !showAllArtifacts"
-          class="mt-2 text-xs text-gray-400 hover:text-gray-600 transition-colors"
-          @click="showAllArtifacts = true"
-        >
-          Show {{ artifactList.length - 3 }} more
-        </button>
       </section>
 
       <!-- Queries -->
@@ -169,10 +159,32 @@ import { computed, ref, watch, onMounted } from 'vue'
 import { MarkdownRender } from 'markstream-vue'
 import ToolWidgetPreview from '~/components/tools/ToolWidgetPreview.vue'
 import WebhookConfigModal from '~/components/report/WebhookConfigModal.vue'
+import DecisionCard from '~/components/DecisionCard.vue'
+import DashboardSkeleton from '~/components/dashboard/DashboardSkeleton.vue'
+// Explicit import: filename doesn't start with its dir ("report") so Nuxt would
+// auto-register it as <ReportOutputsFeed> — bare <OutputsFeed> would render nothing.
+import OutputsFeed from '~/components/report/OutputsFeed.vue'
+// Explicit import: filename doesn't start with "report" so Nuxt would auto-register
+// it as <ReportSessionSummaryCard> — a bare <SessionSummaryCard> would render nothing.
+import SessionSummaryCard from '~/components/report/SessionSummaryCard.vue'
 
 const props = defineProps<{
   // Latest agent text answer (markdown). Shown as the "Answer" card at the top.
   latestAnswer?: string
+  // True while the latest run is still generating. When set and no answer /
+  // sense-making content has landed yet, the panel shows the dashboard shimmer
+  // (DashboardSkeleton) instead of a blank Outputs pane.
+  generating?: boolean
+  // Frozen backend sense_making object for the latest answer completion. When
+  // present, a compact DecisionCard leads the Outputs panel. Null = nothing renders.
+  senseMaking?: Record<string, any> | null
+  // P4: true while the decision is still computing → show a skeleton placeholder.
+  senseMakingPending?: boolean
+  // HYBRID_AUTO_MODEL: the model the classifier routed the latest answer to.
+  autoModel?: Record<string, any> | null
+  // The report's chat messages (user + system completion rows). Drives the
+  // per-turn Outputs feed (Question + Answer + Decision + artifacts per turn).
+  messages?: any[]
   scheduledPrompts: any[]
   artifactList: any[]
   queryList: any[]
@@ -188,6 +200,13 @@ const props = defineProps<{
   showClose?: boolean
   // Report id — enables the Webhooks section + Configure webhook modal.
   reportId?: string
+  // Pinned Session Summary (rolled up across all turns). null = none built yet →
+  // SessionSummaryCard shows its slim "Generate summary" prompt.
+  sessionSummary?: Record<string, any> | null
+  // True when newer turns landed since the summary was built (shows a stale badge).
+  sessionSummaryStale?: boolean
+  // True while the summary is (re)building.
+  sessionSummaryLoading?: boolean
 }>()
 
 // ---- Webhooks ----
@@ -213,16 +232,13 @@ async function loadWebhooks() {
 onMounted(loadWebhooks)
 watch(() => props.reportId, loadWebhooks)
 
-const showAllArtifacts = ref(false)
-const visibleArtifacts = computed(() =>
-  showAllArtifacts.value ? props.artifactList : props.artifactList.slice(0, 3)
-)
-
 const emit = defineEmits([
   'editScheduledPrompt',
   'openArtifact',
+  'retryArtifact',
   'scrollToMessage',
   'close',
+  'refreshSessionSummary',
 ])
 
 // Render-ready instruction list: prefer the historical list (so accepted
@@ -256,6 +272,16 @@ const instructionsList = computed(() => {
 })
 
 const hasAnswer = computed(() => !!(props.latestAnswer && String(props.latestAnswer).trim()))
+
+// Show the warm dashboard shimmer while a run is generating and nothing renderable
+// has landed yet (no answer, no decision, no decision-skeleton). The instant any of
+// those arrive, this flips false and the real content shows.
+const showGeneratingSkeleton = computed(() =>
+  !!props.generating &&
+  !hasAnswer.value &&
+  !props.senseMaking &&
+  !props.senseMakingPending
+)
 
 const hasAnything = computed(() =>
   hasAnswer.value ||

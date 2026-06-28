@@ -131,6 +131,14 @@ class CreateDashboardTool(Tool):
         observation_context = runtime_ctx.get("observation_context") or {}
         context_hub = runtime_ctx.get("context_hub")
 
+        # HYBRID: bake a data-grounded Key Insights panel + Decision callout into the
+        # top of the dashboard. Flag is org/DB-owned; defaults ON via schema.
+        settings = runtime_ctx.get("settings")
+        try:
+            key_insights_on = settings.get_config("dashboard_key_insights").value if settings else True
+        except Exception:
+            key_insights_on = True
+
         # Collect available visualizations with their ViewSchema
         visualizations: List[Dict[str, Any]] = []
 
@@ -232,6 +240,44 @@ class CreateDashboardTool(Tool):
             
             viz_json = json.dumps(visualizations, indent=2, default=str)
 
+            insights_directive = ""
+            if key_insights_on:
+                insights_directive = """
+═══════════════════════════════════════════════════════════════════════════════
+MANDATORY INSIGHTS LAYER  (place these as the VERY FIRST blocks, above all KPIs/charts)
+═══════════════════════════════════════════════════════════════════════════════
+Before any visualization, you MUST output, in this order:
+
+1. A DECISION callout — a single text block, "variant": "callout":
+   {{
+     "type": "text",
+     "variant": "callout",
+     "size": "full",
+     "content": "<p><strong>Decision · &lt;Watch|Act|Hold&gt; · confidence: &lt;high|medium|low&gt;</strong></p><p>&lt;one sentence: the single most important so-what + the recommended next move&gt;</p>",
+     "is_completed": true
+   }}
+
+2. A KEY INSIGHTS panel — a single text block, "variant": "insight":
+   {{
+     "type": "text",
+     "variant": "insight",
+     "size": "full",
+     "content": "<h3>Key Insights</h3><ul><li>&lt;insight 1&gt;</li><li>&lt;insight 2&gt;</li><li>&lt;insight 3&gt;</li></ul>",
+     "is_completed": true
+   }}
+
+GROUNDING RULES (non-negotiable):
+- Write 3–5 insight bullets. Each MUST cite a concrete number, share, ratio, site,
+  period or unit that is actually present in AVAILABLE VISUALIZATIONS or OBSERVATIONS.
+- Prefer comparisons and so-whats over restating a metric: which site/unit dominates,
+  the trend direction, the outlier, the gap between two figures, the concentration.
+- If you cannot ground a claim in the provided data, DO NOT write it. Never invent
+  numbers, sites, or periods. Fewer true bullets beats more guessed ones.
+- Keep each bullet to one line. Plain business language, no fluff.
+- The DECISION verb: "Act" if the data demands a change now, "Watch" if it warrants
+  monitoring, "Hold" if all is nominal. Confidence reflects how clean/complete the data is.
+"""
+
             return f"""SYSTEM
 You are a world-class dashboard designer. Create STUNNING, modern dashboards with visual hierarchy and compelling data storytelling.
 
@@ -254,7 +300,7 @@ AVAILABLE VISUALIZATIONS:
 OBSERVATIONS
 <past_observations>{past_obs_json}</past_observations>
 <last_observation>{last_obs_json}</last_observation>
-
+{insights_directive}
 ═══════════════════════════════════════════════════════════════════════════════
 BLOCK TYPES - Use these to build beautiful dashboards
 ═══════════════════════════════════════════════════════════════════════════════
@@ -380,6 +426,7 @@ RULES
 5. Use column_layout for side-by-side comparisons (spans MUST sum to 12)
 6. Place titles/descriptions BEFORE related visualizations
 7. Every block MUST have "is_completed": true
+8. If a MANDATORY INSIGHTS LAYER is specified above, those blocks come FIRST, before everything else
 
 OUTPUT FORMAT:
 {{

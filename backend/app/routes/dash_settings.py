@@ -54,7 +54,24 @@ async def get_frontend_settings():
         ldap_enabled = bool(getattr(_file_ldap, "enabled", False)) if _file_ldap else False
         ldap_logo = ""
 
+    # First-run setup gate. needs_setup == True ONLY when the server has zero
+    # users — the UI then shows the create-super-admin form. The instant the
+    # first user exists this flips to False forever (signup screen never returns).
+    # FAIL-CLOSED: any error counting users => False => login shown, NOT signup,
+    # so a glitch can never re-open admin creation.
+    needs_setup = False
+    try:
+        from sqlalchemy import select, func
+        from app.dependencies import async_session_maker
+        from app.models.user import User
+        async with async_session_maker() as _s:
+            _count = (await _s.execute(select(func.count()).select_from(User))).scalar_one()
+        needs_setup = (_count == 0)
+    except Exception:
+        needs_setup = False
+
     return JSONResponse({
+        "needs_setup": needs_setup,
         "google_oauth": {
             "enabled": google_enabled,
             "logo": google_logo,

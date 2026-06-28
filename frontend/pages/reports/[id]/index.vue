@@ -327,12 +327,16 @@
 											v-if="(m.completion_blocks || []).some(b => b.tool_execution)"
 											class="flex items-center gap-2 mb-2 text-[13px] text-[#7A7066] select-none"
 										>
-											<span v-if="m.status === 'in_progress'" class="inline-block w-3.5 h-3.5 rounded-full border-2 border-[#E8C9B5] border-t-[#C2541E] animate-spin"></span>
-											<Icon v-else name="heroicons:check-circle" class="w-4 h-4 text-[#3F7A4F]" />
-											<span class="ui-serif" :class="{ 'cc-shimmer': m.status === 'in_progress' }">
-												{{ m.status === 'in_progress' ? 'Working' : 'Thought process' }} ·
-												{{ blocksToSteps(m.completion_blocks || []).length }} step{{ blocksToSteps(m.completion_blocks || []).length === 1 ? '' : 's' }}<template v-if="m.status === 'in_progress'"> · {{ liveElapsed(m) }}</template><template v-else> · Done</template>
-											</span>
+											<template v-if="m.status === 'in_progress'">
+												<span class="cai-wave" aria-hidden="true"><svg viewBox="0 0 40 18" preserveAspectRatio="none"><path class="wv wv1" d="M0 9 Q10 1 20 9 T40 9" stroke="#D67037"/><path class="wv wv2" d="M0 9 Q10 17 20 9 T40 9" stroke="#C2541E" style="opacity:.55"/></svg></span>
+												<span class="ui-serif font-medium text-[#2A2420] truncate">{{ runningStageText(m) }}</span>
+												<span class="cai-wave cai-flip" aria-hidden="true"><svg viewBox="0 0 40 18" preserveAspectRatio="none"><path class="wv wv1" d="M0 9 Q10 1 20 9 T40 9" stroke="#D67037"/><path class="wv wv2" d="M0 9 Q10 17 20 9 T40 9" stroke="#C2541E" style="opacity:.55"/></svg></span>
+												<span class="ml-1 tabular-nums text-[11.5px] text-[#9A8678] flex-none">{{ liveElapsed(m) }}</span>
+											</template>
+											<template v-else>
+												<Icon name="heroicons:check-circle" class="w-4 h-4 text-[#3F7A4F]" />
+												<span class="ui-serif">Thought process · {{ blocksToSteps(m.completion_blocks || []).length }} step{{ blocksToSteps(m.completion_blocks || []).length === 1 ? '' : 's' }} · Done</span>
+											</template>
 										</div>
 										<!-- Render each completion block - unified structure -->
 										<div v-for="(block, blockIndex) in (m.completion_blocks || []).filter(b => b.phase !== 'knowledge_harness')" :key="block.id"
@@ -461,9 +465,11 @@
 										/>
 
 										<!-- Thinking pill when system is working but no visible progress - moved to end -->
-										<div v-if="shouldShowWorkingDots(m)" class="mt-2 flex items-center gap-2 text-[13px] text-[#7A7066]">
-											<span class="inline-block w-3.5 h-3.5 rounded-full border-2 border-[#E8C9B5] border-t-[#C2541E] animate-spin"></span>
-											<span class="tool-shimmer">Thinking…</span>
+										<div v-if="shouldShowWorkingDots(m)" class="mt-2 flex items-center gap-2.5 text-[13px] text-[#7A7066]">
+											<span class="cai-wave" aria-hidden="true"><svg viewBox="0 0 40 18" preserveAspectRatio="none"><path class="wv wv1" d="M0 9 Q10 1 20 9 T40 9" stroke="#D67037"/><path class="wv wv2" d="M0 9 Q10 17 20 9 T40 9" stroke="#C2541E" style="opacity:.55"/></svg></span>
+											<span class="ui-serif font-medium text-[#2A2420] truncate">{{ runningStageText(m) }}</span>
+											<span class="cai-wave cai-flip" aria-hidden="true"><svg viewBox="0 0 40 18" preserveAspectRatio="none"><path class="wv wv1" d="M0 9 Q10 1 20 9 T40 9" stroke="#D67037"/><path class="wv wv2" d="M0 9 Q10 17 20 9 T40 9" stroke="#C2541E" style="opacity:.55"/></svg></span>
+											<span class="ml-1 tabular-nums text-[11.5px] text-[#9A8678] flex-none">{{ liveElapsed(m) }}</span>
 										</div>
 									</div>
 
@@ -665,6 +671,19 @@
 		</div>
 		<!-- Prompt box (in normal flow at the bottom of the left column) -->
 		<div class="shrink-0 bg-[#FAF8F3] pt-2 pb-6">
+			<!-- Persistent run-status strip: live wave + current step + elapsed,
+			     docked just above the composer so progress stays in view even when
+			     the message thread is scrolled up. Shows only while a run is live. -->
+			<div v-if="(runActive && lastSystemMessage) || autoBuilding" class="mx-auto w-full px-4 max-w-2xl mb-2">
+				<div class="flex items-center gap-2.5 px-3.5 py-2 rounded-xl border border-[#EFE3D5] bg-gradient-to-b from-[#FCF4EC] to-[#FAF8F3] text-[13px] text-[#7A7066]">
+					<span class="cai-wave" aria-hidden="true"><svg viewBox="0 0 40 18" preserveAspectRatio="none"><path class="wv wv1" d="M0 9 Q10 1 20 9 T40 9" stroke="#D67037"/><path class="wv wv2" d="M0 9 Q10 17 20 9 T40 9" stroke="#C2541E" style="opacity:.55"/></svg></span>
+					<span class="ui-serif font-medium text-[#2A2420] truncate">{{ runActive ? runningStageText(lastSystemMessage) : 'Building a dashboard from your data…' }}</span>
+					<span class="cai-wave cai-flip" aria-hidden="true"><svg viewBox="0 0 40 18" preserveAspectRatio="none"><path class="wv wv1" d="M0 9 Q10 1 20 9 T40 9" stroke="#D67037"/><path class="wv wv2" d="M0 9 Q10 17 20 9 T40 9" stroke="#C2541E" style="opacity:.55"/></svg></span>
+					<span v-if="runActive" class="ml-auto tabular-nums text-[11.5px] text-[#9A8678] flex-none">{{ liveElapsed(lastSystemMessage) }}</span>
+					<button v-if="runActive" class="flex-none text-[11.5px] text-[#9A8678] border border-[#EFE3D5] rounded-full px-2.5 py-0.5 bg-white hover:text-[#A8330F]" @click="abortStream">Stop</button>
+					<span v-else class="ml-auto flex-none text-[11px] text-[#9A8678]">auto · one-click</span>
+				</div>
+			</div>
 			<div :class="['mx-auto w-full', isExcel ? 'px-0' : 'px-4 max-w-2xl']">
 				<!-- Slide-workspace composer framing: PromptBoxV2 owns its own placeholder
 				     (i18n, internal), so we surface the slide-scoped intent as a hint chip
@@ -2701,6 +2720,19 @@ const activeSteps = computed<any[]>(() => {
 })
 
 // Per-step "show detail" toggle for recovered (amber) error rows.
+// Live "what's happening" label for the running wave indicator: the current
+// running step's title, else the last step's title, else a friendly verb.
+function runningStageText(m: any): string {
+	try {
+		const steps = blocksToSteps(m?.completion_blocks || [])
+		if (steps.length) {
+			const live = [...steps].reverse().find((s: any) => s.status === 'run') || steps[steps.length - 1]
+			if (live?.title) return live.title
+		}
+	} catch (_) {}
+	return 'Working on it…'
+}
+
 const expandedStepErrors = ref<Set<string>>(new Set())
 function toggleStepError(id: string) {
 	const s = new Set(expandedStepErrors.value)
@@ -2809,6 +2841,36 @@ const runStatus = computed(() => (lastSystemMessage.value as any)?.status)
 const runActive = computed<boolean>(
 	() => isStreaming.value || runStatus.value === 'in_progress'
 )
+
+// AUTO-ARTIFACT (HYBRID_AUTO_ARTIFACT): when a chat turn produced a dataset but
+// no artifact, the backend auto-builds a dashboard in the background (~2min).
+// Poll the artifacts list so it appears without a manual refresh + surface a
+// "building" state on the dock strip. Fail-soft — gives up after ~3min, and if
+// the flag is off (no build comes) the poll simply times out quietly.
+const autoBuilding = ref(false)
+let _autoPollTimer: ReturnType<typeof setTimeout> | null = null
+function stopAutoPoll() {
+	if (_autoPollTimer) { clearTimeout(_autoPollTimer); _autoPollTimer = null }
+	autoBuilding.value = false
+}
+async function pollAutoArtifact(triesLeft: number) {
+	if (triesLeft <= 0) { stopAutoPoll(); return }
+	try { await checkHasArtifacts() } catch (_) {}
+	if (hasPageArtifact.value || hasSlidesArtifact.value) { stopAutoPoll(); return }
+	_autoPollTimer = setTimeout(() => pollAutoArtifact(triesLeft - 1), 6000)
+}
+watch(runActive, (now, prev) => {
+	if (prev && !now) {
+		nextTick(() => {
+			const producedData = (summaryQueries.value || []).length > 0
+			if (producedData && !hasPageArtifact.value && !hasSlidesArtifact.value) {
+				autoBuilding.value = true
+				pollAutoArtifact(30)
+			}
+		})
+	}
+})
+onBeforeUnmount(() => stopAutoPoll())
 
 // RUN STARTS -> open panel + show Activity; reset per-run pins.
 watch(runStatus, (now, prev) => {
@@ -5143,6 +5205,16 @@ onMounted(async () => {
 	background: #C08A2D;
 	border-color: #C08A2D;
 }
+
+/* Running "wave · what's happening · wave" indicator. */
+.cai-wave { width: 30px; height: 16px; display: inline-block; flex: none; }
+.cai-wave svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.cai-wave.cai-flip { transform: scaleX(-1); }
+.cai-wave .wv { fill: none; stroke-width: 2.2; stroke-linecap: round; transform-origin: center; }
+.cai-wave .wv1 { animation: caiWob 1.5s ease-in-out infinite; }
+.cai-wave .wv2 { animation: caiWob 1.5s ease-in-out infinite 0.25s; }
+@keyframes caiWob { 0%, 100% { transform: scaleY(0.3); } 50% { transform: scaleY(1); } }
+@media (prefers-reduced-motion: reduce) { .cai-wave .wv { animation: none; } }
 
 /* Phase 3 — shimmer the "Working · 0:42" header text while the run streams. */
 @keyframes ccShimmer { 0% { background-position: -120% 0; } 100% { background-position: 120% 0; } }

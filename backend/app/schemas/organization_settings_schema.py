@@ -169,6 +169,8 @@ class OrganizationSettingsConfig(BaseModel):
     webhook_rate_limit_per_min: FeatureConfig = FeatureConfig(value=60, name="Webhook rate limit (per minute)", description="Maximum inbound webhook deliveries accepted per minute per organization. Excess deliveries are rejected with 429.", is_lab=False, editable=True)
     step_retention_days: FeatureConfig = FeatureConfig(value=14, name="Widget Data Retention Days", description="Number of days to retain widgets data before purging.", is_lab=False, editable=True)
     enable_excel_addin: FeatureConfig = FeatureConfig(value=True, name="Excel Add-in", description="Enable the built-in Excel Add-in so users can sideload the manifest directly from this instance", is_lab=False, editable=True)
+    dashboard_key_insights: FeatureConfig = FeatureConfig(value=True, name="Dashboard Key Insights", description="Bake an LLM-generated, data-grounded Key Insights panel and a Decision callout into the top of every generated dashboard", is_lab=False, editable=True)
+    session_summary: FeatureConfig = FeatureConfig(value=True, name="Session Summary", description="Roll up all turns of a report (question/answer, decisions and produced artifacts) into one cheap-LLM structured summary, pinned in the Outputs panel. Recomputed on demand or when the conversation changes.", is_lab=False, editable=True)
 
     ai_features: Dict[str, FeatureConfig] = {
         # Update defaults to use 'value' instead of 'enabled'

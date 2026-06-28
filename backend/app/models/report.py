@@ -25,6 +25,12 @@ class Report(BaseSchema):
     artifact_visibility = Column(String, nullable=False, default='none', server_default='none')
     conversation_visibility = Column(String, nullable=False, default='none', server_default='none')
 
+    # Hybrid "Session Summary": one cached cheap-LLM roll-up across ALL turns of
+    # this report (question/answer + F10 sense_making decisions + artifacts), shown
+    # pinned in the Outputs panel. Recomputed on demand or when turns change.
+    # MANUAL DDL REQUIRED (no alembic migration): ALTER TABLE reports ADD COLUMN session_summary json
+    session_summary = Column(JSON, nullable=True, default=None)
+
     cron_schedule = Column(String, nullable=True)
     last_run_at = Column(DateTime, nullable=True, default=None)
     # Subscribers notified after each scheduled rerun

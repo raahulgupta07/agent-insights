@@ -98,8 +98,18 @@
         <p class="home-eyebrow">{{ greeting }}{{ userFirstName ? ', ' + userFirstName : '' }}</p>
         <h1 class="home-h1">What should we <span class="home-h1-em">explore</span> today?</h1>
         <p class="home-sub">{{ $t('home.subtitle') }}</p>
+        <!-- idle brand wave: same motif as the running "thinking" indicator;
+             fills the gap above the composer + signals the agent is ready. -->
+        <div class="home-wave" aria-hidden="true">
+          <svg viewBox="0 0 220 26" preserveAspectRatio="none">
+            <path class="hw hw1" d="M0 13 Q22 4 44 13 T88 13 T132 13 T176 13 T220 13" stroke="#D67037" />
+            <path class="hw hw2" d="M0 13 Q22 22 44 13 T88 13 T132 13 T176 13 T220 13" stroke="#C2541E" />
+            <path class="hw hw3" d="M0 13 Q22 9 44 13 T88 13 T132 13 T176 13 T220 13" stroke="#A8330F" />
+          </svg>
+        </div>
+        <p class="home-ready">{{ readyCaption }}</p>
       </div>
-      <div class="w-full md:w-4/5 mx-auto mt-10 rounded-lg relative z-10">
+      <div class="w-full md:w-4/5 mx-auto mt-6 rounded-lg relative z-10">
           <PromptBoxV2
               :textareaContent="textareaContent"
               :initialSelectedDataSources="selectedDataSources"
@@ -203,6 +213,10 @@ const hasLoadedModels = ref(false)
 
 // Use selected agents from AgentSelector as the data sources
 const selectedDataSources = computed(() => selectedAgentObjects.value)
+const readyCaption = computed(() => {
+  const n = (selectedDataSources.value || []).length
+  return n > 0 ? `ready · grounded on ${n} source${n === 1 ? '' : 's'}` : 'ready when you are'
+})
 
 const getModels = async () => {
   try {
@@ -447,6 +461,21 @@ await signOut({
   position: relative; margin: 0 auto;
   font-size: 16.5px; color: #6E6356; max-width: 480px;
 }
+/* idle brand wave + readiness caption (gap-filler above the composer) */
+.home-wave {
+  position: relative; width: 220px; max-width: 62%; height: 24px; margin: 20px auto 0; opacity: .92;
+}
+.home-wave svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.home-wave .hw { fill: none; stroke-width: 2; stroke-linecap: round; transform-origin: center; }
+.home-wave .hw1 { animation: home-wob 2.6s ease-in-out infinite; opacity: .8; }
+.home-wave .hw2 { animation: home-wob 2.6s ease-in-out infinite .35s; opacity: .5; }
+.home-wave .hw3 { animation: home-wob 2.6s ease-in-out infinite .7s; opacity: .32; }
+@keyframes home-wob { 0%, 100% { transform: scaleY(.5); } 50% { transform: scaleY(1); } }
+.home-ready {
+  position: relative; margin: 9px 0 0; font-size: 12px; letter-spacing: .04em;
+  color: #9A8678; text-transform: lowercase;
+}
+@media (prefers-reduced-motion: reduce) { .home-wave .hw { animation: none; } }
 @keyframes home-orb {
   0%, 100% { transform: translateX(-50%) translateY(0) scale(1); opacity: .55; }
   50% { transform: translateX(-50%) translateY(-22px) scale(1.15); opacity: .8; }

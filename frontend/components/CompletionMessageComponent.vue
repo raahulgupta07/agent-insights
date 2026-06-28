@@ -71,6 +71,12 @@
                     <!-- Claude-style agent step timeline (thinking pill + vertical steps) -->
                     <AgentStepTimeline :steps="localCompletion.steps || []" :status="localCompletion.status" />
 
+                    <!-- Sense-Making "Decision" card — leads the answer when the completion
+                         carries a sense_making object (absent => renders nothing) -->
+                    <DecisionCard
+                        v-if="localCompletion.sense_making || localCompletion.completion?.sense_making"
+                        :sense="localCompletion.sense_making || localCompletion.completion?.sense_making" />
+
                     <!-- Always show content when available -->
                     <div v-if="localCompletion.completion?.content" class="markdown-wrapper">
                         <MDC :value="localCompletion.completion?.content" class="markdown-content" />

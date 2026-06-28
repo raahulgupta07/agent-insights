@@ -39,9 +39,15 @@ from app.schemas.connection_tool_schema import (
 )
 
 
+import logging
+
 router = APIRouter(prefix="/connections", tags=["connections"])
 connection_service = ConnectionService()
 indexing_service = ConnectionIndexingService()
+logger = logging.getLogger(__name__)
+
+# Valid 3-level connector visibility values (management-plane sharing model).
+VALID_VISIBILITIES = {"private", "shared", "org"}
 
 
 def _indexing_to_progress(row) -> "ConnectionIndexingProgress | None":
@@ -89,17 +95,44 @@ async def _user_can_access_connection(
 
 
 async def _guard_private_owner(db, connection_id, organization, current_user):
-    """CREATOR-ONLY guard for a private (per-agent) connector.
+    """OWNER-OR-ADMIN guard for managing a connection.
 
-    Loads the connection and raises 403 if it is owned by someone other than
-    `current_user` (no admin bypass). No-op for org connectors. Used by the
-    mutate/test/reindex/tables routes that delegate the fetch to the service so
-    the ownership check happens BEFORE any side effect.
+    Loads the connection and authorizes the caller to mutate it:
+      * super admin / manage_connections → may manage ANY connection in the org
+        (full super-admin override, incl. another user's private connector);
+      * otherwise → the caller MUST be the connector's owner (owner_user_id ==
+        caller). Org connectors (owner_user_id NULL) are admin-managed, so a
+        non-admin is denied.
+    Used by the mutate/test/reindex/tables routes so the check happens BEFORE
+    any side effect. (Credentials are still never returned to the client.)
     """
-    from app.services import private_connector_guard as _pcg
     connection = await connection_service.get_connection(db, connection_id, organization)
-    _pcg.require_owner(connection, current_user)
-    return connection
+    if await _is_org_admin(db, current_user, organization):
+        return connection  # super-admin override
+    owner_id = getattr(connection, "owner_user_id", None)
+    if owner_id is not None and str(owner_id) == str(current_user.id):
+        return connection  # the creator may manage their own connector
+    raise HTTPException(
+        status_code=403,
+        detail="You can only manage connections you own; ask an admin for org connectors.",
+    )
+
+
+async def guard_owned_connection(
+    connection_id: str,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """FastAPI dependency: OWNER-OR-ADMIN authz on a connection mutate route.
+
+    Wraps `_guard_private_owner` and wires the check into the route SIGNATURE so a
+    new mutate route can't silently ship without authz — add
+    `_guarded = Depends(guard_owned_connection)` (or `connection = Depends(...)`
+    to also receive the loaded row) and the guard runs before the body. Raises
+    403 for a non-owner non-admin; returns the loaded Connection otherwise.
+    """
+    return await _guard_private_owner(db, connection_id, organization, current_user)
 
 
 # ==================== Routes ====================
@@ -149,7 +182,31 @@ async def list_connections(
         )
         accessible_ds_ids = granted_ds_ids | {str(r) for (r,) in public_ds_rows.all()}
 
+        def _is_mine(c):
+            oid = getattr(c, "owner_user_id", None)
+            return oid is not None and str(oid) == str(current_user.id)
+
         def _conn_visible(c):
+            # Visibility-aware list filter (non-admins). The creator always sees
+            # their own connector at ANY level (even with no grant / no linked
+            # data source yet).
+            if _is_mine(c):
+                return True
+            vis = getattr(c, "visibility", None)
+            if vis == "org":
+                return True
+            if vis == "private":
+                # Not mine → invisible (filter_visible already dropped it).
+                return False
+            if vis == "shared":
+                if str(c.id) in granted_conn_ids:
+                    return True
+                if c.data_sources:
+                    return any(str(ds.id) in accessible_ds_ids for ds in c.data_sources)
+                return False
+            # Fallback when visibility is absent (legacy row): old behavior.
+            if _pcg.is_private(c) and _pcg.owns(c, current_user):
+                return True
             if str(c.id) in granted_conn_ids:
                 return True
             if c.data_sources:
@@ -243,6 +300,8 @@ async def list_connections(
             allowed_user_auth_modes=conn.allowed_user_auth_modes,
             last_synced_at=conn.last_synced_at.isoformat() if conn.last_synced_at else None,
             organization_id=str(conn.organization_id),
+            owner_user_id=str(conn.owner_user_id) if conn.owner_user_id else None,
+            visibility=getattr(conn, "visibility", None),
             table_count=0 if conn.type in _TOOL_PROVIDER_TYPES else table_count,
             tool_count=tool_count,
             agent_count=len(conn.data_sources) if conn.data_sources else 0,
@@ -254,14 +313,63 @@ async def list_connections(
 
 
 @router.post("", response_model=ConnectionSchema)
-@requires_permission('manage_connections')
 async def create_connection(
     data: ConnectionCreate,
     current_user: User = Depends(current_user),
     db: AsyncSession = Depends(get_async_db),
     organization: Organization = Depends(get_current_organization)
 ):
-    """Create a new database connection."""
+    """Create a new database connection.
+
+    3-level VISIBILITY (self-service — ANY org member may create at ANY level):
+      - "private" → owner only.
+      - "shared"  → owner + specifically-granted users/groups (resource_grants).
+      - "org"     → all org members.
+    owner_user_id is ALWAYS the creator (creator keeps edit rights) regardless of
+    level. Non-private create requires HYBRID_AGENT_CONNECTORS (admins bypass, so
+    legacy admin org-wide create keeps working).
+
+    Back-compat: callers that send only the legacy `scope` ('shared'|'personal')
+    are mapped via the derive rule ('shared'->'org', else 'private').
+    """
+    from app.settings.hybrid_flags import flags
+
+    scope = (getattr(data, "scope", None) or "shared").lower()
+    visibility = (getattr(data, "visibility", None) or "").lower()
+    if visibility not in VALID_VISIBILITIES:
+        # Derive from the legacy scope: 'shared' = org-wide, anything else private.
+        visibility = "org" if scope == "shared" else "private"
+
+    resolved = await resolve_permissions(db, str(current_user.id), str(organization.id))
+    is_admin = (
+        FULL_ADMIN in resolved.org_permissions
+        or resolved.has_org_permission("manage_connections")
+    )
+
+    # Org membership is required for any self-service create.
+    membership = (
+        await db.execute(
+            select(Membership).where(
+                Membership.user_id == current_user.id,
+                Membership.organization_id == organization.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not a member of this organization.")
+
+    # Non-private (shared/org) self-service create is gated by the feature flag;
+    # admins always may (keeps legacy admin org-wide create working flag-off).
+    if visibility != "private" and not is_admin and not flags.AGENT_CONNECTORS:
+        raise HTTPException(
+            status_code=403,
+            detail="Shared / org-wide connectors are not enabled for this organization.",
+        )
+
+    # owner_user_id is ALWAYS the creator now (even org/shared) so the creator
+    # keeps edit rights. No spoofing — taken from the session user.
+    owner_user_id = str(current_user.id)
+
     connection = await connection_service.create_connection(
         db=db,
         organization=organization,
@@ -272,8 +380,35 @@ async def create_connection(
         credentials=data.credentials,
         auth_policy=data.auth_policy,
         allowed_user_auth_modes=data.allowed_user_auth_modes,
+        owner_user_id=owner_user_id,
     )
-    
+
+    # Stamp the visibility level on the freshly-created row (the service signature
+    # is left untouched — minimal core edit, mirrors the studio_id binding below).
+    connection.visibility = visibility
+    await db.commit()
+    await db.refresh(connection)
+
+    # Optional agent binding: a private connector created from a studio's
+    # Connectors page binds to that studio so it appears in the agent's
+    # "My Connectors" tab. Only meaningful for 'private'. Validate org ownership.
+    studio_id = (getattr(data, "studio_id", None) or "").strip() or None
+    if studio_id and visibility == "private":
+        from app.models.studio import Studio
+        studio = (
+            await db.execute(
+                select(Studio).where(
+                    Studio.id == studio_id,
+                    Studio.organization_id == organization.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if not studio:
+            raise HTTPException(status_code=404, detail="Studio not found in this organization.")
+        connection.studio_id = studio_id
+        await db.commit()
+        await db.refresh(connection)
+
     # Inline the latest indexing run so the modal can show progress
     # immediately without a second roundtrip.
     from app.schemas.data_source_registry import tool_provider_types; _TOOL_PROVIDER_TYPES = tool_provider_types()
@@ -287,6 +422,8 @@ async def create_connection(
         auth_policy=connection.auth_policy,
         last_synced_at=connection.last_synced_at.isoformat() if connection.last_synced_at else None,
         organization_id=str(connection.organization_id),
+        owner_user_id=str(connection.owner_user_id) if connection.owner_user_id else None,
+        visibility=getattr(connection, "visibility", None),
         table_count=0 if connection.type in _TOOL_PROVIDER_TYPES else (len(connection.connection_tables) if connection.connection_tables else 0),
         tool_count=len(connection.connection_tools) if connection.type in _TOOL_PROVIDER_TYPES and connection.connection_tools else 0,
         agent_count=len(connection.data_sources) if connection.data_sources else 0,
@@ -295,23 +432,30 @@ async def create_connection(
 
 
 @router.get("/{connection_id}", response_model=ConnectionDetailSchema)
-@requires_permission('manage_connections')
 async def get_connection(
     connection_id: str,
     current_user: User = Depends(current_user),
     db: AsyncSession = Depends(get_async_db),
     organization: Organization = Depends(get_current_organization)
 ):
-    """Get connection details. Non-admins get a redacted view (no config/credentials) and must have access to at least one linked data source."""
+    """Get connection details.
+
+    The OWNER (creator) and any admin get the full editable detail (config +
+    has_credentials flag) so they can edit. Other members get a redacted view
+    (no config/credentials) and must have access to at least one linked data
+    source; they may never view someone else's PRIVATE connector.
+    """
     connection = await connection_service.get_connection(db, connection_id, organization)
 
-    # CREATOR-ONLY: a private connector is visible to its owner only (no admin
-    # bypass). No-op for org connectors.
-    from app.services import private_connector_guard as _pcg
-    _pcg.require_owner(connection, current_user)
-
     is_admin = await _is_org_admin(db, current_user, organization)
-    if not is_admin:
+    owner_id = getattr(connection, "owner_user_id", None)
+    is_owner = owner_id is not None and str(owner_id) == str(current_user.id)
+    can_see_full = is_admin or is_owner
+
+    # Non-owner non-admin: block others' private connectors + require DS access.
+    from app.services import private_connector_guard as _pcg
+    if not can_see_full:
+        _pcg.require_owner(connection, current_user)  # 403 on someone else's private
         if not await _user_can_access_connection(db, current_user, connection):
             raise HTTPException(status_code=403, detail="Access denied to this connection")
 
@@ -324,8 +468,8 @@ async def get_connection(
         except:
             config = {}
 
-    # Strip sensitive fields for non-admins
-    if not is_admin:
+    # Strip sensitive fields unless the caller owns it or is an admin.
+    if not can_see_full:
         config = {}
         allowed_user_auth_modes = []
         has_credentials = False
@@ -344,6 +488,7 @@ async def get_connection(
         config=config or {},
         last_synced_at=connection.last_synced_at.isoformat() if connection.last_synced_at else None,
         organization_id=str(connection.organization_id),
+        owner_user_id=str(connection.owner_user_id) if connection.owner_user_id else None,
         table_count=0 if connection.type in _TOOL_PROVIDER_TYPES else (len(connection.connection_tables) if connection.connection_tables else 0),
         tool_count=len(connection.connection_tools) if connection.type in _TOOL_PROVIDER_TYPES and connection.connection_tools else 0,
         agent_count=len(connection.data_sources) if connection.data_sources else 0,
@@ -357,16 +502,15 @@ async def get_connection(
 
 
 @router.put("/{connection_id}", response_model=ConnectionSchema)
-@requires_permission('manage_connections')  # Admin-only
 async def update_connection(
     connection_id: str,
     data: ConnectionUpdate,
     current_user: User = Depends(current_user),
     db: AsyncSession = Depends(get_async_db),
-    organization: Organization = Depends(get_current_organization)
+    organization: Organization = Depends(get_current_organization),
+    _guarded=Depends(guard_owned_connection),
 ):
     """Update a connection."""
-    await _guard_private_owner(db, connection_id, organization, current_user)
     updates = data.dict(exclude_unset=True)
     connection = await connection_service.update_connection(
         db=db,
@@ -385,22 +529,152 @@ async def update_connection(
         auth_policy=connection.auth_policy,
         last_synced_at=connection.last_synced_at.isoformat() if connection.last_synced_at else None,
         organization_id=str(connection.organization_id),
+        owner_user_id=str(connection.owner_user_id) if connection.owner_user_id else None,
+        visibility=getattr(connection, "visibility", None),
         table_count=0 if connection.type in _TOOL_PROVIDER_TYPES else (len(connection.connection_tables) if connection.connection_tables else 0),
         tool_count=len(connection.connection_tools) if connection.type in _TOOL_PROVIDER_TYPES and connection.connection_tools else 0,
         agent_count=len(connection.data_sources) if connection.data_sources else 0,
     )
 
 
+class VisibilityGrant(BaseModel):
+    """A principal to grant 'shared'-visibility access to."""
+    principal_type: str  # "user" | "group"
+    principal_id: str
+
+
+class VisibilityUpdate(BaseModel):
+    """Body for PATCH /connections/{id}/visibility.
+
+    `visibility` is one of 'private' | 'shared' | 'org'. `grants` is honored only
+    when visibility=='shared' — each becomes a connection resource_grant so that
+    principal can see/reuse the connector.
+    """
+    visibility: str
+    grants: List[VisibilityGrant] = []
+
+
+@router.patch("/{connection_id}/visibility", response_model=ConnectionSchema)
+async def set_connection_visibility(
+    connection_id: str,
+    data: VisibilityUpdate,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Change a connector's 3-level visibility (owner OR admin).
+
+    - 'private' = owner only. Clears any existing connection grants.
+    - 'shared'  = owner + specifically-granted users/groups (writes resource_grants
+                  for each item in `grants`; existing grants are kept).
+    - 'org'     = all org members. Clears any existing connection grants.
+
+    owner_user_id is unchanged (creator keeps edit rights). Never returns
+    credentials. The data query path is untouched — visibility is management-only.
+    """
+    new_vis = (data.visibility or "").lower()
+    if new_vis not in VALID_VISIBILITIES:
+        raise HTTPException(
+            status_code=400,
+            detail="visibility must be one of 'private', 'shared', 'org'.",
+        )
+
+    connection = await connection_service.get_connection(db, connection_id, organization)
+
+    # Auth: owner OR org admin (full_admin / manage_connections). No one else.
+    from app.services import private_connector_guard as _pcg
+    is_owner = (
+        getattr(connection, "owner_user_id", None) is not None
+        and str(connection.owner_user_id) == str(current_user.id)
+    )
+    is_admin = await _is_org_admin(db, current_user, organization)
+    if not (is_owner or is_admin):
+        raise HTTPException(
+            status_code=403,
+            detail="Only the connector's creator or an admin can change its visibility.",
+        )
+
+    old_vis = getattr(connection, "visibility", None)
+    connection.visibility = new_vis
+
+    # Manage the connection's resource_grants to match the new level.
+    from app.models.resource_grant import ResourceGrant
+    from app.schemas.rbac_schema import ResourceGrantCreate
+    from app.services.rbac_service import rbac_service
+
+    if new_vis == "shared":
+        for g in (data.grants or []):
+            ptype = (g.principal_type or "").lower()
+            pid = (g.principal_id or "").strip()
+            if ptype not in ("user", "group") or not pid:
+                continue
+            try:
+                await rbac_service.create_resource_grant(
+                    db,
+                    str(organization.id),
+                    ResourceGrantCreate(
+                        resource_type="connection",
+                        resource_id=str(connection.id),
+                        principal_type=ptype,
+                        principal_id=pid,
+                        permissions=["view_schema", "query"],
+                    ),
+                )
+            except HTTPException as e:
+                # Duplicate grant (409) is fine — the principal already has access.
+                if e.status_code != 409:
+                    raise
+    else:
+        # Demote (private/org): drop any lingering connection grants so they
+        # don't leak access after the level changes.
+        existing = await db.execute(
+            select(ResourceGrant).where(
+                ResourceGrant.organization_id == str(organization.id),
+                ResourceGrant.resource_type == "connection",
+                ResourceGrant.resource_id == str(connection.id),
+            )
+        )
+        for grant in existing.scalars().all():
+            await db.delete(grant)
+
+    await db.commit()
+    await db.refresh(connection)
+
+    logger.info(
+        "connection.visibility_changed connection_id=%s %s->%s user_id=%s",
+        str(connection.id), old_vis, new_vis, str(current_user.id),
+    )
+
+    from app.schemas.data_source_registry import tool_provider_types; _TOOL_PROVIDER_TYPES = tool_provider_types()
+    indexing_row = await indexing_service.get_latest(db, str(connection.id))
+    indexing_payload = _indexing_to_progress(indexing_row)
+    return ConnectionSchema(
+        id=str(connection.id),
+        name=connection.name,
+        type=connection.type,
+        is_active=connection.is_active,
+        auth_policy=connection.auth_policy,
+        allowed_user_auth_modes=connection.allowed_user_auth_modes,
+        last_synced_at=connection.last_synced_at.isoformat() if connection.last_synced_at else None,
+        organization_id=str(connection.organization_id),
+        owner_user_id=str(connection.owner_user_id) if connection.owner_user_id else None,
+        visibility=getattr(connection, "visibility", None),
+        table_count=0 if connection.type in _TOOL_PROVIDER_TYPES else (len(connection.connection_tables) if connection.connection_tables else 0),
+        tool_count=len(connection.connection_tools) if connection.type in _TOOL_PROVIDER_TYPES and connection.connection_tools else 0,
+        agent_count=len(connection.data_sources) if connection.data_sources else 0,
+        indexing=indexing_payload.model_dump() if indexing_payload else None,
+    )
+
+
 @router.delete("/{connection_id}")
-@requires_permission('manage_connections')  # Admin-only
 async def delete_connection(
     connection_id: str,
     current_user: User = Depends(current_user),
     db: AsyncSession = Depends(get_async_db),
-    organization: Organization = Depends(get_current_organization)
+    organization: Organization = Depends(get_current_organization),
+    _guarded=Depends(guard_owned_connection),
 ):
     """Delete a connection. Fails if connection is linked to any agents."""
-    await _guard_private_owner(db, connection_id, organization, current_user)
     return await connection_service.delete_connection(
         db=db,
         connection_id=connection_id,
@@ -427,16 +701,15 @@ async def test_connection_params(
 
 
 @router.post("/{connection_id}/test", response_model=ConnectionTestResult)
-@requires_permission('manage_connections')  # Admin-only
 async def test_connection(
     connection_id: str,
     overrides: ConnectionTestOverride = None,
     current_user: User = Depends(current_user),
     db: AsyncSession = Depends(get_async_db),
-    organization: Organization = Depends(get_current_organization)
+    organization: Organization = Depends(get_current_organization),
+    _guarded=Depends(guard_owned_connection),
 ):
     """Test a connection, optionally with override credentials/config."""
-    await _guard_private_owner(db, connection_id, organization, current_user)
     result = await connection_service.test_connection(
         db=db,
         connection_id=connection_id,
@@ -513,6 +786,7 @@ async def set_connection_query_identity(
     current_user: User = Depends(current_user),
     db: AsyncSession = Depends(get_async_db),
     organization: Organization = Depends(get_current_organization),
+    connection=Depends(guard_owned_connection),
 ):
     """Set the admin/owner query-identity for a delegated connection: run queries as
     the service account or as the user themselves. Persisted per (user, connection).
@@ -532,7 +806,6 @@ async def set_connection_query_identity(
     if identity not in VALID_IDENTITIES:
         raise HTTPException(status_code=400, detail="query_identity must be 'self' or 'service_account'")
 
-    connection = await _guard_private_owner(db, connection_id, organization, current_user)
     if (connection.auth_policy or "system_only") != "user_required" or not supports_user_token(connection):
         raise HTTPException(status_code=400, detail="This connection does not support query-identity selection")
     if not await is_admin_or_owner(db, connection, current_user):
@@ -576,7 +849,8 @@ async def refresh_connection_schema(
     connection_id: str,
     current_user: User = Depends(current_user),
     db: AsyncSession = Depends(get_async_db),
-    organization: Organization = Depends(get_current_organization)
+    organization: Organization = Depends(get_current_organization),
+    connection=Depends(guard_owned_connection),
 ):
     """Kick off a background indexing job to refresh the connection's schema.
 
@@ -584,7 +858,6 @@ async def refresh_connection_schema(
     to observe progress. Idempotent — re-firing while a job is running returns
     the in-flight row.
     """
-    connection = await _guard_private_owner(db, connection_id, organization, current_user)
     row = await indexing_service.start(db=db, connection=connection)
     progress = _indexing_to_progress(row)
     return {
@@ -601,6 +874,7 @@ async def reindex_connection(
     current_user: User = Depends(current_user),
     db: AsyncSession = Depends(get_async_db),
     organization: Organization = Depends(get_current_organization),
+    connection=Depends(guard_owned_connection),
 ):
     """Kick off a background indexing job.
 
@@ -608,7 +882,6 @@ async def reindex_connection(
     Pass `?force=true` to cancel any stuck row and start fresh.
     """
     from datetime import datetime
-    connection = await _guard_private_owner(db, connection_id, organization, current_user)
     if force:
         existing = await indexing_service.get_active(db, connection_id)
         if existing is not None:
@@ -750,9 +1023,9 @@ async def refresh_connection_tools(
     current_user: User = Depends(current_user),
     db: AsyncSession = Depends(get_async_db),
     organization: Organization = Depends(get_current_organization),
+    connection=Depends(guard_owned_connection),
 ):
     """Refresh/discover tools for an MCP or Custom API connection."""
-    connection = await _guard_private_owner(db, connection_id, organization, current_user)
     tools = await connection_service.refresh_tools(db, connection, current_user)
     return [
         ConnectionToolSchema(
@@ -803,9 +1076,9 @@ async def batch_update_connection_tools(
     current_user: User = Depends(current_user),
     db: AsyncSession = Depends(get_async_db),
     organization: Organization = Depends(get_current_organization),
+    _guarded=Depends(guard_owned_connection),
 ):
     """Batch enable/disable tools."""
-    await _guard_private_owner(db, connection_id, organization, current_user)
     tools = await connection_service.batch_update_tools(db, data.tool_ids, data.is_enabled)
     return [
         ConnectionToolSchema(
@@ -831,9 +1104,9 @@ async def update_tool(
     current_user: User = Depends(current_user),
     db: AsyncSession = Depends(get_async_db),
     organization: Organization = Depends(get_current_organization),
+    _guarded=Depends(guard_owned_connection),
 ):
     """Enable/disable a tool or update its policy."""
-    await _guard_private_owner(db, connection_id, organization, current_user)
     tool = await connection_service.update_connection_tool(
         db, tool_id, is_enabled=data.is_enabled, policy=data.policy
     )

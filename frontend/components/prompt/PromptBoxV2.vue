@@ -447,6 +447,26 @@
                         </UTooltip>
                         <template #panel="{ close }">
                             <div class="p-1.5 text-xs max-h-80 overflow-y-auto w-[300px]">
+                                <!-- HYBRID_AUTO_MODEL: classifier picks the best model per question -->
+                                <div
+                                    v-if="autoModelEnabled"
+                                    class="relative px-2.5 py-2 rounded-lg cursor-pointer flex items-start gap-2.5 transition-colors mb-1 border-b border-[#EFE7DA] pb-2.5"
+                                    :class="selectedModel === 'auto' ? 'bg-[#FBEFE4]/60' : 'hover:bg-[#faf8f3]'"
+                                    @click="() => { selectModel('auto'); close(); }"
+                                >
+                                    <span v-if="selectedModel === 'auto'" class="absolute start-0 top-2 bottom-2 w-0.5 rounded-full bg-[#C2541E]"></span>
+                                    <div class="mt-0.5">
+                                        <Icon name="heroicons-bolt" class="w-4 h-4 text-[#C2541E]" />
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <div class="flex items-center gap-1.5">
+                                            <span class="font-semibold text-gray-900">Auto</span>
+                                            <span class="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0 bg-[#FBEFE4] text-[#C2541E]">Smart</span>
+                                            <Icon v-if="selectedModel === 'auto'" name="heroicons-check" class="w-3.5 h-3.5 text-[#C2541E] ms-auto shrink-0" />
+                                        </div>
+                                        <p class="text-gray-500 text-[11px] leading-snug mt-0.5">Picks the best model for each question — fast for lookups, strong for deep analysis.</p>
+                                    </div>
+                                </div>
                                 <div
                                     v-for="m in models"
                                     :key="m.id"
@@ -513,6 +533,12 @@
             </div>
         </div>
 
+        <!-- F10: composer lock note — only while the decision is forming. -->
+        <div v-if="props.decisionPending" class="mt-2 flex items-center gap-1.5 px-1 text-[11px] text-[#A8330F]">
+            <span class="inline-block w-2.5 h-2.5 rounded-full border-2 border-[#E8C9B5] border-t-[#C2541E] animate-spin flex-none"></span>
+            <span>Forming the decision — you can ask the next question once it&rsquo;s ready.</span>
+        </div>
+
         <!-- Modals -->
         <InstructionsListModalComponent ref="instructionsListModalRef" />
         <ImagePreviewModal ref="imagePreviewModalRef" />
@@ -546,7 +572,13 @@ import { useExcel } from '@/composables/useExcel'
 
 const props = defineProps({
     report_id: String,
+    // HYBRID_AUTO_MODEL: the model the classifier last routed to (for the "Auto · <Model>" label).
+    autoPicked: { type: Object, default: null },
     latestInProgressCompletion: Object,
+    // F10: true while the backend is forming the post-answer decision. Locks the
+    // composer (disable submit) + shows an inline note until the decision is ready.
+    // Fail-open: defaults false, so when the feature is off the composer is unchanged.
+    decisionPending: { type: Boolean, default: false },
     isStopping: Boolean,
     // Allow fine-tuning alignment if needed later
     popoverOffset: { type: Number, default: 16 },
@@ -1014,7 +1046,21 @@ const modelMeta = (m: any) => {
     return { tier: 'pro', tierLabel: 'Pro', desc: 'Most capable · deep analysis, planning & SQL', chips }
 }
 const selectedModel = ref<string>('')
+// HYBRID_AUTO_MODEL: when enabled, the picker shows an "Auto" option that sends the
+// sentinel model_id "auto" → the backend classifier routes to the best model.
+const autoModelEnabled = ref<boolean>(false)
+async function loadAutoModelFlag() {
+    try {
+        const { data } = await useMyFetch<any[]>('/api/organization/hybrid-flags')
+        const rows = (data.value as any[]) || []
+        autoModelEnabled.value = !!rows.find(r => r?.env_name === 'HYBRID_AUTO_MODEL')?.effective
+    } catch { autoModelEnabled.value = false }
+}
 const selectedModelLabel = computed(() => {
+    if (selectedModel.value === 'auto') {
+        const picked = (props.autoPicked as any)?.model
+        return picked ? `Auto · ${picked}` : 'Auto'
+    }
     const model = models.value.find(m => m.id === selectedModel.value)
     return model?.name || t('prompt.selectModel')
 })
@@ -1033,7 +1079,14 @@ async function loadModels() {
             // Set the default model as selected, or fall back to first enabled model
             if (!selectedModel.value && models.value.length > 0) {
                 if (props.initialModel && models.value.find(m => m.id === props.initialModel)) {
+                    // A report with a saved/explicit model keeps it.
                     selectedModel.value = props.initialModel
+                } else if (props.initialModel === 'auto' && autoModelEnabled.value) {
+                    // Persisted sentinel "auto" (not in the model list) → keep Auto.
+                    selectedModel.value = 'auto'
+                } else if (autoModelEnabled.value) {
+                    // Nothing persisted + HYBRID_AUTO_MODEL on → default to Auto · SMART.
+                    selectedModel.value = 'auto'
                 } else {
                 // First try to find the model marked as default
                 const defaultModel = models.value.find(m => m.is_default)
@@ -1180,6 +1233,7 @@ const hasDataSourceOrFile = computed(() => {
 const canSubmit = computed(() => {
     return text.value.trim().length > 0
         && !props.latestInProgressCompletion
+        && !props.decisionPending  // F10: lock while the decision is forming
         && !isHydratingDataSources.value
         && !hasFilesUploading.value  // Don't allow submit while files are uploading
         && !!selectedModel.value
@@ -1430,6 +1484,9 @@ onMounted(async () => {
     window.addEventListener('prompt:prefill', handlePromptPrefill)
     window.addEventListener('keydown', handleEscKey)
 
+    // Resolve the Auto-model flag FIRST so loadModels() can default to "Auto"
+    // when no explicit model is persisted (fail-soft: flag load never throws).
+    await loadAutoModelFlag()
     await loadModels()
     await refreshContextEstimate(false)
     if (props.report_id) {

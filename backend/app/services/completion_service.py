@@ -176,6 +176,31 @@ class CompletionService:
         self.llm_service = LLMService()
         self.data_source_service = DataSourceService()
 
+    async def _auto_pick_model(self, db, organization, current_user, question, small_model=None):
+        """HYBRID_AUTO_MODEL: classify question complexity → cheapest capable model.
+
+        Returns (model, decision_dict). NEVER raises — on any failure returns the org
+        default with a fallback decision so behaviour matches the feature being OFF.
+        """
+        try:
+            from app.ai.knowledge.auto_model import choose_auto_model
+            default_model = await organization.get_default_llm_model(db)
+            if small_model is None:
+                small_model = await self.llm_service.get_default_model(db, organization, current_user, is_small=True)
+            all_models = await self.llm_service.get_models(db, organization, current_user, is_enabled=True)
+            return await choose_auto_model(
+                question=question,
+                models=list(all_models or []),
+                default_model=default_model,
+                small_model=small_model,
+            )
+        except Exception:
+            logger.warning("auto_model: _auto_pick_model failed", exc_info=True)
+            try:
+                return await organization.get_default_llm_model(db), {"via": "fallback", "tier": "balanced"}
+            except Exception:
+                return None, {"via": "fallback", "tier": "balanced"}
+
     async def _serialize_completion(self, db: AsyncSession, completion: Completion, current_user: User = None, organization: Organization = None) -> CompletionSchema:
         """Serialize a completion model to a schema following get_completions format"""
         if completion.role == "user":
@@ -294,7 +319,8 @@ class CompletionService:
             else:
                 step = None
 
-            if completion_data.prompt.model_id:
+            # "auto" sentinel: estimate uses the org default (no classifier — avoid per-keystroke cost).
+            if completion_data.prompt.model_id and completion_data.prompt.model_id != "auto":
                 model = await self.llm_service.get_model_by_id(db, organization, current_user, completion_data.prompt.model_id)
             else:
                 model = await organization.get_default_llm_model(db)
@@ -502,8 +528,18 @@ class CompletionService:
 
             # Get default model - this is critical
             # HYBRID_AGENT_ACL: precedence: explicit request > studio per-agent config > org default (flag-gated, default OFF)
-            if completion_data.prompt and completion_data.prompt.model_id:
-                model = await self.llm_service.get_model_by_id(db, organization, current_user, completion_data.prompt.model_id)
+            _auto_decision = None
+            _req_mid = completion_data.prompt.model_id if completion_data.prompt else None
+            small_model = await self.llm_service.get_default_model(db, organization, current_user, is_small=True)
+            if flags.AUTO_MODEL and _req_mid == "auto":
+                # Auto model selection: classify question complexity → cheapest capable model.
+                model, _auto_decision = await self._auto_pick_model(
+                    db, organization, current_user,
+                    (completion_data.prompt.content if completion_data.prompt else "") or "",
+                    small_model,
+                )
+            elif _req_mid and _req_mid != "auto":
+                model = await self.llm_service.get_model_by_id(db, organization, current_user, _req_mid)
             else:
                 model = None
                 if flags.AGENT_ACL and getattr(report, "studio_id", None):
@@ -518,8 +554,6 @@ class CompletionService:
                             model = None
                 if model is None:
                     model = await organization.get_default_llm_model(db)
-
-            small_model = await self.llm_service.get_default_model(db, organization, current_user, is_small=True)
 
             if not model:
                 raise HTTPException(
@@ -786,6 +820,119 @@ class CompletionService:
                     with tracer.start_as_current_span("completion.agent_execution"):
                         await agent.main_execution()
                     span.add_event("agent_execution_finished")
+
+                    # ── F10 Sense-Making (flag HYBRID_SENSE_MAKING, default OFF) ──
+                    # Post-run decision layer: reconstruct this turn's success-step
+                    # DataFrames, compute deterministic signals + ONE cheap LLM call,
+                    # and attach a `sense_making` object to the ANSWER completion's
+                    # `completion` JSON (read raw by the FE). Fully fail-soft: any
+                    # error leaves the answer untouched (OFF => byte-identical).
+                    try:
+                        from app.settings.hybrid_flags import flags as _hflags
+                        if _hflags.SENSE_MAKING:
+                            _resp_comps = await self._get_response_completions(
+                                db, head_completion, current_user, organization
+                            )
+                            # Collect THIS turn's success steps (with data rows) via
+                            # the response completions' agent executions -> tool
+                            # executions -> created_step_id.
+                            _comp_ids = [c.id for c in _resp_comps]
+                            _collected_steps = []
+                            if _comp_ids:
+                                _ae_res = await db.execute(
+                                    select(AgentExecution).where(
+                                        AgentExecution.completion_id.in_(_comp_ids)
+                                    )
+                                )
+                                _ae_ids = [e.id for e in _ae_res.scalars().all()]
+                                _step_ids = []
+                                if _ae_ids:
+                                    _te_res = await db.execute(
+                                        select(ToolExecution).where(
+                                            ToolExecution.agent_execution_id.in_(_ae_ids)
+                                        )
+                                    )
+                                    for _te in _te_res.scalars().all():
+                                        if getattr(_te, "created_step_id", None):
+                                            _step_ids.append(_te.created_step_id)
+                                if _step_ids:
+                                    _st_res = await db.execute(
+                                        select(Step).where(Step.id.in_(_step_ids))
+                                    )
+                                    for _st in _st_res.scalars().all():
+                                        _sdata = getattr(_st, "data", None)
+                                        if getattr(_st, "status", None) == "success" and \
+                                                isinstance(_sdata, dict) and _sdata.get("rows"):
+                                            _collected_steps.append(_st)
+                            # Identify the ANSWER completion: last system completion
+                            # whose `completion` dict has non-empty narrative content.
+                            _answer_completion = None
+                            for _c in reversed(_resp_comps):
+                                if getattr(_c, "role", None) != "system":
+                                    continue
+                                _cdata = _c.completion
+                                if isinstance(_cdata, dict) and (_cdata.get("content") or "").strip():
+                                    _answer_completion = _c
+                                    break
+                            if _collected_steps and _answer_completion is not None:
+                                # No SSE stream on the non-stream path: the HTTP response is
+                                # synchronous, so the "pending" decision state is implicit (the
+                                # client is already blocked awaiting this response). No event emitted.
+                                from app.ai.knowledge.sense_maker import build_sense_making
+                                _q = (head_completion.prompt or getattr(report, "title", "") or "")
+                                _sm = await build_sense_making(
+                                    db,
+                                    steps=_collected_steps,
+                                    question=_q,
+                                    model=small_model,
+                                )
+                                if _sm:
+                                    from sqlalchemy.orm.attributes import flag_modified
+                                    _answer_completion.completion = {
+                                        **(_answer_completion.completion or {}),
+                                        "sense_making": _sm,
+                                    }
+                                    flag_modified(_answer_completion, "completion")
+                                    await db.commit()
+                    except Exception:
+                        logging.warning("F10 sense_making enrichment skipped", exc_info=True)
+
+                    # ── Auto-model badge (HYBRID_AUTO_MODEL): persist routing decision ──
+                    # Independent of sense-making; runs only when "auto" routed this turn.
+                    if _auto_decision:
+                        try:
+                            _ac_comps = await self._get_response_completions(
+                                db, head_completion, current_user, organization)
+                            _ac_ans = None
+                            for _c in reversed(_ac_comps):
+                                if getattr(_c, "role", None) == "system" and isinstance(_c.completion, dict) \
+                                        and (_c.completion.get("content") or "").strip():
+                                    _ac_ans = _c
+                                    break
+                            if _ac_ans is not None:
+                                from sqlalchemy.orm.attributes import flag_modified
+                                _ac_ans.completion = {**(_ac_ans.completion or {}), "auto_model": _auto_decision}
+                                flag_modified(_ac_ans, "completion")
+                                await db.commit()
+                        except Exception:
+                            logging.warning("auto_model badge (non-stream) skipped", exc_info=True)
+
+                    # ── Auto-artifact (HYBRID_AUTO_ARTIFACT, default OFF) ──
+                    # Run fully done (answer + sense_making committed) → if this
+                    # turn produced a dataset but no artifact, schedule a
+                    # background dashboard build. Flag-gated, fail-soft,
+                    # idempotent; own detached session inside the helper.
+                    try:
+                        from app.services.auto_artifact import schedule_auto_artifact
+                        schedule_auto_artifact(
+                            report_id=report.id,
+                            organization_id=organization.id,
+                            user_id=current_user.id,
+                            system_completion_id=system_completion.id,
+                            report_mode=getattr(report, "mode", "chat"),
+                        )
+                    except Exception:
+                        logging.warning("auto-artifact (non-stream) skipped", exc_info=True)
 
                     # Assemble v2 for the new message pair (user + system children)
                     with tracer.start_as_current_span("completion.assemble_v2_response"):
@@ -1313,6 +1460,8 @@ class CompletionService:
                 agent_execution_id=exec_obj.id if exec_obj else None,
                 prompt=c.prompt,
                 completion_blocks=c_blocks,
+                sense_making=(c.completion.get("sense_making") if isinstance(getattr(c, "completion", None), dict) else None),
+                auto_model=(c.completion.get("auto_model") if isinstance(getattr(c, "completion", None), dict) else None),
                 created_widgets=[],
                 created_steps=[],
                 files=c_files,
@@ -1681,6 +1830,8 @@ class CompletionService:
                 prompt=c.prompt,
                 completion=completion_data,
                 completion_blocks=c_blocks,
+                sense_making=(c.completion.get("sense_making") if isinstance(getattr(c, "completion", None), dict) else None),
+                auto_model=(c.completion.get("auto_model") if isinstance(getattr(c, "completion", None), dict) else None),
                 created_widgets=[],
                 created_steps=[],
                 files=c_files,
@@ -1903,8 +2054,17 @@ class CompletionService:
 
             # Get default model
             # HYBRID_AGENT_ACL: precedence: explicit request > studio per-agent config > org default (flag-gated, default OFF)
-            if completion_data.prompt and completion_data.prompt.model_id:
-                model = await self.llm_service.get_model_by_id(db, organization, current_user, completion_data.prompt.model_id)
+            _auto_decision = None
+            _req_mid = completion_data.prompt.model_id if completion_data.prompt else None
+            if flags.AUTO_MODEL and _req_mid == "auto":
+                # Auto model selection: classify question complexity → cheapest capable model.
+                model, _auto_decision = await self._auto_pick_model(
+                    db, organization, current_user,
+                    (completion_data.prompt.content if completion_data.prompt else "") or "",
+                )
+                _log(f"auto_model→{(_auto_decision or {}).get('model')} ({(_auto_decision or {}).get('tier')})")
+            elif _req_mid and _req_mid != "auto":
+                model = await self.llm_service.get_model_by_id(db, organization, current_user, _req_mid)
             else:
                 model = None
                 if flags.AGENT_ACL and getattr(report, "studio_id", None):
@@ -2073,6 +2233,18 @@ class CompletionService:
             # Create event queue for streaming
             event_queue = CompletionEventQueue()
 
+            # Auto-model: the chosen model is already known at spawn — surface it LIVE
+            # so the FE shows "Auto → <Model>" while the answer streams (not just at end).
+            if _auto_decision:
+                try:
+                    await event_queue.put(SSEEvent(
+                        event="auto_model",
+                        completion_id=str(system_completion.id),
+                        data=_auto_decision,
+                    ))
+                except Exception:
+                    pass
+
             async def run_agent_with_streaming():
                 """Run agent in background and stream events."""
                 at0 = time.monotonic()
@@ -2181,6 +2353,92 @@ class CompletionService:
                                 await agent.main_execution()
                             agent_span.add_event("agent_execution_finished")
                             _alog("agent_execution_done")
+
+                            # ── F10 Sense-Making (streaming path, flag HYBRID_SENSE_MAKING, default OFF) ──
+                            # Mirrors the non-stream hook: after the agent finishes, compute the
+                            # decision card from this turn's success steps and attach it to the
+                            # answer completion. Fully flag-gated + fail-soft → never blocks the stream.
+                            try:
+                                from app.settings.hybrid_flags import flags as _hflags
+                                if _hflags.SENSE_MAKING:
+                                    _sysid = str(system_completion_obj.id)
+                                    _ans = (await db.execute(
+                                        select(Completion).where(Completion.id == _sysid)
+                                    )).scalars().first()
+                                    _collected_steps = []
+                                    _ae_ids = (await db.execute(
+                                        select(AgentExecution.id).where(
+                                            AgentExecution.completion_id == _sysid)
+                                    )).scalars().all()
+                                    if _ae_ids:
+                                        _step_ids = (await db.execute(
+                                            select(ToolExecution.created_step_id).where(
+                                                ToolExecution.agent_execution_id.in_(_ae_ids),
+                                                ToolExecution.created_step_id.isnot(None))
+                                        )).scalars().all()
+                                        if _step_ids:
+                                            _st_rows = (await db.execute(
+                                                select(Step).where(Step.id.in_(list(_step_ids)))
+                                            )).scalars().all()
+                                            for _st in _st_rows:
+                                                _sdata = getattr(_st, "data", None)
+                                                if getattr(_st, "status", None) == "success" and \
+                                                        isinstance(_sdata, dict) and _sdata.get("rows"):
+                                                    _collected_steps.append(_st)
+                                    _ans_data = _ans.completion if (_ans is not None and isinstance(_ans.completion, dict)) else {}
+                                    if _ans is not None and _collected_steps and (_ans_data.get("content") or "").strip():
+                                        # Announce the pending decision run so the FE can show a
+                                        # "forming decision" loader + lock the composer until the
+                                        # post-answer sense-making truly finishes. `completion.finished`
+                                        # (emitted AFTER this block) stays the ready/unlock signal.
+                                        await event_queue.put(SSEEvent(event="sense_making.pending", completion_id=str(system_completion.id), data={}))
+                                        from app.ai.knowledge.sense_maker import build_sense_making
+                                        _q = (getattr(completion_obj, "prompt", None) or getattr(report, "title", "") or "")
+                                        _sm = await build_sense_making(
+                                            db, steps=_collected_steps, question=_q, model=small_model)
+                                        if _sm:
+                                            from sqlalchemy.orm.attributes import flag_modified
+                                            _ans.completion = {**(_ans.completion or {}), "sense_making": _sm}
+                                            flag_modified(_ans, "completion")
+                                            await db.commit()
+                            except Exception:
+                                logger.warning("F10 sense_making (stream) skipped", exc_info=True)
+
+                            # ── Auto-model badge (HYBRID_AUTO_MODEL, streaming) ──
+                            if _auto_decision:
+                                try:
+                                    _ac_sysid = str(system_completion_obj.id)
+                                    _ac_ans = (await db.execute(
+                                        select(Completion).where(Completion.id == _ac_sysid)
+                                    )).scalars().first()
+                                    if _ac_ans is not None and isinstance(_ac_ans.completion, dict):
+                                        from sqlalchemy.orm.attributes import flag_modified
+                                        _ac_ans.completion = {**(_ac_ans.completion or {}), "auto_model": _auto_decision}
+                                        flag_modified(_ac_ans, "completion")
+                                        await db.commit()
+                                except Exception:
+                                    logger.warning("auto_model badge (stream) skipped", exc_info=True)
+
+                            # ── Auto-artifact (HYBRID_AUTO_ARTIFACT, default OFF) ──
+                            # Agent run + sense_making done → if this turn produced
+                            # a dataset but no artifact, schedule a background
+                            # dashboard build. Flag-gated, fail-soft, idempotent;
+                            # the helper opens its OWN detached session (does not
+                            # touch this stream's session), so it never blocks or
+                            # breaks the SSE stream.
+                            try:
+                                from app.services.auto_artifact import schedule_auto_artifact
+                                _rmode = (completion_data.prompt.mode if completion_data.prompt else None) \
+                                    or getattr(report, "mode", "chat")
+                                schedule_auto_artifact(
+                                    report_id=report.id,
+                                    organization_id=organization.id,
+                                    user_id=current_user.id,
+                                    system_completion_id=system_completion.id,
+                                    report_mode=_rmode,
+                                )
+                            except Exception:
+                                logger.warning("auto-artifact (stream) skipped", exc_info=True)
 
                             # Send completion finished event
                             finished_event = SSEEvent(

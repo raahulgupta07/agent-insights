@@ -90,8 +90,13 @@ class ConnectionService:
         credentials: dict = None,
         auth_policy: str = "system_only",
         allowed_user_auth_modes: list = None,
+        owner_user_id: str = None,
     ) -> Connection:
-        """Create a new connection with validation."""
+        """Create a new connection with validation.
+
+        owner_user_id: when set, the connection is PRIVATE to that user
+        (per-agent connectors, HYBRID_AGENT_CONNECTORS). NULL = org-wide/shared.
+        """
 
         # Check enterprise license for restricted data sources
         from app.ee.license import is_datasource_allowed, is_enterprise_licensed
@@ -150,6 +155,7 @@ class ConnectionService:
             auth_policy=auth_policy,
             allowed_user_auth_modes=allowed_user_auth_modes,
             organization_id=organization.id,
+            owner_user_id=owner_user_id,
             is_active=True,
         )
 

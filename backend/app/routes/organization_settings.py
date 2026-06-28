@@ -6,6 +6,7 @@ from app.models.user import User
 from app.models.organization import Organization
 from app.core.auth import current_user
 from app.core.permissions_decorator import requires_permission
+from app.core.permission_resolver import resolve_permissions, FULL_ADMIN
 from app.services.organization_settings_service import OrganizationSettingsService
 from app.schemas.organization_settings_schema import (
     OrgSmtpSchema,
@@ -271,7 +272,7 @@ async def update_org_sso_auth_mode(
 # ---------------------------------------------------------------------------
 import os
 from sqlalchemy.orm.attributes import flag_modified
-from app.settings.hybrid_flags import flags, UPGRADE_FLAGS, set_override
+from app.settings.hybrid_flags import flags, UPGRADE_FLAGS, HIDDEN_FLAGS, set_override
 
 
 def _env_default(env_name: str) -> bool:
@@ -316,24 +317,51 @@ def _flag_row(env_name: str, meta: dict, override) -> dict:
 
 
 @router.get("/organization/hybrid-flags")
-@requires_permission('manage_settings')
 async def get_hybrid_flags(
     current_user: User = Depends(current_user),
     db: AsyncSession = Depends(get_async_db),
     organization: Organization = Depends(get_current_organization),
 ):
-    """List the agent-upgrade hybrid flags with env default, per-org override and effective value."""
+    """List the agent-upgrade hybrid flags with env default, per-org override and effective value.
+
+    Admins (manage_settings) get the FULL rows — used by the Settings flag editor.
+    Any other org member gets a MINIMAL projection (env_name/key/effective only):
+    flag effectiveness is per-ORG (not per-role), and the studio rail/tab gating
+    must read it for everyone. Members never see notes/override/defaults; PUT stays
+    admin-only. Fixes flag-gated tabs (Connectors/Teach/Reports) being invisible to
+    non-admins because the admin-gated GET 403'd for them.
+    """
     settings = await settings_service.get_settings(db, organization, current_user)
     config = settings.config if isinstance(settings.config, dict) else {}
     overrides = config.get("hybrid_overrides") or {}
     if not isinstance(overrides, dict):
         overrides = {}
 
-    rows = [
-        _flag_row(env_name, meta, overrides.get(env_name))
+    resolved = await resolve_permissions(db, str(current_user.id), str(organization.id))
+    is_admin = (
+        FULL_ADMIN in resolved.org_permissions
+        or resolved.has_org_permission("manage_settings")
+        or bool(getattr(current_user, "is_superuser", False))
+    )
+
+    visible = [
+        (env_name, meta)
         for env_name, meta in UPGRADE_FLAGS.items()
+        if env_name not in HIDDEN_FLAGS
     ]
-    return rows
+
+    if is_admin:
+        return [_flag_row(env_name, meta, overrides.get(env_name)) for env_name, meta in visible]
+
+    # Non-admin members: booleans only, no config internals.
+    return [
+        {
+            "env_name": env_name,
+            "key": env_name[len("HYBRID_"):] if env_name.startswith("HYBRID_") else env_name,
+            "effective": _effective(env_name),
+        }
+        for env_name, meta in visible
+    ]
 
 
 @router.put("/organization/hybrid-flags/{env_name}")
@@ -351,7 +379,7 @@ async def update_hybrid_flag(
     applies). Persists to config['hybrid_overrides'] and applies the override
     live to this process immediately.
     """
-    if env_name not in UPGRADE_FLAGS:
+    if env_name not in UPGRADE_FLAGS or env_name in HIDDEN_FLAGS:
         raise HTTPException(status_code=400, detail=f"Unknown hybrid flag: {env_name}")
 
     enabled = payload.get("enabled")

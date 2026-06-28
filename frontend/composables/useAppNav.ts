@@ -127,7 +127,8 @@ export function useAppNav() {
         { key: 'knowledge', href: '/knowledge', activePath: '/knowledge', icon: 'heroicons-academic-cap', label: 'nav.knowledge', section: 'CONTEXT' },
         { key: 'instructions', href: '/instructions', activePath: '/instructions', icon: 'heroicons-cube', label: 'nav.instructions', section: 'CONTEXT' },
         { key: 'queries', href: '/queries', activePath: '/queries', component: LibraryIcon, label: 'nav.queries', section: 'CONTEXT' },
-        { key: 'skills', href: '/skills', activePath: '/skills', icon: 'heroicons-sparkles', label: 'Skills', section: 'CAPABILITIES' },
+        // 'Skills' (global /skills = HYBRID_SKILLS sandbox-exec) removed from nav —
+        // known-unstable (livelocks the agent loop). Use studio Domain Packs instead.
         { key: 'memory', href: '/memory', activePath: '/memory', icon: 'heroicons-cpu-chip', label: 'Memory', section: 'CAPABILITIES' },
         { key: 'my-groups', href: '/settings/my-groups', activePath: '/settings/my-groups', icon: 'heroicons-user-group', label: 'My Groups', section: 'ACCESS' },
       ],
@@ -136,7 +137,10 @@ export function useAppNav() {
       title: 'nav.manage',
       railHeader: { subtitle: 'Connect, observe, and automate', badge: 'ORG', icon: 'heroicons-adjustments-horizontal' },
       items: [
-        { key: 'connectors', href: '/connectors', activePath: '/connectors', icon: 'heroicons-circle-stack', label: 'Connectors', permission: 'create_data_source', section: 'DATA' },
+        // Open to ALL org members: each user sees connectors they created + shared
+        // to them + org-wide, and can self-serve build/edit their own (per-user
+        // connector visibility). Create-shared/org stays gated inside the page.
+        { key: 'connectors', href: '/connectors', activePath: '/connectors', icon: 'heroicons-circle-stack', label: 'Connectors', section: 'DATA' },
         { key: 'monitoring', href: '/monitoring', activePath: '/monitoring', component: ActivityIcon, label: 'nav.monitoring', adminOnly: true, section: 'OBSERVE' },
         { key: 'evals', href: '/evals', activePath: '/evals', icon: 'heroicons-check-circle', label: 'nav.evals', permission: 'manage_evals', section: 'OBSERVE' },
         { key: 'workflows', href: '/workflows', activePath: '/workflows', icon: 'heroicons-arrow-path', label: 'Workflows', permission: 'manage_settings', section: 'AUTOMATE' },

@@ -177,6 +177,14 @@ class CompletionV2Schema(BaseModel):
     fork_asset_refs: Optional[List[Dict[str, Any]]] = None
     completion: Optional[Dict[str, Any]] = None  # raw completion content for fork summary rendering
 
+    # F10 Sense-Making decision card (top-level so the FE list view can render it;
+    # the nested `completion` field is None in the v2 list assembly).
+    sense_making: Optional[Dict[str, Any]] = None
+
+    # Auto Model Selection badge (HYBRID_AUTO_MODEL): which model the classifier
+    # picked for this answer + why. Top-level for the same reason as sense_making.
+    auto_model: Optional[Dict[str, Any]] = None
+
     class Config:
         from_attributes = True
 

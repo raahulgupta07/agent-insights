@@ -17,6 +17,26 @@ class ConnectionCreate(BaseModel):
     credentials: Optional[dict] = None
     auth_policy: str = "system_only"
     allowed_user_auth_modes: Optional[list] = None
+    # "shared"  = org-wide connector (admin only; owner_user_id NULL, reusable).
+    # "personal" = private connector owned by the creator (any user; owner forced
+    #              to the session user server-side). Requires HYBRID_AGENT_CONNECTORS.
+    scope: str = "shared"
+    # 3-level connector VISIBILITY (management-plane sharing). When set, this WINS
+    # over the legacy `scope` derive rule. One of:
+    #   'private' = owner only.
+    #   'shared'  = owner + specifically-granted users/groups.
+    #   'org'     = all org members.
+    # Any org member may self-service create at ANY level (non-private create
+    # requires HYBRID_AGENT_CONNECTORS, same as personal). owner_user_id is always
+    # the creator. Back-compat: when omitted, derived from `scope`
+    # ('shared'->'org', else 'private').
+    visibility: Optional[str] = None
+    # Optional agent binding for a personal connector created from a studio's
+    # Connectors page. When set (+ scope=personal), the connector is bound to that
+    # studio (Connection.studio_id) so it lands in that agent's "My Connectors"
+    # tab. Validated server-side (must be a studio in the caller's org). Ignored
+    # for shared scope.
+    studio_id: Optional[str] = None
 
 
 class ConnectionUpdate(BaseModel):
@@ -49,6 +69,12 @@ class ConnectionSchema(BaseModel):
     tool_count: int = 0
     agent_count: int = 0
     agent_names: List[str] = []  # Names of linked agents (for delete confirmation)
+    # Ownership tier: NULL = shared/org-wide connector; set = private to that user.
+    # Lets the FE split "Shared" vs "My Connections". Never carries credentials.
+    owner_user_id: Optional[str] = None
+    # 3-level visibility for the management/list plane: 'private' | 'shared' |
+    # 'org'. Lets the FE badge each connector. Never carries credentials.
+    visibility: Optional[str] = None
     indexing: Optional[Dict[str, Any]] = None
     # Per-user auth status for the requesting user (user_required connections):
     # has_user_credentials / effective_auth / uses_fallback / connection.

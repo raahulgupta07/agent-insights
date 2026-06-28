@@ -68,6 +68,14 @@ services:
       - DASH_CONFIG_PATH=/app/dash-config.yaml
       # Tier-2 scale-out: Redis backs the per-user skill-run concurrency cap across replicas.
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      # First-run super-admin bootstrap. start.sh runs scripts/seed_admin.py ONCE
+      # before uvicorn IF both email+password are non-empty in the CONTAINER env.
+      # These MUST be passed through here — compose only uses .env for ${VAR}
+      # interpolation, it does NOT auto-inject .env into the container. Set the
+      # values in .env; seeder is idempotent (skips if the user already exists).
+      - DASH_ADMIN_EMAIL=${DASH_ADMIN_EMAIL:-}
+      - DASH_ADMIN_PASSWORD=${DASH_ADMIN_PASSWORD:-}
+      - DASH_ADMIN_NAME=${DASH_ADMIN_NAME:-Admin}
       # NOTE: all ~50 HYBRID_* feature flags + skill-exec knobs are NO LONGER set
       # here. They live in the UI (Settings → Features), stored per-org in
       # organization_settings.config['hybrid_overrides'] and loaded at boot by

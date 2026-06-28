@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.auth import current_user
+from app.core.permission_resolver import resolve_permissions, FULL_ADMIN
 from app.dependencies import get_async_db, get_current_organization
 from app.errors import AppError, ErrorCode
 from app.models.connection import Connection
@@ -243,6 +244,39 @@ class StudioConnectorRead(BaseModel):
     pinned: bool = False
 
 
+class StudioConnectorListItem(BaseModel):
+    """A connector row in the studio Connectors page (My / Shared tab).
+
+    ``active`` = at least one of the connector's DataSources is currently pinned
+    (StudioDataSource, not soft-deleted) to this studio — only ACTIVE connectors
+    are queryable by the agent and get data sync.
+    """
+    connection_id: str
+    name: str
+    type: str
+    owner_user_id: Optional[str] = None
+    visibility: Optional[str] = None     # 'private' | 'shared' | 'org' (FE badge)
+    is_org: bool = False                 # shared/org connector (vs my private)
+    active: bool = False                 # pinned to this studio → agent can use it
+    data_source_id: Optional[str] = None
+    sync_status: Optional[str] = None    # Connection.last_connection_status
+    last_synced_at: Optional[str] = None
+    table_count: Optional[int] = None
+
+
+class StudioConnectorsResponse(BaseModel):
+    """Two-tab payload for the studio Connectors page."""
+    mine: List[StudioConnectorListItem] = []
+    shared: List[StudioConnectorListItem] = []
+
+
+class ActivateResult(BaseModel):
+    ok: bool = True
+    connection_id: str
+    data_source_id: str
+    active: bool
+
+
 def _require_agent_connectors() -> None:
     """404 (feature locked) unless HYBRID_AGENT_CONNECTORS is on — mirrors
     me_groups `_ensure_enabled` / `_require_flag` so the route's existence isn't
@@ -251,42 +285,136 @@ def _require_agent_connectors() -> None:
     pcg.require_feature_enabled()
 
 
-@router.get("/studios/{studio_id}/connectors", response_model=List[StudioConnectorRead])
+async def _pinned_ds_ids(db: AsyncSession, studio_id: str) -> set:
+    """DataSource ids currently pinned (active) to this studio."""
+    res = await db.execute(
+        select(StudioDataSource.agent_id).where(
+            StudioDataSource.studio_id == studio_id,
+            StudioDataSource.deleted_at.is_(None),
+        )
+    )
+    return {str(r) for (r,) in res.all()}
+
+
+def _connector_item(c: Connection, *, is_org: bool, pinned: set) -> StudioConnectorListItem:
+    ds_list = list(getattr(c, "data_sources", None) or [])
+    active_ds = next((str(ds.id) for ds in ds_list if str(ds.id) in pinned), None)
+    ds_id = active_ds or (str(ds_list[0].id) if ds_list else None)
+    last = getattr(c, "last_synced_at", None)
+    return StudioConnectorListItem(
+        connection_id=str(c.id),
+        name=c.name,
+        type=c.type,
+        owner_user_id=str(c.owner_user_id) if c.owner_user_id else None,
+        visibility=getattr(c, "visibility", None),
+        is_org=is_org,
+        active=active_ds is not None,
+        data_source_id=ds_id,
+        sync_status=getattr(c, "last_connection_status", None),
+        last_synced_at=last.isoformat() if last is not None else None,
+    )
+
+
+@router.get("/studios/{studio_id}/connectors", response_model=StudioConnectorsResponse)
 async def list_studio_connectors(
     studio_id: str,
     current_user: User = Depends(current_user),
     db: AsyncSession = Depends(get_async_db),
     organization: Organization = Depends(get_current_organization),
 ):
-    """List this studio's PRIVATE connectors owned by the caller (creator-only).
+    """Two-tab connector list for a studio: ``mine`` + ``shared``.
 
-    Only the caller's own private connectors for this studio are returned — a
-    private connector is never visible to anyone but its creator.
+    * **mine** — connectors the caller OWNS (``owner_user_id == me``) at ANY
+      visibility level (the creator keeps edit rights everywhere).
+    * **shared** — connectors NOT owned by the caller that are visible to them:
+      ``visibility=='org'``, or (``visibility=='shared'`` AND granted to them /
+      admin), or legacy admin-made org connectors (``owner_user_id`` NULL).
+      Private connectors owned by other users are NEVER listed.
+
+    Each row carries ``active`` = whether one of its DataSources is pinned to this
+    studio. Only ACTIVE connectors are queryable by the agent + get data sync.
     """
     _require_agent_connectors()
     await _require_role(db, studio_id, current_user)
 
-    res = await db.execute(
-        select(Connection).where(
-            Connection.studio_id == studio_id,
+    pinned = await _pinned_ds_ids(db, studio_id)
+
+    # ── MINE: every connector owned by the caller, any visibility level ─────────
+    mine_res = await db.execute(
+        select(Connection)
+        .options(selectinload(Connection.data_sources))
+        .where(
             Connection.organization_id == organization.id,
             Connection.owner_user_id == str(current_user.id),
         )
     )
-    rows = list(res.scalars().all())
-    # Owner-filter defensively (studio_id-bound private connectors only).
-    rows = pcg.filter_visible(rows, current_user)
-    return [
-        StudioConnectorRead(
-            connection_id=str(c.id),
-            studio_id=str(c.studio_id),
-            name=c.name,
-            type=c.type,
-            owner_user_id=str(c.owner_user_id),
-            pinned=True,
-        )
-        for c in rows
+    mine = [
+        _connector_item(c, is_org=False, pinned=pinned)
+        for c in mine_res.scalars().all()
     ]
+
+    # ── SHARED: org/shared connectors the caller may reuse ─────────────────────
+    all_conns = await _connection_service.get_connections(db, organization)
+    resolved = await resolve_permissions(db, str(current_user.id), str(organization.id))
+    is_admin = (
+        FULL_ADMIN in resolved.org_permissions
+        or resolved.has_org_permission("manage_connections")
+    )
+    granted_conn_ids = {
+        rid for (rtype, rid) in resolved.resource_permissions if rtype == "connection"
+    }
+    granted_ds_ids = {
+        rid for (rtype, rid) in resolved.resource_permissions if rtype == "data_source"
+    }
+    public_ds_rows = await db.execute(
+        select(DataSource.id).where(
+            DataSource.organization_id == str(organization.id),
+            DataSource.is_public.is_(True),
+        )
+    )
+    accessible_ds_ids = granted_ds_ids | {str(r) for (r,) in public_ds_rows.all()}
+
+    def _shared_visible(c: Connection) -> bool:
+        # Owned by the caller → belongs in `mine`, not here.
+        oid = getattr(c, "owner_user_id", None)
+        if oid is not None and str(oid) == str(current_user.id):
+            return False
+        vis = getattr(c, "visibility", None)
+        # Legacy admin-made org connector (owner NULL) = org-wide, everyone sees.
+        if oid is None and vis in (None, "org"):
+            return True
+        if vis == "org":
+            return True
+        if vis == "private":
+            # Another user's private connector never appears in Shared.
+            return False
+        if vis == "shared":
+            if is_admin:
+                return True
+            if str(c.id) in granted_conn_ids:
+                return True
+            if c.data_sources:
+                return any(str(ds.id) in accessible_ds_ids for ds in c.data_sources)
+            return False
+        # Fallback (no visibility attr on a legacy row): old behavior — private
+        # (owner set) hidden; otherwise admin/grant/public-DS visible.
+        if pcg.is_private(c):
+            return False
+        if is_admin:
+            return True
+        if str(c.id) in granted_conn_ids:
+            return True
+        if c.data_sources:
+            return any(str(ds.id) in accessible_ds_ids for ds in c.data_sources)
+        return False
+
+    shared = [
+        _connector_item(c, is_org=True, pinned=pinned)
+        for c in all_conns
+        if _shared_visible(c)
+    ]
+
+    return StudioConnectorsResponse(mine=mine, shared=shared)
 
 
 @router.post("/studios/{studio_id}/connectors", response_model=StudioConnectorRead)
@@ -327,6 +455,7 @@ async def create_studio_connector(
     )).scalar_one()
     conn_row.owner_user_id = str(current_user.id)
     conn_row.studio_id = str(studio_id)
+    conn_row.visibility = "private"
     await db.commit()
     await db.refresh(conn_row)
 
@@ -378,6 +507,148 @@ async def create_studio_connector(
         owner_user_id=str(current_user.id),
         pinned=True,
     )
+
+
+@router.post(
+    "/studios/{studio_id}/connectors/{connection_id}/activate",
+    response_model=ActivateResult,
+)
+async def activate_studio_connector(
+    studio_id: str,
+    connection_id: str,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Activate a connector for this agent (owner/editor only).
+
+    "Active" = a DataSource wrapping the connector is pinned to this studio, so
+    the agent can query it and a data sync is triggered. Works for the caller's
+    own private connectors AND shared/org connectors they may reuse. A shared
+    connector with no DataSource yet gets one auto-created (private to the studio
+    pin; the connector itself is unchanged). Idempotent.
+    """
+    _require_agent_connectors()
+    await _require_role(db, studio_id, current_user, editor=True)
+
+    res = await db.execute(
+        select(Connection)
+        .options(selectinload(Connection.data_sources))
+        .where(
+            Connection.id == connection_id,
+            Connection.organization_id == organization.id,
+        )
+    )
+    conn = res.scalar_one_or_none()
+    if conn is None:
+        raise AppError.not_found("connection.not_found", "Connector not found")
+    # A private connector owned by SOMEONE ELSE can never be activated here.
+    if pcg.is_private(conn) and not pcg.owns(conn, current_user):
+        raise AppError.forbidden(
+            ErrorCode.ACCESS_DENIED, "This is a private connector of another user."
+        )
+
+    # Ensure a DataSource wraps the connection (reuse the first existing one).
+    ds_list = list(conn.data_sources or [])
+    if ds_list:
+        ds = ds_list[0]
+    else:
+        ds = DataSource(
+            name=conn.name,
+            organization_id=organization.id,
+            is_public=False,
+            use_llm_sync=False,
+            owner_user_id=current_user.id,
+        )
+        ds.connections.append(conn)
+        db.add(ds)
+        try:
+            await db.commit()
+            await db.refresh(ds)
+        except IntegrityError:
+            await db.rollback()
+            ds = DataSource(
+                name=f"{conn.name}-{str(conn.id)[:8]}",
+                organization_id=organization.id,
+                is_public=False,
+                use_llm_sync=False,
+                owner_user_id=current_user.id,
+            )
+            ds.connections.append(conn)
+            db.add(ds)
+            await db.commit()
+            await db.refresh(ds)
+
+    # Pin (dedupe + reactivate a previously soft-deleted pin).
+    existing = await db.execute(
+        select(StudioDataSource).where(
+            StudioDataSource.studio_id == studio_id,
+            StudioDataSource.agent_id == str(ds.id),
+        )
+    )
+    pin = existing.scalar_one_or_none()
+    if pin is None:
+        db.add(StudioDataSource(studio_id=str(studio_id), agent_id=str(ds.id)))
+        await db.commit()
+    elif pin.deleted_at is not None:
+        pin.deleted_at = None
+        await db.commit()
+
+    # Trigger data sync / grounded-context regen in the background.
+    from app.services.studio_bootstrap import schedule_bootstrap_on_source_pin
+    schedule_bootstrap_on_source_pin(background_tasks, str(studio_id))
+
+    return ActivateResult(
+        ok=True, connection_id=str(conn.id), data_source_id=str(ds.id), active=True
+    )
+
+
+@router.delete("/studios/{studio_id}/connectors/{connection_id}/activate")
+async def deactivate_studio_connector(
+    studio_id: str,
+    connection_id: str,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Deactivate a connector for this agent (owner/editor only).
+
+    Soft-deletes the StudioDataSource pin(s) for every DataSource wrapping this
+    connector — the agent can no longer query it. The connector + its DataSource
+    are left intact (re-activate any time). Idempotent.
+    """
+    _require_agent_connectors()
+    await _require_role(db, studio_id, current_user, editor=True)
+
+    res = await db.execute(
+        select(Connection)
+        .options(selectinload(Connection.data_sources))
+        .where(
+            Connection.id == connection_id,
+            Connection.organization_id == organization.id,
+        )
+    )
+    conn = res.scalar_one_or_none()
+    if conn is None:
+        raise AppError.not_found("connection.not_found", "Connector not found")
+
+    ds_ids = [str(ds.id) for ds in (conn.data_sources or [])]
+    if ds_ids:
+        from datetime import datetime
+
+        pins = await db.execute(
+            select(StudioDataSource).where(
+                StudioDataSource.studio_id == studio_id,
+                StudioDataSource.agent_id.in_(ds_ids),
+                StudioDataSource.deleted_at.is_(None),
+            )
+        )
+        for pin in pins.scalars().all():
+            pin.deleted_at = datetime.utcnow()
+        await db.commit()
+
+    return {"ok": True, "connection_id": str(conn.id), "active": False}
 
 
 async def _load_studio_private_connector(

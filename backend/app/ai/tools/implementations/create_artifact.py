@@ -353,6 +353,7 @@ class CreateArtifactTool(Tool):
             messages_context=prompt_context.get("messages_context", ""),
             image_count=prompt_context.get("image_count", 0),
             organization_settings=prompt_context.get("organization_settings"),
+            sense_making=prompt_context.get("sense_making"),
         )
 
         # Build screenshot context if available
@@ -546,6 +547,22 @@ Fix the errors while keeping the same design and functionality. Output the corre
         db = runtime_ctx.get("db")
         context_hub = runtime_ctx.get("context_hub")
         organization_settings = runtime_ctx.get("settings")
+
+        # Sense-Making decision card (optional, flag-gated). Prefer an explicitly
+        # passed card (from the one-click report route); otherwise best-effort
+        # fetch by report id. Fully fail-soft → None means byte-identical prompt.
+        sense_making = tool_input.get("sense_making")
+        if sense_making is None:
+            try:
+                from app.settings.hybrid_flags import flags as _hybrid_flags
+                if _hybrid_flags.SENSE_MAKING:
+                    _rpt = runtime_ctx.get("report")
+                    _rid = getattr(_rpt, "id", None) or runtime_ctx.get("report_id")
+                    if db is not None and _rid:
+                        from app.ai.knowledge.sense_maker import get_stored_sense_making
+                        sense_making = await get_stored_sense_making(db, str(_rid))
+            except Exception:
+                sense_making = None
 
         # Check privacy setting
         allow_llm_see_data = True
@@ -779,6 +796,7 @@ Fix the errors while keeping the same design and functionality. Output the corre
             "messages_context": messages_context,
             "image_count": len(completion_images),
             "organization_settings": organization_settings,
+            "sense_making": sense_making,
         }
 
         prompt = self._build_prompt(
@@ -792,6 +810,7 @@ Fix the errors while keeping the same design and functionality. Output the corre
             messages_context=messages_context,
             image_count=len(completion_images),
             organization_settings=organization_settings,
+            sense_making=sense_making,
         )
 
         # Stream from LLM
@@ -1010,17 +1029,31 @@ Fix the errors while keeping the same design and functionality. Output the corre
             "collapsed_default": True,
         }
 
-        # Build observation message
-        summary_msg = f"Created artifact '{data.title or 'Untitled'}' with {len(code)} characters of code"
-        if data.mode == "slides" and preview_images:
-            summary_msg += f". Generated {len(preview_images)} slide preview images."
-        elif render_errors:
-            summary_msg += f". RENDER FAILED with {len(render_errors)} error(s): {render_errors[0]}"
-            if len(render_errors) > 1:
-                summary_msg += f" (and {len(render_errors) - 1} more)"
-            summary_msg += ". The dashboard code has a bug — use edit_artifact to fix the specific error."
-        elif screenshot_base64:
-            summary_msg += ". Screenshot of the rendered dashboard is attached — review it for visual correctness."
+        # Build observation message.
+        # CRITICAL: slides-mode success wording must ONLY be emitted when the pptx
+        # actually built. A failed deck (e.g. sandbox-rejected python-pptx code)
+        # left status='failed' with an empty pptx_path — never claim success here,
+        # or the agent's answer fabricates "Presentation created successfully!".
+        slides_failed = (data.mode == "slides") and (not pptx_success)
+        if slides_failed:
+            _err = pptx_error or "unknown error"
+            summary_msg = (
+                f"Slide deck generation FAILED: {_err}. "
+                f"The deck was NOT created (no slides were produced). "
+                f"Tell the user it failed and offer to retry — do NOT claim the "
+                f"presentation was created or that it succeeded."
+            )
+        else:
+            summary_msg = f"Created artifact '{data.title or 'Untitled'}' with {len(code)} characters of code"
+            if data.mode == "slides" and preview_images:
+                summary_msg += f". Generated {len(preview_images)} slide preview images."
+            elif render_errors:
+                summary_msg += f". RENDER FAILED with {len(render_errors)} error(s): {render_errors[0]}"
+                if len(render_errors) > 1:
+                    summary_msg += f" (and {len(render_errors) - 1} more)"
+                summary_msg += ". The dashboard code has a bug — use edit_artifact to fix the specific error."
+            elif screenshot_base64:
+                summary_msg += ". Screenshot of the rendered dashboard is attached — review it for visual correctness."
 
         observation: Dict[str, Any] = {
             "summary": summary_msg,
@@ -1029,6 +1062,16 @@ Fix the errors while keeping the same design and functionality. Output the corre
             "visualization_count": len(visualizations),
             "visualization_ids": included_viz_ids,
         }
+        if slides_failed:
+            # Unambiguous, machine-readable failure signal for the agent's reflection.
+            observation["failed"] = True
+            observation["status"] = "failed"
+            observation["error"] = pptx_error or "unknown error"
+            # Surface failure on the tool output too, so nothing downstream treats
+            # this as a successful creation.
+            output["success"] = False
+            output["status"] = "failed"
+            output["error"] = pptx_error or "unknown error"
         if render_errors:
             observation["render_errors"] = render_errors
 
@@ -1090,6 +1133,7 @@ Fix the errors while keeping the same design and functionality. Output the corre
         messages_context: str = "",
         image_count: int = 0,
         organization_settings: Any = None,
+        sense_making: Any = None,
     ) -> str:
         """Build the prompt for generating slides using python-pptx code."""
         viz_json = json.dumps(viz_profiles, indent=2, default=str)
@@ -1101,8 +1145,55 @@ Fix the errors while keeping the same design and functionality. Output the corre
         if image_count > 0:
             images_context = f"\n**Attached Images:** {image_count} image(s) provided for visual reference. Use these to understand the design intent, branding, color schemes, or layout preferences the user wants to incorporate."
 
+        # KEY DECISION SLIDE — only when a sense_making card is present (flag-gated
+        # upstream). Absent → empty string → byte-identical prompt to today.
+        key_decision_block = ""
+        if isinstance(sense_making, dict):
+            try:
+                _hl = sense_making.get("headline") or {}
+                _hl_text = str(_hl.get("text") or "").strip()
+                _top = self._sense_making_top_finding(sense_making)
+                _so_what = str(_top.get("so_what") or "").strip()
+                _action = str(((_top.get("now_what") or {}).get("action")) or "").strip()
+                if _hl_text or _so_what or _action:
+                    key_decision_block = f"""
+═══════════════════════════════════════════════════════════════════════════════
+KEY DECISION SLIDE (generate FIRST, BEFORE the normal slides)
+═══════════════════════════════════════════════════════════════════════════════
+Generate a leading title slide titled "Key Decision" as the VERY FIRST slide of the deck, before the title slide and all data slides. Use EXACTLY these values — do not invent or reword them:
+- Headline: "{_hl_text}"
+- Why it matters (so what): "{_so_what}"
+- Recommended action (now what): "{_action}"
+Lay it out as a bold executive summary slide (large headline, the "so what" and the "now what" as readable supporting lines). Then continue with the normal title slide and the per-visualization slides exactly as instructed below — this Key Decision slide is IN ADDITION to them, do not drop any slide.
+"""
+            except Exception:
+                key_decision_block = ""
+
         return f"""Role: presentation author using python-pptx.{language_directive}
 Generate python-pptx code to create a polished slide deck.
+
+═══════════════════════════════════════════════════════════════════════════════
+⛔ SANDBOX RULES — READ FIRST (violating ANY of these FAILS THE WHOLE DECK)
+═══════════════════════════════════════════════════════════════════════════════
+Your code runs in a RESTRICTED sandbox with an AST security gate. The following
+builtins are HARD-BANNED — using even ONE of them rejects your entire script and
+NO slides are produced:
+
+    getattr · hasattr · setattr · eval · exec · open · __import__ · locals · globals · vars
+
+DO THIS INSTEAD:
+- To check whether an attribute exists, use:  'name' in dir(obj)
+- To read an attribute, access it DIRECTLY (obj.attr) or guard with try/except:
+      try:
+          axis = chart.category_axis
+      except Exception:
+          axis = None
+- NEVER write getattr(obj, 'attr', default). Use the try/except pattern above.
+- Use ONLY python-pptx APIs and plain Python. Do not import anything (all classes
+  listed below are already in the namespace).
+
+This rule is absolute. The example helpers below are already written to obey it —
+copy their try/except style, never reintroduce getattr/hasattr.
 
 ═══════════════════════════════════════════════════════════════════════════════
 AVAILABLE IN NAMESPACE (already provided — do not import)
@@ -1201,10 +1292,18 @@ style_chart_text(chart, TEXT_LIGHT)   # TEXT_LIGHT on dark slides; TEXT_DARK on 
 **`style_chart_text` helper — paste once, call on every chart:**
 ```python
 def style_chart_text(chart, color):
-    # Axis tick labels (category + value)
-    for axis in (getattr(chart, 'category_axis', None), getattr(chart, 'value_axis', None)):
-        if axis is None:
-            continue
+    # Axis tick labels (category + value). NO getattr — sandbox-banned.
+    # chart.category_axis / value_axis raise if absent, so guard with try/except.
+    axes = []
+    try:
+        axes.append(chart.category_axis)
+    except Exception:
+        pass
+    try:
+        axes.append(chart.value_axis)
+    except Exception:
+        pass
+    for axis in axes:
         try:
             axis.tick_labels.font.color.rgb = color
             axis.tick_labels.font.size = Pt(11)
@@ -1217,14 +1316,14 @@ def style_chart_text(chart, color):
             chart.legend.font.size = Pt(11)
         except Exception:
             pass
-    # Data labels on every plot/series
+    # Data labels on every plot/series (plot.has_data_labels is a real property)
     for plot in chart.plots:
-        if getattr(plot, 'has_data_labels', False):
-            try:
+        try:
+            if plot.has_data_labels:
                 plot.data_labels.font.color.rgb = color
                 plot.data_labels.font.size = Pt(10)
-            except Exception:
-                pass
+        except Exception:
+            pass
 ```
 
 **Other chart types:**
@@ -1356,9 +1455,17 @@ def generate_slides(visualizations, report):
     TEXT_ON_BG = TEXT_LIGHT             # flip to TEXT_DARK if you choose a light BG
 
     def style_chart_text(chart, color):
-        for axis in (getattr(chart, 'category_axis', None), getattr(chart, 'value_axis', None)):
-            if axis is None:
-                continue
+        # NO getattr (sandbox-banned) — guard axis access with try/except.
+        axes = []
+        try:
+            axes.append(chart.category_axis)
+        except Exception:
+            pass
+        try:
+            axes.append(chart.value_axis)
+        except Exception:
+            pass
+        for axis in axes:
             try:
                 axis.tick_labels.font.color.rgb = color
                 axis.tick_labels.font.size = Pt(11)
@@ -1371,12 +1478,12 @@ def generate_slides(visualizations, report):
             except Exception:
                 pass
         for plot in chart.plots:
-            if getattr(plot, 'has_data_labels', False):
-                try:
+            try:
+                if plot.has_data_labels:
                     plot.data_labels.font.color.rgb = color
                     plot.data_labels.font.size = Pt(10)
-                except Exception:
-                    pass
+            except Exception:
+                pass
 
     def set_background(slide, color=BG_DARK):
         bg = slide.background
@@ -1499,7 +1606,24 @@ prs = generate_slides(visualizations, report)
 prs.save(_pptx_output_path)
 ```
 
+{key_decision_block}
 Create a beautiful, varied presentation following these design principles. Each slide should look DIFFERENT from the others. Use visual elements, accent shapes, and thoughtful color choices:"""
+
+    def _sense_making_top_finding(self, sense_making: Any) -> Dict[str, Any]:
+        """Return the top finding dict (by impact_rank asc) or {} — fail-soft."""
+        try:
+            findings = [f for f in (sense_making.get("findings") or []) if isinstance(f, dict)]
+            if not findings:
+                return {}
+            def _rank(f: Dict[str, Any]) -> float:
+                nw = f.get("now_what") or {}
+                try:
+                    return float(nw.get("impact_rank"))
+                except (TypeError, ValueError):
+                    return 1e9
+            return sorted(findings, key=_rank)[0]
+        except Exception:
+            return {}
 
     def _build_page_prompt(
         self,
@@ -1512,6 +1636,7 @@ Create a beautiful, varied presentation following these design principles. Each 
         messages_context: str = "",
         image_count: int = 0,
         organization_settings: Any = None,
+        sense_making: Any = None,
     ) -> str:
         """Build the prompt for generating page/dashboard (React + ECharts)."""
         viz_json = json.dumps(viz_profiles, indent=2, default=str)
@@ -1522,6 +1647,96 @@ Create a beautiful, varied presentation following these design principles. Each 
         images_context = ""
         if image_count > 0:
             images_context = f"\n**Attached Images:** {image_count} image(s) provided for visual reference. Use these to understand the design intent, branding, color schemes, or layout preferences the user wants to incorporate."
+
+        # DECISION BANNER — only when a sense_making card is present (flag-gated
+        # upstream). Absent → empty string → byte-identical prompt to today.
+        decision_banner_block = ""
+        if isinstance(sense_making, dict):
+            try:
+                _hl = sense_making.get("headline") or {}
+                _hl_text = str(_hl.get("text") or "").strip()
+                _hl_sev = str(_hl.get("severity") or "").strip()
+                _top = self._sense_making_top_finding(sense_making)
+                _action = str(((_top.get("now_what") or {}).get("action")) or "").strip()
+                if _hl_text or _action:
+                    decision_banner_block = f"""
+═══════════════════════════════════════════════════════════════════════════════
+DECISION BANNER (render FIRST, above every chart — in ADDITION to the dashboard)
+═══════════════════════════════════════════════════════════════════════════════
+Render, as the VERY FIRST element of the dashboard (above all KPI cards and charts), a single compact full-width banner card that communicates the key decision. Use EXACTLY these values — do not invent or reword them:
+- Headline: "{_hl_text}"
+- Severity: "{_hl_sev}"
+- Recommended action: "{_action}"
+Style the banner to match the dashboard's color story; tint it by severity (e.g. red/amber/green accent) but keep text readable per the CONTRAST CONTRACT. This banner is IN ADDITION to the normal dashboard — render every chart and KPI as usual, do NOT drop or replace any of them.
+"""
+            except Exception:
+                decision_banner_block = ""
+
+        # EXPLAINABILITY — baked Decision + Key Insights + per-widget Explain, grounded in the
+        # data already in this prompt (independent of post-run sense_making timing). Flag is
+        # org/DB-owned (organization_settings), defaults ON via schema; fail-soft default ON.
+        try:
+            key_insights_on = organization_settings.get_config("dashboard_key_insights").value if organization_settings else True
+        except Exception:
+            key_insights_on = True
+
+        explainability_block = ""
+        if key_insights_on:
+            # NOTE: plain (non-f) string — single braces are literal here, so `viz={viz[N]}`
+            # and JSX stay intact when this value is substituted into the f-string below.
+            explainability_block = """
+═══════════════════════════════════════════════════════════════════════════════
+EXPLAINABILITY — BAKED DECISION, KEY INSIGHTS & PER-WIDGET EXPLAIN (MANDATORY)
+═══════════════════════════════════════════════════════════════════════════════
+Make this dashboard EXPLAINABLE, not just descriptive. Ground EVERY statement below ONLY in the
+numbers, sites, periods and ratios that actually appear in YOUR VISUALIZATIONS above (their
+rows / sample_rows / column_stats / view_config). NEVER invent a number, name, period or trend
+that is not in the provided data. Fewer true statements beat more guessed ones. One short line
+each, plain business language. If the data does not support a line, omit it.
+
+1) DECISION CALLOUT + KEY INSIGHTS — render these as the VERY FIRST elements, ABOVE the KPI row:
+   a. A compact full-width Decision callout (tinted, readable per the CONTRAST CONTRACT) whose
+      first line reads EXACTLY:
+        "DECISION · <Watch|Act|Hold> · confidence: <high|medium|low>"
+      then ONE sentence = the single most important so-what + the recommended next move. Choose
+      Watch/Act/Hold and the confidence from how strong and clear the data signal is.
+   b. A "Key Insights" card with 3–5 bullets. EACH bullet must cite a concrete number / site /
+      period / ratio that appears in the data above (e.g. "Store 14 drove 38% of revenue",
+      "March units fell 22% vs February"). No bullet without a real figure from the data.
+
+2) PER-WIDGET EXPLAIN (the core requirement): EVERY KPICard and EVERY chart SectionCard must carry
+   a short AI explanation. Render it as a small collapsible block at the BOTTOM of the card — a
+   native <details> with a tiny <summary>Explain</summary> — using the card's own text colors
+   (match the CONTRAST CONTRACT: light text on dark cards). Use UP TO 4 tiered one-liners, each
+   prefixed with its label, and INCLUDE A LINE ONLY IF THE DATA SUPPORTS IT:
+        • Reading  — what the number / chart literally says (descriptive)
+        • Why      — the most likely driver / cause visible in the data (diagnostic)
+        • So-what  — the business impact (impact)
+        • Do       — the recommended next action (prescriptive)
+   Pattern (plain JSX, NO new component — works on light or dark cards via your own classes):
+        <details className="mt-3 text-xs">
+          <summary className="cursor-pointer select-none opacity-70 hover:opacity-100">Explain</summary>
+          <div className="mt-1.5 space-y-1 opacity-90">
+            <p><span className="font-semibold">Reading:</span> Revenue is 1.2M, up from 0.9M.</p>
+            <p><span className="font-semibold">Why:</span> Store 14 added 38% of the gain.</p>
+            <p><span className="font-semibold">So-what:</span> Q4 target now within reach.</p>
+            <p><span className="font-semibold">Do:</span> Replicate Store 14's promo in lagging sites.</p>
+          </div>
+        </details>
+   KEEP the info popover too: still pass viz={viz[N]} (and rows / calc when relevant) to every card.
+   The popover shows provenance/data; the Explain block shows the reasoning — they are complementary.
+   For custom tiles you build yourself (not KPICard/SectionCard), put the same <details> Explain
+   block inside the tile.
+
+3) WATCH badge: if a widget's underlying data shows an anomaly, outlier or extreme value (a single
+   category dominating the total, a sharp spike/drop period-over-period, a negative where positive is
+   expected), add a small "WATCH" badge to that card's header, e.g.
+        <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800">WATCH</span>
+   (tint it to fit your color story and contrast). Only when the data genuinely shows the anomaly.
+
+GROUNDING (non-negotiable): cite only numbers / sites / periods / ratios present in the data above;
+never invent; fewer true statements beat more guessed ones; one line each; plain business language.
+"""
 
         # Note: Previous artifact code is now available via observation context (from create_artifact/read_artifact)
         # The planner can call read_artifact if needed to load previous code into context
@@ -1731,7 +1946,7 @@ CHART SELECTION:
 - Show data from different angles without redundancy. Each chart should reveal something the others don't.
 
 The goal: it should look like a designer built it for this specific dataset, not like a template was filled in.
-
+{explainability_block}
 ═══════════════════════════════════════════════════════════════════════════════
 OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════════════════════════
@@ -1750,10 +1965,10 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App />);
 
 Structure: all code should be inside `function App() {{ ... }}` with `ReactDOM.createRoot(document.getElementById('root')).render(<App />);` at the end. Do not put return statements outside a function.
 
-Rules: `<script type="text/babel">` wrapper. `useArtifactData()` for data. `<EChart option={{...}} />` for charts. Pass `viz={{viz[N]}}` to every KPICard/SectionCard so the built-in info popover shows the data behind it. Responsive. Handle zero rows. No hardcoded data. No UUIDs/branding/emoji. Guard nullish values before string methods (use `(val || '')` or `String(val ?? '')`).
+Rules: `<script type="text/babel">` wrapper. `useArtifactData()` for data. `<EChart option={{...}} />` for charts. Pass `viz={{viz[N]}}` to every KPICard/SectionCard so the built-in info popover shows the data behind it. If the EXPLAINABILITY section above is present, render the Decision callout + Key Insights first and a collapsible "Explain" block on every KPI/chart card (grounded only in real data). Responsive. Handle zero rows. No hardcoded data. No UUIDs/branding/emoji. Guard nullish values before string methods (use `(val || '')` or `String(val ?? '')`).
 
 **Code size:** Write compact code — no unnecessary variables, comments, or verbose JSX. Omit default props. Don't repeat theme styling the 'dash' theme already provides. Prefer inline expressions over separate variables when used once. For simple dashboards target under 8K characters. For detailed/specific user requests, use as much space as needed to faithfully implement their design — fidelity to the user's request is more important than brevity.
-
+{decision_banner_block}
 Now create the dashboard:"""
 
     def _build_prompt(
@@ -1768,6 +1983,7 @@ Now create the dashboard:"""
         messages_context: str = "",
         image_count: int = 0,
         organization_settings: Any = None,
+        sense_making: Any = None,
     ) -> str:
         """Build the prompt for generating artifact code. Dispatches to mode-specific builders."""
         if mode == "slides":
@@ -1781,6 +1997,7 @@ Now create the dashboard:"""
                 messages_context=messages_context,
                 image_count=image_count,
                 organization_settings=organization_settings,
+                sense_making=sense_making,
             )
         return self._build_page_prompt(
             user_prompt=user_prompt,
@@ -1792,6 +2009,7 @@ Now create the dashboard:"""
             messages_context=messages_context,
             image_count=image_count,
             organization_settings=organization_settings,
+            sense_making=sense_making,
         )
 
     def _extract_code(self, response: str, mode: str = "page") -> str:

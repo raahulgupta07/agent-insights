@@ -68,6 +68,27 @@ async def deliver(
     """
     parts = await build_parts(ctx)
     subject = parts.subject or ctx.title or "Report"
+
+    # Sense-Making decision lead (flag-gated, fail-soft). PREPEND a "Decision"
+    # box above the rendered result and tag the subject with the action. On any
+    # error the email is delivered exactly as today (no lead block). Flag OFF →
+    # byte-identical to today. Reuses the already-stored card (NO LLM).
+    try:
+        from app.settings.hybrid_flags import flags as _sm_flags
+        if getattr(_sm_flags, "SENSE_MAKING", False):
+            from app.ai.knowledge.sense_maker import get_stored_sense_making
+            from app.services.report_delivery import template as _tpl
+            sm = await get_stored_sense_making(db, ctx.report_id)
+            if sm:
+                lead = _tpl.sense_making_lead_html(sm)
+                if lead:
+                    parts.body_html = lead + (parts.body_html or "")
+                    tag = _tpl.sense_making_subject_tag(sm)
+                    if tag and not subject.startswith(tag):
+                        subject = tag + subject
+    except Exception:  # noqa: BLE001 — deliver exactly as today on any error
+        logger.warning("report_delivery: sense-making lead failed", exc_info=True)
+
     send_attachments = _attachments_to_send_dicts(parts) or None
     try:
         if parts.inline_images:

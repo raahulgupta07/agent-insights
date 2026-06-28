@@ -1,9 +1,17 @@
 """Private (per-agent) connector guards — HYBRID_AGENT_CONNECTORS.
 
-A connection whose ``owner_user_id`` is set is a PRIVATE, creator-only connector
-bound to a single Studio (``studio_id``). Org connectors (``owner_user_id`` NULL)
-behave exactly as before — every helper here short-circuits to a no-op for them,
-so the NULL-owner path is byte-identical to today.
+PRIVATENESS is now driven by the connection's ``visibility`` level, NOT merely by
+``owner_user_id`` (which is the CREATOR on every member-made connector regardless
+of level). A connection is PRIVATE iff ``visibility == 'private'`` — only then is
+it creator-only / non-shareable. ``'shared'`` and ``'org'`` connectors pass these
+guards (they are managed/listed via the visibility plane in the routes, e.g.
+``connection.list_connections`` and ``studio_sources``). Fallback: when a row
+carries no ``visibility`` attribute, the legacy rule applies (set
+``owner_user_id`` = private).
+
+These guards govern ONLY the management plane (list/edit/test/delete/reindex),
+NEVER the data query path (creds always resolve server-side under
+``auth_policy=system_only``).
 
 Two invariants are enforced from one place so every call-site stays consistent:
 
@@ -52,8 +60,15 @@ def require_feature_enabled() -> None:
 
 
 def is_private(connection) -> bool:
-    """A connection is PRIVATE iff it carries an owner_user_id."""
-    return getattr(connection, "owner_user_id", None) is not None
+    """A connection is PRIVATE iff its visibility level is 'private'.
+
+    Fallback (no visibility attr present, e.g. a partial/legacy row): a set
+    ``owner_user_id`` means private, preserving the old semantics.
+    """
+    vis = getattr(connection, "visibility", None)
+    if vis is None:
+        return getattr(connection, "owner_user_id", None) is not None
+    return vis == "private"
 
 
 def owns(connection, user) -> bool:
@@ -95,10 +110,12 @@ def deny_share(connection) -> None:
 
 
 def filter_visible(connections: Iterable, user) -> list:
-    """Drop private connectors NOT owned by `user`; keep org + own-private.
+    """Drop PRIVATE connectors NOT owned by `user`; keep everything else.
 
-    Used by the connection LIST route so a member never sees someone else's
-    private connector. Org connectors (NULL owner) stay visible to everyone.
+    Keeps a connection when it is NOT private (visibility 'shared'/'org' — their
+    finer list-visibility is enforced in ``list_connections``) OR it is private
+    and owned by `user`. Used by the connection LIST route so a member never sees
+    someone else's private connector.
     """
     out = []
     for c in connections:

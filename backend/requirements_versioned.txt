@@ -97,7 +97,8 @@ ordered-set==4.1.0
 packaging==24.0
 pathspec==1.0.4
 pandas==2.2.2
-prophet==1.1.6
+statsmodels==0.14.2
+patsy==1.0.2
 parso==0.8.3
 partialjson==0.0.8
 pdfminer.six==20251230

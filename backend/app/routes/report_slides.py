@@ -140,6 +140,19 @@ async def _generate_artifact(
         "prompt": _MODE_PROMPTS.get(mode, _MODE_PROMPTS["page"]),
     }
 
+    # Sense-Making: fold the persisted decision card into the prompt (SAFE
+    # prompt-injection path only — no artifact-iframe plumbing). Fail-soft:
+    # sm None → behaves exactly as today.
+    if flags.SENSE_MAKING:
+        try:
+            from app.ai.knowledge.sense_maker import get_stored_sense_making
+
+            sm = await get_stored_sense_making(db, str(report.id))
+            if sm:
+                tool_input["sense_making"] = sm
+        except Exception:  # noqa: BLE001 — never break artifact generation
+            logger.warning("sense_making fetch failed for report %s", report_id, exc_info=True)
+
     from app.ai.tools.implementations.create_artifact import CreateArtifactTool
 
     tool = CreateArtifactTool()
@@ -323,4 +336,163 @@ async def get_report_workbook(
         name = (q.title or step.title or f"Sheet {len(sheets) + 1}")[:28]
         sheets.append({"name": name, "columns": grid["columns"], "rows": grid["rows"]})
 
+    # Sense-Making "Insights" sheet (deterministic, NO LLM) — prepend at index 0
+    # so it's the first tab. Flag-gated + fully fail-soft: any error → original sheets.
+    if flags.SENSE_MAKING:
+        try:
+            from app.ai.knowledge.sense_maker import get_stored_sense_making
+
+            sm = await get_stored_sense_making(db, str(report.id))
+            if sm:
+                insight_rows: list[list[str]] = []
+                headline = sm.get("headline") or {}
+                insight_rows.append(["Headline", str(headline.get("text") or "")])
+                _sev = str(headline.get("severity") or "")
+                _conf = str(headline.get("confidence") or "")
+                insight_rows.append(["Severity", f"{_sev} · confidence {_conf}"])
+                for f in (sm.get("findings") or [])[:6]:
+                    if not isinstance(f, dict):
+                        continue
+                    nw = f.get("now_what") or {}
+                    rank = str(nw.get("impact_rank") or "")
+                    kind = str(f.get("kind") or "")
+                    insight_rows.append([
+                        f"#{rank} {kind}".strip(),
+                        f"{f.get('what') or ''} → {nw.get('action') or ''}",
+                    ])
+                for a in (sm.get("alerts") or [])[:6]:
+                    if not isinstance(a, dict):
+                        continue
+                    insight_rows.append([
+                        "Alert",
+                        f"{a.get('metric') or ''} {a.get('value') or ''} vs "
+                        f"{a.get('threshold') or ''} → {a.get('action') or ''}",
+                    ])
+                insight_rows = [[str(c) for c in row] for row in insight_rows]
+                sheets.insert(0, {
+                    "name": "Insights",
+                    "columns": ["Decision", "Detail"],
+                    "rows": insight_rows,
+                })
+        except Exception:  # noqa: BLE001 — never break the workbook
+            logger.warning("Insights sheet build failed for report %s", report_id, exc_info=True)
+
     return {"sheets": sheets}
+
+
+# --------------------------------------------------------------------------- #
+# Session Summary — one cached cheap-LLM roll-up across ALL turns of a report.
+# Gated by the org setting ``session_summary`` (default ON), NOT a hybrid flag.
+# GET  /api/reports/{id}/session-summary → {summary, stale}  (NO rebuild)
+# POST /api/reports/{id}/session-summary → rebuild + cache, returns {summary, stale}
+# Fully fail-soft: errors degrade to {summary:null, ...}, never a raw 500.
+# --------------------------------------------------------------------------- #
+
+
+async def _session_summary_enabled(db: AsyncSession, organization) -> bool:
+    """Read the org ``session_summary`` setting (default ON). Fail-soft → True."""
+    try:
+        from app.models.organization_settings import OrganizationSettings
+
+        row = (
+            await db.execute(
+                select(OrganizationSettings).where(
+                    OrganizationSettings.organization_id == organization.id
+                )
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            return True  # no settings row yet → schema default (ON)
+        cfg = row.get_config("session_summary")
+        if cfg is None:
+            return True
+        val = cfg.value if hasattr(cfg, "value") else cfg
+        return bool(val)
+    except Exception:  # noqa: BLE001 — never break the route on a settings read
+        logger.warning("session_summary: settings read failed", exc_info=True)
+        return True
+
+
+def _is_stale(summary, marker: dict) -> bool:
+    """stale=True when there is no summary, or its provenance differs from the
+    report's CURRENT latest system completion (count or last id)."""
+    if not isinstance(summary, dict):
+        return True
+    gf = summary.get("generated_from") if isinstance(summary.get("generated_from"), dict) else {}
+    return (
+        gf.get("completion_count") != marker.get("completion_count")
+        or gf.get("last_completion_id") != marker.get("last_completion_id")
+    )
+
+
+@router.get("/reports/{report_id}/session-summary")
+async def get_report_session_summary(
+    report_id: str,
+    current_user: User = Depends(current_user),
+    organization: Organization = Depends(get_current_organization),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """Return the cached session summary + whether it's stale. NEVER rebuilds."""
+    if not await _session_summary_enabled(db, organization):
+        return {"summary": None, "stale": False}
+
+    report = await _load_report(db, report_id, organization)
+    try:
+        from app.ai.knowledge.session_summary import latest_completion_marker
+
+        marker = await latest_completion_marker(db, str(report.id))
+        summary = report.session_summary
+        return {"summary": summary, "stale": _is_stale(summary, marker)}
+    except Exception:  # noqa: BLE001 — fail-soft read
+        logger.warning("session_summary GET failed for report %s", report_id, exc_info=True)
+        return {"summary": report.session_summary, "stale": True}
+
+
+@router.post("/reports/{report_id}/session-summary")
+async def rebuild_report_session_summary(
+    report_id: str,
+    current_user: User = Depends(current_user),
+    organization: Organization = Depends(get_current_organization),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """Rebuild the session summary via the cheap-LLM synthesizer, cache it on the
+    report, and return it. No-op (200, {summary:null}) when the setting is OFF."""
+    if not await _session_summary_enabled(db, organization):
+        return {"summary": None, "stale": False}
+
+    report = await _load_report(db, report_id, organization)
+    try:
+        from datetime import datetime, timezone
+        from sqlalchemy.orm.attributes import flag_modified
+        from app.ai.knowledge.session_summary import build_session_summary
+        from app.services.llm_service import LLMService
+
+        # Cheap/small org default model — same tier as sense_maker / followups.
+        model = await LLMService().get_default_model(
+            db, organization, current_user, is_small=True
+        )
+
+        summary = await build_session_summary(
+            db, report=report, organization=organization,
+            user=current_user, model=model,
+        )
+        if not summary:
+            # Nothing to summarise (no completed turns) or synth failed — fail-soft.
+            return {"summary": report.session_summary, "stale": True}
+
+        # Stamp the provenance timestamp the synthesizer left as None.
+        gf = summary.get("generated_from")
+        if isinstance(gf, dict):
+            gf["generated_at"] = datetime.now(timezone.utc).isoformat()
+
+        report.session_summary = summary
+        flag_modified(report, "session_summary")  # JSON in-place set isn't auto-tracked
+        await db.commit()
+        return {"summary": summary, "stale": False}
+    except Exception:  # noqa: BLE001 — never leak a raw 500
+        logger.warning("session_summary POST failed for report %s", report_id, exc_info=True)
+        try:
+            await db.rollback()
+        except Exception:  # noqa: BLE001
+            pass
+        return {"summary": report.session_summary, "stale": True}
