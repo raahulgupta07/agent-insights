@@ -140,6 +140,7 @@ from app.routes import (
     smart_upload,
     smart_workbook,
     smart_dashboard,
+    ingest_brain,
 )
 from app.routes.oidc_auth import router as oidc_auth_router
 from app.ee.routes import router as enterprise_router
@@ -319,6 +320,7 @@ app.include_router(datasource_columns.router, prefix="/api")  # Feature 2: colum
 app.include_router(compliance_scan.router, prefix="/api")  # Feature 4: compliance scan (gated HYBRID_COMPLIANCE_GATE)
 app.include_router(column_profile.router, prefix="/api")  # Batch B: column intelligence profiler (gated HYBRID_COLUMN_INTEL)
 app.include_router(smart_dashboard.router, prefix="/api")  # Smart Dashboard Build (sidecar, gated HYBRID_SMART_DASHBOARD)
+app.include_router(ingest_brain.router, prefix="/api")    # F09 Universal Ingest Brain (sidecar, gated HYBRID_INGEST_BRAIN)
 app.include_router(studio_learning.router, prefix="/api")
 app.include_router(build.router, prefix="/api")
 app.include_router(console.router, prefix="/api")
