@@ -2401,6 +2401,16 @@ class CompletionService:
                                             _ans.completion = {**(_ans.completion or {}), "sense_making": _sm}
                                             flag_modified(_ans, "completion")
                                             await db.commit()
+                                            # Deliver the finished card over SSE so the FE renders the
+                                            # DecisionCard LIVE. Previously only `sense_making.pending`
+                                            # (shimmer) was emitted and the payload was written to the DB
+                                            # but never streamed — so the card appeared only after a full
+                                            # page reload (loadCompletions hoists it from the API).
+                                            await event_queue.put(SSEEvent(
+                                                event="sense_making.ready",
+                                                completion_id=str(_ans.id),
+                                                data={"sense_making": _sm},
+                                            ))
                             except Exception:
                                 logger.warning("F10 sense_making (stream) skipped", exc_info=True)
 

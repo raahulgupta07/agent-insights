@@ -584,6 +584,28 @@ async def startup_event():
         except Exception as e:
             logger.error(f"Failed to schedule insight daemon job: {e}")
 
+    # Hybrid Brain-Graph miner daemon. Proposes PENDING correlation edges from
+    # each org's published entities so the (already-wired) reader has edges to
+    # inject — without this the BRAIN_GRAPH section is always empty. The tick
+    # self-leader-gates + claims across pods; ONLY scheduled when
+    # HYBRID_BRAIN_GRAPH is on. Default deploy unchanged.
+    if is_scheduler_leader and _hybrid_flags.BRAIN_GRAPH:
+        try:
+            from app.services.brain_service import run_brain_graph_daemon_tick
+            scheduler.add_job(
+                run_brain_graph_daemon_tick,
+                trigger="interval",
+                hours=6,
+                id="hybrid_brain_graph_daemon",
+                replace_existing=True,
+                coalesce=True,
+                max_instances=1,
+                misfire_grace_time=600,
+            )
+            logger.info("Scheduled job: hybrid_brain_graph_daemon every 6 hours")
+        except Exception as e:
+            logger.error(f"Failed to schedule brain-graph daemon job: {e}")
+
     # Hybrid Studios ST8 self-improvement daemon. Self-no-ops unless
     # STUDIO_LEARN_DAEMON_ENABLED is on; the tick also self-leader-gates across
     # pods. Default deploy is unchanged.

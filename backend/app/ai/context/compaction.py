@@ -148,19 +148,21 @@ def edit_to_budget(
     used_tokens: int,
     budget: int,
     model=None,
-) -> Tuple[str, List[str]]:
+) -> Tuple[str, List[str], str]:
     """EDIT: if over budget, drop droppable sections in `_DROP_ORDER` (lowest
     priority first) one at a time, re-measuring, until under budget. Never
     drops the base block (index 0) or any unmatched/core section. Returns
-    `(new_instructions, dropped_first_lines)`. Never raises."""
+    `(new_instructions, dropped_first_lines, dropped_text)` where dropped_text
+    is the concatenated bodies of the removed sections (for an optional COMPRESS
+    pass). Never raises."""
     try:
         if not instructions or used_tokens <= budget:
-            return instructions, []
+            return instructions, [], ""
 
         model_id = getattr(model, "model_id", None) if model is not None else None
         blocks = _split_sections(instructions)
         if len(blocks) <= 1:
-            return instructions, []
+            return instructions, [], ""
 
         # Build a list of (drop_rank, index) for droppable blocks (skip index 0).
         droppable: List[Tuple[int, int]] = []
@@ -172,7 +174,11 @@ def edit_to_budget(
         droppable.sort(key=lambda t: (t[0], t[1]))
 
         if not droppable:
-            return instructions, []
+            return instructions, [], ""
+
+        def _bodies(removed: set) -> str:
+            # Concatenate removed blocks in original order (for COMPRESS).
+            return "\n\n".join(blocks[i] for i in sorted(removed))
 
         removed_idx = set()
         dropped_headers: List[str] = []
@@ -182,15 +188,15 @@ def edit_to_budget(
             kept = [b for i, b in enumerate(blocks) if i not in removed_idx]
             candidate = "\n\n".join(kept)
             if _count(candidate, model_id) <= budget:
-                return candidate, dropped_headers
+                return candidate, dropped_headers, _bodies(removed_idx)
 
         # Still over budget after dropping everything droppable -> return the
         # maximally-trimmed result (COMPRESS would run next if its sub-flag on).
         kept = [b for i, b in enumerate(blocks) if i not in removed_idx]
-        return "\n\n".join(kept), dropped_headers
+        return "\n\n".join(kept), dropped_headers, _bodies(removed_idx)
     except Exception as exc:  # never break the loop
         logger.debug("context compaction edit_to_budget failed: %s", exc)
-        return instructions, []
+        return instructions, [], ""
 
 
 def _strip_awareness(instructions: str) -> str:
@@ -243,24 +249,48 @@ def _truncate_digest(dropped_text: str) -> str:
 async def maybe_compress(dropped_text: str, *, model=None, db=None) -> str:
     """COMPRESS (opt-in): summarize dropped/old text into a one-line digest.
 
-    When `CONTEXT_COMPACT_LLM` is on and the text is large, attempt ONE LLM
+    When `CONTEXT_COMPACT_LLM` is on and the text is large, run ONE LLM
     one-shot summary; on ANY failure or when the sub-flag is off, fall back to
     the deterministic head-truncate. Never raises.
 
-    NOTE: kept available for future wiring; the in-loop `compact()` path does
-    NOT call this (it must stay synchronous/cheap). The repo's one-shot LLM
-    client pattern lives behind per-org provider config + an async client; to
-    avoid a brittle, untested call from a pure helper, the LLM digest path is
-    intentionally a TODO for MVP and we return the deterministic truncate. The
-    sub-flag defaulting OFF makes this acceptable.
+    Wired from agent_v2's async `_apply_context_compaction` (which awaits this
+    after the synchronous `compact()` EDIT pass, passing the dropped section
+    bodies). `compact()` itself stays sync/cheap and never calls this.
     """
     try:
         if not _llm_enabled():
             return _truncate_digest(dropped_text)
-        # TODO(compress-llm): wire a single one-shot LLM summarization here,
-        # mirroring app.ai.brain.* distill helpers (per-org client, never raise).
-        # Until then, even with the sub-flag on we return the safe truncate.
-        return _truncate_digest(dropped_text)
+        text = (dropped_text or "").strip()
+        if not text:
+            return ""
+        # Only worth an LLM call when there is real bulk to compress; otherwise
+        # the deterministic truncate is already tight.
+        if len(text) <= _DIGEST_CHARS:
+            return _truncate_digest(text)
+        if model is None:
+            return _truncate_digest(text)
+        # ONE bounded one-shot summary, mirroring the app.ai.knowledge.* idiom
+        # (sync .inference from an async caller is fine; LLM manages its loop).
+        import asyncio
+        from app.ai.llm.llm import LLM
+        from app.dependencies import async_session_maker
+
+        prompt = (
+            "You are compressing dropped agent context to save tokens. "
+            "Summarize the material below into at most 3 dense lines. "
+            "Preserve concrete names, table/column identifiers, numbers and any "
+            "approved facts. No preamble, no markdown headers.\n\n"
+            + text[:8000]
+        )
+
+        def _infer() -> str:
+            # LLM.inference is sync/blocking — run off the event loop.
+            return LLM(model, usage_session_maker=async_session_maker).inference(
+                prompt, usage_scope="context_compress"
+            )
+
+        digest = (await asyncio.to_thread(_infer) or "").strip()
+        return digest or _truncate_digest(text)
     except Exception:
         return _truncate_digest(dropped_text)
 
@@ -287,7 +317,7 @@ def compact(instructions: str, *, model=None) -> Tuple[str, dict]:
         used = _count(instructions, model_id)
         budget = _budget_tokens(model)
 
-        edited, dropped = edit_to_budget(
+        edited, dropped, dropped_text = edit_to_budget(
             instructions, used_tokens=used, budget=budget, model=model
         )
         used2 = _count(edited, model_id)
@@ -301,6 +331,10 @@ def compact(instructions: str, *, model=None) -> Tuple[str, dict]:
             "used_after": used2,
             "budget": budget,
             "dropped": dropped,
+            # Bodies of the dropped sections — fed to the optional async COMPRESS
+            # pass (maybe_compress) by the agent_v2 caller when the LLM sub-flag
+            # is on. Empty when nothing was dropped.
+            "dropped_text": dropped_text,
         }
     except Exception as exc:  # never break the loop
         logger.debug("context compaction compact failed: %s", exc)

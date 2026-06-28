@@ -9,6 +9,70 @@ Bullet rules (this is the user-facing "What's new" feed):
     Hidden from the popover; shown collapsed on the full /changelog page only.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.61.0 — Full-deployment default: everything fail-soft ON  (2026-06-28)
+- Every feature that can't crash, lose data, or block users is now ON out of the box — the intended posture for
+  a full engineer install. 16 more flipped: Auto-configure-from-Doc, Code Enrich, Hybrid Search, File Browser,
+  Scheduled Reports, Rich Report Emails, Per-Org Quotas, Pack Auto-bind, Bi-temporal Facts, LLM Context
+  Compaction, Brain Graph, DuckDB Federation, and the 4 daemons (Insight, Eval, Join-Mining, Studio-Learn).
+  - `hybrid_flags.py` `_bool(...,True)` flips for all of the above. All are fail-soft: no-op without their
+    prerequisite (SMTP/OAuth/S3/entities/index), cost-only when used, or behavior-transparent. Verified: all-on
+    boot is clean (health 200, zero errors), all 5 daemons register, `import main` OK.
+  - **HELD OFF (the one genuine footgun): `HYBRID_AUTOTRAIN_ON_INDEX`** — auto-trains EVERY table when a
+    connector is indexed → runaway token/time cost on a large warehouse. Enable per-deployment only when wanted.
+  - Quotas default-ON is safe: fail-open with no UsagePolicy (always allows) until a policy is configured.
+  - Daemons start at the install restart; infra-gated features (File Browser/OAuth, Reports/SMTP, Federation/S3)
+    surface but no-op until the engineer wires the backend. Re-baked + tagged `v1.61.0`.
+  - Net OFF now: only AUTOTRAIN_ON_INDEX + the 6 retired skill/subagent flags (hidden).
+
+## v1.60.1 — 6 more safe features ON by default  (2026-06-28)
+- Six additive, fail-soft features now ON out of the box: personal contact Groups, group-based agent sharing,
+  per-agent private connectors, the Workflow runner, governance (PII/freshness) hints, and join-graph context.
+  - `hybrid_flags.py` `_bool(...,True)` flips: USER_GROUPS, AGENT_CONNECTORS, GROUP_ACCESS, WORKFLOWS,
+    GOVERNANCE, JOIN_GRAPH. Chosen because they cost nothing, need no external infra, and degrade to empty/no-op
+    without data. Deliberately LEFT opt-in: token-costly (CODE_ENRICH, AUTOMAP, PACK_AUTOBIND, SEMANTIC_SEARCH,
+    CONTEXT_COMPACT_LLM, BRAIN_GRAPH), infra-gated (FILE_BROWSER/OAuth, AGENT_REPORTS+RICH_REPORT_EMAIL/SMTP,
+    FEDERATION/S3), dangerous (AUTOTRAIN_ON_INDEX), user-blocking (QUOTAS), behavior-changing (BITEMPORAL), daemons.
+  - Re-baked + tagged `v1.60.1`.
+
+## v1.60.0 — Feature audit: sensible defaults, two real fixes, retire dead toggles  (2026-06-28)
+- 9 verified features now ON out of the box: Decision cards (Sense-Making), Auto model pick, Forecasting,
+  one-click Dashboard/Slides/Excel, auto-build dashboard, clarify-first (Ambiguity Gate), context compaction,
+  Column Intel, Compliance scan.
+- LLM context compaction now actually works — over budget, old context is summarized into a short digest
+  instead of dropped, so the agent keeps the gist.
+- Fixed a crash for non-streaming / API / webhook callers when starting a report.
+- Removed toggles that could never work (skill/subagent self-improvement family) — use Domain Packs instead.
+  - Audited all 38 default-OFF hybrid flags (3 parallel code-audit agents + live/unit/gate runtime tests on a
+    real data source). Verdicts: ~22 WORK, ~12 BLOCKED-by-prereq, dead set retired.
+  - Default-ON flips in `hybrid_flags.py` (`_bool(X, True)`): SENSE_MAKING, AUTO_MODEL, AUTO_ARTIFACT,
+    AMBIGUITY_GATE, FORECAST, ONECLICK_ARTIFACTS, CONTEXT_COMPACT, COLUMN_INTEL, COMPLIANCE_GATE.
+  - **CONTEXT_COMPACT_LLM implemented** (was a TODO stub): `compaction.edit_to_budget` now also returns the
+    dropped section bodies; `maybe_compress` runs ONE `asyncio.to_thread` LLM summary; `agent_v2`
+    `_apply_context_compaction` made async + memoized per dropped-set (≈1 LLM call/run) and appends a
+    "### Compressed earlier context" digest. Un-hidden from HIDDEN_FLAGS. Sub-flag still default OFF (opt-in cost).
+  - **BRAIN_GRAPH writer wired**: new leader-gated `run_brain_graph_daemon_tick` (brain_service.py) +
+    main.py registration (6h interval, flag-gated) calls `propose_edges_from_entities` → pending edges →
+    existing approve route publishes → the already-wired reader injects. (Still needs published entities to mine.)
+  - **Platform bug fix**: added `platform` + `platform_context` Optional fields to `PromptSchema` — the
+    non-stream inline completion path read them and 500'd for API/webhook/scheduled callers.
+  - **Retired (added to HIDDEN_FLAGS)**: SKILL_AUTOGROW, SKILL_OPTIMIZE, SKILL_OPTIMIZE_DAEMON — the whole
+    skill self-improvement family dead-ends on SKILLS (livelocks). Joins SKILLS/SUBAGENTS/RECURSIVE already hidden.
+  - Image re-baked + tagged `v1.60.0`.
+
+## v1.59.1 — Fresh-install fix: reports no longer break on a clean database  (2026-06-28)
+- Reports + chat now work on a brand-new or freshly-reset install. Previously, a clean database was
+  missing an internal column and every report silently failed before it could start.
+  - Root cause: `Report.session_summary` (added in v1.48–1.49) shipped with NO alembic migration — the
+    column was only hand-applied to the live DB. Any schema rebuilt purely from migrations (fresh install
+    or `DROP SCHEMA` wipe) lacked it, so every report query 500'd with
+    `UndefinedColumnError: column reports.session_summary does not exist` → no report/completion created
+    (file uploads landed but analysis never ran).
+  - Fix: new migration `sessumm1` (down_revision `connvis1`) does `ALTER TABLE reports ADD COLUMN IF NOT
+    EXISTS session_summary json` — idempotent, so legacy hand-DDL'd DBs are unaffected. Dropped the stale
+    "MANUAL DDL REQUIRED" note in `models/report.py`. Image re-baked + tagged `v1.59.1`.
+  - Verified: full ORM-vs-DB drift scan now clean except a vestigial unused `applications` model (no table,
+    no code references — left as-is).
+
 ## v1.59.0 — Session Summary works + "forming the decision" live status  (2026-06-28)
 - **Generate summary** now works — the Outputs "Session Summary" card builds a synthesis across every turn.
 - While the agent forms the DECISION after an answer, a live status shows at the bottom of the chat input

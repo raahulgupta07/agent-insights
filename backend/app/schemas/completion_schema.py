@@ -16,6 +16,11 @@ class PromptSchema(BaseModel):
     #   per-completion > trigger words in prompt > LLMModel.config default > "off"
     # Currently honored on Anthropic only; ignored on other providers.
     reasoning_effort: Optional[str] = None  # off|low|medium|high
+    # The non-stream inline completion path reads these (completion_service ~L800,
+    # L815). Without them, any NON-streaming caller (API / webhook / scheduled)
+    # 500s with AttributeError. Optional/None so the streaming path is unchanged.
+    platform: Optional[str] = None
+    platform_context: Optional[dict] = None
 
     class Config:
         from_attributes = True

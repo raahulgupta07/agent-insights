@@ -298,6 +298,70 @@ async def run_insight_daemon_tick(session_maker: Optional[Callable[[], Any]] = N
     return written
 
 
+BRAIN_GRAPH_JOB_ID = "hybrid_brain_graph_mine"
+
+
+async def run_brain_graph_daemon_tick(session_maker: Optional[Callable[[], Any]] = None) -> int:
+    """Leader-gated periodic miner for BRAIN_GRAPH. Proposes PENDING correlation
+    edges from each org's PUBLISHED entities (approval-gated; the reader only
+    injects published edges). Without this tick nothing ever produces edges, so
+    the injected graph section stays empty — this is the missing writer.
+
+    Returns the count of orgs for which ≥1 edge was written. All guarded;
+    returns 0 on any error or when HYBRID_BRAIN_GRAPH is off. Mirrors
+    run_insight_daemon_tick's leader/claim/session discipline."""
+    try:
+        from app.settings.hybrid_flags import flags
+
+        if not flags.BRAIN_GRAPH:
+            return 0
+    except Exception:
+        return 0
+
+    try:
+        from app.core.scheduler import claim_scheduled_run, try_acquire_scheduler_leader
+
+        if not try_acquire_scheduler_leader():
+            return 0
+        if not claim_scheduled_run(BRAIN_GRAPH_JOB_ID):
+            return 0
+    except Exception as e:
+        logger.warning("brain-graph tick leader/claim failed: %s", e)
+        return 0
+
+    written = 0
+    try:
+        maker = session_maker
+        if maker is None:
+            from app.dependencies import async_session_maker
+
+            maker = async_session_maker
+
+        from app.ai.brain import brain_graph
+
+        async with maker() as db:
+            organizations = await _resolve_orgs(db)
+            if not organizations:
+                return 0
+            model = await _resolve_model(db)
+            for org in organizations[:MAX_ORGS_PER_TICK]:
+                try:
+                    res = await brain_graph.propose_edges_from_entities(
+                        db, organization=org, model=model
+                    )
+                    if res and res.get("edges"):
+                        written += 1
+                        await db.commit()
+                except Exception:
+                    # One org's failure must not abort the rest of the tick.
+                    continue
+    except Exception as e:
+        logger.warning("brain-graph run_brain_graph_daemon_tick failed: %s", e)
+        return written
+
+    return written
+
+
 async def _resolve_orgs(db: Any) -> List[Any]:
     """Best-effort list of organizations to scan. [] on any error."""
     try:

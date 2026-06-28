@@ -3929,6 +3929,18 @@ async function handleStreamingEvent(eventType: string | null, payload: any, sysM
 			decisionForming.value = true
 			break
 
+		case 'sense_making.ready':
+			// The finished Decision card arrived live — attach it to the
+			// streaming system message so DecisionCard renders WITHOUT a reload,
+			// and clear the "forming the decision" shimmer. (Before this event
+			// existed, the payload was only in the DB and the card showed only
+			// after a full page reload.)
+			if (sysMessage && payload && payload.sense_making) {
+				sysMessage.sense_making = payload.sense_making
+			}
+			decisionForming.value = false
+			break
+
 		case 'decision.partial':
 		case 'decision.final':
 			// Update plan decision information

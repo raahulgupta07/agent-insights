@@ -28,7 +28,7 @@ class Report(BaseSchema):
     # Hybrid "Session Summary": one cached cheap-LLM roll-up across ALL turns of
     # this report (question/answer + F10 sense_making decisions + artifacts), shown
     # pinned in the Outputs panel. Recomputed on demand or when turns change.
-    # MANUAL DDL REQUIRED (no alembic migration): ALTER TABLE reports ADD COLUMN session_summary json
+    # Column created by alembic migration `sessumm1` (was previously hand-applied DDL).
     session_summary = Column(JSON, nullable=True, default=None)
 
     cron_schedule = Column(String, nullable=True)

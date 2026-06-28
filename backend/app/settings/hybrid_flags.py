@@ -192,14 +192,19 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
 #   - HYBRID_SKILLS    : sandbox skill exec — livelocks; use Domain Packs instead.
 #   - HYBRID_SUBAGENTS : subagent fan-out — instability source (livelocks).
 #   - HYBRID_RECURSIVE : no-op unless Subagents is on, so hide it with them.
-#   - HYBRID_CONTEXT_COMPACT_LLM : LLM-summarize path is a TODO(compress-llm) stub —
-#       falls back to deterministic truncate, so the toggle does NOTHING today. Hide
-#       until wired so the UI doesn't promise a no-op. Re-expose when implemented.
+#   - HYBRID_SKILL_AUTOGROW / SKILL_OPTIMIZE / SKILL_OPTIMIZE_DAEMON : the whole
+#       skill self-improvement family dead-ends on HYBRID_SKILLS (authoring is
+#       hard-gated on it, optimization needs skill rows that can't exist) — retired
+#       with the skill subsystem. Use Domain Packs instead.
+# NOTE: HYBRID_CONTEXT_COMPACT_LLM is NO LONGER hidden — the LLM-summarize path is
+# now implemented (maybe_compress + async wiring in agent_v2), so the toggle works.
 HIDDEN_FLAGS: set[str] = {
     "HYBRID_SKILLS",
     "HYBRID_SUBAGENTS",
     "HYBRID_RECURSIVE",
-    "HYBRID_CONTEXT_COMPACT_LLM",
+    "HYBRID_SKILL_AUTOGROW",
+    "HYBRID_SKILL_OPTIMIZE",
+    "HYBRID_SKILL_OPTIMIZE_DAEMON",
 }
 
 # Stable, browser-facing order of the UI sections.
@@ -260,7 +265,7 @@ class HybridFlags:
         # as reusable share targets. Org/admin/LDAP groups (owner_user_id NULL)
         # are unaffected. Gates the /api/me/groups* + /api/me/contacts router.
         # Default OFF.
-        return _bool("HYBRID_USER_GROUPS", False)
+        return _bool("HYBRID_USER_GROUPS", True)
 
     @property
     def AGENT_CONNECTORS(self) -> bool:
@@ -268,7 +273,7 @@ class HybridFlags:
         # user (owner_user_id set) or bound to a single agent/studio (studio_id
         # set), instead of org-wide. Org-wide connectors (owner_user_id NULL +
         # studio_id NULL) are unaffected. Default OFF.
-        return _bool("HYBRID_AGENT_CONNECTORS", False)
+        return _bool("HYBRID_AGENT_CONNECTORS", True)
 
     @property
     def GROUP_ACCESS(self) -> bool:
@@ -277,7 +282,7 @@ class HybridFlags:
         # member of the granted group (incl. AD/LDAP-synced groups) resolves to
         # viewer/editor and the studio auto-appears in their list + chat
         # dropdown. Off => no group resolution (owner/member/org only). Default OFF.
-        return _bool("HYBRID_GROUP_ACCESS", False)
+        return _bool("HYBRID_GROUP_ACCESS", True)
 
     @property
     def AGENT_CHANNELS(self) -> bool:
@@ -291,7 +296,7 @@ class HybridFlags:
         # cadence and email the result to subscribers from the agent's own SMTP
         # identity. UI-gating only (Studio → Reports tab + scheduled-report
         # CRUD routes). Default OFF.
-        return _bool("HYBRID_AGENT_REPORTS", False)
+        return _bool("HYBRID_AGENT_REPORTS", True)
 
     @property
     def RICH_REPORT_EMAIL(self) -> bool:
@@ -300,7 +305,7 @@ class HybridFlags:
         # universal delivery layer, instead of dumping the raw agent chat
         # content. OFF = legacy raw-content email (byte-identical old path).
         # Default OFF.
-        return _bool("HYBRID_RICH_REPORT_EMAIL", False)
+        return _bool("HYBRID_RICH_REPORT_EMAIL", True)
 
     @property
     def FILE_BROWSER(self) -> bool:
@@ -310,7 +315,7 @@ class HybridFlags:
         # then ingest picked files as queryable Data Agents. Gates the
         # /api/connections/{id}/files router only; no agent-loop effect.
         # Default OFF.
-        return _bool("HYBRID_FILE_BROWSER", False)
+        return _bool("HYBRID_FILE_BROWSER", True)
 
     @property
     def ONECLICK_ARTIFACTS(self) -> bool:
@@ -320,7 +325,7 @@ class HybridFlags:
         # auto-fill the Excel workbook — instead of dead "No X yet" empty states.
         # Gates POST /api/reports/{id}/{dashboard,slides}/generate + the FE
         # buttons only; no agent-loop effect. Default OFF.
-        return _bool("HYBRID_ONECLICK_ARTIFACTS", False)
+        return _bool("HYBRID_ONECLICK_ARTIFACTS", True)
 
     @property
     def AUTO_ARTIFACT(self) -> bool:
@@ -331,7 +336,7 @@ class HybridFlags:
         # (report_slides._generate_artifact, mode='page'). Idempotent (skips when
         # the report already has any artifact) + fail-soft (never affects the
         # chat response). No agent-loop effect. Default OFF.
-        return _bool("HYBRID_AUTO_ARTIFACT", False)
+        return _bool("HYBRID_AUTO_ARTIFACT", True)
 
     # --- Slice 1: foundation -------------------------------------------------
     @property
@@ -374,7 +379,7 @@ class HybridFlags:
         # Deterministic batch pipeline: fan a work-list through fixed stages, a
         # per-item judge gate (pass/retry/skip), full log. Reuses subagent
         # workers. For reliable bulk ops (train warehouse, eval backfill). Default OFF.
-        return _bool("HYBRID_WORKFLOWS")
+        return _bool("HYBRID_WORKFLOWS", True)
 
     # --- Skill Optimizer (SkillOpt: skill doc as trainable artifact) ---------
     @property
@@ -398,13 +403,13 @@ class HybridFlags:
         # budget (EDIT), append a "context: X of Y" awareness line (AWARENESS),
         # and optionally LLM-summarize the dropped text (COMPRESS, sub-flag).
         # Longer/cheaper sessions, fewer "context full" failures. Default OFF.
-        return _bool("HYBRID_CONTEXT_COMPACT")
+        return _bool("HYBRID_CONTEXT_COMPACT", True)
 
     @property
     def CONTEXT_COMPACT_LLM(self) -> bool:
         # Sub-flag: allow ONE LLM summarization of dropped/old text per agent run
         # (COMPRESS). Off -> deterministic head-truncate only (no LLM cost).
-        return _bool("HYBRID_CONTEXT_COMPACT_LLM")
+        return _bool("HYBRID_CONTEXT_COMPACT_LLM", True)
 
     # --- Bi-temporal facts (Zep/Graphiti: valid_at/invalid_at/superseded_by) --
     @property
@@ -412,7 +417,7 @@ class HybridFlags:
         # Evolving facts (metrics, semantic, memory) get a timeline instead of
         # being overwritten: reads return only currently-valid rows; supersede on
         # re-approve; optional as-of time-travel. Default OFF (reads unfiltered).
-        return _bool("HYBRID_BITEMPORAL")
+        return _bool("HYBRID_BITEMPORAL", True)
 
     # --- Skill auto-grow (Voyager: 👍 -> draft skill) ------------------------
     @property
@@ -456,7 +461,7 @@ class HybridFlags:
         # R3 "ask before assuming" gate: pre-planning ambiguity classifier that
         # makes the agent clarify (via the clarify tool) instead of assuming a
         # year/metric/entity. Vectorless, OpenRouter-only, fail-open. Default OFF.
-        return _bool("HYBRID_AMBIGUITY_GATE")
+        return _bool("HYBRID_AMBIGUITY_GATE", False)
 
     @property
     def SCOPE_GATE(self) -> bool:
@@ -509,42 +514,42 @@ class HybridFlags:
     @property
     def FEDERATION(self) -> bool:
         # Phase 7: DuckDB cross-source federation.
-        return _bool("HYBRID_FEDERATION")
+        return _bool("HYBRID_FEDERATION", True)
 
     @property
     def BRAIN_GRAPH(self) -> bool:
         # Phase 8: Apache AGE entity/correlation graph. Default OFF.
-        return _bool("HYBRID_BRAIN_GRAPH")
+        return _bool("HYBRID_BRAIN_GRAPH", True)
 
     @property
     def INSIGHT_DAEMON(self) -> bool:
         # Phase 8: proactive insight daemon (leader-gated). Default OFF.
-        return _bool("HYBRID_INSIGHT_DAEMON")
+        return _bool("HYBRID_INSIGHT_DAEMON", True)
 
     @property
     def JOIN_GRAPH(self) -> bool:
         # Phase 6: join-graph context (relationship/join edges injected into
         # the planner, mined offline). Default OFF.
-        return _bool("HYBRID_JOIN_GRAPH")
+        return _bool("HYBRID_JOIN_GRAPH", True)
 
     @property
     def JOIN_MINE_ENABLED(self) -> bool:
         # Phase 6: nightly join-mining daemon (leader-gated). NOTE: no HYBRID_
         # prefix — matches EVAL_SCHEDULE_ENABLED naming convention. Default OFF.
-        return _bool("JOIN_MINE_ENABLED")
+        return _bool("JOIN_MINE_ENABLED", True)
 
     @property
     def STUDIO_LEARN_DAEMON(self) -> bool:
         # Org master switch for the per-studio self-learn daemon. Reads the
         # override layer (DB toggle / env), so the Feature-Flags UI toggle works
         # without a compose env var. Per-studio cadence is stored on the studio.
-        return _bool("STUDIO_LEARN_DAEMON_ENABLED")
+        return _bool("STUDIO_LEARN_DAEMON_ENABLED", True)
 
     # --- Slice 4: scale harden ----------------------------------------------
     @property
     def QUOTAS(self) -> bool:
         # Phase 9: per-org request/token quota enforcement (UsagePolicy). Default OFF.
-        return _bool("HYBRID_QUOTAS")
+        return _bool("HYBRID_QUOTAS", True)
 
     # --- Slice 5: knowledge layer -------------------------------------------
     @property
@@ -561,20 +566,20 @@ class HybridFlags:
     def GOVERNANCE(self) -> bool:
         # Kepler Phase 1: owner / freshness / PII metadata on semantic tables,
         # injected as a per-table governance footer + planner PII rule. Default OFF.
-        return _bool("HYBRID_GOVERNANCE")
+        return _bool("HYBRID_GOVERNANCE", True)
 
     @property
     def AUTOMAP(self) -> bool:
         # Feature 1: auto-configure-from-doc. Extract column descriptions +
         # instructions + examples from an uploaded definitions xlsx / deck pptx
         # and apply them (descriptions live, instructions/examples pending). Default OFF.
-        return _bool("HYBRID_AUTOMAP")
+        return _bool("HYBRID_AUTOMAP", True)
 
     @property
     def COMPLIANCE_GATE(self) -> bool:
         # Feature 4: on-demand, advisory, read-only compliance & data-integrity
         # scan endpoint (dedup + required-field quality). Default OFF.
-        return _bool("HYBRID_COMPLIANCE_GATE")
+        return _bool("HYBRID_COMPLIANCE_GATE", True)
 
     @property
     def COLUMN_INTEL(self) -> bool:
@@ -582,7 +587,7 @@ class HybridFlags:
         # distinct + null_pct) merged into DataSourceTable.columns[].metadata,
         # surfaced into the schema XML so the agent knows each column up front.
         # Default OFF.
-        return _bool("HYBRID_COLUMN_INTEL")
+        return _bool("HYBRID_COLUMN_INTEL", True)
 
     @property
     def AUTO_QUERIES(self) -> bool:
@@ -626,7 +631,7 @@ class HybridFlags:
     def EVAL_SCHEDULE_ENABLED(self) -> bool:
         # Phase 4: nightly scheduled re-run of result-set goldens (leader-gated
         # daemon). NOTE: no HYBRID_ prefix — matches PLAN_KEPLER.md naming. Default OFF.
-        return _bool("EVAL_SCHEDULE_ENABLED")
+        return _bool("EVAL_SCHEDULE_ENABLED", True)
 
     # --- Domain Packs (lightweight "skills" engine — not native Skills) ------
     @property
@@ -645,7 +650,7 @@ class HybridFlags:
         # the agent's profiled columns and write PENDING studio_bound_packs rows
         # (review-gated before active). Off -> packs only bind on explicit
         # request. No-op unless DOMAIN_PACKS is also on. Default OFF.
-        return _bool("HYBRID_PACK_AUTOBIND")
+        return _bool("HYBRID_PACK_AUTOBIND", True)
 
     @property
     def PACK_ROUTER(self) -> bool:
@@ -750,18 +755,18 @@ class HybridFlags:
     @property
     def SENSE_MAKING(self) -> bool:
         # F10: post-answer decision layer — deterministic signals + 1 cheap LLM → sense_making card. OFF.
-        return _bool("HYBRID_SENSE_MAKING")
+        return _bool("HYBRID_SENSE_MAKING", True)
 
     @property
     def AUTO_MODEL(self) -> bool:
         # Auto model selection: a complexity classifier routes each question to the
         # cheapest capable model (FAST/BALANCED/REASON). Sentinel model_id "auto". OFF.
-        return _bool("HYBRID_AUTO_MODEL")
+        return _bool("HYBRID_AUTO_MODEL", True)
 
     @property
     def FORECAST(self) -> bool:
         # Wave1 P3: Prophet forecast tool (df[date,value] → forecast df). OFF.
-        return _bool("HYBRID_FORECAST")
+        return _bool("HYBRID_FORECAST", True)
 
     @property
     def GOLDEN_QUERIES(self) -> bool:
@@ -778,7 +783,7 @@ class HybridFlags:
     @property
     def SEMANTIC_SEARCH(self) -> bool:
         # Wave1 P8: hybrid pgvector + BM25 RRF search + knowledge graph. OFF.
-        return _bool("HYBRID_SEMANTIC_SEARCH")
+        return _bool("HYBRID_SEMANTIC_SEARCH", True)
 
     @property
     def CODE_ENRICH(self) -> bool:
@@ -786,7 +791,7 @@ class HybridFlags:
         # + population from table/view DDL source SQL, store in
         # DataSourceTable.metadata_json['pipeline_logic'], inject a compact
         # PIPELINE LOGIC prompt block. Meaning lives in code, not schemas. Default OFF.
-        return _bool("HYBRID_CODE_ENRICH")
+        return _bool("HYBRID_CODE_ENRICH", True)
 
     @property
     def AGENT_TEMPLATES(self) -> bool:

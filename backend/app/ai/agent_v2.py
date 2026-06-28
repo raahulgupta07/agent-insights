@@ -854,7 +854,7 @@ class AgentV2:
                 step_count += 1
 
                 user_name, user_note = await self._resolve_user_profile()
-                instructions_text = self._apply_context_compaction(instructions_text)
+                instructions_text = await self._apply_context_compaction(instructions_text)
                 planner_input = PlannerInput(
                     organization_name=self.organization.name,
                     organization_ai_analyst_name=self.ai_analyst_name,
@@ -2495,7 +2495,7 @@ class AgentV2:
                     # Combine user images + observation images
                     all_images = user_images + observation_images
                     user_name, user_note = await self._resolve_user_profile()
-                    instructions = self._apply_context_compaction(instructions)
+                    instructions = await self._apply_context_compaction(instructions)
                     planner_input = PlannerInput(
                         organization_name=self.organization.name,
                         organization_ai_analyst_name=self.ai_analyst_name,
@@ -4267,7 +4267,7 @@ class AgentV2:
         active_artifact = await self._get_active_artifact()
 
         user_name, user_note = await self._resolve_user_profile()
-        instructions = self._apply_context_compaction(instructions)
+        instructions = await self._apply_context_compaction(instructions)
         planner_input = PlannerInput(
             organization_name=self.organization.name,
             organization_ai_analyst_name=self.ai_analyst_name,
@@ -4372,18 +4372,46 @@ class AgentV2:
                 span.set_attribute("report.id", str(self.report.id))
             return await self.context_hub.build_context()
 
-    def _apply_context_compaction(self, instructions: str) -> str:
+    async def _apply_context_compaction(self, instructions: str) -> str:
         """Flag-gated (HYBRID_CONTEXT_COMPACT) EDIT+AWARENESS pass over the
         assembled planner instructions. Fail-soft: returns input unchanged on
-        any error or when the flag is off. (COMPRESS/LLM path is opt-in and not
-        invoked here — this stays cheap; it runs ~2x per planner iteration.)"""
+        any error or when the flag is off.
+
+        EDIT (drop low-priority sections) is synchronous + runs ~2x per planner
+        iteration. The optional COMPRESS pass (HYBRID_CONTEXT_COMPACT_LLM) makes
+        ONE LLM call to summarize the dropped bodies into a tiny digest and
+        appends it, so the model keeps the gist instead of losing it. The digest
+        is MEMOIZED per unique dropped-set on `self._compress_cache`, so a run
+        with the same sections dropped each iteration costs ~1 LLM call total."""
         try:
             from app.settings.hybrid_flags import flags as _cc_flags
             if not _cc_flags.CONTEXT_COMPACT:
                 return instructions
             from app.ai.context import compaction as _compaction
             new_instructions, _meta = _compaction.compact(instructions, model=self.model)
-            return new_instructions or instructions
+            new_instructions = new_instructions or instructions
+
+            # Optional COMPRESS: summarize dropped bodies (memoized per run).
+            if getattr(_cc_flags, "CONTEXT_COMPACT_LLM", False):
+                dropped_text = (_meta or {}).get("dropped_text") or ""
+                if dropped_text.strip():
+                    cache = getattr(self, "_compress_cache", None)
+                    if cache is None:
+                        cache = {}
+                        self._compress_cache = cache
+                    key = hash(dropped_text)
+                    if key not in cache:
+                        cache[key] = await _compaction.maybe_compress(
+                            dropped_text, model=self.model
+                        )
+                    digest = cache.get(key) or ""
+                    if digest.strip():
+                        new_instructions = (
+                            new_instructions
+                            + "\n\n### Compressed earlier context\n"
+                            + digest.strip()
+                        )
+            return new_instructions
         except Exception:
             return instructions
 
