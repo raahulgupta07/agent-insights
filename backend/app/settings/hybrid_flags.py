@@ -182,6 +182,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_DATA_TYPING": {"label": "Data Typing (real numbers + dates)", "role": "user", "category": "Ingest", "status": "experimental", "note": "Master plan E5: before the query engine, cast number-shaped columns ('1,234' -> 1234) and date-shaped columns (strings -> real dates) using the E3 dtype, so SUM/AVG/min-max + date range/sort work correctly. Category/text/provenance untouched (protects verified-golden filters). Conservative (>=90% must parse or keep raw), fail-soft. Default OFF."},
     "HYBRID_TRAIN_ROUTING": {"label": "Inbox → Train auto-routing", "role": "user", "category": "Ingest", "status": "experimental", "note": "Upload files into a per-agent Inbox with no per-file decision. When you Train, a first stage classifies each queued file (train model, default GLM-5.2, + larger excerpt), auto-places confident files to Database/Semantic/Instructions/Examples/Knowledge, and HOLDS uncertain ones for post-train Review. Reuses the Smart Upload classifier + sinks. Default OFF."},
     "HYBRID_AUTOPILOT_V2": {"label": "Auto-pilot v2 (queue-first)", "role": "user", "category": "Ingest", "status": "experimental", "note": "Reordered studio Auto-pilot: ADD (compact connector/upload/folder) → QUEUE (prominent, instant heuristic type-guess chips + inline re-route) → TRAIN (one button, streams a segregation receipt with reconcile 'N in → M placed' + coverage 'periods materialized' lines) → RESULT lanes. Held items show why (reason/confidence/signals) with one-click resolve. Faster: heuristic-first classify skips the LLM on obvious files, parallel apply, skip-unchanged. Reuses route_inbox/classifier/train. Off keeps the legacy 3-step UI. Fail-soft. Default OFF."},
+    "HYBRID_INGEST_BRAIN": {"label": "Universal Ingest Brain (F09)", "role": "user", "category": "Ingest", "status": "experimental", "note": "Deep file understanding (messy Excel/PDF/Word/image) → one org brain. Phased; default OFF."},
 
     # --- Learning / Brain -------------------------------------------------
     "HYBRID_BRAIN_READ": {"label": "Brain Read (inject memories)", "role": "agent", "category": "Learning", "status": "stable"},
@@ -949,6 +950,15 @@ class HybridFlags:
         # VIEW can physically materialize -- instead of the in-memory DuckDB that
         # is lost on restart. Default OFF (proven on a copy before recommending).
         return _bool("HYBRID_PERSIST_WAREHOUSE", False)
+    def INGEST_BRAIN(self) -> bool:
+        # ROADMAP F09: Universal Ingest Brain. A 6-stage pipeline behind the
+        # existing from-file ingest — DETECT → EXTRACT (messy Excel regions /
+        # merged cells / multi-row headers; PDF/Word/image GPU-free) → PROFILE
+        # (per-column ColumnProfile) → UNDERSTAND → UNIFY (cross-source joins)
+        # → STORE+LEARN into one org-level brain (review-gated). Built in
+        # phases; every stage fail-soft and preview-before-commit. With this
+        # OFF the ingest path is byte-identical to today. Default OFF.
+        return _bool("HYBRID_INGEST_BRAIN", False)
 
     @property
     def RESULT_CACHE(self) -> bool:
@@ -1232,6 +1242,7 @@ class HybridFlags:
             "DEF_REGISTRY": self.DEF_REGISTRY,
             "VERIFIED_GOLDENS": self.VERIFIED_GOLDENS,
             "QUERY_CORRECTION": self.QUERY_CORRECTION,
+            "INGEST_BRAIN": self.INGEST_BRAIN,
             "CONTEXT_COMPACT": self.CONTEXT_COMPACT,
             "SKILL_OPTIMIZE": self.SKILL_OPTIMIZE,
             "SUBAGENTS": self.SUBAGENTS,
