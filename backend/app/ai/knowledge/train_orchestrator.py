@@ -593,6 +593,10 @@ async def run_training(studio_id, organization_id, user_id) -> None:
                     sem_ids: list[str] = []
                     met_ids: list[str] = []
                     col_ids: list[str] = []
+                    # T3: meanings bound from a sibling "Definitions" glossary.
+                    # Kept SEPARATE from col_ids — these stay PENDING (approval
+                    # gate), unlike the auto-approved AI-proposed meanings.
+                    def_ids: list[str] = []
                     for ds in sources:
                         try:
                             r = await propose_knowledge_from_schema(
@@ -629,6 +633,26 @@ async def run_training(studio_id, organization_id, user_id) -> None:
                                     getattr(ds, "id", "?"),
                                     e,
                                 )
+                            # T3: bind a sibling "Definitions" glossary onto this
+                            # source's columns (parse -> fuzzy -> pending). Stays
+                            # PENDING (not added to col_ids -> not auto-approved).
+                            try:
+                                from app.ai.knowledge.doc_extractor import (
+                                    apply_definitions_to_data_source,
+                                )
+                                rd = await apply_definitions_to_data_source(
+                                    db,
+                                    organization=organization,
+                                    data_source=ds,
+                                    model=model,
+                                )
+                                def_ids.extend((rd or {}).get("columns", []) or [])
+                            except Exception as e:  # noqa: BLE001 - per-source fail-soft
+                                logger.warning(
+                                    "train_orchestrator definitions bind failed for %s: %s",
+                                    getattr(ds, "id", "?"),
+                                    e,
+                                )
 
                     # Auto-approve the fresh proposals (Auto-train auto-approves;
                     # keeps the Review queue empty and the rows live in context).
@@ -654,7 +678,8 @@ async def run_training(studio_id, organization_id, user_id) -> None:
                         await db.commit()
                     detail["semantic_metrics"] = (
                         f"ok ({len(sem_ids)} semantic, {len(met_ids)} metrics, "
-                        f"{len(col_ids)} col meanings)"
+                        f"{len(col_ids)} col meanings, "
+                        f"{len(def_ids)} from definitions (pending))"
                     )
                 except Exception as e:  # noqa: BLE001
                     try:

@@ -148,6 +148,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_AUTO_EVALS": {"label": "Auto Eval Cases", "role": "review", "category": "Ingest", "status": "stable"},
     "HYBRID_MERGE_SAME_SCHEMA": {"label": "Merge Same-Schema Uploads", "role": "user", "category": "Ingest", "status": "stable"},
     "HYBRID_SMART_HEADER": {"label": "Smart Header + Glossary", "role": "user", "category": "Ingest", "status": "stable"},
+    "HYBRID_TOTAL_ROW": {"label": "Pre-Aggregated Total-Row Detection", "role": "user", "category": "Ingest", "status": "experimental", "note": "At file ingest, flag likely total/subtotal rows (e.g. site='ALL Total') so the agent excludes them and stops double-counting SUM()."},
 
     # --- Learning / Brain -------------------------------------------------
     "HYBRID_BRAIN_READ": {"label": "Brain Read (inject memories)", "role": "agent", "category": "Learning", "status": "stable"},
@@ -697,6 +698,22 @@ class HybridFlags:
         return _bool("HYBRID_SMART_HEADER", True)
 
     @property
+    def TOTAL_ROW(self) -> bool:
+        # Ingest Task T2: detect PRE-AGGREGATED total/subtotal rows at ingest so
+        # the agent stops double-counting. Real case: a CSV has per-site rows PLUS
+        # rows where site='ALL Total' (already summed across sites) — a naive
+        # SUM(value) over the whole table double-counts (the subtotal + its parts).
+        # During profiling we scan the DataFrame for likely total rows (a
+        # low-cardinality dimension equals 'total'/'all total'/'grand total'/...
+        # while other key dimensions are blank), record markers into the
+        # DataSourceTable.metadata_json['total_row_markers'] (+ an estimated
+        # total_row_count), and auto-emit a guardrail Instruction the agent reads
+        # ("Exclude pre-aggregated total rows: WHERE site NOT ILIKE '%total%'").
+        # Conservative (only flags when row-share is plausible, < 60%) and
+        # fail-soft (never breaks ingest). Default OFF.
+        return _bool("HYBRID_TOTAL_ROW", False)
+
+    @property
     def RESULT_CACHE(self) -> bool:
         # Task 7: deterministic result cache. Keyed by (normalized question text +
         # the report's per-source row-count watermark signature). On a HIT with an
@@ -839,6 +856,7 @@ class HybridFlags:
             "QUERY_LEARNING": self.QUERY_LEARNING,
             "MERGE_SAME_SCHEMA": self.MERGE_SAME_SCHEMA,
             "SMART_HEADER": self.SMART_HEADER,
+            "TOTAL_ROW": self.TOTAL_ROW,
             "CONTEXT_COMPACT": self.CONTEXT_COMPACT,
             "SKILL_OPTIMIZE": self.SKILL_OPTIMIZE,
             "SUBAGENTS": self.SUBAGENTS,

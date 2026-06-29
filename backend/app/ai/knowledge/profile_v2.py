@@ -158,7 +158,7 @@ def _profile_table_v2_impl(table, df_sample) -> dict:
     if df_sample is not None:
         col_stats = _stats_from_df(df_sample)
     else:
-        col_stats = _stats_from_db(tbl_name)
+        col_stats = _stats_from_db(table)
 
     if not col_stats:
         return {}
@@ -227,24 +227,144 @@ def _stats_from_df(df) -> List[Dict[str, Any]]:
     return stats
 
 
-def _stats_from_db(tbl_name: str) -> List[Dict[str, Any]]:
-    """Pull column stats from the analytics DB (write engine, safe for pgbouncer)."""
+def _loader_engine():
+    """Return the RAW loader/admin engine that WROTE the ingested data (per-org
+    `staging_<org>` schema, no search_path restriction, no write-guard so plain
+    SELECT/COUNT reads work). Falls back to the analytics write engine."""
     try:
-        from sqlalchemy import text
-        from app.services.autotrain.profiler import _safe_ident, _jsonable, _is_numeric
-
-        tbl = _safe_ident(tbl_name)
-        schema = "staging"
-        sch = _safe_ident(schema)
+        from app.services.ingest.tenant_schema import loader_write_engine
+        return loader_write_engine()
     except Exception as e:
-        logger.warning("profile_v2 _stats_from_db: bad identifiers: %s", e)
+        logger.debug("profile_v2 _loader_engine: loader engine unavailable (%s), "
+                     "falling back to analytics write engine", e)
+        from app.ai.code_execution.analytics_engine import get_analytics_write_engine
+        return get_analytics_write_engine()
+
+
+def _resolve_physical(engine, table) -> Optional[tuple]:
+    """Resolve the (schema, physical_table) the loader actually wrote for `table`.
+
+    Authoritative source = the linked ConnectionTable (`metadata_json['schema']`
+    = per-org `staging_<org>` schema, `name` = "<schema>.<safe_table>"). Both the
+    schema name and the 60-char-truncated physical table name live there, so this
+    sidesteps both the wrong-`staging` bug and the 63-char identifier overflow.
+
+    Only already-loaded column attrs of `table` are touched (`name`,
+    `connection_table_id`) — NEVER lazy relationships (this runs in a worker
+    thread off an async session → a lazy load would MissingGreenlet). The
+    ConnectionTable row is fetched with a plain sync query on the same engine.
+
+    Returns the first (schema, name) candidate that PHYSICALLY exists, else None.
+    """
+    from sqlalchemy import text
+
+    raw_name = getattr(table, "name", None)
+    ct_id = getattr(table, "connection_table_id", None)
+
+    ct_schema: Optional[str] = None
+    ct_table: Optional[str] = None
+    if ct_id:
+        try:
+            with engine.connect() as conn:
+                row = conn.execute(
+                    text("SELECT name, metadata_json FROM connection_tables WHERE id = :i"),
+                    {"i": ct_id},
+                ).first()
+            if row:
+                ct_name, ct_meta = row[0], row[1]
+                if isinstance(ct_meta, str):
+                    import json
+                    try:
+                        ct_meta = json.loads(ct_meta)
+                    except Exception:
+                        ct_meta = None
+                if isinstance(ct_meta, dict):
+                    ct_schema = ct_meta.get("schema") or None
+                if ct_name and "." in ct_name:
+                    s2, t2 = ct_name.split(".", 1)
+                    ct_schema = ct_schema or (s2 or None)
+                    ct_table = t2 or None
+                elif ct_name:
+                    ct_table = ct_name
+        except Exception as e:
+            logger.debug("profile_v2 _resolve_physical: connection_table lookup failed: %s", e)
+
+    # Canonicalise table-name candidates the same way the loader did (slug + [:60]).
+    try:
+        from app.services.ingest.loader import safe_table_name
+    except Exception:
+        safe_table_name = None
+
+    name_candidates: List[str] = []
+    for n in (ct_table, raw_name):
+        if not n:
+            continue
+        if n not in name_candidates:
+            name_candidates.append(n)
+        if safe_table_name is not None:
+            sn = safe_table_name(n)
+            if sn and sn not in name_candidates:
+                name_candidates.append(sn)
+
+    schema_candidates: List[str] = []
+    for s in (ct_schema, "staging"):
+        if s and s not in schema_candidates:
+            schema_candidates.append(s)
+
+    # Pick the first (schema, table) that physically exists.
+    try:
+        with engine.connect() as conn:
+            for s in schema_candidates:
+                for n in name_candidates:
+                    exists = conn.execute(
+                        text(
+                            "SELECT 1 FROM information_schema.tables "
+                            "WHERE table_schema = :s AND table_name = :t LIMIT 1"
+                        ),
+                        {"s": s, "t": n},
+                    ).first()
+                    if exists:
+                        return (s, n)
+    except Exception as e:
+        logger.debug("profile_v2 _resolve_physical: existence check failed: %s", e)
+    return None
+
+
+def _stats_from_db(table) -> List[Dict[str, Any]]:
+    """Pull column stats from the per-org staging schema the loader wrote into.
+
+    Resolves the REAL (schema, physical_table) — `staging_<org>` + 60-char safe
+    name — via the linked ConnectionTable, then reads through the same raw loader
+    engine. Returns [] on any failure (never throws), exactly as before.
+    """
+    try:
+        from app.services.autotrain.profiler import _safe_ident, _jsonable, _is_numeric
+    except Exception as e:
+        logger.warning("profile_v2 _stats_from_db: bad helpers: %s", e)
         return []
 
+    tbl_name = getattr(table, "name", None)
+
     try:
-        from app.ai.code_execution.analytics_engine import get_analytics_write_engine
-        engine = get_analytics_write_engine()
+        engine = _loader_engine()
     except Exception as e:
         logger.warning("profile_v2 _stats_from_db: cannot get engine: %s", e)
+        return []
+
+    resolved = _resolve_physical(engine, table)
+    if not resolved:
+        logger.warning(
+            "profile_v2 _stats_from_db(%s): no physical table found in staging_<org>/staging",
+            tbl_name,
+        )
+        return []
+    schema, phys_name = resolved
+
+    try:
+        sch = _safe_ident(schema)
+        tbl = _safe_ident(phys_name)
+    except Exception as e:
+        logger.warning("profile_v2 _stats_from_db: bad identifiers: %s", e)
         return []
 
     qname = f'"{sch}"."{tbl}"'
@@ -261,7 +381,7 @@ def _stats_from_db(tbl_name: str) -> List[Dict[str, Any]]:
                     "SELECT column_name, data_type FROM information_schema.columns "
                     "WHERE table_schema = :s AND table_name = :t ORDER BY ordinal_position"
                 ),
-                {"s": schema, "t": tbl_name},
+                {"s": schema, "t": phys_name},
             ).fetchall()
 
             for col_name, dtype in cols:

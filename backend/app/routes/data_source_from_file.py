@@ -468,6 +468,28 @@ async def create_data_source_from_file(
     except Exception:  # noqa: BLE001
         logger.warning("from-file: glossary routing failed", exc_info=True)
 
+    # ── 4c. Task T2 (HYBRID_TOTAL_ROW): pre-aggregated total-row detection ──
+    # Scan the just-ingested frames for likely roll-up/subtotal rows (e.g. a
+    # `site='ALL Total'` row already summed across sites) and record markers in
+    # each DataSourceTable.metadata_json + emit a guardrail Instruction so the
+    # agent excludes them and stops double-counting SUM(). Fail-soft, flag-gated.
+    try:
+        from app.settings.hybrid_flags import flags as _tr_flags
+
+        if _tr_flags.TOTAL_ROW:
+            from app.ai.knowledge.total_rows import apply_total_row_detection
+
+            await apply_total_row_detection(
+                db,
+                organization=organization,
+                data_source=data_source,
+                abs_path=abs_path,
+                sheet_names=payload.sheet_names,
+                merged_paths=config.get("merged_paths") or [],
+            )
+    except Exception:  # noqa: BLE001
+        logger.warning("from-file: total-row detection failed", exc_info=True)
+
     # ── 5. Build the response: DataSourceSchema (+ tables[]) ─────────────
     ds_schema = await data_source_service.get_data_source(
         db, str(data_source.id), organization, current_user

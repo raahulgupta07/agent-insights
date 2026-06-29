@@ -999,9 +999,30 @@ async def ai_suggest_columns(
     if not isinstance(result, dict):
         result = {"columns": []}
     columns = result.get("columns", [])
+
+    # T3: also bind a sibling "Definitions" glossary onto this source's columns
+    # (parse -> fuzzy-match -> pending). Approval-gated; never overwrites approved.
+    # Fail-soft: a definitions problem must not 500 the AI-suggest call.
+    definition_columns: list = []
+    try:
+        from app.ai.knowledge.doc_extractor import apply_definitions_to_data_source
+        rd = await apply_definitions_to_data_source(
+            db,
+            organization=organization,
+            data_source=data_source,
+            model=model,
+        )
+        definition_columns = (rd or {}).get("columns", []) or []
+    except Exception:
+        definition_columns = []
+
     return {
         "proposed": result,
-        "counts": {"columns": len(columns)},
+        "definitions": {"columns": definition_columns},
+        "counts": {
+            "columns": len(columns),
+            "from_definitions": len(definition_columns),
+        },
         "disabled": False,
     }
 

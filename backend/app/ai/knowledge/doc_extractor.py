@@ -508,3 +508,259 @@ async def extract_proposal(
         "source": source,
         "warnings": warnings,
     }
+
+
+# --------------------------------------------------------------------------- #
+# T3 — bind a sibling "Definitions" source onto a data source's column meanings
+# --------------------------------------------------------------------------- #
+# A "Definitions" upload is a column glossary (column-name -> meaning) that today
+# lands as just another queryable table. This wires it so its definitions get
+# APPLIED to the *sibling* real data source's column meanings (pending, gated).
+#
+# Detection of a definitions doc (either signal is enough):
+#   * NAME — the data source name or the file name contains a glossary token
+#     ('definition', 'glossary', 'dictionary', 'data dict', 'codebook').
+#   * SHAPE — a 2-column name->meaning sheet (most rows are exactly 2 cells, the
+#     right cell reads like prose), detected by re-using ``_parse_file``.
+#
+# Bind flow: parse the definitions file(s) via ``extract_proposal`` (which already
+# fuzzy-matches proposed column names to the TARGET source's live schema with the
+# difflib cutoff above) -> write each MATCHED meaning to the SemanticColumn path
+# as ``status='pending'`` (approval-gated, NEVER overwrites an approved row).
+
+_DEFINITION_NAME_TOKENS = (
+    "definition", "definitions", "glossary", "dictionary",
+    "data dict", "data-dict", "datadict", "codebook", "data catalog",
+)
+
+
+def _name_is_definitions(*names: Optional[str]) -> bool:
+    pool = " ".join((n or "").lower() for n in names)
+    return any(tok in pool for tok in _DEFINITION_NAME_TOKENS)
+
+
+def _shape_is_definitions(parsed: Dict[str, Any]) -> bool:
+    """Heuristic: does a parsed workbook look like a 2-col name->meaning glossary?
+
+    Conservative — only used as a *fallback* signal when the name doesn't match.
+    Pending + approval-gated downstream, so a rare false positive is low-harm.
+    """
+    pairs = parsed.get("pairs") or []
+    if len(pairs) < 3:
+        return False
+    left_lens, right_lens, prose = [], [], 0
+    for left, right in pairs:
+        l, r = (left or "").strip(), (right or "").strip()
+        if not l or not r:
+            continue
+        left_lens.append(len(l))
+        right_lens.append(len(r))
+        if len(r) >= 12 and " " in r:  # meaning cell reads like prose
+            prose += 1
+    if len(right_lens) < 3:
+        return False
+    avg_left = sum(left_lens) / len(left_lens)
+    avg_right = sum(right_lens) / len(right_lens)
+    # Short left (column-like) + longer prose-y right + a majority prose rows.
+    return avg_left <= 40 and avg_right >= 12 and prose >= max(3, len(right_lens) // 2)
+
+
+async def _find_definition_file_ids(
+    db: AsyncSession, *, organization, exclude_data_source_id: str
+) -> List[str]:
+    """Find sibling definitions-doc file ids in this org (excludes the target ds).
+
+    Scans the org's data sources (and their attached files) plus standalone org
+    files; classifies each candidate by NAME token or, for .xlsx, 2-col SHAPE.
+    Bounded + fail-soft — returns [] on any trouble.
+    """
+    out: List[str] = []
+    try:
+        # Candidate map: file_id -> {path, filename, ds_names}
+        cands: Dict[str, Dict[str, Any]] = {}
+
+        ds_rows = (
+            await db.execute(
+                select(DataSource).where(
+                    DataSource.organization_id == organization.id
+                )
+            )
+        ).scalars().all()
+        for ds in ds_rows:
+            if str(ds.id) == str(exclude_data_source_id):
+                continue
+            for f in (getattr(ds, "files", None) or []):
+                ent = cands.setdefault(
+                    str(f.id),
+                    {"path": f.path, "filename": f.filename, "ds_names": set()},
+                )
+                ent["ds_names"].add(ds.name or "")
+
+        # Standalone org files (covers a definitions file not wrapped as a ds).
+        f_rows = (
+            await db.execute(
+                select(FileModel).where(
+                    FileModel.organization_id == organization.id
+                )
+            )
+        ).scalars().all()
+        for f in f_rows:
+            cands.setdefault(
+                str(f.id),
+                {"path": f.path, "filename": f.filename, "ds_names": set()},
+            )
+
+        parsed_budget = 25  # cap content-shape parses (name hits are free)
+        for fid, ent in cands.items():
+            names = list(ent["ds_names"]) + [ent.get("filename")]
+            if _name_is_definitions(*names):
+                out.append(fid)
+                continue
+            # SHAPE fallback — only for spreadsheets, only while budget remains.
+            fname = (ent.get("filename") or "").lower()
+            if parsed_budget <= 0 or not fname.endswith((".xlsx", ".xlsm")):
+                continue
+            abs_path = _resolve_upload_path(ent.get("path") or "")
+            if not abs_path:
+                continue
+            parsed_budget -= 1
+            parsed = _parse_file(abs_path)
+            if "error" not in parsed and _shape_is_definitions(parsed):
+                out.append(fid)
+    except Exception as e:  # never raise — this feeds a fail-soft train stage
+        logger.warning("doc_extractor _find_definition_file_ids failed: %s", e)
+    return out
+
+
+async def apply_definitions_to_data_source(
+    db: AsyncSession, *, organization, data_source, model=None
+) -> Dict[str, Any]:
+    """Bind a sibling Definitions doc onto a data source's column meanings.
+
+    Finds a definitions-glossary upload in the same org, parses + fuzzy-matches
+    its terms to THIS data source's columns (via ``extract_proposal``), and writes
+    each matched meaning to the existing ``SemanticColumn`` path as
+    ``status='pending'`` (approval-gated; NEVER overwrites an approved row; seeds
+    the SemanticTable/SemanticColumn skeleton if it isn't there yet).
+
+    Gated behind the EXISTING ``SEMANTIC_LAYER`` flag. NEVER raises — degrades to
+    ``{'columns': [], ...}`` so it can never break Auto-train.
+    Returns ``{'columns': [<SemanticColumn.id>...], 'matched': int, 'source': ...}``.
+    """
+    out: Dict[str, Any] = {"columns": [], "matched": 0}
+    try:
+        from app.settings.hybrid_flags import flags
+        if not flags.SEMANTIC_LAYER:
+            return out
+
+        ds_id = str(getattr(data_source, "id", None) or "")
+        if not ds_id:
+            return out
+
+        file_ids = await _find_definition_file_ids(
+            db, organization=organization, exclude_data_source_id=ds_id
+        )
+        if not file_ids:
+            return out
+
+        # Parse + fuzzy-match the definitions docs to THIS ds's live schema.
+        proposal = await extract_proposal(
+            db,
+            organization=organization,
+            file_ids=file_ids,
+            data_source_id=ds_id,
+        )
+        if not isinstance(proposal, dict) or "error" in proposal:
+            out["error"] = (proposal or {}).get("error") if isinstance(proposal, dict) else "no proposal"
+            return out
+        out["source"] = proposal.get("source")
+
+        matched = [
+            cd for cd in (proposal.get("column_descriptions") or [])
+            if isinstance(cd, dict) and cd.get("matched")
+            and (cd.get("description") or "").strip()
+            and cd.get("table_name") and cd.get("matched_column")
+        ]
+        out["matched"] = len(matched)
+        if not matched:
+            return out
+
+        from app.models.semantic_table import SemanticTable, SemanticColumn
+        from sqlalchemy.orm import selectinload
+
+        # Load existing semantic skeleton for (org, ds) — columns eager-loaded.
+        sem_tables = (
+            await db.execute(
+                select(SemanticTable)
+                .where(
+                    SemanticTable.organization_id == str(organization.id),
+                    SemanticTable.data_source_id == ds_id,
+                )
+                .options(selectinload(SemanticTable.columns))
+            )
+        ).scalars().all()
+        st_by_name: Dict[str, Any] = {st.table_name: st for st in sem_tables}
+        cols_by_table: Dict[str, Dict[str, Any]] = {
+            st.table_name: {c.name: c for c in (st.columns or [])}
+            for st in sem_tables
+        }
+
+        changed = False
+        for cd in matched:
+            tname = cd["table_name"]
+            cname = cd["matched_column"]
+            meaning = (cd["description"] or "").strip()
+
+            st = st_by_name.get(tname)
+            if st is None:  # seed the table skeleton (mirrors GET /semantic)
+                st = SemanticTable(
+                    organization_id=str(organization.id),
+                    data_source_id=ds_id,
+                    table_name=tname,
+                    description="",
+                    use_cases=[],
+                    quality_notes=[],
+                    status="draft",
+                )
+                db.add(st)
+                await db.flush()
+                st_by_name[tname] = st
+                cols_by_table[tname] = {}
+
+            col = cols_by_table.get(tname, {}).get(cname)
+            if col is None:  # seed the column skeleton
+                col = SemanticColumn(
+                    semantic_table_id=st.id,
+                    name=cname,
+                    type="",
+                    meaning="",
+                    status="draft",
+                )
+                db.add(col)
+                await db.flush()
+                cols_by_table.setdefault(tname, {})[cname] = col
+
+            # NEVER overwrite an approved meaning; skip no-op rewrites.
+            if _clean(getattr(col, "status", None)) == "approved":
+                continue
+            if _clean(getattr(col, "meaning", None)) == meaning:
+                continue
+            col.meaning = meaning
+            col.status = "pending"
+            out["columns"].append(str(col.id))
+            changed = True
+
+        if changed:
+            await db.commit()
+        return out
+    except Exception as e:  # never raise to the caller (train/route is fail-soft)
+        logger.warning("doc_extractor apply_definitions_to_data_source failed: %s", e)
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+        return {"columns": [], "matched": 0, "error": str(e)}
+
+
+def _clean(v: Any) -> str:
+    return str(v or "").strip()
