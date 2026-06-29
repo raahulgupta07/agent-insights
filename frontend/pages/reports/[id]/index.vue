@@ -1095,11 +1095,6 @@
 							<svg width="15" height="15" fill="none" stroke="#3B6FE0" stroke-width="1.9" viewBox="0 0 24 24"><rect x="3" y="11" width="4" height="9"/><rect x="10" y="6" width="4" height="14"/><rect x="17" y="3" width="4" height="17"/></svg>
 							<div class="mt-1.5 text-[10.5px] font-semibold text-[#2C53A8] leading-tight">Dashboard</div>
 						</button>
-						<button @click="handleExampleClick('Write a narrative report with key findings for: ' + (lastUserQuestion || report?.title || 'this data'))" class="relative text-left rounded-lg border border-gray-200 p-2 bg-[#F6F4FF] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
-							<span class="absolute top-1.5 right-1.5 text-[8px] font-bold leading-none px-1 py-0.5 rounded bg-violet-100 text-violet-700">AI</span>
-							<svg width="15" height="15" fill="none" stroke="#7A5CD0" stroke-width="1.8" viewBox="0 0 24 24"><path d="M6 3h9l5 5v13H6z"/><path d="M15 3v5h5"/></svg>
-							<div class="mt-1.5 text-[10.5px] font-semibold text-[#5A41A8] leading-tight">Report</div>
-						</button>
 						<button @click="setPanelView('slides', true)" class="relative text-left rounded-lg border border-gray-200 p-2 bg-[#FFF4EF] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
 							<span class="absolute top-1.5 right-1.5 text-[8px] font-bold leading-none px-1 py-0.5 rounded bg-[#FEE9DF] text-[#C2541E]">PPT</span>
 							<svg width="15" height="15" fill="none" stroke="#D2603A" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="1.5"/><path d="M8 21h8M12 17v4"/></svg>
