@@ -37,8 +37,12 @@ class FileService:
         report_id: Optional[str] = None,
         data_source_id: Optional[str] = None,
     ) -> FileSchema:
-        # Generate a unique filename to prevent overwriting existing files
-        unique_filename = f"{uuid.uuid4()}_{file.filename}"
+        # Generate a unique filename to prevent overwriting existing files.
+        # Folder uploads (e.g. OneDrive exports) send a relative path as filename
+        # ("OneDrive_1/Report.csv"); strip any directory components so the save
+        # path stays flat and open() doesn't hit a missing subdir.
+        safe_name = (file.filename or "upload").replace("\\", "/").split("/")[-1] or "upload"
+        unique_filename = f"{uuid.uuid4()}_{safe_name}"
         file_location = f"uploads/files/{unique_filename}"
 
         # Async file writing
@@ -48,7 +52,7 @@ class FileService:
 
         # Create the database entry
         db_file = File(
-            filename=file.filename,
+            filename=safe_name,
             content_type=file.content_type,
             path=file_location,
             user_id=current_user.id,

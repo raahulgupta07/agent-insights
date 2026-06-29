@@ -1005,10 +1005,14 @@ class LLMService:
         self,
         db: AsyncSession,
         organization: Organization,
-        current_user: User,
+        current_user: User = None,
         is_small: bool = False
     ):
-        """Get the default model for an organization. If is_small=True, prefer small default, fallback to regular, then first enabled."""
+        """Get the default model for an organization. If is_small=True, prefer small default, fallback to regular, then first enabled.
+
+        ``current_user`` is accepted for call-site symmetry but not used here — the
+        default model is an org-level setting. Optional so background jobs (auto-train)
+        that have no request user can call ``get_default_model(db, organization)``."""
         if is_small:
             small_default = await db.execute(
                 select(LLMModel)
