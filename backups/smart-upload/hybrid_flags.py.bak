@@ -133,7 +133,6 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_RICH_REPORT_EMAIL": {"label": "Rich Report Emails", "role": "agent", "category": "Agents & Access", "status": "beta", "note": "Render scheduled/automated report emails from structured results (clean table + sanitized insights + dashboard image/PDF) instead of dumping the raw agent chat. OFF = legacy raw-content email."},
     "HYBRID_ONECLICK_ARTIFACTS": {"label": "One-click Dashboard / Slides / Excel", "role": "user", "category": "Agents & Access", "status": "beta", "note": "On a report's right panel, turns the empty Dashboard/Slides/Excel states into one-click builders: 'Generate dashboard' (real page artifact), 'Generate slide deck' (python-pptx deck + previews + .pptx) from the report's existing charts, and an auto-filled Excel workbook. Reuses the chat create_artifact pipeline."},
     "HYBRID_AUTO_ARTIFACT": {"label": "Auto-build Dashboard from chat", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "When a chat turn produces a dataset (the agent ran create_data → ≥1 chart) but makes NO artifact, automatically build a dashboard (page artifact) in the background so the Outputs panel isn't empty. Reuses the one-click create_artifact pipeline. Idempotent (only when the report has zero artifacts) + fully fail-soft. Default OFF."},
-    "HYBRID_SMART_UPLOAD": {"label": "Smart Upload Router", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "One drop zone for ANY file. A heuristic + small-LLM ensemble classifies each upload (data / glossary / rules / Q&A / reference) and routes it to the right home — Database, Semantic, Instructions, Examples, or Knowledge — auto-applying confident low-risk files and asking you to confirm only the uncertain or answer-changing ones. Reuses existing sinks. Fail-soft. Default OFF."},
     "HYBRID_QUOTAS": {"label": "Per-Org Quotas", "role": "agent", "category": "Agents & Access", "status": "stable"},
     "HYBRID_DOMAIN_PACKS": {"label": "Domain Packs (Skills)", "role": "agent", "category": "Agents & Access", "status": "stable"},
     "HYBRID_PACK_ROUTER": {"label": "Pack Router", "role": "agent", "category": "Agents & Access", "status": "stable"},
@@ -338,17 +337,6 @@ class HybridFlags:
         # the report already has any artifact) + fail-soft (never affects the
         # chat response). No agent-loop effect. Default OFF.
         return _bool("HYBRID_AUTO_ARTIFACT", True)
-
-    @property
-    def SMART_UPLOAD(self) -> bool:
-        # Smart Upload Router: one drop zone for ANY file (data / glossary / rules
-        # / Q&A / reference doc). A heuristic + small-LLM ensemble classifies each
-        # file and routes it to the right home — Database (data source), Semantic
-        # (column meanings), Instructions, Examples, or Knowledge (RAG) — at the
-        # highest confidence it can, asking the user to confirm ONLY when uncertain
-        # or answer-changing. Reuses existing sinks (data_source_from_file,
-        # doc_extractor, teach engine, docs_index). Fail-soft. Default OFF.
-        return _bool("HYBRID_SMART_UPLOAD", False)
 
     # --- Slice 1: foundation -------------------------------------------------
     @property
@@ -881,7 +869,6 @@ class HybridFlags:
             "RICH_REPORT_EMAIL": self.RICH_REPORT_EMAIL,
             "ONECLICK_ARTIFACTS": self.ONECLICK_ARTIFACTS,
             "AUTO_ARTIFACT": self.AUTO_ARTIFACT,
-            "SMART_UPLOAD": self.SMART_UPLOAD,
         }
 
 
