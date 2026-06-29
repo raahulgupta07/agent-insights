@@ -1100,7 +1100,7 @@
 							<svg width="15" height="15" fill="none" stroke="#D2603A" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="1.5"/><path d="M8 21h8M12 17v4"/></svg>
 							<div class="mt-1.5 text-[10.5px] font-semibold text-[#C2541E] leading-tight">Slides</div>
 						</button>
-						<button @click="setPanelView('excel', true)" class="relative text-left rounded-lg border border-gray-200 p-2 bg-[#EEFAF1] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
+						<button @click="onExcelCta()" class="relative text-left rounded-lg border border-gray-200 p-2 bg-[#EEFAF1] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
 							<span class="absolute top-1.5 right-1.5 text-[8px] font-bold leading-none px-1 py-0.5 rounded bg-[#D8F3E1] text-[#157A43]">XLS</span>
 							<svg width="15" height="15" fill="none" stroke="#1E9E57" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 8l8 8M16 8l-8 8"/></svg>
 							<div class="mt-1.5 text-[10.5px] font-semibold text-[#157A43] leading-tight">Excel</div>
@@ -1622,6 +1622,18 @@
 
 	<!-- Image Preview Modal -->
 	<ImagePreviewModal ref="imagePreviewModalRef" />
+
+	<!-- Smart Workbook Build Sheet (HYBRID_SMART_WORKBOOK — flag OFF = never mounts) -->
+	<Teleport to="body">
+		<DashboardSmartWorkbookSheet
+			v-if="smartWorkbookOpen"
+			:reportId="report_id"
+			:open="smartWorkbookOpen"
+			@close="smartWorkbookOpen = false"
+			@skip="() => { smartWorkbookOpen = false; setPanelView('excel', true) }"
+			@built="() => { smartWorkbookOpen = false; setPanelView('excel', true) }"
+		/>
+	</Teleport>
 
 </template>
 
@@ -4777,14 +4789,31 @@ const slideGenError = ref<string | null>(null)
 const dashGenLoading = ref(false)
 const dashGenError = ref<string | null>(null)
 
+// ── Smart Excel Build (HYBRID_SMART_WORKBOOK) ─────────────────────────────
+// When the flag is ON, the Excel tile opens a smart builder instead of the
+// raw workbook dump. Flag OFF = existing setPanelView('excel') behavior.
+const smartWorkbookEnabled = ref(false)
+const smartWorkbookOpen = ref(false)
+
+function onExcelCta() {
+	if (smartWorkbookEnabled.value) {
+		smartWorkbookOpen.value = true
+	} else {
+		setPanelView('excel', true)
+	}
+}
+
 async function loadOneClickFlag() {
 	try {
 		const { data } = await useMyFetch<any[]>('/organization/hybrid-flags')
 		const rows = (data.value as any[]) || []
 		const row = rows.find(r => r?.env_name === 'HYBRID_ONECLICK_ARTIFACTS')
 		oneClickEnabled.value = !!row?.effective
+		const swRow = rows.find(r => r?.env_name === 'HYBRID_SMART_WORKBOOK')
+		smartWorkbookEnabled.value = !!swRow?.effective
 	} catch {
 		oneClickEnabled.value = false  // fail-soft: fall back to placeholders
+		smartWorkbookEnabled.value = false
 	}
 }
 

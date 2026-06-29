@@ -148,6 +148,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_AGENT_PLAN": {"label": "Agent Task Plan", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "At run start the agent writes a 3-5 item high-level task plan (a Claude-style checklist) as a transient 'plan' block. The report Progress panel then shows a numbered task list that ticks over as work proceeds, instead of only low-level tool steps. One extra small-model call per run, fail-soft. Default OFF."},
     "HYBRID_COWORK_PANEL": {"label": "Cowork Outputs Panel", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "Report right-panel redesign: Create/Activity toggle, numbered Progress (the task plan + live sub-steps with auto-scroll), a Working-folders tree of file + database sources and their tables, and a Context section (Skills loaded/used + Sub-agents). Frontend-only, reuses existing activity data. Off keeps the legacy panel. Default OFF."},
     "HYBRID_SMART_UPLOAD": {"label": "Smart Upload Router", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "One drop zone for ANY file. A heuristic + small-LLM ensemble classifies each upload (data / glossary / rules / Q&A / reference) and routes it to the right home — Database, Semantic, Instructions, Examples, or Knowledge — auto-applying confident low-risk files and asking you to confirm only the uncertain or answer-changing ones. Reuses existing sinks. Fail-soft. Default OFF."},
+    "HYBRID_SMART_WORKBOOK": {"label": "Smart Excel Build", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "Outputs 'Excel' tab becomes a smart builder: user types an intent ('pivot revenue by region × month'), an LLM converts it to a transform spec (select/rename/filter/aggregate/pivot/sort), and the result is applied in pure-Python over the existing grids — no SQL re-run. Flag OFF = today's raw workbook dump unchanged. Default OFF."},
     "HYBRID_QUOTAS": {"label": "Per-Org Quotas", "role": "agent", "category": "Agents & Access", "status": "stable"},
     "HYBRID_DOMAIN_PACKS": {"label": "Domain Packs (Skills)", "role": "agent", "category": "Agents & Access", "status": "stable"},
     "HYBRID_PACK_ROUTER": {"label": "Pack Router", "role": "agent", "category": "Agents & Access", "status": "stable"},
@@ -1152,6 +1153,14 @@ class HybridFlags:
         # Default OFF.
         return _bool("HYBRID_FOLDER_SYNC", True)
 
+    @property
+    def SMART_WORKBOOK(self) -> bool:
+        # Smart Excel builder: user types a transform intent, an LLM converts it to
+        # a strict whitelist-validated spec (select/rename/filter/aggregate/pivot/sort)
+        # applied in pure-Python (pandas) over the existing query-result grids — no
+        # SQL re-run. Flag OFF = today's raw workbook dump unchanged. Default OFF.
+        return _bool("HYBRID_SMART_WORKBOOK", False)
+
     def snapshot(self) -> dict[str, bool]:
         """All flags as a dict (for /health, debugging, tests)."""
         return {
@@ -1249,6 +1258,7 @@ class HybridFlags:
             "SMART_UPLOAD": self.SMART_UPLOAD,
             "TRAIN_ROUTING": self.TRAIN_ROUTING,
             "AUTOPILOT_V2": self.AUTOPILOT_V2,
+            "SMART_WORKBOOK": self.SMART_WORKBOOK,
         }
 
 

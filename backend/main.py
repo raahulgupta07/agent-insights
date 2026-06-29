@@ -137,6 +137,7 @@ from app.routes import (
     compliance_scan,
     column_profile,
     smart_upload,
+    smart_workbook,
 )
 from app.routes.oidc_auth import router as oidc_auth_router
 from app.ee.routes import router as enterprise_router
@@ -283,6 +284,7 @@ app.include_router(studio_reports.router, prefix="/api")  # hybrid: per-agent sc
 app.include_router(studio_self_learn.router, prefix="/api")  # hybrid: per-agent self-learn cadence (master STUDIO_LEARN_DAEMON_ENABLED)
 app.include_router(report_slides.router, prefix="/api")   # hybrid: one-click slide deck (gated HYBRID_SLIDE_DECK)
 app.include_router(moa_test.router, prefix="/api")        # hybrid: Mixture-of-Agents test endpoint (sidecar; route gated HYBRID_MOA -> 404 when OFF)
+app.include_router(smart_workbook.router, prefix="/api")  # hybrid: smart Excel build (gated HYBRID_SMART_WORKBOOK)
 app.include_router(external_user_mapping.router, prefix="/api")
 app.include_router(slack_webhook.router)
 app.include_router(teams_webhook.router)
