@@ -1569,7 +1569,7 @@
 				<button
 					class="mt-1 px-4 py-2 rounded-lg bg-[#C2541E] hover:bg-[#A8330F] text-white text-[13px] font-medium flex items-center gap-2 transition-colors disabled:opacity-60"
 					:disabled="dashGenLoading"
-					@click="generateDashboard"
+					@click="onDashboardCta"
 				>
 					<Icon
 						:name="dashGenLoading ? 'heroicons:arrow-path' : 'heroicons:sparkles'"
@@ -1582,6 +1582,19 @@
 				</p>
 				<p v-if="dashGenError" class="text-[12px] text-[#C0362C] max-w-xs">{{ dashGenError }}</p>
 			</div>
+
+			<!-- Smart Dashboard build sheet (HYBRID_SMART_DASHBOARD). Teleported so it
+			     survives Outputs-panel re-renders during the build. -->
+			<Teleport to="body">
+				<DashboardSmartBuildSheet
+					v-if="report?.id"
+					:report-id="String(report.id)"
+					:open="smartSheetOpen"
+					@close="smartSheetOpen = false"
+					@skip="smartSheetOpen = false; generateDashboard()"
+					@built="onSmartBuilt"
+				/>
+			</Teleport>
 
 			<!-- Artifact View / Dash tab (handles all states: loading, empty, has artifacts).
 			     mode-filter="page" → shows dashboards only; the slides deck lives in the Slides tab. -->
@@ -4798,6 +4811,8 @@ async function loadActiveLayoutHasBlocks(): Promise<boolean> {
 const oneClickEnabled = ref(false)
 const smartSlidesEnabled = ref(false)
 const smartSlidesOpen = ref(false)
+const smartDashboardEnabled = ref(false)   // HYBRID_SMART_DASHBOARD
+const smartSheetOpen = ref(false)
 const slideGenLoading = ref(false)
 const slideGenError = ref<string | null>(null)
 const dashGenLoading = ref(false)
@@ -4827,10 +4842,13 @@ async function loadOneClickFlag() {
 		smartWorkbookEnabled.value = !!swRow?.effective
 		const slidesRow = rows.find(r => r?.env_name === 'HYBRID_SMART_SLIDES')
 		smartSlidesEnabled.value = !!slidesRow?.effective
+		const sd = rows.find(r => r?.env_name === 'HYBRID_SMART_DASHBOARD')
+		smartDashboardEnabled.value = !!sd?.effective
 	} catch {
 		oneClickEnabled.value = false  // fail-soft: fall back to placeholders
 		smartWorkbookEnabled.value = false
 		smartSlidesEnabled.value = false
+		smartDashboardEnabled.value = false
 	}
 }
 
@@ -4841,6 +4859,17 @@ function onSlidesCta() {
 	} else {
 		setPanelView('slides', true)
 	}
+}
+
+// Smart Dashboard ON → open the build sheet (auto-context + steer + clarify).
+// OFF → the existing one-click builder runs unchanged.
+function onDashboardCta() {
+	if (smartDashboardEnabled.value) { smartSheetOpen.value = true; return }
+	generateDashboard()
+}
+async function onSmartBuilt() {
+	smartSheetOpen.value = false
+	try { await checkHasArtifacts() } catch {}
 }
 
 async function generateSlideDeck() {
