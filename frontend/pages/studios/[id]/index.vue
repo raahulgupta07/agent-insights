@@ -2502,7 +2502,12 @@ const pinSource = async (agent: any) => {
     }
 }
 
-const openUploadSource = () => { showUploadSource.value = true }
+const openUploadSource = () => {
+  // When the Smart Upload Router is enabled, the "upload a file" entry opens the
+  // router (any file type → auto-routed) to match the ADD copy ("the router sorts
+  // each into Data / Knowledge / Skill / Rule"). Flag OFF → legacy spreadsheet modal.
+  if (smartUploadEnabled.value) { smartUploadOpen.value = true } else { showUploadSource.value = true }
+}
 
 // Folder Sync setup modal (this studio pre-selected as the sync target).
 const showFolderSync = ref(false)

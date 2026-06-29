@@ -28,8 +28,8 @@
                     >
                         <div class="text-[28px]">&#128229;</div>
                         <div class="font-semibold text-[#C2541E] mt-2 text-[15px]">Drop files here &mdash; or click to browse</div>
-                        <div class="text-[12px] text-[#6b7280] mt-1">.csv .xlsx .pdf .docx .txt &middot; data, definitions, logic, references &mdash; mixed is fine</div>
-                        <input ref="fileInput" type="file" multiple class="hidden" accept=".csv,.xlsx,.xls,.pdf,.docx,.txt" @change="onPick" />
+                        <div class="text-[12px] text-[#6b7280] mt-1">.csv .xlsx .pdf .docx .pptx .txt &middot; data, definitions, logic, references &mdash; mixed is fine</div>
+                        <input ref="fileInput" type="file" multiple class="hidden" accept=".csv,.xlsx,.xls,.pdf,.docx,.pptx,.txt,.tsv,.md" @change="onPick" />
                     </div>
 
                     <!-- error -->
