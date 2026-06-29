@@ -149,6 +149,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_COWORK_PANEL": {"label": "Cowork Outputs Panel", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "Report right-panel redesign: Create/Activity toggle, numbered Progress (the task plan + live sub-steps with auto-scroll), a Working-folders tree of file + database sources and their tables, and a Context section (Skills loaded/used + Sub-agents). Frontend-only, reuses existing activity data. Off keeps the legacy panel. Default OFF."},
     "HYBRID_SMART_UPLOAD": {"label": "Smart Upload Router", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "One drop zone for ANY file. A heuristic + small-LLM ensemble classifies each upload (data / glossary / rules / Q&A / reference) and routes it to the right home — Database, Semantic, Instructions, Examples, or Knowledge — auto-applying confident low-risk files and asking you to confirm only the uncertain or answer-changing ones. Reuses existing sinks. Fail-soft. Default OFF."},
     "HYBRID_SMART_WORKBOOK": {"label": "Smart Excel Build", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "Outputs 'Excel' tab becomes a smart builder: user types an intent ('pivot revenue by region × month'), an LLM converts it to a transform spec (select/rename/filter/aggregate/pivot/sort), and the result is applied in pure-Python over the existing grids — no SQL re-run. Flag OFF = today's raw workbook dump unchanged. Default OFF."},
+    "HYBRID_SMART_SLIDES": {"label": "Smart Slide Deck Build", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "Outputs 'Generate slide deck' becomes a smart builder: auto-prefills the prompt from the chat turn, auto-uses the agent's own bound data sources (no picker), routes the model via Auto, and asks ONE clarifying chip ONLY when there's no usable signal. Reuses create_artifact + ambiguity-gate + sense-making. Default OFF."},
     "HYBRID_QUOTAS": {"label": "Per-Org Quotas", "role": "agent", "category": "Agents & Access", "status": "stable"},
     "HYBRID_DOMAIN_PACKS": {"label": "Domain Packs (Skills)", "role": "agent", "category": "Agents & Access", "status": "stable"},
     "HYBRID_PACK_ROUTER": {"label": "Pack Router", "role": "agent", "category": "Agents & Access", "status": "stable"},
@@ -453,6 +454,15 @@ class HybridFlags:
         # the Smart Upload sinks and HOLDS the uncertain/answer-changing ones for
         # post-train Review. Reuses the Smart Upload classifier + apply. OFF.
         return _bool("HYBRID_TRAIN_ROUTING", False)
+    def SMART_SLIDES(self) -> bool:
+        # Smart Slide Deck Build (Outputs → "Generate slide deck"). Auto-prefills
+        # the prompt from the chat turn, auto-resolves the agent's OWN bound data
+        # sources (no picker), routes the model via Auto, and asks ONE clarifying
+        # chip ONLY when there is no usable signal (cold open + empty prompt).
+        # Reuses report_slides._generate_artifact (build), the ambiguity gate
+        # (clarify), and sense-making (Decision card). Flag OFF → the existing
+        # one-click builder is unchanged. Default OFF.
+        return _bool("HYBRID_SMART_SLIDES", False)
 
     # --- Slice 1: foundation -------------------------------------------------
     @property
@@ -1259,6 +1269,7 @@ class HybridFlags:
             "TRAIN_ROUTING": self.TRAIN_ROUTING,
             "AUTOPILOT_V2": self.AUTOPILOT_V2,
             "SMART_WORKBOOK": self.SMART_WORKBOOK,
+            "SMART_SLIDES": self.SMART_SLIDES,
         }
 
 

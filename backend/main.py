@@ -75,6 +75,7 @@ from app.routes import (
     studio_self_learn,
     report_slides,
     moa_test,
+    smart_slides,
     external_user_mapping,
     telegram_webhook,
     slack_webhook,
@@ -285,6 +286,7 @@ app.include_router(studio_self_learn.router, prefix="/api")  # hybrid: per-agent
 app.include_router(report_slides.router, prefix="/api")   # hybrid: one-click slide deck (gated HYBRID_SLIDE_DECK)
 app.include_router(moa_test.router, prefix="/api")        # hybrid: Mixture-of-Agents test endpoint (sidecar; route gated HYBRID_MOA -> 404 when OFF)
 app.include_router(smart_workbook.router, prefix="/api")  # hybrid: smart Excel build (gated HYBRID_SMART_WORKBOOK)
+app.include_router(smart_slides.router, prefix="/api")    # hybrid: smart slide deck builder (gated HYBRID_SMART_SLIDES)
 app.include_router(external_user_mapping.router, prefix="/api")
 app.include_router(slack_webhook.router)
 app.include_router(teams_webhook.router)

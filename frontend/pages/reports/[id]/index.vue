@@ -1095,7 +1095,7 @@
 							<svg width="15" height="15" fill="none" stroke="#3B6FE0" stroke-width="1.9" viewBox="0 0 24 24"><rect x="3" y="11" width="4" height="9"/><rect x="10" y="6" width="4" height="14"/><rect x="17" y="3" width="4" height="17"/></svg>
 							<div class="mt-1.5 text-[10.5px] font-semibold text-[#2C53A8] leading-tight">Dashboard</div>
 						</button>
-						<button @click="setPanelView('slides', true)" class="relative text-left rounded-lg border border-gray-200 p-2 bg-[#FFF4EF] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
+						<button @click="onSlidesCta()" class="relative text-left rounded-lg border border-gray-200 p-2 bg-[#FFF4EF] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
 							<span class="absolute top-1.5 right-1.5 text-[8px] font-bold leading-none px-1 py-0.5 rounded bg-[#FEE9DF] text-[#C2541E]">PPT</span>
 							<svg width="15" height="15" fill="none" stroke="#D2603A" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="1.5"/><path d="M8 21h8M12 17v4"/></svg>
 							<div class="mt-1.5 text-[10.5px] font-semibold text-[#C2541E] leading-tight">Slides</div>
@@ -1632,6 +1632,18 @@
 			@close="smartWorkbookOpen = false"
 			@skip="() => { smartWorkbookOpen = false; setPanelView('excel', true) }"
 			@built="() => { smartWorkbookOpen = false; setPanelView('excel', true) }"
+		/>
+	</Teleport>
+
+	<!-- Smart Slides Sheet (HYBRID_SMART_SLIDES) — flag OFF = never rendered -->
+	<Teleport to="body">
+		<DashboardSmartSlidesSheet
+			v-if="smartSlidesOpen"
+			:reportId="report_id"
+			:open="smartSlidesOpen"
+			@close="smartSlidesOpen = false"
+			@skip="smartSlidesOpen = false; setPanelView('slides', true)"
+			@built="smartSlidesOpen = false; checkHasArtifacts()"
 		/>
 	</Teleport>
 
@@ -4784,6 +4796,8 @@ async function loadActiveLayoutHasBlocks(): Promise<boolean> {
 // builder that creates a REAL artifact (page dashboard or slides deck) from the
 // report's existing charts, instead of a dead empty state / placeholder.
 const oneClickEnabled = ref(false)
+const smartSlidesEnabled = ref(false)
+const smartSlidesOpen = ref(false)
 const slideGenLoading = ref(false)
 const slideGenError = ref<string | null>(null)
 const dashGenLoading = ref(false)
@@ -4811,9 +4825,21 @@ async function loadOneClickFlag() {
 		oneClickEnabled.value = !!row?.effective
 		const swRow = rows.find(r => r?.env_name === 'HYBRID_SMART_WORKBOOK')
 		smartWorkbookEnabled.value = !!swRow?.effective
+		const slidesRow = rows.find(r => r?.env_name === 'HYBRID_SMART_SLIDES')
+		smartSlidesEnabled.value = !!slidesRow?.effective
 	} catch {
 		oneClickEnabled.value = false  // fail-soft: fall back to placeholders
 		smartWorkbookEnabled.value = false
+		smartSlidesEnabled.value = false
+	}
+}
+
+// When flag ON → open the smart builder sheet; when OFF → legacy one-click panel
+function onSlidesCta() {
+	if (smartSlidesEnabled.value) {
+		smartSlidesOpen.value = true
+	} else {
+		setPanelView('slides', true)
 	}
 }
 

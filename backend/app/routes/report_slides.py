@@ -85,11 +85,16 @@ async def _load_report(db: AsyncSession, report_id: str, organization) -> Report
 
 async def _generate_artifact(
     *, mode: str, report_id: str, current_user, organization, db: AsyncSession,
+    steer_prompt: str = "", depth: str = "", size: str = "",
 ) -> dict:
     """Shared builder for both modes. Runs the chat create_artifact pipeline over
     the report's existing visualizations and returns the result dict. Deletes its
     own artifact on hard failure so a failed attempt leaves no stale empty
-    artifact (which would flip hasPageArtifact / hasSlidesArtifact on the FE)."""
+    artifact (which would flip hasPageArtifact / hasSlidesArtifact on the FE).
+
+    ``steer_prompt`` / ``depth`` / ``size`` (Smart Slides / Smart Dashboard, all
+    optional) fold a user's intent + layout preference into the build prompt.
+    Empty = today's behavior byte-for-byte."""
     label = _MODE_LABEL.get(mode, "Artifact")
     report = await _load_report(db, report_id, organization)
 
@@ -133,11 +138,41 @@ async def _generate_artifact(
     }
 
     default_title = "Presentation" if mode == "slides" else (report.title or "Dashboard")
+    base_prompt = _MODE_PROMPTS.get(mode, _MODE_PROMPTS["page"])
+    # Smart Slides / Smart Dashboard: fold the user's steer + layout preference
+    # into the build prompt. Empty steer = byte-identical to legacy behavior.
+    steer_bits = []
+    if (steer_prompt or "").strip():
+        _artifact_label = "slide deck" if mode == "slides" else "dashboard"
+        steer_bits.append(
+            f"USER FOCUS — build the {_artifact_label} to answer: {steer_prompt.strip()}"
+        )
+    if depth == "exec":
+        steer_bits.append(
+            "AUDIENCE: executive — lead with the headline KPIs, one key chart, "
+            "and the decision; keep it tight."
+        )
+    elif depth == "analyst":
+        steer_bits.append(
+            "AUDIENCE: analyst — include the full breakdown: trends, segment "
+            "splits, and a drill-down table."
+        )
+    if size == "compact":
+        if mode == "slides":
+            steer_bits.append("SIZE: compact — at most 5–6 slides, the most impactful ones only.")
+        else:
+            steer_bits.append("SIZE: compact — at most 4–5 widgets, the most important ones only.")
+    elif size == "full":
+        if mode == "slides":
+            steer_bits.append("SIZE: full — a complete multi-section presentation with detail slides.")
+        else:
+            steer_bits.append("SIZE: full — a complete multi-section dashboard.")
+    full_prompt = base_prompt if not steer_bits else (base_prompt + "\n\n" + "\n".join(steer_bits))
     tool_input = {
         "mode": mode,
         "visualization_ids": viz_ids,
         "title": (report.title or default_title).strip() or default_title,
-        "prompt": _MODE_PROMPTS.get(mode, _MODE_PROMPTS["page"]),
+        "prompt": full_prompt,
     }
 
     # Sense-Making: fold the persisted decision card into the prompt (SAFE
