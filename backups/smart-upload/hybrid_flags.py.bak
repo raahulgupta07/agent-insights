@@ -133,12 +133,6 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_RICH_REPORT_EMAIL": {"label": "Rich Report Emails", "role": "agent", "category": "Agents & Access", "status": "beta", "note": "Render scheduled/automated report emails from structured results (clean table + sanitized insights + dashboard image/PDF) instead of dumping the raw agent chat. OFF = legacy raw-content email."},
     "HYBRID_ONECLICK_ARTIFACTS": {"label": "One-click Dashboard / Slides / Excel", "role": "user", "category": "Agents & Access", "status": "beta", "note": "On a report's right panel, turns the empty Dashboard/Slides/Excel states into one-click builders: 'Generate dashboard' (real page artifact), 'Generate slide deck' (python-pptx deck + previews + .pptx) from the report's existing charts, and an auto-filled Excel workbook. Reuses the chat create_artifact pipeline."},
     "HYBRID_AUTO_ARTIFACT": {"label": "Auto-build Dashboard from chat", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "When a chat turn produces a dataset (the agent ran create_data → ≥1 chart) but makes NO artifact, automatically build a dashboard (page artifact) in the background so the Outputs panel isn't empty. Reuses the one-click create_artifact pipeline. Idempotent (only when the report has zero artifacts) + fully fail-soft. Default OFF."},
-    "HYBRID_CROSS_SOURCE_UNIFY": {"label": "Cross-Source Unify", "role": "agent", "category": "Intelligence", "status": "experimental", "note": "At ingest, detect same-shape sibling tables (e.g. 6 monthly files with identical columns) and register a unified UNION ALL view (+ a _period column) so the agent queries across them in one shot. Records a union group + emits an instruction. Fail-soft, no migration. Default OFF."},
-    "HYBRID_DATA_QUALITY": {"label": "Data Quality Scan", "role": "user", "category": "Intelligence", "status": "experimental", "note": "At ingest, scan columns for quality issues (high null %, type-coercion risk, outliers, near-constant) and emit a data_quality guardrail instruction the agent reads. Pure pandas, fail-soft, no migration. Default OFF."},
-    "HYBRID_VALUE_NORMALIZE": {"label": "Value Normalization (canonical)", "role": "agent", "category": "Intelligence", "status": "experimental", "note": "Resolve a canonical value for near-duplicate labels (e.g. 'daily_used__l' vs 'daily_used__l_') and record a value→canonical map so GROUP BY doesn't scatter one category across spellings. Detection only, no data rewrite. Default OFF."},
-    "HYBRID_AGENT_PLAN": {"label": "Agent Task Plan", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "At run start the agent writes a 3-5 item high-level task plan (a Claude-style checklist) as a transient 'plan' block. The report Progress panel then shows a numbered task list that ticks over as work proceeds, instead of only low-level tool steps. One extra small-model call per run, fail-soft. Default OFF."},
-    "HYBRID_COWORK_PANEL": {"label": "Cowork Outputs Panel", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "Report right-panel redesign: Create/Activity toggle, numbered Progress (the task plan + live sub-steps with auto-scroll), a Working-folders tree of file + database sources and their tables, and a Context section (Skills loaded/used + Sub-agents). Frontend-only, reuses existing activity data. Off keeps the legacy panel. Default OFF."},
-    "HYBRID_SMART_UPLOAD": {"label": "Smart Upload Router", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "One drop zone for ANY file. A heuristic + small-LLM ensemble classifies each upload (data / glossary / rules / Q&A / reference) and routes it to the right home — Database, Semantic, Instructions, Examples, or Knowledge — auto-applying confident low-risk files and asking you to confirm only the uncertain or answer-changing ones. Reuses existing sinks. Fail-soft. Default OFF."},
     "HYBRID_QUOTAS": {"label": "Per-Org Quotas", "role": "agent", "category": "Agents & Access", "status": "stable"},
     "HYBRID_DOMAIN_PACKS": {"label": "Domain Packs (Skills)", "role": "agent", "category": "Agents & Access", "status": "stable"},
     "HYBRID_PACK_ROUTER": {"label": "Pack Router", "role": "agent", "category": "Agents & Access", "status": "stable"},
@@ -154,7 +148,6 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_AUTO_EVALS": {"label": "Auto Eval Cases", "role": "review", "category": "Ingest", "status": "stable"},
     "HYBRID_MERGE_SAME_SCHEMA": {"label": "Merge Same-Schema Uploads", "role": "user", "category": "Ingest", "status": "stable"},
     "HYBRID_SMART_HEADER": {"label": "Smart Header + Glossary", "role": "user", "category": "Ingest", "status": "stable"},
-    "HYBRID_TOTAL_ROW": {"label": "Pre-Aggregated Total-Row Detection", "role": "user", "category": "Ingest", "status": "experimental", "note": "At file ingest, flag likely total/subtotal rows (e.g. site='ALL Total') so the agent excludes them and stops double-counting SUM()."},
 
     # --- Learning / Brain -------------------------------------------------
     "HYBRID_BRAIN_READ": {"label": "Brain Read (inject memories)", "role": "agent", "category": "Learning", "status": "stable"},
@@ -344,60 +337,6 @@ class HybridFlags:
         # the report already has any artifact) + fail-soft (never affects the
         # chat response). No agent-loop effect. Default OFF.
         return _bool("HYBRID_AUTO_ARTIFACT", True)
-
-    @property
-    def CROSS_SOURCE_UNIFY(self) -> bool:
-        # At ingest, detect same-shape sibling tables (e.g. 6 monthly files with
-        # identical columns) and register a unified logical view (UNION ALL +
-        # a _period column) so the agent can query across them in one shot,
-        # instead of UNIONing by hand. Records a union group + emits an
-        # instruction. Fail-soft, no migration. Default OFF.
-        return _bool("HYBRID_CROSS_SOURCE_UNIFY", False)
-
-    @property
-    def DATA_QUALITY(self) -> bool:
-        # At ingest, scan columns for quality issues (high null %, type-coercion
-        # risk, outliers, constant/near-constant) and emit a data_quality
-        # guardrail instruction the agent reads. Pure pandas, fail-soft,
-        # no migration. Default OFF.
-        return _bool("HYBRID_DATA_QUALITY", False)
-
-    @property
-    def VALUE_NORMALIZE(self) -> bool:
-        # Extend deep-profile variant detection to resolve a CANONICAL value for
-        # near-duplicate labels (e.g. 'daily_used__l' vs 'daily_used__l_') and
-        # record a value→canonical map so GROUP BY doesn't scatter one real
-        # category across spellings. Detection only (no data rewrite). Default OFF.
-        return _bool("HYBRID_VALUE_NORMALIZE", False)
-
-    @property
-    def AGENT_PLAN(self) -> bool:
-        # At the start of a run the planner emits a 3-5 item high-level task PLAN
-        # (a Claude-style TODO list) as a transient completion block
-        # (source_type='plan'). Lets the right panel show a numbered checklist
-        # whose items tick over as execution proceeds, instead of only low-level
-        # tool steps. One extra small-model call per run, fail-soft. Default OFF.
-        return _bool("HYBRID_AGENT_PLAN", False)
-
-    @property
-    def COWORK_PANEL(self) -> bool:
-        # Report right-panel redesign (Cowork look): a Create/Activity toggle,
-        # numbered Progress (the AGENT_PLAN list with live sub-steps + auto-scroll),
-        # a Working-folders tree (file + database sources with their tables), and a
-        # Context section (Skills loaded/used + Sub-agents). FE-only; reuses existing
-        # activity fields. Off => the legacy stacked panel. Default OFF.
-        return _bool("HYBRID_COWORK_PANEL", False)
-
-    @property
-    def SMART_UPLOAD(self) -> bool:
-        # Smart Upload Router: one drop zone for ANY file (data / glossary / rules
-        # / Q&A / reference doc). A heuristic + small-LLM ensemble classifies each
-        # file and routes it to the right home — Database (data source), Semantic
-        # (column meanings), Instructions, Examples, or Knowledge (RAG) — at the
-        # highest confidence it can, asking the user to confirm ONLY when uncertain
-        # or answer-changing. Reuses existing sinks (data_source_from_file,
-        # doc_extractor, teach engine, docs_index). Fail-soft. Default OFF.
-        return _bool("HYBRID_SMART_UPLOAD", False)
 
     # --- Slice 1: foundation -------------------------------------------------
     @property
@@ -758,22 +697,6 @@ class HybridFlags:
         return _bool("HYBRID_SMART_HEADER", True)
 
     @property
-    def TOTAL_ROW(self) -> bool:
-        # Ingest Task T2: detect PRE-AGGREGATED total/subtotal rows at ingest so
-        # the agent stops double-counting. Real case: a CSV has per-site rows PLUS
-        # rows where site='ALL Total' (already summed across sites) — a naive
-        # SUM(value) over the whole table double-counts (the subtotal + its parts).
-        # During profiling we scan the DataFrame for likely total rows (a
-        # low-cardinality dimension equals 'total'/'all total'/'grand total'/...
-        # while other key dimensions are blank), record markers into the
-        # DataSourceTable.metadata_json['total_row_markers'] (+ an estimated
-        # total_row_count), and auto-emit a guardrail Instruction the agent reads
-        # ("Exclude pre-aggregated total rows: WHERE site NOT ILIKE '%total%'").
-        # Conservative (only flags when row-share is plausible, < 60%) and
-        # fail-soft (never breaks ingest). Default OFF.
-        return _bool("HYBRID_TOTAL_ROW", False)
-
-    @property
     def RESULT_CACHE(self) -> bool:
         # Task 7: deterministic result cache. Keyed by (normalized question text +
         # the report's per-source row-count watermark signature). On a HIT with an
@@ -916,7 +839,6 @@ class HybridFlags:
             "QUERY_LEARNING": self.QUERY_LEARNING,
             "MERGE_SAME_SCHEMA": self.MERGE_SAME_SCHEMA,
             "SMART_HEADER": self.SMART_HEADER,
-            "TOTAL_ROW": self.TOTAL_ROW,
             "CONTEXT_COMPACT": self.CONTEXT_COMPACT,
             "SKILL_OPTIMIZE": self.SKILL_OPTIMIZE,
             "SUBAGENTS": self.SUBAGENTS,
@@ -947,12 +869,6 @@ class HybridFlags:
             "RICH_REPORT_EMAIL": self.RICH_REPORT_EMAIL,
             "ONECLICK_ARTIFACTS": self.ONECLICK_ARTIFACTS,
             "AUTO_ARTIFACT": self.AUTO_ARTIFACT,
-            "CROSS_SOURCE_UNIFY": self.CROSS_SOURCE_UNIFY,
-            "DATA_QUALITY": self.DATA_QUALITY,
-            "VALUE_NORMALIZE": self.VALUE_NORMALIZE,
-            "AGENT_PLAN": self.AGENT_PLAN,
-            "COWORK_PANEL": self.COWORK_PANEL,
-            "SMART_UPLOAD": self.SMART_UPLOAD,
         }
 
 
