@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>CityAgent — Doc-Driven Self-Correcting Train Pipeline</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root{
+    --bg:#F6F1EA; --card:#FFFFFF; --ink:#211B14; --muted:#6b6257;
+    --accent:#C2541E; --accent2:#A8330F; --line:#E9E0D3; --good:#1f7a4d; --bad:#b23b2e;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.5}
+  header{padding:28px 32px;border-bottom:1px solid var(--line);background:#fff}
+  header h1{margin:0 0 4px;font-size:26px;font-weight:600;font-family:Georgia,'Spectral',serif}
+  header p{margin:0;color:var(--muted)}
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 24px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;
+        padding:22px 24px;margin:20px 0;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+  .card h2{margin:0 0 6px;font-size:19px;font-weight:600}
+  .card h2 .tag{font-size:12px;color:#fff;background:var(--accent);padding:2px 9px;
+                border-radius:20px;vertical-align:middle;margin-left:8px;font-weight:600}
+  .sub{color:var(--muted);margin:0 0 14px;font-size:14px}
+  .mermaid{background:#FBFAF7;border:1px solid var(--line);border-radius:12px;padding:18px;overflow:auto}
+  table{border-collapse:collapse;width:100%;margin-top:6px;font-size:14px}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:#F4EEE5;font-weight:600}
+  code{background:#F4EEE5;padding:1px 6px;border-radius:6px;font-size:13px}
+  pre{background:#1b1813;color:#e8e2d6;padding:14px 16px;border-radius:10px;overflow:auto;
+      font-size:12.5px;line-height:1.55}
+  pre .g{color:#7fd1a0}.pre .r{color:#e88}
+  .good{color:var(--good);font-weight:600}.bad{color:var(--bad);font-weight:600}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:780px){.grid{grid-template-columns:1fr}}
+  .legend span{display:inline-block;margin-right:16px;font-size:13px;color:var(--muted)}
+  .dot{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:middle;margin-right:5px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Document-Driven Self-Correcting Train Pipeline</h1>
+  <p>CityAgent Analytics · ingest → extract → registry → generate → <b>eval-gate</b> → correction loop. Verified against your CRM doc.</p>
+</header>
+
+<div class="wrap">
+
+  <div class="card">
+    <h2>1 · Full pipeline <span class="tag">end to end</span></h2>
+    <p class="sub">Many docs in → one verified agent out. The <b>Definition Registry</b> is the single source of truth; the <b>Eval Gate</b> blocks anything that doesn't match a known answer.</p>
+    <div class="legend">
+      <span><i class="dot" style="background:#C2541E"></i>data path</span>
+      <span><i class="dot" style="background:#3b76c2"></i>knowledge/logic path</span>
+      <span><i class="dot" style="background:#1f7a4d"></i>verified / approved</span>
+      <span><i class="dot" style="background:#b23b2e"></i>held / wrong</span>
+    </div>
+    <div class="mermaid">
+flowchart TD
+    subgraph IN[" UPLOAD — lots of documents "]
+      D1["data files<br/>csv / xlsx"]:::data
+      D2["glossary<br/>Definitions.xlsx"]:::know
+      D3["logic + Q&A<br/>Logic.docx"]:::know
+      D4["explanations<br/>pptx / pdf"]:::know
+    end
+
+    D1 --> CL{"classify<br/>route_inbox"}:::proc
+    D2 --> CL
+    D3 --> CL
+    D4 --> CL
+
+    CL -->|data| MERGE["MERGE same-schema<br/>→ ONE table + _source_period<br/>(kills UNION ALL)"]:::data
+    CL -->|glossary| GLOSS["parse term → definition"]:::know
+    CL -->|logic+Q&A| TRIP["extract triples<br/>(Question, Answer, Logic)"]:::know
+    CL -->|rules| RULES["parse instruction rules"]:::know
+
+    MERGE --> PROF["profile columns once<br/>(stats, roles)"]:::data
+
+    GLOSS --> REG
+    TRIP --> REG
+    RULES --> REG
+    PROF --> REG
+
+    REG[("DEFINITION REGISTRY<br/>single source of truth<br/>Lead = Completed+Unsuccessful+Type=Lead<br/>NewUser = …+RelStatus=New<br/>rule: always Status=Completed<br/>EXPECTED: leads=1544, succ=7526, newUser=117")]:::reg
+
+    REG --> GEN["GENERATE (logic-aware)<br/>SQL built FROM defs<br/>FROM crm WHERE &lt;def&gt;"]:::proc
+    GEN --> EVAL{"EVAL GATE<br/>run SQL → compare<br/>to EXPECTED answer"}:::gate
+
+    EVAL -->|match| OKQ["✅ approved golden<br/>(in agent context)"]:::good
+    EVAL -->|mismatch / no expected| HOLD["❌ HELD + diff shown<br/>needs your input"]:::bad
+
+    OKQ --> INSTR["definitions → INSTRUCTIONS<br/>injected on every chat answer"]:::proc
+    INSTR --> CHAT["agent answers<br/>correct + consistent"]:::good
+
+    HOLD -. user provides detail .-> CORR
+    CHAT -. 👎 wrong, correct logic .-> CORR
+    CORR["CORRECTION LOOP<br/>update the ONE definition"]:::fix
+    CORR --> REG
+
+    classDef data fill:#FBEFE4,stroke:#C2541E,color:#5a2c12;
+    classDef know fill:#EAF1FB,stroke:#3b76c2,color:#1e3a5f;
+    classDef proc fill:#FFFFFF,stroke:#9a8f7f,color:#211B14;
+    classDef gate fill:#FFF7E8,stroke:#C99A2E,color:#5a4410;
+    classDef reg fill:#F1ECFB,stroke:#7a5bd0,color:#2e2150;
+    classDef good fill:#E7F5ED,stroke:#1f7a4d,color:#0f4a2c;
+    classDef bad fill:#FBEAE7,stroke:#b23b2e,color:#6a1f17;
+    classDef fix fill:#FFF0D9,stroke:#C2541E,color:#5a2c12;
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>2 · Correction loop <span class="tag">one fix → all SQL</span></h2>
+    <p class="sub">User pastes an instruction. The pipeline updates the definition once, regenerates every dependent query, and re-verifies — so a single correction fixes all affected SQL.</p>
+    <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant I as Instruction parser
+    participant R as Definition Registry
+    participant G as SQL generator
+    participant E as Eval gate
+    participant Q as Query library
+
+    U->>I: "Lead = Completed + Unsuccessful + Type=Lead.<br/>Always filter Status=Completed."
+    I->>R: upsert definition (Lead, Status-rule)
+    R->>G: find queries depending on Lead / missing Status
+    G->>G: regenerate SQL FROM new def
+    G->>E: run each rewritten query
+    E-->>E: compare vs EXPECTED (1544 …)
+    alt matches expected
+        E->>Q: update + re-approve ✅
+        Q-->>U: "6 queries corrected & verified"
+    else mismatch / unknown
+        E->>Q: hold + show diff ❌
+        Q-->>U: "needs detail: query X off by N"
+    end
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>3 · Before / after <span class="tag">the two bugs</span></h2>
+    <div class="grid">
+      <div>
+        <p class="sub"><span class="bad">TODAY</span> — 6 tables, UNION ALL, no filters, unverified</p>
+<pre>SELECT "Call Outcome", COUNT(*)
+FROM "b1673838..._may_25"
+UNION ALL SELECT * FROM "t_2194..._jan_25"
+UNION ALL SELECT * FROM ...   -- 6 tables
+-- no Status filter, no Lead def
+-- approved without checking any number</pre>
+      </div>
+      <div>
+        <p class="sub"><span class="good">AFTER</span> — one table, clean, verified vs your doc</p>
+<pre>SELECT _source_period, COUNT(*)
+FROM crm
+WHERE "Status"='Completed'
+  AND "Call Outcome"='Unsuccessful'
+  AND "Related Brand Relationship: Type"='Lead'
+GROUP BY _source_period;
+-- eval: total = <span class="g">1544 ✅ matches doc</span> → approved</pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>4 · Coverage <span class="tag">honest</span></h2>
+    <table>
+      <tr><th>Issue</th><th>Fixed by</th><th>Status</th></tr>
+      <tr><td>UNION ALL / 6 tables not 1</td><td>Phase 1 one-table merge</td><td class="good">auto</td></tr>
+      <tr><td>SQL missing Status / Lead / User filters</td><td>Phase 4 logic-aware gen</td><td class="good">auto</td></tr>
+      <tr><td>No verification vs your numbers</td><td>Phase 5 eval gate</td><td class="good">auto</td></tr>
+      <tr><td>Logic.docx stuck HELD, unused</td><td>Phase 2 route→instructions</td><td class="good">auto</td></tr>
+      <tr><td>Definitions not applied to chat answers</td><td>Phase 7 inject</td><td class="good">auto</td></tr>
+      <tr><td>One fix doesn't propagate</td><td>Phase 3 registry</td><td class="good">auto</td></tr>
+      <tr><td>Hidden rule not written in any doc (e.g. RelStatus=New)</td><td>eval flags mismatch → you supply once</td><td class="bad">needs you (surfaced, never hidden)</td></tr>
+      <tr><td>Question with no stated answer</td><td>marked <code>unverified</code>, not auto-approved</td><td class="bad">needs you</td></tr>
+      <tr><td>Conflicting defs across docs</td><td>flagged → you choose</td><td class="bad">needs you</td></tr>
+    </table>
+    <p class="sub" style="margin-top:14px">Guarantee: <b>train never approves SQL that doesn't match a verified number.</b> Wrong/unknown → HELD + diff. You correct once → everything regenerates and re-verifies.</p>
+  </div>
+
+</div>
+
+<script>
+  mermaid.initialize({startOnLoad:true, theme:'base', themeVariables:{
+    fontFamily:'-apple-system,Segoe UI,Roboto,sans-serif', fontSize:'13px',
+    primaryColor:'#fff', lineColor:'#9a8f7f', primaryTextColor:'#211B14'
+  }, flowchart:{curve:'basis', nodeSpacing:38, rankSpacing:46}});
+</script>
+</body>
+</html>

@@ -5,6 +5,66 @@ from app.schemas.data_source_schema import DataSourceSummarySchema
 from app.ai.prompt_formatters import Table as PromptTable
 
 
+def _render_coverage_note(metadata_json) -> str:
+    """Phase 3 (HYBRID_INGEST_RECONCILE): if the ingest reconcile gate marked this
+    table's source DEGRADED (a multi-file upload where some files failed to load),
+    surface a hard DATA COVERAGE warning so the agent answers honestly about the
+    periods it actually has — instead of fabricating the missing ones.
+
+    Returns "" when there's no coverage marker or the source is OK (no behavior
+    change). Defensive: any malformed marker yields "".
+    """
+    try:
+        if not isinstance(metadata_json, dict):
+            return ""
+        cov = metadata_json.get("ingest_coverage")
+        if not isinstance(cov, dict) or cov.get("status") != "degraded":
+            return ""
+        periods = [str(p) for p in (cov.get("periods_loaded") or []) if p]
+        failed = cov.get("failed") or []
+        failed_desc = ", ".join(
+            f"{f.get('label') or f.get('path')}"
+            + (f" ({f.get('period')})" if f.get("period") else "")
+            for f in failed if isinstance(f, dict)
+        )
+        loaded = cov.get("loaded_files")
+        expected = cov.get("expected_files")
+        msg = (
+            "DATA COVERAGE WARNING — this source is INCOMPLETE. "
+            f"Only {loaded} of {expected} uploaded files loaded. "
+        )
+        if periods:
+            msg += "Periods actually present: " + ", ".join(periods) + ". "
+        if failed_desc:
+            msg += "MISSING / failed to load: " + failed_desc + ". "
+        msg += (
+            "Do NOT infer, estimate, extrapolate, or fabricate values for any "
+            "period or file that is missing. If the user asks about a missing "
+            "period, state plainly that it is not in the data and was not loaded. "
+            "Only answer for the periods listed as present."
+        )
+        return xml_tag("data_coverage", xml_escape(msg), {"status": "incomplete"})
+    except Exception:
+        return ""
+
+
+def _render_data_quality_note(metadata_json) -> str:
+    """E4 (HYBRID_DATA_VALIDATION): if the ingest data-quality gate stamped a
+    <data_quality> block on this table (typo-split categories, all-null columns,
+    null spikes), surface it verbatim so the agent knows which columns/values are
+    unreliable before it filters or groups by them. Returns "" when absent.
+    """
+    try:
+        if not isinstance(metadata_json, dict):
+            return ""
+        block = metadata_json.get("data_quality")
+        if isinstance(block, str) and block.startswith("<data_quality"):
+            return block
+        return ""
+    except Exception:
+        return ""
+
+
 # Schema usage tracking models for context snapshots
 class TableUsageItem(BaseModel):
     """Lightweight tracking of a single table's usage in context."""
@@ -154,7 +214,9 @@ class TablesSchemaContext(ContextSection):
             note_xml = ""
             if is_semantic_view:
                 note_xml = xml_tag("note", "Snowflake Semantic View: query with SELECT * FROM SEMANTIC_VIEW(view_name DIMENSIONS dim1, dim2 METRICS metric1, metric2 WHERE condition). Use DIMENSIONS for role=dimension columns, METRICS for role=measure/metric columns.")
-            inner = "\n".join(filter(None, [note_xml, xml_tag("columns", cols), metadata_xml, pbi_xml, metrics_xml]))
+            coverage_xml = _render_coverage_note(getattr(t, 'metadata_json', None))
+            dq_xml = _render_data_quality_note(getattr(t, 'metadata_json', None))
+            inner = "\n".join(filter(None, [coverage_xml, dq_xml, note_xml, xml_tag("columns", cols), metadata_xml, pbi_xml, metrics_xml]))
             table_attrs = {"name": t.name}
             # Mark semantic views
             if is_semantic_view:
@@ -396,7 +458,9 @@ class TablesSchemaContext(ContextSection):
                             pbi_xml = xml_tag("powerbi_report_server", pbi_inner, pbi_attrs)
                 except Exception:
                     pbi_xml = ""
-                inner = "\n".join(filter(None, [note_xml, xml_tag("columns", cols), xml_tag("pks", pks) if pks else "", xml_tag("fks", fks) if fks else "", pbi_xml]))
+                coverage_xml = _render_coverage_note(getattr(t, 'metadata_json', None))
+                dq_xml = _render_data_quality_note(getattr(t, 'metadata_json', None))
+                inner = "\n".join(filter(None, [coverage_xml, dq_xml, note_xml, xml_tag("columns", cols), xml_tag("pks", pks) if pks else "", xml_tag("fks", fks) if fks else "", pbi_xml]))
                 return xml_tag("table", inner, attrs)
 
             if has_multi_connection:

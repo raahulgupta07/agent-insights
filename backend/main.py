@@ -60,6 +60,7 @@ from app.routes import (
     organization,
     data_source,
     data_source_from_file,
+    pipeline as pipeline_routes,
     demo_data_source,
     text_widget,
     user_profile,
@@ -253,6 +254,7 @@ async def health():
 
 app.include_router(demo_data_source.router, prefix="/api")  # Must be before data_source for /data_sources/demos to match
 app.include_router(data_source_from_file.router, prefix="/api")  # /data_sources/from-file — before catch-all param routes
+app.include_router(pipeline_routes.router, prefix="/api")  # Pipeline v1: verified-golden build + recorrect
 app.include_router(data_source.router, prefix="/api")
 app.include_router(report.router, prefix="/api")
 app.include_router(scheduled_prompt.router, prefix="/api")

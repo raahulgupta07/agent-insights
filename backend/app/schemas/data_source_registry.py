@@ -52,6 +52,9 @@ from app.schemas.data_sources.configs import (
     # Power BI
     PowerBIConfig,
     PowerBICredentials,
+    # Power BI — user sign-in (ROPC) variant
+    PowerbiUserConfig,
+    PowerbiUserCredentials,
     # Power BI Report Server (on-prem)
     PowerBIReportServerConfig,
     PowerBIReportServerCredentials,
@@ -219,6 +222,14 @@ def _is_dev_environment() -> bool:
 
 
 def _entry_visible(entry: DataSourceRegistryEntry) -> bool:
+    # Flag-gated connector types: hidden until their HYBRID_* flag is on.
+    if entry.type == "powerbi_user":
+        try:
+            from app.settings.hybrid_flags import flags as _hf
+            if not _hf.POWERBI_USER:
+                return False
+        except Exception:  # noqa: BLE001 — never break the grid on a flag read
+            return False
     if not entry.dev_only:
         return True
     return _is_dev_environment()
@@ -600,6 +611,24 @@ REGISTRY: Dict[str, DataSourceRegistryEntry] = {
         ),
         client_path="app.data_sources.clients.powerbi_client.PowerBIClient",
         requires_license=None,  # Hybrid: all connectors un-gated (badge dropped)
+    ),
+    "powerbi_user": DataSourceRegistryEntry(
+        type="powerbi_user",
+        title="Power BI (User Sign-in)",
+        description="Query Power BI semantic models as a signed-in user (email + password). Same DAX engine as Power BI; no app registration needed. Requires MFA off + Build permission on the datasets.",
+        config_schema=PowerbiUserConfig,
+        credentials_auth=AuthOptions(
+            default="user_password",
+            by_auth={
+                "user_password": AuthVariant(
+                    title="Sign in with email + password",
+                    schema=PowerbiUserCredentials,
+                    scopes=["user"]
+                ),
+            }
+        ),
+        client_path="app.data_sources.clients.powerbi_user_client.PowerBIUserClient",
+        requires_license=None,  # Hybrid: all connectors un-gated
     ),
     "powerbi_report_server": DataSourceRegistryEntry(
         type="powerbi_report_server",

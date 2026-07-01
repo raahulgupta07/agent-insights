@@ -220,6 +220,17 @@ FORBIDDEN_ATTRIBUTES = frozenset({
 })
 
 
+# Call-site names that actually execute SQL. SQL-write scanning is restricted
+# to the string arguments of THESE calls — never to arbitrary string literals.
+# Covers BaseClient.execute_query and the federation engine, plus the common
+# DB-API / pandas / DuckDB execution surfaces a generated generate_df() might use.
+SQL_EXECUTOR_CALLS = frozenset({
+    'execute_query', 'execute', 'executemany', 'executescript',
+    'sql', 'query', 'read_sql', 'read_sql_query', 'read_sql_table',
+    'run_federated_sql',
+})
+
+
 class CodeSecurityVisitor(ast.NodeVisitor):
     """AST visitor that checks for dangerous code patterns."""
 
@@ -250,39 +261,51 @@ class CodeSecurityVisitor(ast.NodeVisitor):
         if isinstance(node.func, ast.Name) and node.func.id == '__import__':
             self.errors.append("Forbidden function call: '__import__()'")
 
+        # SQL-write detection is SCOPED to SQL executor call-sites only.
+        # We deliberately do NOT scan free-floating string literals (column
+        # aliases, chart titles, dict keys, comments-as-strings) — a name like
+        # "Successful Call Rate (%)" or "Load Time" is data, never an executed
+        # statement, and blanket text-matching on it is an unbounded source of
+        # false positives. The real write-blocking guarantee lives at the data
+        # boundary (read-only DuckDB attach / read-only DB sessions); this scan
+        # is a best-effort early warning for SQL that is *actually handed to an
+        # executor*. See visit_Attribute (sandbox-escape) for the bounded,
+        # capability-style checks that remain a true blacklist.
+        method = None
+        if isinstance(node.func, ast.Attribute):
+            method = node.func.attr
+        elif isinstance(node.func, ast.Name):
+            method = node.func.id
+        if method in SQL_EXECUTOR_CALLS:
+            for arg in list(node.args) + [kw.value for kw in node.keywords]:
+                self._scan_sql_arg(arg)
+
         self.generic_visit(node)
+
+    def _scan_sql_arg(self, arg: ast.AST):
+        """Scan a single executor argument (string literal or f-string) for
+        write-SQL. Only invoked for args passed to a known SQL executor."""
+        if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+            self._match_sql(arg.value, kind="string")
+        elif isinstance(arg, ast.JoinedStr):
+            for part in arg.values:
+                if isinstance(part, ast.Constant) and isinstance(part.value, str):
+                    self._match_sql(part.value, kind="f-string")
+
+    def _match_sql(self, value: str, *, kind: str):
+        if len(value) <= 5:
+            return
+        match = _FORBIDDEN_SQL_IN_STRING_REGEX.search(value)
+        if match:
+            snippet = value[:50].replace('\n', ' ')
+            self.errors.append(
+                f"Forbidden SQL operation '{match.group()}' in {kind}: \"{snippet}...\""
+            )
 
     def visit_Attribute(self, node: ast.Attribute):
         # Check for direct access to forbidden attributes like obj.__class__
         if node.attr in FORBIDDEN_ATTRIBUTES:
             self.errors.append(f"Forbidden attribute access: '{node.attr}'")
-        self.generic_visit(node)
-
-    def visit_Constant(self, node: ast.Constant):
-        # Check string literals for dangerous SQL operations. Uses the
-        # structural regex so prose like "create a chart" or "update the
-        # description" isn't flagged — we only match keywords that appear in
-        # real SQL context (CREATE TABLE, DELETE FROM, UPDATE x SET, ...).
-        if isinstance(node.value, str) and len(node.value) > 5:
-            match = _FORBIDDEN_SQL_IN_STRING_REGEX.search(node.value)
-            if match:
-                snippet = node.value[:50].replace('\n', ' ')
-                self.errors.append(
-                    f"Forbidden SQL operation '{match.group()}' in string: \"{snippet}...\""
-                )
-        self.generic_visit(node)
-
-    def visit_JoinedStr(self, node: ast.JoinedStr):
-        # Check f-string parts for dangerous SQL using the same structural
-        # regex — prose inside f-strings shouldn't trip the validator either.
-        for part in node.values:
-            if isinstance(part, ast.Constant) and isinstance(part.value, str):
-                match = _FORBIDDEN_SQL_IN_STRING_REGEX.search(part.value)
-                if match:
-                    snippet = part.value[:50].replace('\n', ' ')
-                    self.errors.append(
-                        f"Forbidden SQL operation '{match.group()}' in f-string: \"{snippet}...\""
-                    )
         self.generic_visit(node)
 
 
@@ -358,7 +381,7 @@ _FORBIDDEN_SQL_IN_STRING_PATTERNS = [
     r'\bGRANT\s+[\w,\s*]+\s+ON\b',
     r'\bREVOKE\s+[\w,\s*]+\s+(ON|FROM)\b',
     r'\bEXEC(UTE)?\s+(\w+\.)*\w+',
-    r'\bCALL\s+\w+\s*\(',
+    r'(?:^|;)\s*CALL\s+\w+\s*\(',
     r'\bLOAD\s+DATA\b',
     r'\bINTO\s+OUTFILE\b',
     r'\bINTO\s+DUMPFILE\b',

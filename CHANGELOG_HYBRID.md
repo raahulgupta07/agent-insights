@@ -9,6 +9,60 @@ Bullet rules (this is the user-facing "What's new" feed):
     Hidden from the popover; shown collapsed on the full /changelog page only.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.65.0 — Power BI: sign in with a code, even with 2FA  (2026-07-01)
+- Connect Power BI even when your account has multi-factor auth on — pick "Sign in with a code", approve on your phone, done. No password stored.
+- Stays connected without asking you to log in again every hour.
+  - **P3 device-code flow:** new `services/powerbi_device_code.py` (`start_device_code`/`poll_device_code`, MS public client `1950a258…`, scope `…/powerbi/api/.default offline_access`). Routes `POST /data_sources/{id}/my-credentials/device-code/{start,poll}` (flag `POWERBI_USER`, fail-soft); poll-success persists the **refresh_token** (Fernet-encrypted) via `upsert_my_credentials`. `PowerBIUserClient` gains a `refresh_token` param + a refresh-grant branch in `connect()` (mints a fresh access token, rotates the refresh token) taking precedence over ROPC. `PowerbiUserCredentials`: username/password now optional, added hidden `refresh_token`. FE `UserDataSourceCredentialsModal.vue` "Sign in with a code" button → shows user_code + verification_uri → polls until approved → closes.
+  - Proven live end-to-end (SG tenant `0a8a4f2c`): device-code approved in browser → token minted → `refresh_token` → `list_workspaces()` returned all 3 SG workspaces. Baked `cityagent-analytics:v1.65.0`, flag ON org 7d372305, rollback `pre-p3-rollback`.
+
+## v1.64.0 — Power BI: see everything you can access, anywhere  (2026-07-01)
+- Sign in to Power BI with your own account and instantly see every dataset you can reach — across your company tenant AND any partner/guest tenant — in one merged list.
+- Each dataset is now tagged "queryable" or not up front, so the agent won't try to run reports on models it can't read.
+  - **#8 scan-all-tenants:** new `services/powerbi_multi_tenant_scan.py::scan_all_tenants(username,password)` → `discover_tenants` (ARM `/tenants`) → per-tenant `PowerBIUserClient.get_schemas()` (ThreadPool max_workers=4, fail-soft per tenant) → tables tagged `metadata_json.powerbi.tenantId/tenantName`. Credentials-service hook `scan_all_tenants_overlay()` (flag `POWERBI_USER`, `asyncio.to_thread`) persists the merged list via the existing `DataSourceService._upsert_user_overlay`. Route `POST /api/data_sources/{id}/my-credentials/scan-all-tenants`; FE "Scan all my tenants" button + per-tenant result list in `UserDataSourceCredentialsModal.vue`.
+  - **P5 storage-mode gate:** `list_datasets` now carries `storageMode`/`targetStorageMode`; `get_schemas` tags each table `powerbi.queryable` (Import/PremiumFiles/Abf/DirectQuery AND not on-prem-gateway) + `storageMode`/`isOnPremGatewayRequired`. Non-queryable models still surface, just flagged.
+  - **P4 brute table-discovery:** for lakehouse/warehouse models that reject `COLUMNSTATISTICS` and aren't Push datasets, `_brute_discover_tables` probes ~40 common names via `EVALUATE TOPN(1,'Name')`. HARDENED (live-test earned): skip genuinely-empty databases ("…at least one table" error) and abort the whole probe on first HTTP 429 (respects the 120 req/min/user cap).
+  - Proven live: one identity → 2 tenants (home City Holdings + guest City Mart Holding SG), 24 merged tables, 18 queryable / 6 not, tenant-tagged, no 429 storm. Baked `cityagent-analytics:v1.64.0` (docker commit), flag `POWERBI_USER` ON org 7d372305.
+
+## v1.63.0 — Training checks its own answers before shipping  (2026-07-01)
+- Training now verifies each business metric against the numbers in your logic/Q&A doc BEFORE the agent uses it.
+  A generated query is only kept if it reproduces the expected answer (e.g. Lead = 1,544). If it doesn't match,
+  it's held back — so the agent never learns a wrong number.
+- On a real customer dataset this approved Lead (1,544), Successful Calls (7,526) and Unsuccessful Calls (4,179)
+  exactly, and correctly held three definitions that don't add up yet (New User, a channel breakdown, and three
+  free-form questions) for a human to review — instead of shipping them wrong.
+  - Wired the doc-driven verified-golden EVAL GATE into `ai/knowledge/train_orchestrator.run_training` as a new
+    fail-soft stage (after `joins`, before `hybrid_index`), gated on `HYBRID_VERIFIED_GOLDENS` AND
+    `HYBRID_FULL_PIPELINE` (both must be on; no-op otherwise). It loads `AgentDefinition`s, groups them by
+    `data_source_id`, runs `services/train/golden_gen.generate_for_definitions` → `eval_gate.evaluate`, saves only
+    matches via `routes/pipeline._save_golden` (approved + `is_golden`), and HOLDS mismatches/errors. Reuses the
+    existing pipeline services — wiring only, no new logic. Detail line `verified_goldens: N approved, M held`.
+  - Proven E2E in a real in-process train (org 7d372305, studio CRM): `verified_goldens: ok (3 approved, 6 held)`.
+    Root-caused a false failure to the bare-python override-load landmine (`ONE_TABLE_MERGE` must be loaded from DB
+    overrides for the 6 monthly files to merge into one 21,240-row table); `SpreadsheetClient` already merges
+    correctly — no client change needed. Held 3 are genuinely broken definitions (New User expected 2,025 is
+    unreproducible; Channel Breakdown is a pivot mis-modeled as a scalar; Q8/Q9/Q11 are doc-format SQL errors) →
+    need business input via the instruction-driven corrector (`HYBRID_QUERY_CORRECTION`), not an auto-fix.
+  - Docs: `docs/TRAINING_TODO.md` + `docs/TRAINING_STATE.md` (Phase 0 audit + proven results).
+
+## v1.62.0 — Honest data uploads: never silently drop a file  (2026-06-30)
+- Uploading several files at once (e.g. 6 monthly reports) now tells you the truth. If some files don't load,
+  you see "Only 2 of 6 loaded — missing: Feb, Mar" instead of a green "success" that hides the gap.
+- The agent stops making up missing data. When a source is incomplete, the agent is told exactly which periods
+  it has — so it answers about those and says the rest "isn't in the data" instead of inventing numbers.
+- Awkward files (a title banner above the header, odd encodings) now parse instead of failing, so fewer files
+  go missing in the first place.
+  - New flag `HYBRID_INGEST_RECONCILE` (default OFF). Phase 1: the multi-file merge in
+    `SpreadsheetClient._load_frames` records each file's outcome (loaded|failed + rows + error) on
+    `last_ingest_report` instead of the old silent `except: continue`. Phase 2: `services/ingest/reconcile.py`
+    `run_ingest_reconcile` compares loaded files + materialized rows vs source rows, stamps `ingest_coverage` on
+    the connection config + each `DataSourceTable.metadata_json`, marks the source `degraded`; wired into BOTH the
+    new-source and the same-schema-append paths in `routes/data_source_from_file.py` (append is the real
+    multi-month merge path). Phase 3: `tables_schema_section._render_coverage_note` injects a hard DATA COVERAGE
+    warning into the planner schema for a degraded source. Phase 4: the reconcile flag also enables the robust
+    readers (`csv_reader`/`excel_reader`) so banner/odd-format files parse. Phase 5: `UploadSpreadsheetModal.vue`
+    shows a red persistent warning naming the missing files. Row-shortfall check ignores no_rows==0 (DuckDB tables
+    report 0) to avoid false-degrade. No migration; off = byte-identical to today.
+
 ## v1.61.0 — Full-deployment default: everything fail-soft ON  (2026-06-28)
 - Every feature that can't crash, lose data, or block users is now ON out of the box — the intended posture for
   a full engineer install. 16 more flipped: Auto-configure-from-Doc, Code Enrich, Hybrid Search, File Browser,

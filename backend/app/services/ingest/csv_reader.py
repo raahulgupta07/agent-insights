@@ -80,16 +80,65 @@ def _detect_delimiter(path: str, encoding: str) -> str:
         return ","
 
 
+def _is_label(v) -> bool:
+    """True if a cell is a non-null, non-numeric-looking string label."""
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return False
+    s = str(v).strip()
+    if not s:
+        return False
+    try:
+        float(s.replace(",", ""))
+        return False
+    except (ValueError, TypeError):
+        return True
+
+
+def _detect_header_row(path: str, enc: str, sep: str, *, scan: int = 25) -> int:
+    """First row where >=60% of non-null cells are string labels AND the row
+    spans most columns — skips banner/title rows above the real header. Returns 0
+    when nothing better is found. Fail-soft.
+
+    Parses raw rows with the stdlib ``csv`` reader (NOT pandas) so a narrow banner
+    row above the real header can't collapse the inferred column count to 1.
+    """
+    try:
+        rows: list[list[str]] = []
+        with open(path, "r", encoding=enc, errors="replace", newline="") as f:
+            for i, fields in enumerate(_csv.reader(f, delimiter=sep)):
+                rows.append(fields)
+                if i + 1 >= scan:
+                    break
+        if not rows:
+            return 0
+        width = max(len(r) for r in rows)
+        if width <= 1:
+            return 0
+        min_cover = max(2, int(0.6 * width))
+        for i, row in enumerate(rows):
+            non_null = [c for c in row if c is not None and str(c).strip() != ""]
+            if len(non_null) < min_cover:
+                continue  # banner / sparse row above the header
+            labels = sum(1 for c in non_null if _is_label(c))
+            if labels / max(len(non_null), 1) >= 0.6:
+                return i
+    except Exception:  # noqa: BLE001
+        pass
+    return 0
+
+
 def read_csv(path: str, *, max_rows: int = 1_000_000) -> pd.DataFrame:
     """Read a CSV robustly. Normalizes common null tokens to NaN."""
     try:
         enc = _detect_encoding(path)
         sep = _detect_delimiter(path, enc)
+        header_row = _detect_header_row(path, enc, sep)
         df = pd.read_csv(
             path,
             sep=sep,
             encoding=enc,
             encoding_errors="replace",
+            header=header_row,
             nrows=max_rows,
             on_bad_lines="skip",
             dtype=object,

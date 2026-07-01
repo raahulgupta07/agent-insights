@@ -5,7 +5,20 @@
 > Companion: `CLAUDE.md` (rules/current state), `DEVLOG.md` (dated history), `ROADMAP.md` (forward plan),
 > `docs/INGEST_BRAIN_DESIGN.md` (F09 universal-ingest design).
 > **Keep current:** when a ship changes a load-bearing path/pattern, update this file (same habit as DEVLOG bump).
-> Last verified: 2026-06-27 · `VERSION_HYBRID` 1.41.0 · mig head `agentconn1`.
+> Last verified: 2026-07-01 · `VERSION_HYBRID` 1.65.0 · mig head `defreg1`.
+> v1.65.0: Power BI P3 device-code sign-in (MFA-safe, BAKED) — `services/powerbi_device_code.py` (start/poll,
+> offline_access→refresh_token), routes `POST /data_sources/{id}/my-credentials/device-code/{start,poll}`
+> (poll-success persists Fernet refresh_token), `PowerBIUserClient.refresh_token` + refresh-grant in `connect()`,
+> FE "Sign in with a code" button. Flag `POWERBI_USER`. Tester `scratchpad/pbi_devicecode_app.py` (:8901).
+> v1.64.0: Power BI per-user connector next phase (BAKED) — `services/powerbi_multi_tenant_scan.py::scan_all_tenants`
+> (loop `get_schemas()` per discovered tenant → merged tenant-tagged overlay), P5 storage-mode gate + P4 brute
+> table-discovery in `powerbi_client.py` (`_is_dataset_queryable`, `_brute_discover_tables`; hardened skip-empty-DB +
+> abort-on-429). Route `POST /data_sources/{id}/my-credentials/scan-all-tenants`. Flag `POWERBI_USER` ON org 7d372305.
+> v1.63.0: verified-golden EVAL GATE wired into `ai/knowledge/train_orchestrator.run_training` (stage after
+> `joins`, before `hybrid_index`; gated `HYBRID_VERIFIED_GOLDENS`+`HYBRID_FULL_PIPELINE`) — loads
+> `AgentDefinition`s → `services/train/golden_gen`→`eval_gate` → saves matches via `routes/pipeline._save_golden`,
+> HOLDS mismatch. See `docs/TRAINING_TODO.md` + `TRAINING_STATE.md`. Offline flag-test LANDMINE: bare
+> `docker exec python` skips `load_overrides_from_db` (flags read OFF) — `set_override`/load first.
 
 ## v1.41.0 live training log (CLI) + AI column meanings + SOON cards
 - **Train log:** `ai/knowledge/train_orchestrator.py` keeps a capped timestamped `log[]` in `_train_status`. A

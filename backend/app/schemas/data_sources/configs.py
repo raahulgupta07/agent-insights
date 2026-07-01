@@ -762,6 +762,45 @@ class PowerBIConfig(BaseModel):
     pass
 
 
+# Power BI — user sign-in (delegated / ROPC) variant
+class PowerbiUserCredentials(BaseModel):
+    tenant_id: str = Field(
+        ...,
+        title="Tenant ID",
+        description="Azure AD Tenant ID (Directory ID)",
+        json_schema_extra={"ui:type": "string"}
+    )
+    username: Optional[str] = Field(
+        None,
+        title="Email",
+        description="Your Microsoft Entra (Azure AD) email — used to sign in.",
+        json_schema_extra={"ui:type": "string"}
+    )
+    password: Optional[str] = Field(
+        None,
+        title="Password",
+        description="Your Microsoft account password. ROPC sign-in requires MFA to be OFF on this account. Leave blank if using device-code sign-in.",
+        json_schema_extra={"ui:type": "password"}
+    )
+    client_id: Optional[str] = Field(
+        None,
+        title="OAuth Client ID (optional)",
+        description="Public app registration client ID for user sign-in. Blank = use the built-in Microsoft public client.",
+        json_schema_extra={"ui:type": "string"}
+    )
+    refresh_token: Optional[str] = Field(
+        None,
+        title="Refresh token",
+        description="OAuth refresh token from device-code sign-in (stored encrypted; not user-entered).",
+        json_schema_extra={"ui:type": "password", "ui:hidden": True}
+    )
+
+
+class PowerbiUserConfig(BaseModel):
+    """Auto-discovers all workspaces and datasets the signed-in user can access."""
+    pass
+
+
 # Power BI Report Server (on-prem)
 class PowerBIReportServerCredentials(BaseModel):
     username: str = Field(

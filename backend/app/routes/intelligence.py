@@ -199,14 +199,37 @@ async def get_layer(
             edges = []
             try:
                 from app.models.brain_graph_edge import BrainGraphEdge  # local import, optional
+                # NEWPIPE S4: build id->name lookup so edges render real names
+                # (e.g. "Lead", "crm_conso") instead of "metric:fa75…"/"table:de3b…".
+                name_of: dict[str, str] = {}
+                try:
+                    from app.models.metric_definition import MetricDefinition
+                    from app.models.semantic_table import SemanticTable
+                    for m in (await db.execute(select(MetricDefinition).where(
+                            MetricDefinition.organization_id == org_id))).scalars().all():
+                        name_of[f"metric:{m.id}"] = m.name or f"metric:{str(m.id)[:8]}"
+                    for t in (await db.execute(select(SemanticTable).where(
+                            SemanticTable.organization_id == org_id))).scalars().all():
+                        nm = getattr(t, "table_name", None) or getattr(t, "name", None) or ""
+                        # strip dlt/physical "t_<32hex>_" prefix → readable label
+                        import re as _re
+                        nm = _re.sub(r"^t_([0-9a-f]{2,}_){1,6}", "", str(nm))
+                        nm = _re.sub(r"_+", " ", nm).strip().title() or f"table:{str(t.id)[:8]}"
+                        name_of[f"table:{t.id}"] = nm
+                except Exception as le:  # noqa
+                    logger.debug("intelligence: edge name lookup failed: %s", le)
+
+                def _pretty(ent: str) -> str:
+                    return name_of.get(ent, ent if ":" not in ent else ent.split(":")[0] + ":" + ent.split(":")[1][:8])
+
                 res = await db.execute(
                     select(BrainGraphEdge).where(BrainGraphEdge.organization_id == org_id).limit(50)
                 )
                 for e in res.scalars().all():
                     edges.append([
-                        str(getattr(e, "src_entity", "?")),
+                        _pretty(str(getattr(e, "src_entity", "?"))),
                         str(getattr(e, "relation", "related_to")),
-                        str(getattr(e, "dst_entity", "?")),
+                        _pretty(str(getattr(e, "dst_entity", "?"))),
                     ])
             except Exception as e:  # noqa
                 logger.debug("intelligence: KG edges read failed: %s", e)

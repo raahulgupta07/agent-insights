@@ -17,6 +17,43 @@
                 </div>
 
                 <div class="px-5 py-4 max-h-[calc(100vh-180px)] overflow-y-auto">
+                    <!-- mode toggle: queue for Train (inbox) vs route now (per file) -->
+                    <div v-if="trainRoutingEnabled" class="flex flex-col sm:flex-row gap-2 mb-4">
+                        <button
+                            type="button"
+                            class="flex-1 text-left rounded-xl border px-3.5 py-2.5 transition-colors"
+                            :class="mode === 'inbox' ? 'border-[#C2541E] bg-[#FFF6F1]' : 'border-[#E9E0D3] bg-white hover:bg-[#FCFBFA]'"
+                            @click="mode = 'inbox'"
+                        >
+                            <div class="flex items-center gap-2">
+                                <span class="w-4 h-4 rounded-full border flex items-center justify-center shrink-0" :class="mode === 'inbox' ? 'border-[#C2541E]' : 'border-[#cfc8bd]'">
+                                    <span v-if="mode === 'inbox'" class="w-2 h-2 rounded-full bg-[#C2541E]"></span>
+                                </span>
+                                <span class="text-[12.5px] font-semibold text-[#1f2328]">Add to inbox &mdash; sort when I Train</span>
+                            </div>
+                            <p class="text-[11px] text-[#6b7280] mt-1 ms-6">Queue files now; the router sorts each into its lane when you train the agent.</p>
+                        </button>
+                        <button
+                            type="button"
+                            class="flex-1 text-left rounded-xl border px-3.5 py-2.5 transition-colors"
+                            :class="mode === 'route' ? 'border-[#C2541E] bg-[#FFF6F1]' : 'border-[#E9E0D3] bg-white hover:bg-[#FCFBFA]'"
+                            @click="mode = 'route'"
+                        >
+                            <div class="flex items-center gap-2">
+                                <span class="w-4 h-4 rounded-full border flex items-center justify-center shrink-0" :class="mode === 'route' ? 'border-[#C2541E]' : 'border-[#cfc8bd]'">
+                                    <span v-if="mode === 'route'" class="w-2 h-2 rounded-full bg-[#C2541E]"></span>
+                                </span>
+                                <span class="text-[12.5px] font-semibold text-[#1f2328]">Route now (per file)</span>
+                            </div>
+                            <p class="text-[11px] text-[#6b7280] mt-1 ms-6">Classify each file and confirm or override its destination right here.</p>
+                        </button>
+                    </div>
+
+                    <!-- inbox confirmation -->
+                    <div v-if="inboxResult" class="mb-4 rounded-xl border border-[#cfe7d5] bg-[#EEFAF1] px-4 py-3">
+                        <div class="text-[13px] font-semibold text-[#157A43]">{{ inboxResult }} file{{ inboxResult === 1 ? '' : 's' }} added to inbox &mdash; they&rsquo;ll be sorted when you Train.</div>
+                    </div>
+
                     <!-- drop zone -->
                     <div
                         class="border-[1.6px] border-dashed border-[#EAD8CD] bg-[#FFF6F1] rounded-2xl px-6 py-7 text-center cursor-pointer mb-4 transition-colors"
@@ -119,24 +156,35 @@
 
                 <!-- footer -->
                 <div class="flex items-center gap-3 px-5 py-3.5 border-t border-[#ECECEC] bg-white">
-                    <label class="inline-flex items-center gap-2 text-[12px] text-[#3b4250] cursor-pointer">
-                        <input v-model="autoTrain" type="checkbox" class="accent-[#C2541E]" />
-                        Auto-train after applying
-                    </label>
-                    <span class="flex-1"></span>
-                    <span class="text-[12px] text-[#6b7280]"><b class="text-[#1f2329]">{{ keepCount }}</b> of {{ items.length }} routed</span>
-                    <button type="button" class="text-[12.5px] font-semibold text-[#3b4250] bg-white border border-[#ECECEC] rounded-lg px-4 py-2 hover:bg-[#F4F3F1]" @click="emitClose">
-                        Cancel
-                    </button>
-                    <button
-                        type="button"
-                        class="text-[13px] font-bold text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-lg px-4 py-2 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                        :disabled="!keepCount || applying || busy"
-                        @click="apply"
-                    >
-                        <span v-if="applying">Applying&hellip;</span>
-                        <span v-else>Apply routing &rarr;</span>
-                    </button>
+                    <!-- INBOX mode: files are added + closed automatically; footer just shows Close -->
+                    <template v-if="mode === 'inbox'">
+                        <span class="text-[12px] text-[#6b7280]">Drop or browse files above &mdash; they queue to the inbox.</span>
+                        <span class="flex-1"></span>
+                        <button type="button" class="text-[12.5px] font-semibold text-[#3b4250] bg-white border border-[#ECECEC] rounded-lg px-4 py-2 hover:bg-[#F4F3F1]" @click="emitClose">
+                            Close
+                        </button>
+                    </template>
+                    <!-- ROUTE-NOW mode: unchanged classify → confirm → apply -->
+                    <template v-else>
+                        <label class="inline-flex items-center gap-2 text-[12px] text-[#3b4250] cursor-pointer">
+                            <input v-model="autoTrain" type="checkbox" class="accent-[#C2541E]" />
+                            Auto-train after applying
+                        </label>
+                        <span class="flex-1"></span>
+                        <span class="text-[12px] text-[#6b7280]"><b class="text-[#1f2329]">{{ keepCount }}</b> of {{ items.length }} routed</span>
+                        <button type="button" class="text-[12.5px] font-semibold text-[#3b4250] bg-white border border-[#ECECEC] rounded-lg px-4 py-2 hover:bg-[#F4F3F1]" @click="emitClose">
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            class="text-[13px] font-bold text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-lg px-4 py-2 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            :disabled="!keepCount || applying || busy"
+                            @click="apply"
+                        >
+                            <span v-if="applying">Applying&hellip;</span>
+                            <span v-else>Apply routing &rarr;</span>
+                        </button>
+                    </template>
                 </div>
             </div>
         </div>
@@ -155,8 +203,16 @@ interface SmartItem {
     signals?: string
 }
 
-const props = defineProps<{ studioId: string; dataSourceId?: string; open: boolean }>()
-const emit = defineEmits<{ (e: 'close'): void; (e: 'applied', summary: any): void }>()
+const props = withDefaults(
+    defineProps<{ studioId: string; dataSourceId?: string; open: boolean; trainRoutingEnabled?: boolean }>(),
+    { trainRoutingEnabled: false },
+)
+const emit = defineEmits<{ (e: 'close'): void; (e: 'applied', summary: any): void; (e: 'inbox-updated', added: number): void }>()
+
+// Mode: 'inbox' = queue files, sort when the user Trains; 'route' = classify + place per file now.
+// Default to inbox when train-routing is on, else the legacy route-now flow.
+const mode = ref<'inbox' | 'route'>(props.trainRoutingEnabled ? 'inbox' : 'route')
+const inboxResult = ref<number | null>(null)
 
 const DESTS = ['database', 'semantic', 'instructions', 'examples', 'knowledge', 'skip']
 const DEST_META: Record<string, { ic: string; label: string; short: string; cls: string }> = {
@@ -181,7 +237,10 @@ const autoTrain = ref(true)
 const result = ref<any>(null)
 
 const busy = computed(() => uploading.value || classifying.value)
-const busyLabel = computed(() => (uploading.value ? 'Uploading files…' : 'Classifying & routing…'))
+const busyLabel = computed(() => {
+    if (uploading.value) return 'Uploading files…'
+    return mode.value === 'inbox' ? 'Adding to inbox…' : 'Classifying & routing…'
+})
 const keepCount = computed(() => items.value.filter(it => it.dest !== 'skip').length)
 // confidence may arrive as 0..1 or 0..100 — normalize for the bar + label.
 const pctScale = computed(() => (items.value.some(it => (it.confidence || 0) > 1) ? 1 : 100))
@@ -217,6 +276,7 @@ function onDrop(e: DragEvent) {
 async function handleFiles(files: File[]) {
     error.value = ''
     result.value = null
+    inboxResult.value = null
     uploading.value = true
     const fileIds: string[] = []
     try {
@@ -236,7 +296,33 @@ async function handleFiles(files: File[]) {
     } finally {
         uploading.value = false
     }
-    if (fileIds.length) await classify(fileIds)
+    if (!fileIds.length) return
+    if (mode.value === 'inbox') await addToInbox(fileIds)
+    else await classify(fileIds)
+}
+
+// INBOX mode: queue the uploaded file ids; emit so the page's StudioInbox refetches; brief confirm + close.
+async function addToInbox(fileIds: string[]) {
+    classifying.value = true
+    error.value = ''
+    try {
+        const { data, error: ibErr } = await useMyFetch<any>(`/studios/${props.studioId}/smart-upload/inbox`, {
+            method: 'POST',
+            body: { file_ids: fileIds },
+        })
+        if (ibErr?.value) {
+            error.value = (ibErr.value as any)?.data?.detail || 'Could not add these files to the inbox.'
+            return
+        }
+        const added = Number((data.value as any)?.added ?? fileIds.length)
+        inboxResult.value = added
+        emit('inbox-updated', added)
+        setTimeout(() => { emitClose() }, 900)
+    } catch (e: any) {
+        error.value = e?.data?.detail || e?.message || 'Could not add to inbox.'
+    } finally {
+        classifying.value = false
+    }
 }
 
 async function classify(fileIds: string[]) {

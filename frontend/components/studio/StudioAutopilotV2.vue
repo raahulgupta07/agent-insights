@@ -1,0 +1,275 @@
+<template>
+  <!-- Auto-pilot v2 — reordered ADD → QUEUE → TRAIN → RESULT. Flag-gated by the parent
+       (HYBRID_AUTOPILOT_V2). Self-contained, fail-soft on every fetch. Warm clay theme. -->
+  <div>
+    <!-- HEADER -->
+    <div class="flex items-start justify-between gap-4 mb-1">
+      <div>
+        <h2 class="text-lg font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">AI Auto-pilot</h2>
+        <p class="text-xs text-[#6b6b6b] mt-0.5 max-w-[460px]">Drop anything in — queue it, train once, and the router sorts each input into Data &middot; Knowledge &middot; Skill &middot; Rule. No per-dataset code.</p>
+      </div>
+      <div class="shrink-0 text-center">
+        <div class="relative w-[54px] h-[54px] mx-auto">
+          <svg width="54" height="54" style="transform:rotate(-90deg)">
+            <circle cx="27" cy="27" r="22" stroke="#ECE7E0" stroke-width="6" fill="none" />
+            <circle cx="27" cy="27" r="22" stroke="#C2541E" stroke-width="6" fill="none" stroke-linecap="round" stroke-dasharray="138" :stroke-dashoffset="Math.round(138 - 138 * (readiness?.score || 0) / 100)" style="transition:stroke-dashoffset .5s" />
+          </svg>
+          <div class="absolute inset-0 flex items-center justify-center text-[15px] font-semibold text-[#C2541E]" style="font-family: ui-serif, Georgia, serif">{{ readiness?.score || 0 }}</div>
+        </div>
+        <div class="text-[9px] uppercase tracking-wide text-[#9a958c] mt-0.5">readiness</div>
+      </div>
+    </div>
+
+    <!-- 1 · ADD (compact) -->
+    <div class="relative mt-4 border border-[#E9E0D3] rounded-2xl bg-white p-3">
+      <span class="absolute -top-2.5 left-4 bg-[#2B2A26] text-white text-[9.5px] font-semibold px-2.5 py-0.5 rounded-full tracking-wide">1 &middot; ADD</span>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-1.5">
+        <button type="button" :disabled="!canEdit" class="flex items-center gap-2 text-left border border-[#E9E0D3] rounded-xl px-3 py-2.5 bg-gradient-to-b from-white to-[#fdfcf9] hover:border-[#2F6F4F] transition-colors disabled:opacity-50" @click="$emit('add','connector')">
+          <span class="w-7 h-7 rounded-lg bg-[#E7F1EB] flex items-center justify-center shrink-0"><UIcon name="i-heroicons-circle-stack" class="w-4 h-4 text-[#2F6F4F]" /></span>
+          <span class="min-w-0"><span class="block text-[12.5px] font-semibold text-[#1f2328] truncate">Add a connector</span><span class="block text-[10.5px] text-[#9a958c] truncate">org library or new</span></span>
+        </button>
+        <button type="button" :disabled="!canEdit" class="flex items-center gap-2 text-left border border-[#E9E0D3] rounded-xl px-3 py-2.5 bg-gradient-to-b from-white to-[#fdfcf9] hover:border-[#C2541E] transition-colors disabled:opacity-50" @click="$emit('add','upload')">
+          <span class="w-7 h-7 rounded-lg bg-[#F6EBE3] flex items-center justify-center shrink-0"><UIcon name="i-heroicons-arrow-up-tray" class="w-4 h-4 text-[#C2541E]" /></span>
+          <span class="min-w-0"><span class="block text-[12.5px] font-semibold text-[#1f2328] truncate">Upload file</span><span class="block text-[10.5px] text-[#9a958c] truncate">.xlsx .csv .pdf .docx</span></span>
+        </button>
+        <button type="button" :disabled="!canEdit" class="flex items-center gap-2 text-left border border-[#E9E0D3] rounded-xl px-3 py-2.5 bg-gradient-to-b from-white to-[#fdfcf9] hover:border-[#C2541E] transition-colors disabled:opacity-50" @click="$emit('add','folder')">
+          <span class="w-7 h-7 rounded-lg bg-[#F4E5DA] flex items-center justify-center shrink-0 text-[#C2541E] text-base">⟳</span>
+          <span class="min-w-0"><span class="block text-[12.5px] font-semibold text-[#1f2328] truncate">Sync a folder <span class="text-[#C2541E]">⟳</span></span><span class="block text-[10.5px] text-[#9a958c] truncate">desktop auto-ingest</span></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 2 · QUEUE (the heart) -->
+    <div class="relative mt-5 border border-[#E9E0D3] rounded-2xl bg-white p-4">
+      <span class="absolute -top-2.5 left-4 bg-[#2B2A26] text-white text-[9.5px] font-semibold px-2.5 py-0.5 rounded-full tracking-wide">2 &middot; QUEUE</span>
+      <p class="text-[11px] text-[#6b6b6b] mt-1 mb-3">Everything you add waits here with an instant type-guess. Re-route anything the router got wrong before you train.</p>
+      <StudioInbox v-if="studioId" :studio-id="studioId" :v2="true" ref="inboxRef" />
+      <div v-else class="text-[11.5px] text-[#9a958c]">Loading agent…</div>
+    </div>
+
+    <!-- 3 · TRAIN (button + segregation receipt) -->
+    <div class="relative mt-5 border border-[#E9E0D3] rounded-2xl bg-white p-4">
+      <span class="absolute -top-2.5 left-4 bg-[#2B2A26] text-white text-[9.5px] font-semibold px-2.5 py-0.5 rounded-full tracking-wide">3 &middot; TRAIN</span>
+      <div class="flex items-center justify-between gap-3 mt-1 flex-wrap">
+        <div class="text-[11.5px] text-[#6b6b6b]"><b class="text-[#1f2328]">{{ (sources || []).length }} source{{ (sources || []).length === 1 ? '' : 's' }} &middot; {{ (docs || []).length }} doc{{ (docs || []).length === 1 ? '' : 's' }} &middot; queued</b> → one pass</div>
+        <div class="flex gap-2 shrink-0">
+          <button type="button" class="text-[11.5px] border border-[#E9E0D3] rounded-lg px-3 py-2 text-[#6b6b6b] hover:bg-[#faf8f3] font-medium" @click="$emit('openTab','sources')">Review routing</button>
+          <button type="button" :disabled="trainingAll || !canTrain" class="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-lg px-3.5 py-2 transition-colors disabled:opacity-50" @click="$emit('train')">
+            <Spinner v-if="trainingAll" class="h-3.5 w-3.5 text-white" />
+            <UIcon v-else name="i-heroicons-bolt" class="w-3.5 h-3.5" />
+            {{ trainingAll ? 'Training…' : '⚡ Auto-train everything' }}
+          </button>
+        </div>
+      </div>
+      <p class="text-[11px] text-[#9a958c] mt-2">One pass: classify → segregate → ingest → write goldens → reconcile → coverage. Needs ≥1 pinned source or a file queued above.</p>
+
+      <!-- RECEIPT (only once a train status exists) -->
+      <div v-if="hasTrainStatus" class="mt-3 border-t border-[#E9E0D3] pt-3">
+        <!-- stage lines -->
+        <div class="flex flex-wrap gap-1.5 mb-2.5">
+          <span v-for="st in receiptStages" :key="st.key"
+            class="inline-flex items-center gap-1 text-[10.5px] font-medium rounded-md px-2 py-0.5"
+            :class="st.done ? 'bg-[#EAF1FA] text-[#2f6fb0]' : 'bg-[#F4F1EA] text-[#9a958c]'">
+            <span class="text-[#7f9fd0]">▸</span>{{ st.label }}
+          </span>
+        </div>
+
+        <!-- RECONCILE + COVERAGE pills -->
+        <div class="flex flex-wrap items-center gap-2 mb-2.5">
+          <span v-if="routeInbox"
+            class="inline-flex items-center gap-1 text-[10.5px] font-semibold rounded-full px-2.5 py-1"
+            :class="(routeInbox.held || 0) === 0 ? 'bg-[#E7F2EC] text-[#2f7a52]' : 'bg-[#FBF1DD] text-[#9A6A12]'">
+            {{ routeInbox.files_in || 0 }} in → {{ routeInbox.placed || 0 }} placed &middot; {{ routeInbox.held || 0 }} held
+          </span>
+          <span v-if="coverageTotalPeriods != null"
+            class="inline-flex items-center gap-1 text-[10.5px] font-semibold rounded-full px-2.5 py-1 bg-[#E4F0F4] text-[#1F6F8B]">
+            coverage {{ coverageTotalPeriods }} period{{ coverageTotalPeriods === 1 ? '' : 's' }}
+          </span>
+        </div>
+
+        <!-- per-dest breakdown (compact) -->
+        <div v-if="byDestEntries.length" class="flex flex-wrap gap-1.5 mb-2.5">
+          <span v-for="[dest, n] in byDestEntries" :key="dest"
+            class="inline-flex items-center gap-1 text-[10px] rounded-md px-2 py-0.5 border border-[#ECE7E0] bg-white text-[#6b6b6b]">
+            {{ destEmoji(dest) }} {{ destShort(dest) }} <b class="text-[#1f2328]">{{ n }}</b>
+          </span>
+        </div>
+
+        <!-- CLI TERMINAL (live train log) -->
+        <div ref="termEl" class="rounded-lg border border-[#2f2b24] bg-[#1b1813] px-3 py-2.5 max-h-[300px] overflow-y-auto font-mono text-[11px] leading-[1.55]" style="font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace">
+          <div v-if="!(trainLogLines || []).length" class="text-[#6f685c]">No log lines yet — run Auto-train to stream live.</div>
+          <div v-for="(ln, i) in (trainLogLines || [])" :key="i" class="flex gap-2 whitespace-pre-wrap break-words">
+            <span class="shrink-0 text-[#6f685c] tabular-nums select-none">{{ ln.t }}</span>
+            <span class="flex-1 min-w-0"
+                  :class="ln.lvl === 'error' ? 'text-[#ff8f7a]' : ln.lvl === 'warn' ? 'text-[#e6c06a]' : (String(ln.msg).startsWith('▸') ? 'text-[#7fc8ff] font-semibold' : 'text-[#d6cfc2]')">{{ ln.msg }}</span>
+          </div>
+          <div v-if="trainLog && trainLog.status === 'running'" class="text-[#7fc8ff] animate-pulse mt-0.5">▍</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4 · RESULT (4 lanes) -->
+    <div class="relative mt-5 border border-[#E9E0D3] rounded-2xl bg-white p-4 mb-4">
+      <span class="absolute -top-2.5 left-4 bg-[#2B2A26] text-white text-[9.5px] font-semibold px-2.5 py-0.5 rounded-full tracking-wide">4 &middot; RESULT</span>
+      <p class="text-[10px] uppercase tracking-wide text-[#9a958c] mt-1 mb-3 flex items-center gap-2"><span class="h-px bg-[#EFEDE6] flex-1"></span>each input lands in one of 4 lanes · all born pending (review gate)<span class="h-px bg-[#EFEDE6] flex-1"></span></p>
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2.5">
+        <!-- DATA -->
+        <div class="rounded-xl border border-[#E9E0D3] bg-[#E7F1EB] p-3 flex flex-col min-h-[164px]">
+          <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#2F6F4F]"></span><h4 class="text-xs font-semibold text-[#2F6F4F]">Data</h4><span class="ms-auto text-[10px] text-[#2F6F4F] font-semibold">{{ (sources || []).length }}</span></div>
+          <p class="text-[9.5px] text-[#5f7d6c] mb-1">tables → profiled &amp; queryable</p>
+          <div v-for="s in (sources || []).slice(0,4)" :key="s.id" class="bg-white border border-black/5 rounded-lg p-2 mt-1.5">
+            <div class="flex items-center gap-1.5"><DataSourceIcon v-if="s.type" class="h-3.5 shrink-0" :type="s.type" /><UIcon v-else name="i-heroicons-circle-stack" class="w-3.5 h-3.5 text-[#9a958c] shrink-0" /><span class="text-[11px] font-medium text-[#1f2328] truncate">{{ s.name || s.agent_id }}</span></div>
+          </div>
+          <div v-if="!(sources || []).length" class="text-[10.5px] text-[#5f7d6c] mt-1.5">Add a sheet or connect a source above.</div>
+          <button type="button" class="mt-auto pt-2 text-[10px] text-[#2F6F4F] font-medium text-left hover:underline" @click="$emit('openTab','sources')">Manage in Sources →</button>
+        </div>
+        <!-- KNOWLEDGE -->
+        <div class="rounded-xl border border-[#E9E0D3] bg-[#E4F0F4] p-3 flex flex-col min-h-[164px]">
+          <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#1F6F8B]"></span><h4 class="text-xs font-semibold text-[#1F6F8B]">Knowledge</h4><span class="ms-auto text-[10px] text-[#1F6F8B] font-semibold">{{ (docs || []).length }}</span></div>
+          <p class="text-[9.5px] text-[#5a7d89] mb-1">docs → definitions extracted</p>
+          <div v-for="d in (docs || []).slice(0,4)" :key="d.id" class="bg-white border border-black/5 rounded-lg p-2 mt-1.5">
+            <div class="flex items-center gap-1.5"><UIcon name="i-heroicons-document-text" class="w-3.5 h-3.5 text-[#1F6F8B] shrink-0" /><span class="text-[11px] font-medium text-[#1f2328] truncate">{{ d.title || d.name || d.filename || 'Knowledge doc' }}</span></div>
+          </div>
+          <div v-if="!(docs || []).length" class="text-[10.5px] text-[#5a7d89] mt-1.5">Upload a PDF / deck, or extract from a source.</div>
+          <button type="button" class="mt-auto pt-2 text-[10px] text-[#1F6F8B] font-medium text-left hover:underline" @click="$emit('openTab','sources')">Manage in Knowledge →</button>
+        </div>
+        <!-- SKILL -->
+        <div class="rounded-xl border border-[#E9E0D3] bg-[#ECEAFB] p-3 flex flex-col min-h-[164px]">
+          <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#5A4FCF]"></span><h4 class="text-xs font-semibold text-[#5A4FCF]">Skill</h4></div>
+          <p class="text-[9.5px] text-[#6f67b0] mb-1">a method/recipe → pack</p>
+          <div class="bg-white border border-black/5 rounded-lg p-2 mt-1.5">
+            <span class="text-[11px] text-[#1f2328]">Paste an analysis method — the router classifies it and binds it to your columns.</span>
+          </div>
+          <button type="button" class="mt-auto pt-2 text-[10px] text-[#5A4FCF] font-medium text-left hover:underline" @click="$emit('openTab','skills')">Open Skills →</button>
+        </div>
+        <!-- RULE / INSTRUCTION -->
+        <div class="rounded-xl border border-[#E9E0D3] bg-[#F6EEDD] p-3 flex flex-col min-h-[164px]">
+          <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#9A6A12]"></span><h4 class="text-xs font-semibold text-[#9A6A12]">Rule / Instruction</h4><span class="ms-auto text-[10px] text-[#9A6A12] font-semibold">{{ (activeInstr || 0) + (activeExamples || 0) }}</span></div>
+          <p class="text-[9.5px] text-[#8a7333] mb-1">a constraint you type</p>
+          <div v-if="activeInstr" class="bg-white border border-black/5 rounded-lg p-2 mt-1.5">
+            <span class="text-[11px] text-[#1f2328]">{{ activeInstr }} instruction{{ activeInstr === 1 ? '' : 's' }} applied to every answer</span>
+          </div>
+          <div v-if="activeExamples" class="bg-white border border-black/5 rounded-lg p-2 mt-1.5">
+            <span class="text-[11px] text-[#1f2328]">{{ activeExamples }} example{{ activeExamples === 1 ? '' : 's' }} grounding the agent</span>
+          </div>
+          <div v-if="!activeInstr && !activeExamples" class="text-[10.5px] text-[#8a7333] mt-1.5">Type a rule like “FY starts in April”.</div>
+          <button type="button" class="mt-auto pt-2 text-[10px] text-[#9A6A12] font-medium text-left hover:underline" @click="$emit('openTab','instructions')">Manage in Instructions →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+const props = defineProps<{
+  studioId: string
+  sources: any[]
+  docs: any[]
+  readiness: { score: number }
+  canEdit: boolean
+  trainingAll: boolean
+  canTrain: boolean
+  trainLog: any
+  trainStages: any[]
+  trainLogLines: any[]
+  activeInstr: number
+  activeExamples: number
+  showTrainLogPanel: boolean
+}>()
+
+defineEmits<{
+  (e: 'add', payload: 'connector' | 'upload' | 'folder'): void
+  (e: 'train'): void
+  (e: 'openTab', payload: string): void
+}>()
+
+const inboxRef = ref<any>(null)
+const termEl = ref<HTMLElement | null>(null)
+
+// Own train-status fetch (parent already polls for the log lines we render as a prop,
+// but the segregation receipt — detail.route_inbox — we resolve here, fail-soft).
+const status = ref<any>(null)
+const routeInbox = computed<any>(() => (status.value && status.value.detail && status.value.detail.route_inbox) || null)
+const hasTrainStatus = computed(() => !!(status.value && (status.value.status || status.value.step || status.value.detail)) || !!(props.trainLog && (props.trainLog.status || props.trainLog.step)))
+
+const RECEIPT_STAGES = [
+  { key: 'classify', label: 'classify' },
+  { key: 'segregate', label: 'segregate' },
+  { key: 'ingest', label: 'ingest' },
+  { key: 'goldens', label: 'goldens' },
+  { key: 'reconcile', label: 'reconcile' },
+  { key: 'coverage', label: 'coverage' },
+]
+const receiptStages = computed(() => {
+  const detail = (status.value && status.value.detail) || (props.trainLog && props.trainLog.detail) || {}
+  const ri = routeInbox.value
+  return RECEIPT_STAGES.map(s => {
+    let done = false
+    if (s.key === 'classify' || s.key === 'segregate') done = !!ri
+    else if (s.key === 'ingest') done = !!(ri && (ri.placed || 0) >= 0 && (ri.files_in != null))
+    else if (s.key === 'goldens') done = !!detail.goldens || !!detail.golden_queries
+    else if (s.key === 'reconcile') done = !!ri
+    else if (s.key === 'coverage') done = coverageTotalPeriods.value != null
+    if (detail[s.key]) done = true
+    return { ...s, done }
+  })
+})
+
+const byDestEntries = computed<[string, number][]>(() => {
+  const bd = (routeInbox.value && routeInbox.value.by_dest) || {}
+  return Object.entries(bd).filter(([, n]) => Number(n) > 0) as [string, number][]
+})
+
+const DEST_EMOJI: Record<string, string> = {
+  database: '📊', semantic: '🔖', instructions: '📋', examples: '📋', knowledge: '📖', skip: '⏸',
+}
+const DEST_SHORT: Record<string, string> = {
+  database: 'data', semantic: 'glossary', instructions: 'instr', examples: 'examples', knowledge: 'def', skip: '?',
+}
+const destEmoji = (d: string) => DEST_EMOJI[d] || '•'
+const destShort = (d: string) => DEST_SHORT[d] || d
+
+// Coverage pill — fail-soft (hide if endpoint 404s).
+const coverageTotalPeriods = ref<number | null>(null)
+async function loadCoverage() {
+  if (!props.studioId) return
+  try {
+    const { data, error } = await useMyFetch<any>(`/studios/${props.studioId}/coverage`)
+    if (error?.value) { coverageTotalPeriods.value = null; return }
+    const srcs: any[] = Array.isArray((data.value as any)?.sources) ? (data.value as any).sources : []
+    let total = 0
+    for (const s of srcs) for (const t of (s.tables || [])) total += Number(t.n_periods || (Array.isArray(t.periods) ? t.periods.length : 0)) || 0
+    coverageTotalPeriods.value = srcs.length ? total : null
+  } catch { coverageTotalPeriods.value = null }
+}
+
+async function loadStatus() {
+  if (!props.studioId) return
+  try {
+    const { data, error } = await useMyFetch<any>(`/studios/${props.studioId}/train/status`, { method: 'GET' })
+    if (error?.value) return
+    const st = (data.value as any) || {}
+    if (st && (st.status || st.step || st.detail)) status.value = st
+  } catch { /* fail-soft */ }
+}
+
+function scrollTermBottom() {
+  nextTick(() => { try { if (termEl.value) termEl.value.scrollTop = termEl.value.scrollHeight } catch { /* */ } })
+}
+watch(() => (props.trainLogLines || []).length, scrollTermBottom)
+
+// Poll train status every 2s while training; refresh coverage when training ends.
+let timer: any = null
+watch(() => props.trainingAll, (now, prev) => {
+  if (now && !timer) {
+    timer = setInterval(() => { loadStatus() }, 2000)
+  } else if (!now && timer) {
+    clearInterval(timer); timer = null
+    loadStatus(); loadCoverage()
+    try { inboxRef.value?.refresh?.() } catch { /* */ }
+  }
+})
+
+onMounted(() => { loadStatus(); loadCoverage() })
+onBeforeUnmount(() => { if (timer) { clearInterval(timer); timer = null } })
+</script>

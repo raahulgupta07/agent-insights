@@ -1454,3 +1454,150 @@ cp connection.py + VERSION_HYBRID(1.55.1) + CHANGELOG into ca-app, restart, bake
 - **v1.56.0/1.56.1 progress wave:** flat "Thinking…" → warm clay `wave · live step · wave · m:ss`. Real renderer was `pages/reports/[id]/index.vue` inline header (NOT `AgentStepTimeline.vue` — v1.56.0 edited the wrong file → wave invisible; v1.56.1 fixed). `runningStageText(m)` = current running step title from `blocksToSteps` (friendly fallback). Both the in-progress header + the bare "Thinking…" dots show it. `.cai-wave` CSS (scaleY wob, reduced-motion guard). Home idle wave (`pages/index.vue` `.home-wave` 3-layer, calmer) + `readyCaption` between subtitle and composer. LANDMINE: first Python splice matched wrong spinner → corrupted DECISION-pending block → `git checkout` restore + redo line-anchored.
 - **v1.57.0 docked status strip:** persistent run-status strip in the composer dock (`runActive && lastSystemMessage`) above the already-`shrink-0` composer — wave + current step + elapsed + Stop(abortStream); stays visible when thread scrolled up.
 - **v1.58.0 AUTO-ARTIFACT (`HYBRID_AUTO_ARTIFACT`, default OFF, ON org 1a073f60):** ROOT CAUSE of "no output" = NOT a bug — planner only calls `create_artifact` on an explicit dashboard ask; "summaries data" → `create_data`+prose, Outputs tiles read `artifacts` table (empty). FIX = auto-build a dashboard in background after a data turn with zero artifacts. New `services/auto_artifact.py` `schedule_auto_artifact()` → strong-ref'd `asyncio.create_task(_build)` → fresh detached session (reload by PK) → reuse `report_slides._generate_artifact(mode='page')`; fail-soft, idempotent (zero-artifact gate = one build/report), detect via `system_completion→AgentExecution→ToolExecution.created_step_id→Step status=success`. Hooks in `completion_service.py` non-stream ~:920 + stream ~:2404 (after answer+sense_making commit, before `finished` SSE; own session so no stream interference). FE `pages/reports/[id]/index.vue`: on `runActive` true→false with data+no-artifact → poll `/artifacts/report/{id}` 6s×30 (`autoBuilding`) + dock strip shows "Building a dashboard from your data…". Flag 3-place in hybrid_flags.py. Backend cp'd + restart (workers=4 converge). BAKED `:dev`+`:v1.56.1`/`:v1.57.0`/`:v1.58.0`. LANDMINE: auto_artifact.py new file + completion_service edits hot-cp → LOST on force-recreate until baked (now baked v1.58.0). Cost bounded (1 build/report lifetime).
+
+## 2026-06-30 — v1.62.0 Ingest reconcile: fail-loud multi-file upload (HYBRID_INGEST_RECONCILE)
+Goal: make the persistent data-source upload behave like the chat-upload path (full fidelity, fail loud).
+Root cause of the CRM "only April" bug = silent partial ingest: 6 months merged via `merged_paths`, 5 failed
+to parse, the merge loop's `except: continue` swallowed them with zero signal → agent saw 1 month and fabricated
+the other 5. Built in 5 phases, all behind flag `HYBRID_INGEST_RECONCILE` (default OFF), no migration.
+- **P1 record failures** — `SpreadsheetClient._load_frames` merge loop: each file → `{path,label,period,status:
+  loaded|failed,rows,error}` on `self.last_ingest_report` (init in `__init__`, module `logger` added). Flag off →
+  report None, silent-skip preserved (byte-identical).
+- **P2 reconcile gate** — NEW `services/ingest/reconcile.py` `run_ingest_reconcile`: re-reads via SpreadsheetClient
+  to get the P1 report, sums active `DataSourceTable.no_rows` = materialized rows, `_build_coverage` verdict
+  `degraded` if any file failed / loaded<expected / (materialized>0 AND <source_rows) — the `>0` guard avoids a
+  FALSE degrade (DuckDB/spreadsheet tables report no_rows=0 at sync). Stamps `ingest_coverage` on connection.config
+  + each table.metadata_json. Wired into `routes/data_source_from_file.py` in BOTH the new-source branch (4c3) AND
+  `_try_merge_same_schema`'s return (the REAL multi-month merge path — new-source always has merged_paths=[] so it
+  can't fire there). Response carries `ingest_coverage`.
+- **P3 agent context** — `ai/context/sections/tables_schema_section.py` `_render_coverage_note` injects a hard
+  `<data_coverage status="incomplete">` warning (periods present, files missing, "do NOT infer/fabricate") into
+  BOTH table renderers. Section file only — did NOT touch the 3 core context files.
+- **P4 robust read** — `_read_one_file_robust` gate now `ROBUST_INGEST OR INGEST_RECONCILE` → reconcile auto-uses
+  the robust csv/excel readers (banner skip, encoding/delim sniff) so failing months parse.
+- **P5 UI** — `components/data/UploadSpreadsheetModal.vue` `coverageOf(ds)`: degraded → red persistent toast naming
+  missing files (both single + batch paths) instead of green success.
+- **Proofs:** P1 flag on/off (records failed vs None); `_build_coverage` 3 branches; P3 render; P4 banner CSV no
+  regression; **real-DB integration** of run_ingest_reconcile (missing merged_path → degraded + table stamped);
+  **live route E2E** through running server (flag effective via DB override, two-month same-schema append →
+  reconcile fired → `ingest_coverage` in response; fixed false-degrade live). Flags enabled org e02b1b04:
+  `HYBRID_INGEST_RECONCILE` + `HYBRID_MERGE_SAME_SCHEMA`. EPHEMERAL (backend hot-cp + FE fe-sync; NOT baked, NOT
+  pushed). Rollback backups in `scratchpad/rollback_ingest_reconcile/`. NOT done: bake, git push, held P0 data
+  re-ingest of the real 5 months into source 0b9b39ac.
+
+---
+
+## 2026-07-01 — v1.63.0 Verified-golden EVAL GATE wired INTO training (BAKED)
+Goal: finish agent training's trust half — every business metric verified against its doc's ground-truth number
+before the agent uses it. Followed a phased plan (`docs/TRAINING_TODO.md`), audit-first (`docs/TRAINING_STATE.md`).
+- **Phase 0 audit** caught memory drift: real org = `7d372305` (not e02b1b04); `HYBRID_FULL_PIPELINE=true` but in
+  `train_orchestrator` it only gated hybrid_index+brain_graph — the doc-driven verified pipeline (`routes/pipeline.py`
+  build-goldens: logic_parser → registry → golden_gen → eval_gate → _save_golden) was ORPHANED from `run_training`.
+  Snapshot `cityagent-analytics:rollback-training-20260701`.
+- **Phase 2 wiring:** new fail-soft stage in `run_training` (after `joins`, before `hybrid_index`), gated
+  `HYBRID_VERIFIED_GOLDENS` AND `HYBRID_FULL_PIPELINE`. Loads `AgentDefinition`s, groups by `data_source_id`, runs
+  `golden_gen.generate_for_definitions` → `eval_gate.evaluate`, saves only matches via `pipeline._save_golden`
+  (approved+is_golden), HOLDS mismatch/error. Reuses existing services (wiring, not new logic). ~55 lines, one
+  insert, no other lines touched.
+- **Phase 3 proof (org 7d372305, studio CRM 2b7fa1cf, source Apr fd164352 w/ 5 merged_paths = 6 months):**
+  populated `agent_definitions` (0 → 9) via crmqa.docx (12 triples). First eval ran 0-approved — **root-caused to
+  the bare-python override-load landmine** (scripts via `docker exec python` don't fire `load_overrides_from_db`, so
+  `ONE_TABLE_MERGE` read OFF → 6 stem tables → single-table SQL → Lead=119). Forcing the flags on collapsed the 6
+  files into ONE 21,240-row table → Lead=1544 / Successful=7526 / Unsuccessful=4179 EXACT → 3 approved. **No
+  `SpreadsheetClient` change needed** (Option B revealed unnecessary — client already merges).
+- **Real in-process train** (script did `load_overrides_from_db` then `run_training`): all 16 stages green,
+  `verified_goldens: ok (3 approved, 6 held)`, "agent ready". Confirms the stage fires live in a real train.
+- **Held 6 = genuinely broken, not auto-fixable:** New User (expected 2025 unreproducible by any derivable
+  predicate; New-status=658, distinct-user=344/4411), Channel Breakdown (a pivot/breakdown mis-modeled as a scalar
+  metric — 603 is one matrix cell; eval gate can't score a pivot), Q8/Q9/Q11 (doc-format SQL errors), Q10 (no
+  expected). These need business input via the instruction-driven corrector (`HYBRID_QUERY_CORRECTION`) — deliberately
+  NOT auto-fixed. This is the gate working (quarantine + explain), not failing.
+- **State:** `HYBRID_VERIFIED_GOLDENS` flipped ON (DB override, org 7d372305; backup in scratchpad). 3 verified
+  goldens saved. BAKED via docker-commit `ca-app` → `cityagent-analytics:dev` + tag `v1.63.0`. NOT git-pushed.
+  NOT done: fix/re-model the held 3 (need business definitions), enable+prove the corrector loop, git push.
+
+## 2026-07-01 — E3 column-profile + E4 data-validation WIRED into agent upload path (EPHEMERAL, flags OFF)
+Master-Plan ingest stages E3/E4 (built earlier as standalone tested modules) are now wired into the live
+from-file upload route so an agent upload actually profiles + validates the data.
+- **`routes/data_source_from_file.py`** — new block **4c4** (after reconcile `4c3`, before post-ingest `4d`),
+  gated `flags.COLUMN_PROFILE or flags.DATA_VALIDATION`, fail-soft (own try/except + own commit), never blocks
+  upload. Reads frames via `SpreadsheetClient._load_frames()` + active `DataSourceTable` rows.
+  - **E3**: `column_profile.profile_frame(df)` per frame → merged → `persist_profile(trows, profile)` writes
+    dtype/null_pct/distinct/min/max/top_values into `DataSourceTable.columns[].metadata` — the SAME store
+    `column_intel` uses, so the agent schema context surfaces `distinct`/`nulls`/`values` with NO section edit.
+  - **E4**: `data_validator.null_and_dup_checks(df, profile)` → `build_data_quality_block(warnings)` → stamped
+    onto each active table's `metadata_json['data_quality']` ONLY when there are real findings (skip the clean
+    marker = no context noise).
+- **`ai/context/sections/tables_schema_section.py`** — new `_render_data_quality_note(metadata_json)` (returns
+  the stored block verbatim when it starts `<data_quality`), wired into BOTH render paths (`_render_table_xml`
+  and `_render_topk_tables_full`), next to the existing `_render_coverage_note`.
+- Compiles host + container; deployed via `docker cp` both files + `docker restart ca-app`; `:3007` healthy.
+- **State:** flags `HYBRID_COLUMN_PROFILE` + `HYBRID_DATA_VALIDATION` default OFF → zero behavior change until
+  turned on. EPHEMERAL (docker cp, NOT baked, NOT pushed). NOT done: turn flags ON via DB override for org
+  7d372305 + re-upload to prove live; wire E3/E4 into `train_orchestrator`; bake.
+
+## 2026-07-01 — E5 data typing (real numbers + dates) built + wired (EPHEMERAL, flag OFF)
+Master-Plan stage E5. The query engine now gets real types instead of string ops.
+- **NEW `services/ingest/typing.py`** `apply_typing(df)` — returns a typed COPY: date-shaped object cols →
+  datetime, number/measure cols → numeric (strips `,` + leading currency). Uses E3 `_classify_dtype`; date
+  takes priority, then `_try_number` attempts ANY object col but strict (>=98% parse) + **code guard** (any
+  leading-zero integer `007` → treated as phone/zip/id, left string). category/text/`_source_*` untouched.
+  Fail-soft (raw frame on error).
+- **`spreadsheet_client.py connect()`** — gated typing pass (`flags.DATA_TYPING`) maps every frame through
+  `apply_typing` BEFORE DuckDB register/materialize. OFF → byte-identical raw frames.
+- **Flag `HYBRID_DATA_TYPING`** added 3-place (registry + `@property` + snapshot), category Ingest, default OFF.
+- **Test `scratchpad/test_t21.py` — PASS:** (1) REGRESSION — 3 verified metrics EXACT (Lead 644 / Succ 7526 /
+  Unsucc 4179), typing ON == OFF (didn't move a count); (2) DATE — `Call Completed Date` typed, real min/max
+  2025-01-02..2025-06-30, `WHERE date >= DATE '2025-01-01' AND < '2025-04-01'` = 11037/21240 rows (impossible
+  on strings); (3) NUMBER — `'1,234'` → int64, sum 16079, text col stays object.
+- Deployed (docker cp typing.py + hybrid_flags.py + spreadsheet_client.py + restart), :3007 healthy. EPHEMERAL,
+  flag OFF (not enabled for any org yet), NOT baked. Why safe for goldens: verified metrics filter text columns
+  → never parse numeric → untouched. E3 (dtype) feeds E5 (cast). Task #21 done.
+
+## 2026-07-01 — PowerBI per-user cross-tenant sign-in (P1+P2)
+
+Goal: every user connects Power BI in their OWN account (incl. cross-tenant B2B guest), like the local tester app.
+Finding: 90% already built — `powerbi_user` connector (`PowerBIUserClient`, ROPC email+pw+tenant, flag `POWERBI_USER`),
+per-user credential system (`auth_policy=user_required` + `UserDataSourceCredentialsService` + routes
+`GET/POST/PATCH/DELETE /data_sources/{id}/my-credentials` + `/test`), per-user schema overlay, FE
+`UserDataSourceCredentialsModal.vue`. `tenant_id` lives in **Credentials** (per-user) not Config → cross-tenant per-user
+works out of the box (each user supplies their own guest tenant).
+
+Only gap = users don't know their guest tenant GUID. Built **P2 tenant auto-discovery**:
+- NEW `app/services/powerbi_tenant_discovery.py` `discover_tenants(username,password,home_tenant='organizations')` →
+  ROPC (public client `1950a258…`) for a `management.azure.com/.default` token → ARM
+  `GET /tenants?api-version=2020-01-01` → `[{id,name,domain}]` (home + all B2B guest tenants). Surfaces raw AADSTS
+  hint on MFA/ROPC-block. Read-only, no secret stored.
+- NEW route `POST /api/data_sources/powerbi/discover-tenants` (in `routes/user_data_source_credentials.py`, same router
+  so auto-included) — pre-connect (no data source needed), flag-gated `POWERBI_USER` (404 off), fail-soft `{ok,error,tenants}`.
+- FE `UserDataSourceCredentialsModal.vue`: for `powerbi_user`, a **"Find my tenants"** button under the tenant_id field →
+  calls discovery with the entered email+pw → renders a click-to-pick tenant list that sets `credentials.tenant_id`.
+  i18n keys added to `locales/en.json` (findMyTenants/pickTenantHint/enterEmailPasswordFirst/noTenantsFound).
+
+Verified LIVE in-container: `discover_tenants(<pbi-test-user>, …)` → 2 tenants
+(City Holdings `0f69909c` home MM + City Mart Holding `0a8a4f2c` guest Singapore = where DataAgent_TestRun lives).
+Route registered `/api/data_sources/powerbi/discover-tenants`. Backend hot-cp'd + restarted (:3007 healthy).
+
+EPHEMERAL: backend cp-only (not baked); FE change needs fe-sync/rebuild to show on :3007 (or dev :3000).
+Flag `POWERBI_USER` default OFF — enable per-org to use. NOT baked, NOT pushed.
+Deferred P3 device-code (MFA fallback), P4 brute table-name discovery (INFO blocked), P5 storage-mode gate.
+Cross-tenant root cause + tester scripts → memory `project_cityagent_powerbi_item_access`.
+
+## 2026-07-01 — Power BI per-user connector: scan-all-tenants + storage-mode gate + brute table discovery (v1.64.0, BAKED)
+Next phase for the per-user Power BI connector (P1 sign-in + P2 tenant-discovery shipped earlier today). Built by 2 disjoint-file subagents + hardened after a live test.
+- **#8 scan-ALL-tenants (`services/powerbi_multi_tenant_scan.py`, NEW):** `scan_all_tenants(username,password,client_id=None)` = `discover_tenants` (ARM `/tenants`) → per-tenant `PowerBIUserClient.get_schemas()` in `ThreadPoolExecutor(max_workers=4)`, each tenant wrapped fail-soft (one bad tenant never sinks the rest; discovery failure surfaces as a single failed pseudo-tenant). Every returned Table tagged in `metadata_json["powerbi"]` with `tenantId`+`tenantName`. Returns `{tenants:[{id,name,domain,ok,table_count,error}], tables:[...], table_count}`; never raises. Credentials-service method `scan_all_tenants_overlay()` (`user_data_source_credentials_service.py` ~L546, flag-gated `POWERBI_USER`, `await asyncio.to_thread(...)`) reshapes merged tables to the `{name:{columns:[{name,dtype}],pks,fks,metadata_json}}` normalized shape and persists via existing `DataSourceService._upsert_user_overlay` (no new table/migration). Route `POST /api/data_sources/{id}/my-credentials/scan-all-tenants` (`routes/user_data_source_credentials.py`). FE "Scan all my tenants" button + per-tenant result list in `UserDataSourceCredentialsModal.vue` (i18n `data.scanAllTenants`/`scanAllHint`).
+- **P5 storage-mode gate (`powerbi_client.py`):** module helper `_is_dataset_queryable(ds)` + `_QUERYABLE_STORAGE_MODES={Import,PremiumFiles,Abf,DirectQuery}` (on-prem-gateway → False). `list_datasets` now emits `storageMode`/`targetStorageMode`; `get_schemas` Phase-4 metadata gets `storageMode`+`isOnPremGatewayRequired`+`queryable`. Non-queryable models still surfaced, tagged not-queryable (agent skips them instead of 400ing at query time).
+- **P4 brute table-discovery (`powerbi_client.py`):** `_COMMON_TABLE_NAMES` (~40, de-duped) + `_brute_discover_tables()` — parallel `EVALUATE TOPN(1,'Name')` probes, column names from `Name[col]` bracket-strip. Wired into `get_dataset_tables` AFTER COLUMNSTATISTICS + REST `/tables` both yield nothing. **HARDENED (live-test earned):** `_get_tables_via_column_stats` now returns `(tables, empty_db)` — `empty_db=True` when the COLUMNSTATISTICS error is "…work only on databases which have at least one table" (genuinely empty staging warehouse) → `get_dataset_tables` skips REST+brute entirely; `_brute_discover_tables` aborts the whole probe on first HTTP 429 (`threading.Event`) + `max_workers` 6→4. Without this, 8 empty staging DBs × ~40 probes tripped the 120 req/min/user cap → 429 storm dropped the guest-tenant scan.
+- **Proven live (org 7d372305, flag ON):** `scan_all_tenants` for `<pbi-test-user>` → 2 tenants OK (home City Holdings `0f69909c` + guest City Mart Holding SG `0a8a4f2c`), 24 merged tables, 18 queryable / 6 not (home Hub Team on-prem-gateway correctly flagged non-queryable), tenant-tagged, Open Project Tracking `projects`/`subjects` surfaced, NO 429 storm (empty staging DBs skipped). Backend `import main` clean, both routes registered, FE button baked into `_nuxt` dist.
+- **BAKED** `cityagent-analytics:dev` = `cityagent-analytics:v1.64.0` (full `docker build` + `docker commit` to fold the post-bake P4 hardening). Rollback `cityagent-analytics:pre-powerbi-rollback` (9ca5c822613b). Flag `HYBRID_POWERBI_USER` ON via DB override org 7d372305. NOT git-pushed. Mig head unchanged `defreg1` (no migration). Deferred: P3 device-code (MFA fallback), refresh-token storage. Detail → memory `project_cityagent_powerbi_item_access`.
+
+## 2026-07-01 — Power BI P3 device-code sign-in (MFA-safe) (v1.65.0, BAKED)
+The last real gap in the per-user Power BI connector: ROPC (email+password) dies on MFA-on accounts (`AADSTS50076/50079`) and ROPC-blocked tenants (`7000218`). P3 = OAuth 2.0 device-code, the self-serve MFA-safe path. (Built inline — the two spawned subagents died instantly on a transient org "subscription access disabled" gate, zero work; rebuilt by hand.)
+- **NEW `services/powerbi_device_code.py`:** `start_device_code(tenant_id, client_id=None)` → POST `/devicecode` (client MS public `1950a258…`, scope `https://analysis.windows.net/powerbi/api/.default offline_access`) → `{ok,device_code,user_code,verification_uri,expires_in,interval,message}`. `poll_device_code(tenant_id, device_code, client_id=None)` → ONE poll of `/token` grant_type=`urn:ietf:params:oauth:grant-type:device_code` → `{status: success|pending|error, access_token?, refresh_token?}` (maps `authorization_pending`/`slow_down`→pending). Never raises; never logs tokens.
+- **`powerbi_user_client.py`:** `__init__` gains `refresh_token`; `connect()` precedence now delegated-access_token → **refresh_token (refresh grant, rotates refresh_token, scope `SCOPE + " offline_access"`)** → ROPC password. So a stored refresh_token = durable connection, no hourly re-login.
+- **`configs.py`:** `PowerbiUserCredentials` — `username`/`password` made Optional (device-code cred = tenant_id + refresh_token), added hidden `refresh_token`. Whole creds dict is `encrypt_credentials()`-Fernet-encrypted → refresh_token never plaintext.
+- **Routes (`user_data_source_credentials.py`):** `POST /data_sources/{id}/my-credentials/device-code/start` + `/poll` (flag `POWERBI_USER`, fail-soft). Poll-success builds `UserDataSourceCredentialsCreate(auth_mode, credentials={tenant_id, refresh_token, username?})` → `svc.upsert_my_credentials` (persist encrypted); tokens never returned to the client.
+- **FE (`UserDataSourceCredentialsModal.vue`):** "Sign in with a code (MFA-safe)" button → start → shows `user_code` + clickable `verification_uri` + status line → `setInterval` polls at the server's `interval` → on success `emit('saved')` + close; timer cleared on unmount + modal-close. i18n `deviceCodeSignIn/enterTenantFirst/deviceWaiting/deviceSuccess/deviceCodeHint`.
+- **PROVEN live end-to-end:** started device-code vs SG tenant `0a8a4f2c` → user approved in browser (MS "signed in to Azure PowerShell" confirmation) → `poll_device_code` returned success + refresh_token → constructed `PowerBIUserClient(tenant_id, refresh_token)` → `list_workspaces()` = [MSFB_POC, HUB-AI, DataAgent_TestRun]. Backend `import main` clean, both routes registered, FE UI baked into `_nuxt` dist.
+- **BAKED** `cityagent-analytics:dev` = `:v1.65.0` (full `docker build` + force-recreate), rollback `pre-p3-rollback` (=v1.64.0). VERSION_HYBRID 1.65.0, mig head unchanged `defreg1`, flag `HYBRID_POWERBI_USER` ON org 7d372305, NOT git-pushed. Now ANY Power BI user (MFA or not, any tenant, guest or home) can self-connect. Remaining backlog: none critical (device-code covers MFA; refresh-token storage now done inline).
+- **Standalone tester:** `scratchpad/pbi_devicecode_app.py` (stdlib :8901) — 3 sign-in paths (device-code / email+password ROPC / find-my-tenants) → scan (queryable-tagged) → DAX runner. Tokens in-memory only. For handing to other users to self-test.

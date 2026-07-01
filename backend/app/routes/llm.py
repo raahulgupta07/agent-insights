@@ -104,6 +104,33 @@ async def delete_provider(
     """Delete a custom provider (preset providers cannot be deleted)"""
     return await llm_service.delete_provider(db, organization, current_user, provider_id)
 
+@router.get("/llm/key_status", response_model=dict)
+async def key_status(
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization)
+):
+    """Whether the org's LLM providers have a usable API key — drives the
+    'Add your API key' banner on the LLM settings page."""
+    return await llm_service.get_key_status(db, organization, current_user)
+
+@router.post("/llm/models/{model_id}/test", response_model=dict)
+@requires_permission('manage_llm')
+async def test_model(
+    model_id: str,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization)
+):
+    """Health-check a single model (1-token ping). Returns success + latency."""
+    try:
+        return await llm_service.test_model(db, organization, current_user, model_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("LLM test_model route error: %s", e, exc_info=True)
+        return {"success": False, "message": str(e), "id": model_id}
+
 @router.get("/llm/models", response_model=List[LLMModelSchemaWithProvider])
 async def get_models(
     is_enabled: bool = None,

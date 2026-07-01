@@ -1274,3 +1274,65 @@ class LLMService:
             logger.error("LLM connection test failed: provider_type=%s, model_id=%s, org_id=%s, message=%s", provider.provider_type, selected_model.model_id, organization.id, result.get("message"))
         return result
 
+    async def test_model(self, db: AsyncSession, organization: Organization, current_user: User, model_id: str):
+        """Health-check ONE saved model: ping its provider with a 1-token call.
+        Returns {success, latency_ms, message, model_id}. Used by the LLM settings
+        per-model 'Test' / 'Test all' UI to show a green/red health badge."""
+        import time as _time
+        from sqlalchemy.orm import selectinload as _selectinload
+
+        res = await db.execute(
+            select(LLMModel)
+            .options(_selectinload(LLMModel.provider))
+            .filter(LLMModel.id == model_id)
+            .filter(LLMModel.organization_id == organization.id)
+            .filter(LLMModel.deleted_at == None)
+        )
+        model = res.unique().scalar_one_or_none()
+        if model is None:
+            raise HTTPException(status_code=404, detail="Model not found")
+
+        t0 = _time.monotonic()
+        try:
+            llm = LLM(model, usage_session_maker=async_session_maker)
+            result = await llm.test_connection()
+        except Exception as e:  # noqa: BLE001 - surface as a failed test, never 500
+            result = {"success": False, "message": str(e)}
+        latency_ms = int((_time.monotonic() - t0) * 1000)
+        return {
+            "success": bool(result.get("success")),
+            "latency_ms": latency_ms,
+            "message": result.get("message"),
+            "model_id": model.model_id,
+            "id": str(model.id),
+        }
+
+    async def get_key_status(self, db: AsyncSession, organization: Organization, current_user: User):
+        """Report whether each provider has a usable (non-blank) API key. Drives
+        the 'Add your API key' banner on the LLM settings page. A seeded provider
+        stores an encrypted BLANK key, so this decrypts and checks for content."""
+        res = await db.execute(
+            select(LLMProvider)
+            .filter(LLMProvider.organization_id == organization.id)
+            .filter(LLMProvider.deleted_at == None)
+        )
+        providers = res.unique().scalars().all()
+        out = []
+        any_key = False
+        for p in providers:
+            key = ""
+            try:
+                creds = p.decrypt_credentials()
+                if isinstance(creds, (list, tuple)):
+                    key = creds[0] or ""
+                elif isinstance(creds, dict):
+                    key = creds.get("api_key") or ""
+                elif isinstance(creds, str):
+                    key = creds
+            except Exception:  # noqa: BLE001
+                key = ""
+            hk = bool(key)
+            any_key = any_key or hk
+            out.append({"provider_id": str(p.id), "name": p.name, "has_key": hk})
+        return {"has_key": any_key, "providers": out}
+

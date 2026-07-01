@@ -1,6 +1,22 @@
 <template>
     <div>
-        <!-- Toolbar: search + Integrate -->
+        <!-- ===== KEY BANNER (only when no usable API key) ===== -->
+        <div v-if="keyLoaded && !hasKey"
+             class="flex items-center justify-between gap-3 mb-4 rounded-xl border border-[#E9C9A8] bg-[#FBF1E6] px-4 py-3">
+            <div class="flex items-center gap-2.5">
+                <UIcon name="i-heroicons-key" class="w-5 h-5 text-[#C2541E] shrink-0" />
+                <div>
+                    <p class="text-sm font-medium text-[#8a3d12]">No API key set — models are inactive.</p>
+                    <p class="text-xs text-[#a4663d]">Add your OpenRouter key to activate all models.</p>
+                </div>
+            </div>
+            <button v-if="useCan('manage_llm_settings')" @click="providerModalOpen = true"
+                    class="bg-[#C2541E] hover:bg-[#A8330F] text-white text-sm px-3 py-1.5 rounded-lg shrink-0 whitespace-nowrap">
+                Add OpenRouter key
+            </button>
+        </div>
+
+        <!-- Toolbar: search + Test all + Integrate -->
         <div class="flex justify-between items-center gap-3 mb-5">
             <div class="flex-1 max-w-md">
                 <input
@@ -10,13 +26,23 @@
                     class="border border-[#E9E0D3] rounded-lg px-3 py-1.5 text-sm focus:ring-[#C2541E] focus:border-[#C2541E] w-full"
                 >
             </div>
-            <button
-                v-if="useCan('manage_llm_settings')"
-                @click="providerModalOpen = true"
-                class="bg-[#C2541E] hover:bg-[#A8330F] text-white text-sm px-3 py-1.5 rounded-lg shrink-0"
-            >
-                {{ $t('settings.llms.integrateModels') }}
-            </button>
+            <div class="flex items-center gap-2 shrink-0">
+                <button
+                    @click="testAll"
+                    :disabled="testingAll"
+                    class="border border-[#E9E0D3] text-[#5a544c] hover:bg-[#FBF8F2] text-sm px-3 py-1.5 rounded-lg disabled:opacity-50 flex items-center gap-1.5"
+                >
+                    <UIcon :name="testingAll ? 'i-heroicons-arrow-path' : 'i-heroicons-bolt'" :class="testingAll ? 'w-4 h-4 animate-spin' : 'w-4 h-4'" />
+                    {{ testingAll ? 'Testing…' : 'Test all' }}
+                </button>
+                <button
+                    v-if="useCan('manage_llm_settings')"
+                    @click="providerModalOpen = true"
+                    class="bg-[#C2541E] hover:bg-[#A8330F] text-white text-sm px-3 py-1.5 rounded-lg"
+                >
+                    {{ $t('settings.llms.integrateModels') }}
+                </button>
+            </div>
         </div>
 
         <!-- ===== SECTION 1 · PRECONFIGURED ===== -->
@@ -29,6 +55,7 @@
                         <th class="px-3 py-2 text-start text-[11px] font-semibold text-[#7c7368] uppercase tracking-wide">{{ $t('settings.llms.colModel') }}</th>
                         <th class="px-3 py-2 text-start text-[11px] font-semibold text-[#7c7368] uppercase tracking-wide">{{ $t('settings.llms.colProvider') }}</th>
                         <th class="px-3 py-2 text-start text-[11px] font-semibold text-[#7c7368] uppercase tracking-wide">{{ $t('settings.llms.colStatus') }}</th>
+                        <th class="px-3 py-2 text-start text-[11px] font-semibold text-[#7c7368] uppercase tracking-wide">HEALTH</th>
                         <th class="px-3 py-2 text-start text-[11px] font-semibold text-[#7c7368] uppercase tracking-wide" v-if="useCan('manage_llm_settings')">{{ $t('settings.llms.colActions') }}</th>
                     </tr>
                 </thead>
@@ -57,6 +84,22 @@
                         <td class="px-3 py-3 whitespace-nowrap text-sm">
                             <UToggle v-model="model.is_enabled" @change="toggleModel(model.id, $event)" :disabled="!useCan('manage_llm_settings') || model.is_default || model.is_small_default" />
                         </td>
+                        <td class="px-3 py-3 whitespace-nowrap text-sm">
+                            <button @click="testModel(model.id)" class="flex items-center gap-1.5 text-xs" :title="healthOf(model.id).error || ''">
+                                <template v-if="healthOf(model.id).state === 'testing'">
+                                    <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 animate-spin text-[#9a958c]" /><span class="text-[#9a958c]">testing…</span>
+                                </template>
+                                <template v-else-if="healthOf(model.id).state === 'ok'">
+                                    <UIcon name="i-heroicons-check-circle-solid" class="w-4 h-4 text-green-600" /><span class="text-green-700">{{ fmtLatency(healthOf(model.id).latency) }}</span>
+                                </template>
+                                <template v-else-if="healthOf(model.id).state === 'fail'">
+                                    <UIcon name="i-heroicons-x-circle-solid" class="w-4 h-4 text-red-500" /><span class="text-red-600">failed</span>
+                                </template>
+                                <template v-else>
+                                    <UIcon name="i-heroicons-play-circle" class="w-4 h-4 text-[#b3ada3]" /><span class="text-[#9a958c] hover:text-[#5a544c]">Test</span>
+                                </template>
+                            </button>
+                        </td>
                         <td class="px-3 py-3 whitespace-nowrap text-sm" v-if="useCan('manage_llm_settings')">
                             <UDropdown :items="getDropdownItems(model)">
                                 <UButton class="text-gray-500 hover:text-gray-900" color="white" label="" trailing-icon="i-heroicons-ellipsis-vertical" />
@@ -78,6 +121,7 @@
                         <th class="px-3 py-2 text-start text-[11px] font-semibold text-[#7c7368] uppercase tracking-wide">{{ $t('settings.llms.colModel') }}</th>
                         <th class="px-3 py-2 text-start text-[11px] font-semibold text-[#7c7368] uppercase tracking-wide">{{ $t('settings.llms.colProvider') }}</th>
                         <th class="px-3 py-2 text-start text-[11px] font-semibold text-[#7c7368] uppercase tracking-wide">{{ $t('settings.llms.colStatus') }}</th>
+                        <th class="px-3 py-2 text-start text-[11px] font-semibold text-[#7c7368] uppercase tracking-wide">HEALTH</th>
                         <th class="px-3 py-2 text-start text-[11px] font-semibold text-[#7c7368] uppercase tracking-wide" v-if="useCan('manage_llm_settings')">{{ $t('settings.llms.colActions') }}</th>
                     </tr>
                 </thead>
@@ -105,6 +149,22 @@
                         <td class="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{{ model.provider.name }}</td>
                         <td class="px-3 py-3 whitespace-nowrap text-sm">
                             <UToggle v-model="model.is_enabled" @change="toggleModel(model.id, $event)" :disabled="!useCan('manage_llm_settings') || model.is_default || model.is_small_default" />
+                        </td>
+                        <td class="px-3 py-3 whitespace-nowrap text-sm">
+                            <button @click="testModel(model.id)" class="flex items-center gap-1.5 text-xs" :title="healthOf(model.id).error || ''">
+                                <template v-if="healthOf(model.id).state === 'testing'">
+                                    <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 animate-spin text-[#9a958c]" /><span class="text-[#9a958c]">testing…</span>
+                                </template>
+                                <template v-else-if="healthOf(model.id).state === 'ok'">
+                                    <UIcon name="i-heroicons-check-circle-solid" class="w-4 h-4 text-green-600" /><span class="text-green-700">{{ fmtLatency(healthOf(model.id).latency) }}</span>
+                                </template>
+                                <template v-else-if="healthOf(model.id).state === 'fail'">
+                                    <UIcon name="i-heroicons-x-circle-solid" class="w-4 h-4 text-red-500" /><span class="text-red-600">failed</span>
+                                </template>
+                                <template v-else>
+                                    <UIcon name="i-heroicons-play-circle" class="w-4 h-4 text-[#b3ada3]" /><span class="text-[#9a958c] hover:text-[#5a544c]">Test</span>
+                                </template>
+                            </button>
                         </td>
                         <td class="px-3 py-3 whitespace-nowrap text-sm" v-if="useCan('manage_llm_settings')">
                             <UDropdown :items="getDropdownItems(model)">
@@ -162,6 +222,8 @@ type Model = {
   is_default: boolean;
   is_small_default: boolean;
   is_enabled: boolean;
+  is_preset?: boolean;
+  is_custom?: boolean;
   provider: Provider;
 };
 
@@ -181,10 +243,10 @@ const filteredModels = computed<Model[]>(() => {
     });
 });
 
-// Seeded ("preconfigured") models = the set we ship via seed_openrouter.py.
-// Anything not in this set (or flagged default) is treated as user-added.
-// NOTE: keep in sync with seed_openrouter.py; a backend `is_preconfigured`
-// flag would be more durable than this id list.
+// Preconfigured = the durable backend `is_preset` flag (set by the config seed
+// in dash-config.yaml default_llm). Ship-ready models are seeded is_preset=true;
+// models a user adds with their own provider are is_preset=false → "Your Models".
+// The id-set is a legacy fallback for any row that predates the is_preset flag.
 const PRECONFIGURED_MODEL_IDS = new Set<string>([
     'anthropic/claude-haiku-4.5',
     'anthropic/claude-sonnet-4.6',
@@ -194,10 +256,63 @@ const PRECONFIGURED_MODEL_IDS = new Set<string>([
 ]);
 
 const isPreconfigured = (m: Model) =>
-    m.is_default || m.is_small_default || PRECONFIGURED_MODEL_IDS.has(m.model_id);
+    m.is_preset === true || m.is_default || m.is_small_default || PRECONFIGURED_MODEL_IDS.has(m.model_id);
 
 const preconfiguredModels = computed<Model[]>(() => filteredModels.value.filter(isPreconfigured));
 const customModels = computed<Model[]>(() => filteredModels.value.filter(m => !isPreconfigured(m)));
+
+// ===== Key status (drives the "Add API key" banner) =====
+const hasKey = ref(false);
+const keyLoaded = ref(false);
+const loadKeyStatus = async () => {
+    try {
+        const res = await useMyFetch<any>('/llm/key_status', { method: 'GET' });
+        const d = res.data.value as any;
+        hasKey.value = !!(d && d.has_key);
+    } catch { hasKey.value = false; }
+    finally { keyLoaded.value = true; }
+};
+
+// ===== Per-model health (Test / Test all) =====
+type Health = { state: 'idle' | 'testing' | 'ok' | 'fail'; latency?: number; error?: string };
+const health = ref<Record<string, Health>>({});
+const testingAll = ref(false);
+const healthOf = (id: string): Health => health.value[id] || { state: 'idle' };
+const fmtLatency = (ms?: number) => ms == null ? '' : (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`);
+
+const testModel = async (id: string): Promise<boolean> => {
+    health.value = { ...health.value, [id]: { state: 'testing' } };
+    try {
+        const res = await useMyFetch<any>(`/llm/models/${id}/test`, { method: 'POST' });
+        const d = res.data.value as any;
+        if (d && d.success) {
+            health.value = { ...health.value, [id]: { state: 'ok', latency: d.latency_ms } };
+            return true;
+        }
+        health.value = { ...health.value, [id]: { state: 'fail', error: (d && d.message) || 'Test failed' } };
+        return false;
+    } catch (e: any) {
+        health.value = { ...health.value, [id]: { state: 'fail', error: e?.message || 'Test failed' } };
+        return false;
+    }
+};
+
+const testAll = async () => {
+    testingAll.value = true;
+    let ok = 0;
+    const all = [...preconfiguredModels.value, ...customModels.value];
+    for (const m of all) {
+        const r = await testModel(m.id);
+        if (r) ok++;
+    }
+    testingAll.value = false;
+    toast.add({
+        title: `${ok} of ${all.length} models healthy`,
+        description: ok === all.length ? 'All models responded.' : (!hasKey.value ? 'Add your API key to activate the rest.' : 'Some models failed — hover the red mark for the error.'),
+        icon: ok === all.length ? 'i-heroicons-check-circle' : 'i-heroicons-exclamation-triangle',
+        color: ok === all.length ? 'green' : 'orange',
+    });
+};
 
 const getModels = async () => {
   const response = await useMyFetch<Model[]>('/llm/models', {
@@ -217,6 +332,7 @@ const getProviders = async () => {
 
 onMounted(async () => {
     await getModels();
+    await loadKeyStatus();
     //await getProviders();
 });
 
@@ -225,6 +341,14 @@ const handleProviderModalClose = async (value: boolean) => {
     if (!value) {  // Modal is closing
         await getModels();
         editProviderId.value = null;
+        // Re-check key status (the user may have just added/changed the key) so
+        // the banner clears, then auto-run Test all to light up the health column
+        // — only when a usable key is now present.
+        const wasKeyless = !hasKey.value;
+        await loadKeyStatus();
+        if (hasKey.value && wasKeyless) {
+            await testAll();
+        }
     }
 };
 

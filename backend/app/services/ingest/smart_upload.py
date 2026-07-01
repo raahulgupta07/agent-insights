@@ -25,7 +25,57 @@ logger = logging.getLogger(__name__)
 # lineage convention so it sorts/reads as a system column.
 SOURCE_LABEL_COL = "_source_label"
 
+# Import v2 (P1): canonical PERIOD column stamped onto merged rows when a period
+# token (month/year) is derivable from the source filename. Lets the agent slice
+# the merged table by period without UNION-ing N monthly files by hand.
+SOURCE_PERIOD_COL = "_source_period"
+
 _GLOSSARY_NAME_RE = re.compile(r"(?i)(defin|glossary|dictionary|data\s*dict|field\s*list|lookup)")
+
+# Month token (optionally followed by a 2/4-digit year) inside a human filename.
+# Mirrors post_ingest._FNAME_PERIOD_RE but kept local to avoid an import cycle.
+_FNAME_PERIOD_RE = re.compile(
+    r"(?<![a-z])("
+    r"jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|"
+    r"aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?"
+    r")(?![a-z])[\s'`’_\-]*((?:19|20)?\d{2})?",
+    re.IGNORECASE,
+)
+_FNAME_PERIOD_NUM_RE = re.compile(r"(?<!\d)((?:19|20)\d{2})[\-_/. ](0[1-9]|1[0-2])(?!\d)")
+_MON3 = {
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+}
+
+
+def period_label_from_filename(filename: str) -> Optional[str]:
+    """Return a canonical period label (e.g. ``2025-03`` or ``Mar 2025`` / ``Mar``)
+    derived from a filename's month/year token, or ``None`` when none is found.
+
+    Conservative + fail-soft: returns ``None`` (no period column) on any doubt.
+    """
+    try:
+        stem = os.path.splitext(os.path.basename(filename or ""))[0]
+        if not stem:
+            return None
+        mn = _FNAME_PERIOD_NUM_RE.search(stem)
+        if mn:
+            return f"{mn.group(1)}-{mn.group(2)}"
+        m = _FNAME_PERIOD_RE.search(stem)
+        if m:
+            mon = _MON3.get(m.group(1)[:3].lower())
+            if not mon:
+                return None
+            yy = m.group(2)
+            if yy:
+                yi = int(yy)
+                year = yi if yi >= 100 else 2000 + yi
+                return f"{year}-{mon:02d}"
+            # month with no year -> capitalized 3-letter month only
+            return m.group(1)[:3].capitalize()
+    except Exception:  # noqa: BLE001
+        return None
+    return None
 
 
 # ---------------------------------------------------------------------------

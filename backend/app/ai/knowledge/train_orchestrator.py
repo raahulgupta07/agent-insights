@@ -71,8 +71,8 @@ def _set(studio_id, **kw) -> None:
 # handler that captures everything the trainer + LLM client already emit, so the
 # panel shows "which model / how many tokens / what saved" without threading
 # state through every call site.
-_LOG_CAP = 400          # max lines kept in-process
-_LOG_PERSIST_CAP = 200  # max lines mirrored to the DB (bound JSON size)
+_LOG_CAP = 1500         # max lines kept in-process (verbose streaming)
+_LOG_PERSIST_CAP = 600  # max lines mirrored to the DB (bound JSON size)
 
 
 def _log(studio_id, msg, level: str = "info") -> None:
@@ -122,7 +122,14 @@ class _RunLogHandler(logging.Handler):
 
 
 # Logger names whose records we capture into the live log during a run.
-_CAPTURE_LOGGERS = ("app.ai.knowledge", "app.ai.llm", __name__)
+# Pipeline v1: widened so per-table profiling, semantic proposals, golden writes,
+# join mining, ingest + tool detail stream into the live train log (was only the
+# coarse `▸ stage` markers).
+_CAPTURE_LOGGERS = (
+    "app.ai.knowledge", "app.ai.llm", "app.ai.brain", "app.ai.tools",
+    "app.routes.column_profile", "app.services.ingest", "app.services.train",
+    __name__,
+)
 
 
 def _attach_log_capture(sid: str):
@@ -223,6 +230,219 @@ async def _resolve_pinned_sources(db, studio, organization):
         return []
 
 
+async def _route_inbox(sid, studio_id, organization_id, user_id) -> dict:
+    """``route_inbox`` train stage (flag HYBRID_TRAIN_ROUTING).
+
+    Classifies each file queued in ``Studio.config['inbox']`` with the train
+    model (default ``z-ai/glm-5.2``; per-studio override ``train_model_id``) and
+    a LARGE excerpt, then AUTO-PLACES confident files via the Smart Upload sinks
+    and HOLDS uncertain / answer-changing ones in ``Studio.config['inbox_held']``
+    for post-train Review. Runs in its OWN session so ``apply_routes``'s internal
+    commit cannot expire the main train session's ORM objects (greenlet landmine).
+    Fail-soft: never raises; returns a summary dict.
+    """
+    from app.settings.hybrid_flags import flags as _flags
+    if not getattr(_flags, "TRAIN_ROUTING", False):
+        return {"skipped": "flag off"}
+    try:
+        from app.dependencies import async_session_maker
+        from app.models.organization import Organization
+        from app.models.user import User
+        from app.models.file import File as _File
+        from app.models.llm_model import LLMModel
+        from app.services.smart_upload import classifier as _clf
+        from app.services.smart_upload import apply as _sapply
+        from app.services.llm_service import LLMService
+    except Exception as e:  # noqa: BLE001
+        _log(sid, f"route_inbox import failed: {e}", "warn")
+        return {"error": f"import: {e}"}
+
+    placed = 0
+    held_new: list = []
+    per_file: list = []      # one entry per classified queued file (segregation receipt)
+    by_dest: dict = {}       # dest -> count of placed files
+    files_in = 0             # number of queued files seen
+    try:
+        async with async_session_maker() as rdb:
+            studio = await _load_studio(rdb, studio_id)
+            organization = (await rdb.execute(
+                select(Organization).where(Organization.id == organization_id)
+            )).scalar_one_or_none()
+            user = (await rdb.execute(
+                select(User).where(User.id == user_id)
+            )).scalar_one_or_none()
+            if studio is None or organization is None:
+                return {"skipped": "no studio/org"}
+
+            cfg = studio.config if isinstance(studio.config, dict) else {}
+            queued = [q for q in (cfg.get("inbox") or []) if isinstance(q, dict)]
+            if not queued:
+                return {"skipped": "empty inbox"}
+            files_in = len(queued)
+
+            _log(sid, f"▸ route_inbox · sorting {len(queued)} inbox file(s)", "info")
+
+            # Resolve the train model (default GLM-5.2; studio override wins;
+            # fall back to the org small default; None => heuristic-only).
+            train_model = None
+            want = cfg.get("train_model_id") or "z-ai/glm-5.2"
+            try:
+                train_model = (await rdb.execute(
+                    select(LLMModel)
+                    .filter(LLMModel.organization_id == organization.id)
+                    .filter(LLMModel.model_id == want)
+                    .filter(LLMModel.is_enabled == True)  # noqa: E712
+                )).scalar_one_or_none()
+            except Exception:  # noqa: BLE001
+                train_model = None
+            if train_model is None:
+                try:
+                    train_model = await LLMService().get_default_model(
+                        rdb, organization, user, is_small=True)
+                except Exception:  # noqa: BLE001
+                    train_model = None
+            _log(sid, f"  route model: "
+                      f"{getattr(train_model, 'model_id', None) or 'heuristic-only'}",
+                 "info")
+
+            # Build {path, filename} per queued file (resolve path from File).
+            files = []
+            for q in queued:
+                p = ""
+                f = (await rdb.execute(
+                    select(_File).where(
+                        _File.id == str(q.get("file_id")),
+                        _File.organization_id == organization.id,
+                    )
+                )).scalar_one_or_none()
+                if f is not None:
+                    p = _sapply._resolve_path(f.path or "") or ""
+                files.append({"path": p, "filename": q.get("filename") or ""})
+
+            records = await _clf.classify_batch(
+                files, llm=train_model, organization=organization,
+                excerpt_chars=4000,
+            )
+
+            # Build the plan as PLAIN dicts (no ORM) so the per-item apply below
+            # can run in its OWN fresh session. semantic needs an existing target
+            # data source to map onto — at train time there isn't one yet, so we
+            # HOLD it for Review rather than letting it fail mid-batch.
+            confident = []  # plain apply items
+            for q, rec in zip(queued, records):
+                rec = dict(rec)
+                dest = rec.get("dest")
+                src = rec.get("source")
+                base = {"file_id": q.get("file_id"), "filename": q.get("filename"),
+                        "dest": dest, "confidence": rec.get("confidence"),
+                        "reason": rec.get("reason"), "signals": rec.get("signals"),
+                        "source": src}
+                if rec.get("needs_confirm") or dest in (None, "", "skip"):
+                    held_new.append(base)
+                    per_file.append({"filename": q.get("filename"), "dest": dest,
+                                     "confidence": rec.get("confidence"),
+                                     "source": src, "placed": False})
+                    _log(sid, f"  ⏸ {q.get('filename')} → {dest} "
+                              f"{rec.get('confidence')}% HELD", "info")
+                elif dest == "semantic":
+                    base["reason"] = ("glossary needs a target data source — map it "
+                                      "after the data is ingested")
+                    held_new.append(base)
+                    per_file.append({"filename": q.get("filename"), "dest": dest,
+                                     "confidence": rec.get("confidence"),
+                                     "source": src, "placed": False})
+                    _log(sid, f"  ⏸ {q.get('filename')} → semantic HELD "
+                              "(needs a data source to map onto)", "info")
+                else:
+                    confident.append(base)
+
+        # --- apply each confident item in ITS OWN fresh session (PARALLEL) -----
+        # apply_routes + create_data_source_from_file commit/rollback internally;
+        # sharing one session means one item's failure poisons the rest, so each
+        # item opens its OWN session. Those sessions are independent, so we run
+        # them with bounded concurrency (Semaphore(4)) instead of serially.
+        async def _apply_one(item: dict) -> dict:
+            try:
+                async with async_session_maker() as adb:
+                    org = (await adb.execute(select(Organization).where(
+                        Organization.id == organization_id))).scalar_one_or_none()
+                    usr = (await adb.execute(select(User).where(
+                        User.id == user_id))).scalar_one_or_none()
+                    res = await _sapply.apply_routes(
+                        adb, organization=org, current_user=usr,
+                        studio_id=str(studio_id), data_source_id=None,
+                        items=[item],
+                    )
+                r0 = (res.get("results") or [{}])[0]
+                if r0.get("ok"):
+                    return {"ok": True, "item": item, "error": None}
+                return {"ok": False, "item": item,
+                        "error": str(r0.get("detail") or "apply returned not-ok")}
+            except Exception as ie:  # noqa: BLE001 - one bad item never sinks others
+                return {"ok": False, "item": item, "error": str(ie)}
+
+        if confident:
+            # Data files flow through create_data_source_from_file, which is NOT
+            # concurrency-safe: it commits internally (expires ORM -> MissingGreenlet
+            # under parallel sessions) and auto-names the connection (parallel ->
+            # duplicate-name IntegrityError on "spreadsheet-1"). So apply DATA items
+            # strictly SEQUENTIALLY; the lighter instruction/example/skill items
+            # stay parallel. Sequential also lets same-schema months merge cleanly.
+            _DATA_DESTS = {"database", "data"}
+            data_items = [it for it in confident if it.get("dest") in _DATA_DESTS]
+            other_items = [it for it in confident if it.get("dest") not in _DATA_DESTS]
+
+            results = []
+            for it in data_items:
+                results.append(await _apply_one(it))
+
+            if other_items:
+                _sem = asyncio.Semaphore(4)
+
+                async def _guarded(it: dict) -> dict:
+                    async with _sem:
+                        return await _apply_one(it)
+
+                results.extend(await asyncio.gather(
+                    *[_guarded(it) for it in other_items],
+                    return_exceptions=False,
+                ))
+
+            for r in results:
+                item = r.get("item", {})
+                dest = item.get("dest")
+                if r.get("ok"):
+                    placed += 1
+                    by_dest[dest] = by_dest.get(dest, 0) + 1
+                    per_file.append({"filename": item.get("filename"), "dest": dest,
+                                     "confidence": item.get("confidence"),
+                                     "source": item.get("source"), "placed": True})
+                    _log(sid, f"  ✓ {item.get('filename')} → {dest} "
+                              f"{item.get('confidence')}% placed", "info")
+                else:
+                    err = r.get("error") or "apply failed"
+                    per_file.append({"filename": item.get("filename"), "dest": dest,
+                                     "confidence": item.get("confidence"),
+                                     "source": item.get("source"), "placed": False})
+                    _log(sid, f"  ✗ {item.get('filename')} → {dest} "
+                              f"FAILED: {err}", "warn")
+                    held_new.append({**item,
+                                     "reason": f"placement failed: {err}"})
+
+        # NOTE: the inbox-clear + held write is done by the CALLER on the main
+        # train session's studio object — NOT here. A separate session would race
+        # the train loop's periodic _persist_db(studio.config) writes (which carry
+        # the stale inbox) and get clobbered. We just return the held list.
+        _log(sid, f"  route_inbox done · {placed} placed · {len(held_new)} held",
+             "info")
+        return {"placed": placed, "held": len(held_new), "held_list": held_new,
+                "per_file": per_file, "by_dest": by_dest, "files_in": files_in}
+    except Exception as e:  # noqa: BLE001
+        _log(sid, f"route_inbox error: {e}", "warn")
+        return {"error": str(e), "held_list": held_new,
+                "per_file": per_file, "by_dest": by_dest, "files_in": files_in}
+
+
 async def run_training(studio_id, organization_id, user_id) -> None:
     """Run the full studio auto-train pipeline in the background. NEVER raises.
 
@@ -271,7 +491,60 @@ async def run_training(studio_id, organization_id, user_id) -> None:
                 return
 
             detail = _RUNS[sid]["detail"]
+
+            # IDLE-IN-TXN GUARD: the PK reloads above (org/user/studio SELECTs)
+            # leave an OPEN read transaction on this main `db`. The next stage
+            # (`_route_inbox`) classifies every inbox file via the LLM and can run
+            # for many MINUTES in its own session, during which `db` sits
+            # idle-IN-transaction. Postgres `idle_in_transaction_session_timeout`
+            # (300s, set in settings/database.py) then TERMINATES this connection,
+            # so every later use (`db.refresh`, `_resolve_pinned_sources`, every
+            # downstream stage) hits `connection is closed` / `Can't reconnect
+            # until invalid transaction is rolled back` and the WHOLE train rolls
+            # back — nothing past Stage 0 persists. Commit here to end the read
+            # txn so the connection goes plain-idle (no idle-in-txn timer) and
+            # survives the long external waits. (pool_pre_ping can't help: it only
+            # validates on pool checkout, never a connection held for the run.)
+            try:
+                await db.commit()
+            except Exception:
+                try:
+                    await db.rollback()
+                except Exception:
+                    pass
+
+            # --- Stage 0: route inbox files (Inbox -> Train) ------------------
+            # Classify + place any files queued in the studio inbox BEFORE we
+            # resolve sources, so newly-placed Database sources are profiled in
+            # this same run. Own-session + fail-soft; no-op when the flag is off
+            # or the inbox is empty.
+            try:
+                _set(sid, step="route_inbox", pct=8, note="sorting inbox")
+                _ri = await _route_inbox(
+                    sid, studio_id, organization_id, user_id)
+                detail["route_inbox"] = {k: v for k, v in _ri.items()
+                                         if k != "held_list"}
+                # Persist inbox-clear + held on THIS (main) session's studio so it
+                # rides the train loop's own config writes (no cross-session race).
+                if "held_list" in _ri and not _ri.get("skipped"):
+                    await db.refresh(studio)
+                    cfg = dict(studio.config) if isinstance(studio.config, dict) else {}
+                    prev = [h for h in (cfg.get("inbox_held") or [])
+                            if isinstance(h, dict)]
+                    merged = {str(h.get("file_id")): h for h in prev}
+                    for h in (_ri.get("held_list") or []):
+                        merged[str(h.get("file_id"))] = h
+                    cfg["inbox_held"] = list(merged.values())
+                    cfg["inbox"] = []
+                    studio.config = cfg
+                    await db.commit()
+                    await db.refresh(studio)
+            except Exception as _rie:  # noqa: BLE001
+                detail["route_inbox"] = {"error": str(_rie)}
+                _log(sid, f"route_inbox stage error: {_rie}", "warn")
+
             # Resolve pinned sources ONCE — reused across profiling + joins stages.
+            # (Resolved AFTER route_inbox so freshly-placed sources are included.)
             sources = await _resolve_pinned_sources(db, studio, organization)
             _log(sid, f"studio '{getattr(studio, 'name', sid)}' · {len(sources)} pinned source(s)", "info")
             try:
@@ -713,6 +986,108 @@ async def run_training(studio_id, organization_id, user_id) -> None:
                     pass
                 detail["joins"] = f"error: {e}"
             _set(sid, pct=98)
+
+            # --- Verified Goldens (P4/P5 EVAL GATE — wire pipeline INTO train) -
+            # For every business definition (metric/filter/rule) carrying an
+            # expected ground-truth answer, regenerate its golden SQL and eval it
+            # against the live source. Save ONLY matches as approved goldens;
+            # mismatches are HELD (never shipped). Reuses the doc-driven pipeline
+            # services (golden_gen + eval_gate) + the route's _save_golden upsert.
+            # Runs BEFORE hybrid_index so approved goldens get indexed this run.
+            # No-op unless BOTH flags on (VERIFIED_GOLDENS default OFF). Fail-soft.
+            try:
+                from app.settings.hybrid_flags import flags as _vg_flags
+                if _vg_flags.VERIFIED_GOLDENS and _vg_flags.FULL_PIPELINE:
+                    _set(sid, step="verified_goldens", pct=98)
+                    _log(sid, "▸ verified goldens (eval gate)", "info")
+                    from app.models.agent_definition import AgentDefinition
+                    from app.services.train import golden_gen as _G, eval_gate as _E
+                    from app.routes.pipeline import _save_golden as _save_vg
+
+                    _defs = (await db.execute(
+                        select(AgentDefinition).where(
+                            AgentDefinition.organization_id == str(organization.id),
+                            AgentDefinition.deleted_at.is_(None),
+                        )
+                    )).scalars().all()
+                    # Group each def under its own data source; defs with no pinned
+                    # source fall back to the first pinned studio source.
+                    _ds_ids = [str(getattr(s, "id", "")) for s in sources
+                               if getattr(s, "id", None)]
+                    _by_ds: dict = {}
+                    for _d in _defs:
+                        _k = _d.data_source_id or (_ds_ids[0] if _ds_ids else None)
+                        if _k:
+                            _by_ds.setdefault(str(_k), []).append(_d)
+                    _appr = _held = 0
+                    for _dsid, _grp in _by_ds.items():
+                        _cands = await _G.generate_for_definitions(
+                            db, data_source_id=_dsid, definitions=_grp)
+                        _res = await _E.evaluate(
+                            db, data_source_id=_dsid, candidates=_cands)
+                        _byid = {str(d.id): d for d in _grp}
+                        for _c in _res.get("approved", []):
+                            _dd = _byid.get(_c["definition_id"])
+                            if _dd is not None:
+                                _dd.status = "approved"
+                            await _save_vg(
+                                db, organization=organization, data_source_id=_dsid,
+                                name=_c["name"], sql=_c["sql"], expected=_c["expected"])
+                        _appr += len(_res.get("approved", []))
+                        _held += len(_res.get("held", []))
+                    await db.commit()
+                    detail["verified_goldens"] = f"ok ({_appr} approved, {_held} held)"
+                    _log(sid, f"verified goldens: {_appr} approved, {_held} held", "info")
+            except Exception as _e:  # noqa: BLE001
+                try:
+                    await db.rollback()
+                except Exception:
+                    pass
+                detail["verified_goldens"] = f"error: {_e}"
+                _log(sid, f"verified_goldens failed: {_e}", "warn")
+
+            # --- Hybrid Search auto-index (P13: wire reindex INTO training) ---
+            # Approved semantic/metric/query/doc rows -> knowledge_search_index
+            # (tsv + pgvector). Without this the Hybrid Search tab stays blank
+            # until someone clicks "Rebuild search index". Fail-soft.
+            try:
+                from app.settings.hybrid_flags import flags as _hs_flags
+                if _hs_flags.SEMANTIC_SEARCH or _hs_flags.FULL_PIPELINE:
+                    _set(sid, step="hybrid_index", pct=99)
+                    _log(sid, "▸ hybrid_index", "info")
+                    from app.ai.knowledge.indexer import reindex_org
+                    _summary = await reindex_org(db, organization)
+                    detail["hybrid_index"] = (
+                        f"ok ({_summary.get('indexed', 0)} indexed, "
+                        f"{_summary.get('embedded', 0)} embedded)"
+                    )
+            except Exception as _e:  # noqa: BLE001
+                detail["hybrid_index"] = f"error: {_e}"
+                _log(sid, f"hybrid_index failed: {_e}", "warn")
+
+            # --- Brain/Knowledge Graph (P14: wire edge-mine INTO training) ----
+            # Deterministic metric/query -> table edges; auto-publish so the
+            # graph tab fills AND the agent's neighbors() can traverse. Fail-soft.
+            try:
+                from app.settings.hybrid_flags import flags as _kg_flags
+                if (_kg_flags.SEMANTIC_SEARCH or getattr(_kg_flags, "BRAIN_GRAPH", False)
+                        or _kg_flags.FULL_PIPELINE):
+                    _set(sid, step="brain_graph", pct=99)
+                    _log(sid, "▸ brain_graph", "info")
+                    from app.ai.knowledge.knowledge_graph import build_knowledge_graph
+                    from sqlalchemy import text as _sql_text
+                    _org_id = str(getattr(organization, "id", ""))
+                    _kg = await build_knowledge_graph(db, org_id=_org_id)
+                    # auto-promote draft edges so neighbors()/agent context see them
+                    await db.execute(_sql_text(
+                        "UPDATE brain_graph_edges SET status='published' "
+                        "WHERE organization_id=:o AND status='draft'"
+                    ), {"o": _org_id})
+                    await db.commit()
+                    detail["brain_graph"] = f"ok ({_kg.get('edges_written', 0)} edges)"
+            except Exception as _e:  # noqa: BLE001
+                detail["brain_graph"] = f"error: {_e}"
+                _log(sid, f"brain_graph failed: {_e}", "warn")
 
             # --- Done ---------------------------------------------------------
             _errs = [k for k, v in detail.items()

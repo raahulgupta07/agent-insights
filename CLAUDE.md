@@ -4,6 +4,28 @@ Guide for any AI agent working in this repo. This is a **hybrid fork of bagofwor
 on branch `hybrid-brain`. Read this before touching anything.
 
 @docs/CODEBASE_MAP.md
+@docs/andrej-karpathy-skills/CLAUDE.md
+
+> **Karpathy guidelines vendored** at `docs/andrej-karpathy-skills/` (4 behavioral rules:
+> Think-before-coding · Simplicity-first · Surgical-changes · Goal-driven-execution), imported above.
+> Apply to every agent in this repo. On conflict, this file's HARD RULES win.
+
+## Full Data Pipeline → `NEWPIPE.md` (2026-06-30)
+The end-to-end 15-phase ingest→train→serve pipeline + the A+B+C combine plan (S1–S8) live in
+**`NEWPIPE.md`**. Read it before touching ingest/train. Headlines:
+- **3 chronic pains diagnosed+fixed:** (1) "Python crash again+again" = numpy ABI drift (`dlt` bumped
+  numpy→2.4.2 vs pandas) + stdlib **module-shadowing** (stray `inspect.py` in cwd) → pin `numpy<2.4`,
+  run from clean dir; (2) "KPIs not matching" = freehand ad-hoc SQL → **governed semantic layer** (locked
+  filters); (3) "highest accuracy" = **golden + answer eval gates**.
+- **Proven on real CRM data** (org Main Org `7d372305`, 6mo): 21,240→21,231 idempotent; KPIs lead=1544/
+  succ=7526/unsucc=4179 EXACT; golden gate caught new_user 658→644; answer-eval blocked 2/2 wrong numbers.
+- **P13 Hybrid Search + P14 Brain Graph WIRED into `train_orchestrator`** (stages `hybrid_index`+`brain_graph`,
+  pct 99, fail-soft, auto-publish edges) — LIVE in product (index 17, edges 10) but **EPHEMERAL (hot-cp, not baked)**.
+- **P0–P12 dlt pipeline = SEPARATE prototype** (`scratchpad/p2run/`), real data, NOT in product.
+- **Backup before replace:** `scratchpad/pipeline_backup_<ts>/` + image `cityagent-analytics:rollback-<ts>` +
+  git tag `pre-full-pipeline-<ts>`. uploads vol = `cityagentanalytics_ca_uploads` (NOT `ca_uploads`).
+- **Correction:** `SEMANTIC_SEARCH` & `FORECAST` DO have `@property`, default True — a prior map note saying
+  OFF was wrong; real blockers were empty index/edges + the approval/publish gate.
 
 ## Boot protocol (READ FIRST — do not scan the tree)
 You become the codebase expert by READING, not scanning. On session start, these load automatically and
@@ -429,8 +451,23 @@ Versioned feature feed surfaced as a 🔔 bell popover in TopNav (before profile
   (explicit import, between New-Report and profile). RULE: every shipped feature bumps
   `VERSION_HYBRID` + adds a `CHANGELOG_HYBRID.md` entry.
 
-**Current state (2026-06-28):** image `cityagent-analytics:dev` on `:3007` (baked `:v1.58.2`), branch `main`,
-mig head **`connvis1`** (off agentconn1), `VERSION_HYBRID`=**1.58.2**. **GIT: v1.51→1.58 pushed `e92eb8c` (main); v1.58.1/.2 doc+fix EPHEMERAL, NOT yet pushed.**
+**2026-06-29 FE EPHEMERAL (fe-sync only, NOT baked — pending `docker commit`):** (1) **plan-block chat leak FIXED** — `HYBRID_AGENT_PLAN` flag-on (org e02b1b04, default OFF) emits a `source_type='plan'` block; chat body renderer `reports/[id]/index.vue:387` was the 1-of-4 consumer missing the plan-skip guard → dumped raw `{"tasks":[...]}`. Fix = `&& block.source_type !== 'plan'`. RULE: skip `source_type='plan'` in EVERY render path (Progress=stepMap.ts:348/484, context=message_context_builder.py:597/1221 already do). (2) **merged Create/Activity into ONE no-tabs panel** (Option A) in the `coworkEnabled` block of `reports/[id]/index.vue` (removed `coworkTab` toggle; Create grid top + Activity below, one scroll). (3) **"only April summary" ROOT CAUSE = silent partial ingest:** CRM Agent source `0b9b39ac` has 1 table, 2447 rows ALL `_source_period=2025-04` (6 months uploaded, 5 never materialized; merged table mis-NAMED `_apr_25` → agent frames answer "April"). Guardrails proposed (manifest+reconcile / coverage-context to agent / neutral table naming / atomic batch merge / post-ingest verify-gate), NOT built. Detail → [[project_cityagent_panel_ingest_completeness]].
+
+**Current state (2026-07-01):** image `cityagent-analytics:dev` on `:3007` (baked `:v1.65.0`), branch `main`,
+mig head **`defreg1`**, `VERSION_HYBRID`=**1.65.0**. **v1.65.0 = Power BI P3 device-code sign-in (MFA-safe, BAKED):**
+`services/powerbi_device_code.py` (start/poll, MS public client, offline_access→refresh_token) + routes
+`POST /data_sources/{id}/my-credentials/device-code/{start,poll}` (poll-success persists Fernet refresh_token) +
+`PowerBIUserClient.refresh_token` param + refresh-grant branch in `connect()` + FE "Sign in with a code" button.
+Proven live (SG tenant approved in browser → refresh_token → 3 workspaces). Rollback `pre-p3-rollback`, flag ON org
+7d372305, NOT git-pushed. Tester `scratchpad/pbi_devicecode_app.py` (:8901). Detail → DEVLOG 2026-07-01.
+**v1.64.0 = Power BI per-user connector NEXT PHASE (BAKED):**
+#8 scan-ALL-tenants (`services/powerbi_multi_tenant_scan.py` → merged tenant-tagged per-user overlay via `_upsert_user_overlay`;
+route `POST /data_sources/{id}/my-credentials/scan-all-tenants` + FE "Scan all my tenants" btn) + P5 storage-mode gate
+(`powerbi_client.py` tags `powerbi.queryable`) + P4 brute table-discovery (`_brute_discover_tables`, HARDENED: skip empty DBs +
+abort on 429). Flag `HYBRID_POWERBI_USER` ON org 7d372305, rollback `pre-powerbi-rollback`, NOT git-pushed. Detail → DEVLOG 2026-07-01. **GIT: v1.51→1.58 pushed `e92eb8c` (main); everything after — v1.59 through v1.65 (PowerBI P1–P3 + #8/P4/P5, verified-golden train, E3/E4 ingest) — EPHEMERAL/commit-baked only, NOT pushed. Image tags: `:v1.65.0`=`:dev`, rollbacks `pre-p3-rollback`(=1.64)/`pre-powerbi-rollback`(=1.64 base)/`pre142-rollback`… Baked work lives only in the local image → PUSH is the top open risk.**
+**v1.63.0 = verified-golden EVAL GATE wired INTO training** — new fail-soft stage in `ai/knowledge/train_orchestrator.run_training` (after `joins`, before `hybrid_index`), gated `HYBRID_VERIFIED_GOLDENS` AND `HYBRID_FULL_PIPELINE`: loads `AgentDefinition`s → `golden_gen`→`eval_gate` → saves only matches (`pipeline._save_golden`), HOLDS mismatch/error. Proven real train org **7d372305**: 3 approved (Lead 1544/Succ 7526/Unsucc 4179 EXACT)/6 held. Detail `docs/TRAINING_TODO.md`+`TRAINING_STATE.md`, DEVLOG 2026-07-01. **LANDMINE: offline `docker exec python` skips `load_overrides_from_db` → flags read OFF (e.g. `ONE_TABLE_MERGE`) → wrong results; `set_override`/load first.** Snapshot `rollback-training-20260701`.
+**E3/E4 INGEST WIRED (2026-07-01, EPHEMERAL, flags OFF):** agent file-upload route `routes/data_source_from_file.py` block **4c4** (after reconcile, before post-ingest, gated `COLUMN_PROFILE or DATA_VALIDATION`, fail-soft): E3 `column_profile.profile_frame`→`persist_profile` into `DataSourceTable.columns[].metadata` (auto-surfaces via existing column-metadata render — distinct/nulls/values); E4 `data_validator.null_and_dup_checks`→`build_data_quality_block`→`metadata_json['data_quality']` per table (findings only). Render: `ai/context/sections/tables_schema_section._render_data_quality_note()` wired into both table render paths. Flags `HYBRID_COLUMN_PROFILE`+`HYBRID_DATA_VALIDATION` default OFF. NOT ON org 7d372305 yet, NOT baked. See DEVLOG 2026-07-01.
+**PowerBI probe (2026-07-01):** `scratchpad/pbi_probe.py` (stdlib :8899, email+pw→token/workspaces/datasets/query-test/diagnosis). CONFIRMED identity `<pbi-test-user>` correct, standard Pro member (not admin). Hub Team datasets Abf+onPrem → constant DAX 200 but INFO.TABLES 400 (on-prem-gateway = non-REST-queryable, LIVE). `DataAgent_TestRun` still not visible → wrong grant/workspace. → [[project_cityagent_powerbi_item_access]].
 **v1.56–1.58.2 = PROGRESS WAVE + DOCK + AUTO-ARTIFACT + OutputsFeed FIX — detail → DEVLOG/CHANGELOG 2026-06-28:**
 - **v1.56–1.57 progress wave/dock:** flat "Thinking…" → warm clay `wave · live step · wave · m:ss` in the report chat. **Real renderer = `pages/reports/[id]/index.vue` inline header + bare-dots block** (NOT `AgentStepTimeline.vue` — that's a different surface; `runningStageText(m)` from `blocksToSteps`). `.cai-wave` CSS (4-hump path, scaleY 0.35–1.15, 1.3s, `cc-shimmer` text). Home idle wave (`pages/index.vue .home-wave`). Docked status strip above composer = **autoBuilding-phase ONLY** (v1.58.1 dropped the `runActive` branch — it duplicated the inline indicator).
 - **v1.58.0 AUTO-ARTIFACT (`HYBRID_AUTO_ARTIFACT`, default OFF, ON org 1a073f60):** data turn with zero artifacts → background dashboard build. `services/auto_artifact.py schedule_auto_artifact()` → strong-ref'd `asyncio.create_task` → fresh session (reload by PK) → reuse `report_slides._generate_artifact(mode='page')`; idempotent (zero-artifact gate = 1 build/report), fail-soft. Hooks `completion_service.py` non-stream + stream after answer+sense_making. FE polls `/artifacts/report/{id}` 6s×30 (`autoBuilding`) + dock "Building a dashboard…". VERIFIED LIVE end-to-end (page:completed ~50s). Clarify turns (ambiguous ask, multiple active sources) run no create_data → no artifact = EXPECTED.

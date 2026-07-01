@@ -50,10 +50,21 @@ class FileService:
             content = await file.read()
             await buffer.write(content)
 
+        # Resolve a non-null content_type: clients (curl/requests/SDKs) may omit
+        # the part Content-Type, leaving UploadFile.content_type None. FileSchema
+        # requires a str, so guess from the filename, else octet-stream — else the
+        # response serialization 500s even though the upload itself succeeded.
+        import mimetypes
+        resolved_ct = (
+            file.content_type
+            or mimetypes.guess_type(safe_name)[0]
+            or "application/octet-stream"
+        )
+
         # Create the database entry
         db_file = File(
             filename=safe_name,
-            content_type=file.content_type,
+            content_type=resolved_ct,
             path=file_location,
             user_id=current_user.id,
             organization_id=organization.id

@@ -78,12 +78,19 @@ default_llm:
     additional_config:
       base_url: https://openrouter.ai/api/v1
       verify_ssl: true
+    # All seeded models ship PRECONFIGURED (is_preset implied by config-seed).
+    # Verified through AgentV2 smoke tests (v1.62 model evals). Opus dropped.
     models:
       - { model_id: anthropic/claude-sonnet-4.6, model_name: Claude Sonnet 4.6, is_default: true }
       - { model_id: anthropic/claude-haiku-4.5, model_name: Claude Haiku 4.5, is_small_default: true }
-      - { model_id: anthropic/claude-opus-4.8, model_name: Claude Opus 4.8 }
       - { model_id: openai/gpt-5.4-mini, model_name: GPT-5.4 Mini }
       - { model_id: google/gemini-2.5-flash, model_name: Gemini 2.5 Flash }
+      - { model_id: deepseek/deepseek-v4-pro, model_name: DeepSeek V4 Pro }
+      - { model_id: minimax/minimax-m2.5, model_name: MiniMax M2.5 }
+      - { model_id: minimax/minimax-m3, model_name: MiniMax M3 }
+      - { model_id: moonshotai/kimi-k2.6, model_name: Kimi K2.6 }
+      - { model_id: z-ai/glm-5.1, model_name: GLM 5.1 }
+      - { model_id: z-ai/glm-5.2, model_name: GLM 5.2 }
 
 intercom:
   enabled: true

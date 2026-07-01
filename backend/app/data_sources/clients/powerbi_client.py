@@ -7,6 +7,51 @@ import re
 from urllib.parse import unquote
 
 
+# Storage modes that are queryable via the REST executeQueries DAX API.
+_QUERYABLE_STORAGE_MODES = {"Import", "PremiumFiles", "Abf", "DirectQuery"}
+
+
+def _is_dataset_queryable(ds: Dict) -> bool:
+    """
+    Whether a Power BI dataset can be queried via the REST executeQueries DAX API.
+
+    On-prem-gateway-required datasets and AAS-live datasets connect fine but
+    every DAX query 400s, so we tag them as not queryable at scan time.
+    """
+    storage_mode = ds.get("storageMode") or ds.get("targetStorageMode")
+    if ds.get("isOnPremGatewayRequired") is True:
+        return False
+    return storage_mode in _QUERYABLE_STORAGE_MODES
+
+
+# Common analytics table names to brute-probe when COLUMNSTATISTICS + REST /tables
+# both come back empty (lakehouse/warehouse-backed datasets).
+_COMMON_TABLE_NAMES = [
+    "sales", "Sales", "orders", "Orders", "order_lines", "Order_Lines",
+    "customers", "Customers", "customer", "Customer",
+    "products", "Products", "product", "Product",
+    "inventory", "Inventory", "stock", "Stock",
+    "transactions", "Transactions", "transaction", "Transaction",
+    "fact", "Fact", "facts", "Facts",
+    "dim_date", "Dim_Date", "date", "Date", "calendar", "Calendar", "dates", "Dates",
+    "dim_product", "Dim_Product", "dim_customer", "Dim_Customer", "dim_store", "Dim_Store",
+    "store", "Store", "stores", "Stores",
+    "employees", "Employees", "employee", "Employee",
+    "users", "Users", "user", "User",
+    "accounts", "Accounts", "account", "Account",
+    "invoices", "Invoices", "invoice", "Invoice",
+    "payments", "Payments", "payment", "Payment",
+    "items", "Items", "item", "Item",
+    "categories", "Categories", "category", "Category",
+    "suppliers", "Suppliers", "supplier", "Supplier",
+    "regions", "Regions", "region", "Region",
+    "dimension", "Dimension", "measures", "Measures",
+    "data", "Data", "Table",
+]
+# De-dup preserving order.
+_COMMON_TABLE_NAMES = list(dict.fromkeys(_COMMON_TABLE_NAMES))
+
+
 def _clean_table_display_name(table_name: str) -> str:
     """
     Clean up Power BI table names for display.
@@ -251,6 +296,8 @@ class PowerBIClient(DataSourceClient):
                     "configuredBy": ds.get("configuredBy"),
                     "isRefreshable": ds.get("isRefreshable"),
                     "isOnPremGatewayRequired": ds.get("isOnPremGatewayRequired"),
+                    "storageMode": ds.get("storageMode") or ds.get("targetStorageMode"),
+                    "targetStorageMode": ds.get("targetStorageMode"),
                     "webUrl": ds.get("webUrl"),
                 })
             url = payload.get("@odata.nextLink")
@@ -298,9 +345,13 @@ class PowerBIClient(DataSourceClient):
         headers = self._build_headers()
 
         # Try COLUMNSTATISTICS first (works for most datasets without admin perms)
-        tables, _ = self._get_tables_via_column_stats(workspace_id, dataset_id)
+        tables, empty_db = self._get_tables_via_column_stats(workspace_id, dataset_id)
         if tables:
             return tables, []
+        # Genuinely empty database (e.g. staging lakehouse/warehouse with 0 tables) —
+        # nothing to find. Skip the REST + brute probes to avoid wasted calls / 429.
+        if empty_db:
+            return [], []
 
         # Fallback: REST API /tables (only works for Push datasets)
         url = f"{self.BASE_URL}/groups/{workspace_id}/datasets/{dataset_id}/tables"
@@ -310,6 +361,11 @@ class PowerBIClient(DataSourceClient):
             if rest_tables and any(t.get("columns") for t in rest_tables):
                 return rest_tables, []
 
+        # Last resort: brute-probe common table names (lakehouse/warehouse datasets)
+        tables, _ = self._brute_discover_tables(workspace_id, dataset_id)
+        if tables:
+            return tables, []
+
         return [], []
 
     def _get_tables_via_column_stats(self, workspace_id: str, dataset_id: str) -> tuple:
@@ -318,7 +374,9 @@ class PowerBIClient(DataSourceClient):
         Works for most imported and DirectQuery datasets.
 
         Returns:
-            tuple: (tables_list, relationships_list) - relationships always empty for this method
+            tuple: (tables_list, empty_db) — ``empty_db`` True when the dataset is a
+            genuinely empty database (0 tables), so the caller can skip the REST /
+            brute-probe fallbacks (which would just waste calls and risk HTTP 429).
         """
         import logging
 
@@ -327,7 +385,7 @@ class PowerBIClient(DataSourceClient):
             stats_dax = "EVALUATE COLUMNSTATISTICS()"
             stats_df = self._execute_dax_internal(workspace_id, dataset_id, stats_dax)
             if stats_df.empty:
-                return [], []
+                return [], False
 
             # Build tables structure from column stats
             tables_dict: Dict[str, Dict] = {}
@@ -352,11 +410,71 @@ class PowerBIClient(DataSourceClient):
                 })
 
             # No relationships available via COLUMNSTATISTICS
-            return list(tables_dict.values()), []
+            return list(tables_dict.values()), False
 
         except Exception as e:
+            msg = str(e)
+            # "DAX Evaluate queries work only on databases which have at least one
+            # table" = the dataset is an empty database, not a blocked one → don't
+            # bother with the REST/brute fallbacks.
+            empty_db = "at least one table" in msg
             logging.warning(f"COLUMNSTATISTICS failed for dataset {dataset_id}: {e}")
-            return [], []
+            return [], empty_db
+
+    def _brute_discover_tables(self, workspace_id: str, dataset_id: str) -> tuple:
+        """
+        Last-resort table discovery: probe a list of common table names with
+        `EVALUATE TOPN(1, 'Name')`. HTTP 200 = the table exists and its columns
+        (DataFrame column names, stripped of the `Name[col]` bracket wrapping)
+        give the column names. Any error on a candidate = skip it (fail-soft).
+
+        For lakehouse/warehouse-backed datasets that reject COLUMNSTATISTICS and
+        aren't Push datasets (so REST /tables is empty).
+
+        Returns:
+            tuple: (tables_list, relationships_list) - relationships always empty
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        import threading
+
+        # If Power BI starts returning 429 (120 req/min/user cap), stop probing
+        # immediately — hammering ~40 more names guarantees a rate-limit storm.
+        rate_limited = threading.Event()
+
+        def _probe(name: str) -> Optional[Dict]:
+            if rate_limited.is_set():
+                return None
+            try:
+                dax = f"EVALUATE TOPN(1, '{name}')"
+                df = self._execute_dax_internal(workspace_id, dataset_id, dax)
+            except Exception as e:
+                if "429" in str(e):
+                    rate_limited.set()
+                return None
+
+            columns = []
+            for raw_col in df.columns:
+                if "[" in raw_col and "]" in raw_col:
+                    col = raw_col[raw_col.index("[") + 1:raw_col.index("]")]
+                else:
+                    col = raw_col
+                if col:
+                    columns.append({"name": col, "dataType": "unknown"})
+
+            return {"name": name, "columns": columns, "measures": []}
+
+        tables_list = []
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            futures = {pool.submit(_probe, name): name for name in _COMMON_TABLE_NAMES}
+            for fut in as_completed(futures):
+                try:
+                    result = fut.result()
+                except Exception:
+                    result = None
+                if result:
+                    tables_list.append(result)
+
+        return tables_list, []
 
     def _get_tables_via_admin_scan(self, workspace_id: str, dataset_id: str) -> tuple:
         """
@@ -703,6 +821,9 @@ class PowerBIClient(DataSourceClient):
                         "tableName": tbl_name,
                         "configuredBy": ds.get("configuredBy"),
                         "webUrl": ds.get("webUrl"),
+                        "storageMode": ds.get("storageMode") or ds.get("targetStorageMode"),
+                        "isOnPremGatewayRequired": ds.get("isOnPremGatewayRequired"),
+                        "queryable": _is_dataset_queryable(ds),
                         "reports": reports_by_dataset.get(ds_id, []),
                     }
                 }

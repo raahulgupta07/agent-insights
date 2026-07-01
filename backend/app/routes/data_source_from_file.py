@@ -45,6 +45,18 @@ class DataSourceFromFileRequest(BaseModel):
     description: Optional[str] = None
 
 
+def _dlt_table_name(ds) -> str:
+    """Stable snake_case DuckDB table name for the dlt durable warehouse.
+
+    Keyed by DataSource id (stable across appends) so every month of the same
+    source merges into ONE table. Prefixed ``t_`` to guarantee a valid identifier.
+    """
+    import re as _re
+
+    raw = str(getattr(ds, "id", "") or getattr(ds, "name", "") or "src")
+    return "t_" + _re.sub(r"[^a-z0-9]+", "_", raw.lower()).strip("_")[:48]
+
+
 async def _dedupe_ds_name(db: AsyncSession, org_id: str, base: str) -> str:
     """Return a DataSource name unique within the org: ``base`` if free, else
     ``base (2)``, ``base (3)`` … (org-scoped, case-insensitive). Fail-soft: on any
@@ -190,7 +202,20 @@ async def _try_merge_same_schema(db, *, organization, current_user, file, abs_pa
         # Append: add this file to the target source's merged_paths + re-sync.
         label = smart_upload.label_from_filename(file.filename or file.path)
         mp = list(cfg.get("merged_paths") or [])
-        mp.append({"path": file.path, "label": label, "file_id": str(file.id)})
+        # IDEMPOTENCY GUARD: never re-append a file already merged (by file_id OR
+        # byte-identical content hash). Without this, re-ingesting the same file
+        # stacks its rows again -> duplicate inflation (the 4.5x dup we hit).
+        _already = any(
+            str(m.get("file_id")) == str(file.id)
+            or (content_hash and m.get("content_hash") == content_hash)
+            for m in mp
+        )
+        if _already:
+            return await _new_source_response(
+                db, data_source_service, ds.id, organization, current_user,
+                extra={"reused": True, "merged": True, "reason": "already_merged_skip_dupe"},
+            )
+        mp.append({"path": file.path, "label": label, "file_id": str(file.id), "content_hash": content_hash})
         cfg["merged_paths"] = mp
         conn.config = json.dumps(cfg) if isinstance(conn.config, str) else cfg
         flag_modified(conn, "config")
@@ -218,9 +243,77 @@ async def _try_merge_same_schema(db, *, organization, current_user, file, abs_pa
                 pass
 
         logger.info("from-file: same-schema append -> data_source %s (+%s)", ds.id, label)
+
+        # DURABILITY (persist-on-append): write the merged frames to staging_<org>
+        # (Postgres volume) so the data survives container restart/rebuild. The
+        # main new-source path persists, but this append branch returns BEFORE
+        # reaching that block — so without this, appended months live only in
+        # in-memory DuckDB and vanish on restart. Fail-soft.
+        try:
+            from app.settings.hybrid_flags import flags as _pw_flags
+
+            if _pw_flags.PERSIST_WAREHOUSE:
+                from app.services.ingest import upload_persist
+
+                ds_pq = await db.execute(
+                    select(DataSource).options(selectinload(DataSource.connections)).filter(DataSource.id == ds.id)
+                )
+                ds_persist = ds_pq.scalar_one()
+                await upload_persist.persist_upload_to_warehouse(
+                    db, organization=organization, data_source=ds_persist, file=file,
+                )
+        except Exception:  # noqa: BLE001
+            logger.warning("from-file: warehouse persist on same-schema append failed", exc_info=True)
+
+        # NEWPIPE P2/P3 (HYBRID_DLT_INGEST): durable, idempotent dlt merge into the
+        # per-org DuckDB file warehouse (by _source_period + content-hash). Additive
+        # to the legacy path; never raises. OFF -> skipped entirely.
+        try:
+            from app.settings.hybrid_flags import flags as _dlt_flags
+
+            if _dlt_flags.DLT_INGEST or _dlt_flags.FULL_PIPELINE:
+                from app.services.ingest import dlt_ingest as _dlt
+                _tbl = _dlt_table_name(ds)
+                _res = _dlt.ingest_file(
+                    org_id=str(organization.id), table=_tbl,
+                    file_path=_resolve_upload_path(file.path or ""),
+                    file_name=file.filename or file.path,
+                )
+                logger.info("from-file: dlt_ingest append %s", _res)
+                # NEWPIPE P6 quality gate on the durable warehouse
+                from app.services.ingest import quality_gate as _qg
+                _gate = _qg.run_quality_gate(str(organization.id), _tbl)
+                logger.info("from-file: quality_gate append passed=%s hard_fail=%s",
+                            _gate.get("passed"), _gate.get("hard_fail"))
+        except Exception:  # noqa: BLE001
+            logger.warning("from-file: dlt_ingest append failed", exc_info=True)
+
+        # Phase 2/5 (HYBRID_INGEST_RECONCILE): THIS is the real multi-file merge
+        # path (each appended month grows merged_paths). Reconcile here so a
+        # dropped month flips the source DEGRADED + surfaces coverage — the
+        # new-source branch above always has merged_paths=[] so it can't.
+        extra = {"reused": True, "merged": True, "reason": "same_schema_append", "appended_label": label}
+        try:
+            from app.settings.hybrid_flags import flags as _rec_flags
+
+            if _rec_flags.INGEST_RECONCILE:
+                from app.services.ingest import reconcile as _reconcile
+
+                ds_q2 = await db.execute(
+                    select(DataSource).options(selectinload(DataSource.connections)).filter(DataSource.id == ds.id)
+                )
+                ds_r = ds_q2.scalar_one()
+                cov = await _reconcile.run_ingest_reconcile(
+                    db, organization=organization, data_source=ds_r, connection=ds_r.connections[0],
+                )
+                if cov:
+                    extra["ingest_coverage"] = cov
+        except Exception:  # noqa: BLE001
+            logger.warning("from-file: reconcile on same-schema append failed", exc_info=True)
+
         return await _new_source_response(
             db, data_source_service, ds.id, organization, current_user,
-            extra={"reused": True, "merged": True, "reason": "same_schema_append", "appended_label": label},
+            extra=extra,
         )
 
     return None
@@ -490,6 +583,124 @@ async def create_data_source_from_file(
     except Exception:  # noqa: BLE001
         logger.warning("from-file: total-row detection failed", exc_info=True)
 
+    # ── 4c2. Import v2 P4 (HYBRID_PERSIST_WAREHOUSE): persist to staging ──
+    # Write the frames into the per-org Postgres staging schema (durable, deep
+    # stats) and stamp physical refs so the unified VIEW below can materialize.
+    # Runs BEFORE T4 so cross_source_unify sees the physical tables. Fail-soft.
+    warehouse: Optional[dict] = None
+    try:
+        from app.settings.hybrid_flags import flags as _pw_flags
+
+        if _pw_flags.PERSIST_WAREHOUSE:
+            from app.services.ingest import upload_persist
+
+            warehouse = await upload_persist.persist_upload_to_warehouse(
+                db, organization=organization, data_source=data_source, file=file,
+            )
+    except Exception:  # noqa: BLE001
+        logger.warning("from-file: warehouse persist failed", exc_info=True)
+
+    # ── 4c2b. NEWPIPE P2/P3 (HYBRID_DLT_INGEST): durable dlt merge ───────
+    try:
+        from app.settings.hybrid_flags import flags as _dlt_flags
+
+        if _dlt_flags.DLT_INGEST or _dlt_flags.FULL_PIPELINE:
+            from app.services.ingest import dlt_ingest as _dlt
+            _tbl = _dlt_table_name(data_source)
+            _res = _dlt.ingest_file(
+                org_id=str(organization.id), table=_tbl,
+                file_path=_resolve_upload_path(file.path or ""),
+                file_name=file.filename or file.path,
+            )
+            logger.info("from-file: dlt_ingest new-source %s", _res)
+            from app.services.ingest import quality_gate as _qg
+            _gate = _qg.run_quality_gate(str(organization.id), _tbl)
+            logger.info("from-file: quality_gate new-source passed=%s hard_fail=%s",
+                        _gate.get("passed"), _gate.get("hard_fail"))
+    except Exception:  # noqa: BLE001
+        logger.warning("from-file: dlt_ingest new-source failed", exc_info=True)
+
+    # ── 4c3. Phase 2 (HYBRID_INGEST_RECONCILE): reconcile gate ──────────
+    # Compare what actually materialized against what the merge tried to load.
+    # Any failed file or row shortfall -> stamp ingest_coverage + mark the source
+    # DEGRADED, so the gap is visible (agent context P3 + UI P5) instead of a
+    # silent partial ingest. Fail-soft, flag-gated, no data mutation.
+    ingest_coverage: Optional[dict] = None
+    try:
+        from app.settings.hybrid_flags import flags as _rec_flags
+
+        if _rec_flags.INGEST_RECONCILE:
+            from app.services.ingest import reconcile as _reconcile
+
+            # Reload the source with its connection eagerly loaded.
+            ds_q = await db.execute(
+                select(DataSource)
+                .options(selectinload(DataSource.connections))
+                .filter(DataSource.id == data_source.id)
+            )
+            ds_full = ds_q.scalar_one()
+            conn_full = ds_full.connections[0]
+            ingest_coverage = await _reconcile.run_ingest_reconcile(
+                db, organization=organization, data_source=ds_full, connection=conn_full,
+            )
+    except Exception:  # noqa: BLE001
+        logger.warning("from-file: ingest reconcile failed", exc_info=True)
+
+    # ── 4c4. E3 column profiling + E4 data-quality validation ───────────
+    # Master Plan stages 3-4. Additive, fail-soft, flag-gated. E3 writes a
+    # per-column profile (dtype/null_pct/distinct/min/max/top_values) into each
+    # DataSourceTable.columns[].metadata — the SAME store column_intel uses, so
+    # the agent's schema context surfaces distinct/nulls/values automatically
+    # (tables_schema_section reads col metadata). E4 runs the null/dup +
+    # near-duplicate-category checks and stamps a <data_quality> block onto each
+    # active table's metadata_json (rendered like the coverage note) so the agent
+    # is warned about typo-split categories / dead columns before it answers.
+    try:
+        from app.settings.hybrid_flags import flags as _pv_flags
+
+        if _pv_flags.COLUMN_PROFILE or _pv_flags.DATA_VALIDATION:
+            from app.services.ingest import column_profile as _cp
+            from app.services.ingest import data_validator as _dv
+            from app.data_sources.clients.spreadsheet_client import SpreadsheetClient
+            from app.models.datasource_table import DataSourceTable
+
+            frames = SpreadsheetClient(path=file.path, file_id=str(file.id))._load_frames()
+
+            trows = (
+                await db.execute(
+                    select(DataSourceTable).where(
+                        DataSourceTable.datasource_id == str(data_source.id),
+                        DataSourceTable.is_active.is_(True),
+                    )
+                )
+            ).scalars().all()
+
+            merged_profile: dict = {}
+            all_warnings: list = []
+            for _name, _df in (frames or {}).items():
+                prof = _cp.profile_frame(_df)
+                merged_profile.update(prof)
+                if _pv_flags.DATA_VALIDATION:
+                    all_warnings.extend(_dv.null_and_dup_checks(_df, prof))
+
+            if _pv_flags.COLUMN_PROFILE and merged_profile:
+                _cp.persist_profile(trows, merged_profile)
+
+            # Only stamp a block when there are real findings — a "clean" marker
+            # would add context noise on every upload for no benefit.
+            if _pv_flags.DATA_VALIDATION and all_warnings:
+                from sqlalchemy.orm.attributes import flag_modified
+                block = _dv.build_data_quality_block(all_warnings)
+                for _t in trows:
+                    md = dict(getattr(_t, "metadata_json", None) or {})
+                    md["data_quality"] = block
+                    _t.metadata_json = md
+                    flag_modified(_t, "metadata_json")
+
+            await db.commit()
+    except Exception:  # noqa: BLE001
+        logger.warning("from-file: column profile / data validation failed", exc_info=True)
+
     # ── 4d. Post-ingest enrichment (T4 / T6 / T7) ───────────────────────
     # All additive + fail-soft; each in its own try/except so one failing can
     # never affect the others or the upload. T4/T6 are flag-gated; T7 (cosmetic
@@ -531,6 +742,29 @@ async def create_data_source_from_file(
     except Exception:  # noqa: BLE001 - import/setup guard
         logger.warning("from-file: post-ingest enrichment unavailable", exc_info=True)
 
+    # ── 4e. Import v2 P2 (HYBRID_AUTO_MAP_GLOSSARY): standalone glossary file ──
+    # If the WHOLE uploaded file is a glossary/definitions file, parse it and
+    # auto-map its terms onto the columns of the org's EXISTING data sources
+    # (pending SemanticColumn meanings) + ingest it as a KnowledgeDoc. Fail-soft.
+    glossary_mapped: Optional[dict] = None
+    try:
+        from app.settings.hybrid_flags import flags as _gm_flags
+
+        if _gm_flags.AUTO_MAP_GLOSSARY:
+            from app.services.ingest import glossary_map
+            from app.data_sources.clients.spreadsheet_client import SpreadsheetClient
+
+            frames = SpreadsheetClient(path=file.path, file_id=str(file.id))._load_frames()
+            if glossary_map.is_glossary_file(frames):
+                terms = glossary_map.extract_glossary_terms(frames)
+                if terms:
+                    glossary_mapped = await glossary_map.map_glossary_to_org(
+                        db, organization=organization, terms=terms,
+                        source_filename=file.filename or "Glossary",
+                    )
+    except Exception:  # noqa: BLE001
+        logger.warning("from-file: glossary auto-map failed", exc_info=True)
+
     # ── 5. Build the response: DataSourceSchema (+ tables[]) ─────────────
     ds_schema = await data_source_service.get_data_source(
         db, str(data_source.id), organization, current_user
@@ -561,4 +795,10 @@ async def create_data_source_from_file(
         body["quality_findings"] = quality_summary
     if renamed_to:
         body["renamed_to"] = renamed_to
+    if glossary_mapped and glossary_mapped.get("columns_mapped"):
+        body["glossary_mapped"] = glossary_mapped
+    if warehouse and warehouse.get("tables"):
+        body["warehouse"] = warehouse
+    if ingest_coverage:
+        body["ingest_coverage"] = ingest_coverage
     return body

@@ -95,8 +95,10 @@ def _file_text(path: str, filename: str) -> str:
 # --------------------------------------------------------------------------- #
 # Per-destination sink dispatch — each reuses an existing subsystem, fail-soft
 # --------------------------------------------------------------------------- #
-async def _apply_database(db, *, organization, current_user, file_id, filename):
-    """database sink: file -> DataSource via the existing from-file route."""
+async def _apply_database(db, *, organization, current_user, file_id, filename,
+                          studio_id=None):
+    """database sink: file -> DataSource via the existing from-file route, then
+    PIN the new data source to the studio so the agent can actually see it."""
     from app.routes.data_source_from_file import (
         create_data_source_from_file,
         DataSourceFromFileRequest,
@@ -113,11 +115,39 @@ async def _apply_database(db, *, organization, current_user, file_id, filename):
         organization=organization,
     )
     body = body if isinstance(body, dict) else {}
+    ds_id = body.get("id")
+
+    # Pin the data source to the studio (StudioDataSource has only studio_id +
+    # agent_id [=data_source id]; NO organization_id column — landmine). Dedupe +
+    # undelete so re-uploads don't stack duplicate pins. Best-effort.
+    pinned = False
+    if studio_id and ds_id:
+        try:
+            from sqlalchemy import select
+            from app.models.studio import StudioDataSource
+            existing = (await db.execute(
+                select(StudioDataSource).where(
+                    StudioDataSource.studio_id == str(studio_id),
+                    StudioDataSource.agent_id == str(ds_id),
+                )
+            )).scalar_one_or_none()
+            if existing is None:
+                db.add(StudioDataSource(studio_id=str(studio_id),
+                                        agent_id=str(ds_id)))
+            elif getattr(existing, "deleted_at", None) is not None:
+                existing.deleted_at = None
+            await db.commit()
+            pinned = True
+        except Exception:  # noqa: BLE001 - pinning is best-effort
+            logger.warning("smart_upload.apply: pin DS %s to studio %s failed",
+                           ds_id, studio_id, exc_info=True)
+
     return {
-        "data_source_id": body.get("id"),
+        "data_source_id": ds_id,
         "name": body.get("name"),
         "tables": len(body.get("tables") or []),
         "reused": body.get("reused", False),
+        "pinned": pinned,
     }
 
 
@@ -300,7 +330,7 @@ async def apply_routes(
             if dest == DEST_DATABASE:
                 created = await _apply_database(
                     db, organization=organization, current_user=current_user,
-                    file_id=file_id, filename=filename,
+                    file_id=file_id, filename=filename, studio_id=studio_id,
                 )
             elif dest == DEST_SEMANTIC:
                 created = await _apply_semantic(

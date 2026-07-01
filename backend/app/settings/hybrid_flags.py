@@ -118,6 +118,9 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_AUTO_MODEL": {"label": "Auto Model Selection", "role": "user", "category": "Intelligence", "status": "experimental", "note": "Pick 'Auto' in the model picker and a complexity classifier routes each question to the cheapest capable model (Fast/Balanced/Reason). Heuristic first; a cheap LLM tie-break only on ambiguous questions. Fail-soft to the org default. Default OFF."},
     "HYBRID_CODE_ENRICH": {"label": "Code Enrich (pipeline logic)", "role": "agent", "category": "Intelligence", "status": "experimental", "note": "Extra LLM cost on train."},
     "HYBRID_FORECAST": {"label": "Forecasting Tool", "role": "user", "category": "Intelligence", "status": "stable", "note": "Holt-Winters/ETS (statsmodels) + LLM narrative. No heavy dep."},
+    "HYBRID_DLT_INGEST": {"label": "Robust Ingest (dlt)", "role": "agent", "category": "Core", "status": "experimental", "note": "dlt → DuckDB file + idempotent merge by period+content-hash. OFF = pandas path."},
+    "HYBRID_FULL_PIPELINE": {"label": "Full Pipeline (15 stages)", "role": "agent", "category": "Core", "status": "experimental", "note": "Quality-gate + golden/answer eval + hybrid-index + brain-graph in one train. See NEWPIPE.md."},
+    "HYBRID_POWERBI_USER": {"label": "Power BI Connector (User Sign-in)", "role": "user", "category": "Connectors", "status": "experimental", "note": "Adds a Power BI semantic-model connector that signs in with email+password (ROPC) — no app registration. Needs MFA off + Build permission on the datasets. Default OFF."},
     "HYBRID_SEMANTIC_SEARCH": {"label": "Hybrid Search (FTS + embeddings)", "role": "agent", "category": "Intelligence", "status": "experimental", "note": "Uses your OpenRouter key for embeddings (text-embedding-3-small). After enabling, click Rebuild search index."},
 
     # --- Agents & Access --------------------------------------------------
@@ -155,6 +158,21 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_MERGE_SAME_SCHEMA": {"label": "Merge Same-Schema Uploads", "role": "user", "category": "Ingest", "status": "stable"},
     "HYBRID_SMART_HEADER": {"label": "Smart Header + Glossary", "role": "user", "category": "Ingest", "status": "stable"},
     "HYBRID_TOTAL_ROW": {"label": "Pre-Aggregated Total-Row Detection", "role": "user", "category": "Ingest", "status": "experimental", "note": "At file ingest, flag likely total/subtotal rows (e.g. site='ALL Total') so the agent excludes them and stops double-counting SUM()."},
+    "HYBRID_ONE_TABLE_MERGE": {"label": "One-Table Merge (kill UNION ALL)", "role": "user", "category": "Ingest", "status": "experimental", "note": "Pipeline v1 (P1): same-schema monthly uploads stack into ONE table + _source_period column instead of N stem-keyed tables that forced UNION ALL. Fail-soft. Default OFF."},
+    "HYBRID_LOGIC_PARSER": {"label": "Logic / Q&A Doc Parser", "role": "user", "category": "Ingest", "status": "experimental", "note": "Pipeline v1 (P2): parse a logic/Q&A doc into (question, answer, logic) triples + expected answers; route logic docs to Instructions. Feeds the Definition Registry. Default OFF."},
+    "HYBRID_DEF_REGISTRY": {"label": "Definition Registry", "role": "review", "category": "Knowledge", "status": "experimental", "note": "Pipeline v1 (P3): single source of truth for business metrics (Lead/New User/Status rule) + expected answers; goldens/instructions reference a def so one fix propagates. Needs migration defreg1. Default OFF."},
+    "HYBRID_VERIFIED_GOLDENS": {"label": "Verified Goldens (eval gate)", "role": "review", "category": "Knowledge", "status": "experimental", "note": "Pipeline v1 (P4+P5): logic-aware golden generation + eval gate — approve a query only when it matches the doc's expected number; mismatch/unknown -> held with a diff. Default OFF."},
+    "HYBRID_QUERY_CORRECTION": {"label": "Query Correction from Instruction", "role": "user", "category": "Knowledge", "status": "experimental", "note": "Pipeline v1 (P6): a user instruction updates a definition -> regenerates every dependent golden -> re-evals. One correction fixes all SQL. Default OFF."},
+    "HYBRID_AUTO_MAP_GLOSSARY": {"label": "Auto-Map Glossary File", "role": "user", "category": "Ingest", "status": "experimental", "note": "Import v2 (P2): a standalone glossary/definitions file (uploaded on its own) is parsed term->definition and auto-mapped onto existing data sources' columns (pending SemanticColumn meanings + KnowledgeDoc). Extends Smart Header beyond in-file sheets. Fail-soft, review-gated. Default OFF."},
+    "HYBRID_ROBUST_INGEST": {"label": "Robust Spreadsheet Ingest", "role": "user", "category": "Ingest", "status": "experimental", "note": "Import v2 (P3): route spreadsheet uploads through the robust readers (encoding/delimiter sniff, real-header detection, banner skip, id-safe numeric, bad-row skip) + per-file ingest feedback, instead of the naive pandas read. Fail-soft fallback. Default OFF."},
+    "HYBRID_PERSIST_WAREHOUSE": {"label": "Persist Uploads to Warehouse", "role": "admin", "category": "Ingest", "status": "experimental", "note": "Import v2 (P4, architectural): persist spreadsheet uploads into the per-org Postgres staging schema so data survives restarts, gets deep stats, and the unified cross-source VIEW can physically materialize -- instead of in-memory DuckDB. Default OFF."},
+    "HYBRID_INGEST_RECONCILE": {"label": "Ingest Reconcile (fail-loud merge)", "role": "admin", "category": "Ingest", "status": "experimental", "note": "Ingest-completeness guard (Phase 1): the multi-file spreadsheet merge records each file's outcome (loaded|failed + rows + error) instead of silently swallowing a bad file with 'except: continue'. Later phases flip a source DEGRADED on a row-count/file mismatch, feed coverage-context to the agent (stop fabricating missing periods), and surface 'N of M failed' in the upload UI. Mirrors the chat-upload path's full-fidelity, fail-loud behavior. Off = byte-identical to today. Default OFF."},
+    "HYBRID_COLUMN_PROFILE": {"label": "Column Profiling (types + value stats)", "role": "user", "category": "Ingest", "status": "experimental", "note": "Master plan E3: on upload, profile each column (dtype num/date/category/text, null %, distinct count, min/max, top values) and persist. Fills the empty semantic_columns.type + gives validation/engineering/understanding real facts. Fail-soft. Default OFF."},
+    "HYBRID_DATA_VALIDATION": {"label": "Data Validation Gate (garbage-in net)", "role": "review", "category": "Ingest", "status": "experimental", "note": "Master plan E4: using column profiles, loud checks — filter-value existence (typo 'Retentnion' vs 'Retention' -> flag not silent-0), row-count floor, null-spike/all-null, category near-duplicate, dup-file hash. Surfaces a <data_quality> block. Golden verifies LOGIC; this verifies DATA. Fail-soft. Default OFF."},
+    "HYBRID_RATIO_METRICS": {"label": "Ratio Metrics (num ÷ den goldens)", "role": "review", "category": "Knowledge", "status": "experimental", "note": "Master plan A2+A3: parse Numerator/Denominator logic into a kind='ratio' definition (num_predicate + den_predicate + group_by), generate two COUNT queries, eval verifies BOTH counts vs ground truth -> approve rate golden. Unblocks recruitment/retention/drop-off rates (Q8/Q9/Q11). Needs migration ratiodef1. Default OFF."},
+    "HYBRID_DATA_TYPING": {"label": "Data Typing (real numbers + dates)", "role": "user", "category": "Ingest", "status": "experimental", "note": "Master plan E5: before the query engine, cast number-shaped columns ('1,234' -> 1234) and date-shaped columns (strings -> real dates) using the E3 dtype, so SUM/AVG/min-max + date range/sort work correctly. Category/text/provenance untouched (protects verified-golden filters). Conservative (>=90% must parse or keep raw), fail-soft. Default OFF."},
+    "HYBRID_TRAIN_ROUTING": {"label": "Inbox → Train auto-routing", "role": "user", "category": "Ingest", "status": "experimental", "note": "Upload files into a per-agent Inbox with no per-file decision. When you Train, a first stage classifies each queued file (train model, default GLM-5.2, + larger excerpt), auto-places confident files to Database/Semantic/Instructions/Examples/Knowledge, and HOLDS uncertain ones for post-train Review. Reuses the Smart Upload classifier + sinks. Default OFF."},
+    "HYBRID_AUTOPILOT_V2": {"label": "Auto-pilot v2 (queue-first)", "role": "user", "category": "Ingest", "status": "experimental", "note": "Reordered studio Auto-pilot: ADD (compact connector/upload/folder) → QUEUE (prominent, instant heuristic type-guess chips + inline re-route) → TRAIN (one button, streams a segregation receipt with reconcile 'N in → M placed' + coverage 'periods materialized' lines) → RESULT lanes. Held items show why (reason/confidence/signals) with one-click resolve. Faster: heuristic-first classify skips the LLM on obvious files, parallel apply, skip-unchanged. Reuses route_inbox/classifier/train. Off keeps the legacy 3-step UI. Fail-soft. Default OFF."},
 
     # --- Learning / Brain -------------------------------------------------
     "HYBRID_BRAIN_READ": {"label": "Brain Read (inject memories)", "role": "agent", "category": "Learning", "status": "stable"},
@@ -398,6 +416,31 @@ class HybridFlags:
         # or answer-changing. Reuses existing sinks (data_source_from_file,
         # doc_extractor, teach engine, docs_index). Fail-soft. Default OFF.
         return _bool("HYBRID_SMART_UPLOAD", False)
+
+    @property
+    def AUTOPILOT_V2(self) -> bool:
+        # Auto-pilot v2 panel: reordered studio home (ADD -> QUEUE -> TRAIN ->
+        # RESULT). Compact add row (connector/upload/folder), a prominent queue
+        # with instant heuristic type-guess chips + inline re-route, a one-button
+        # train that streams a structured SEGREGATION RECEIPT (per-file dest +
+        # counts) with a RECONCILE line (files-in vs placed, never silent) and a
+        # COVERAGE line (distinct _source_period vs uploads), held-lock detail
+        # (reason/confidence/signals + one-click resolve), and faster training
+        # (heuristic-first classify skips the LLM on obvious files, parallel
+        # apply, skip-unchanged). FE reuses the existing autopilot methods; BE
+        # reuses route_inbox/classifier/train. Off keeps the legacy 3-step UI.
+        # Fail-soft. Default OFF.
+        return _bool("HYBRID_AUTOPILOT_V2", False)
+
+    @property
+    def TRAIN_ROUTING(self) -> bool:
+        # Inbox -> Train auto-routing: uploads can just STASH into a per-studio
+        # inbox (no per-file decision). When the studio is trained, a new first
+        # stage (route_inbox) classifies each queued file with the train model
+        # (default GLM-5.2) + a larger excerpt, AUTO-PLACES confident files via
+        # the Smart Upload sinks and HOLDS the uncertain/answer-changing ones for
+        # post-train Review. Reuses the Smart Upload classifier + apply. OFF.
+        return _bool("HYBRID_TRAIN_ROUTING", False)
 
     # --- Slice 1: foundation -------------------------------------------------
     @property
@@ -774,6 +817,107 @@ class HybridFlags:
         return _bool("HYBRID_TOTAL_ROW", False)
 
     @property
+    def ONE_TABLE_MERGE(self) -> bool:
+        # Pipeline v1 (P1): same-schema spreadsheet uploads stack into ONE
+        # canonical table + a _source_period column, instead of N tables keyed by
+        # filename stem (which forced UNION ALL across monthly files). Fail-soft.
+        return _bool("HYBRID_ONE_TABLE_MERGE", False)
+
+    @property
+    def COLUMN_PROFILE(self) -> bool:
+        # Master plan E3: profile each column on upload (dtype, null %, distinct,
+        # min/max, top values) -> fills semantic_columns.type + feeds validation.
+        return _bool("HYBRID_COLUMN_PROFILE", False)
+
+    @property
+    def DATA_VALIDATION(self) -> bool:
+        # Master plan E4: garbage-in net — filter-value existence, row-count floor,
+        # null-spike, category near-dup, dup-file. Surfaces <data_quality>.
+        return _bool("HYBRID_DATA_VALIDATION", False)
+
+    @property
+    def DATA_TYPING(self) -> bool:
+        # Master plan E5: cast number/date-shaped columns to real types before the
+        # query engine, so SUM/AVG/date-range work instead of string ops. Uses E3
+        # dtype; category/text untouched (protects the verified-golden filters).
+        return _bool("HYBRID_DATA_TYPING", False)
+
+    @property
+    def RATIO_METRICS(self) -> bool:
+        # Master plan A2+A3: kind='ratio' definitions (num + den predicates) ->
+        # two COUNT queries -> eval verifies both counts. Unblocks rate metrics.
+        return _bool("HYBRID_RATIO_METRICS", False)
+
+    @property
+    def LOGIC_PARSER(self) -> bool:
+        # Pipeline v1 (P2): parse a logic/Q&A doc into (question, answer, logic)
+        # triples + expected answers; route logic docs into Instructions instead
+        # of held Examples. Feeds the Definition Registry. Fail-soft.
+        return _bool("HYBRID_LOGIC_PARSER", False)
+
+    @property
+    def DEF_REGISTRY(self) -> bool:
+        # Pipeline v1 (P3): Definition Registry — single source of truth for
+        # business metrics (Lead/New User/Status rule) + expected answers. Every
+        # golden/instruction references a def. Needs migration defreg1.
+        return _bool("HYBRID_DEF_REGISTRY", False)
+
+    @property
+    def VERIFIED_GOLDENS(self) -> bool:
+        # Pipeline v1 (P4+P5): logic-aware golden generation + EVAL GATE — a
+        # generated query is approved only when it matches the doc's expected
+        # number; mismatch/unknown -> held with a diff. Fail-soft.
+        return _bool("HYBRID_VERIFIED_GOLDENS", False)
+
+    @property
+    def QUERY_CORRECTION(self) -> bool:
+        # Pipeline v1 (P6): user instruction -> update a definition -> regenerate
+        # every dependent golden -> re-eval. One correction fixes all SQL.
+        return _bool("HYBRID_QUERY_CORRECTION", False)
+
+    @property
+    def AUTO_MAP_GLOSSARY(self) -> bool:
+        # Import v2 (P2): a SEPARATE glossary/definitions FILE (not a sheet inside a
+        # data file) uploaded on its own is detected, parsed term->definition, and
+        # auto-mapped onto the columns of the org's existing data sources (fuzzy
+        # name match) -> writes pending SemanticColumn meanings + a KnowledgeDoc.
+        # Extends SMART_HEADER (which only routes glossary SHEETS within a data
+        # file). Fail-soft, review-gated. Default OFF.
+        return _bool("HYBRID_AUTO_MAP_GLOSSARY", False)
+
+    @property
+    def ROBUST_INGEST(self) -> bool:
+        # Import v2 (P3): route spreadsheet uploads through the robust ingest
+        # readers (services/ingest/csv_reader + excel_reader: encoding+delimiter
+        # sniff, real-header detection, banner skip, id-safe numeric coercion,
+        # bad-row skip) instead of SpreadsheetClient's naive pandas read. Per-file
+        # ingest feedback (skipped rows, detected encoding/header) surfaced on the
+        # response. Fail-soft -> falls back to the naive reader on any error.
+        # Default OFF.
+        return _bool("HYBRID_ROBUST_INGEST", False)
+
+    @property
+    def INGEST_RECONCILE(self) -> bool:
+        # Ingest-completeness guard: make the multi-file spreadsheet merge
+        # fail-LOUD like the chat-upload path. The merge loop in
+        # SpreadsheetClient._load_frames records each file's outcome
+        # (loaded|failed + rows + error) instead of silently swallowing a bad
+        # file with `except: continue`. Later phases use this record to flip a
+        # source DEGRADED, feed coverage-context to the agent, and surface the
+        # gap in the upload UI. Flag OFF -> byte-identical to today (no capture,
+        # silent-skip preserved). Default OFF.
+        return _bool("HYBRID_INGEST_RECONCILE", False)
+
+    @property
+    def PERSIST_WAREHOUSE(self) -> bool:
+        # Import v2 (P4, architectural/risky): persist spreadsheet uploads into the
+        # per-org Postgres staging schema (tenant_schema.loader_write_engine) so
+        # data survives restarts, gets deep stats, and the cross-source unified
+        # VIEW can physically materialize -- instead of the in-memory DuckDB that
+        # is lost on restart. Default OFF (proven on a copy before recommending).
+        return _bool("HYBRID_PERSIST_WAREHOUSE", False)
+
+    @property
     def RESULT_CACHE(self) -> bool:
         # Task 7: deterministic result cache. Keyed by (normalized question text +
         # the report's per-source row-count watermark signature). On a HIT with an
@@ -844,6 +988,25 @@ class HybridFlags:
     def FORECAST(self) -> bool:
         # Wave1 P3: Prophet forecast tool (df[date,value] → forecast df). OFF.
         return _bool("HYBRID_FORECAST", True)
+
+    @property
+    def DLT_INGEST(self) -> bool:
+        # NEWPIPE P2/P3: robust dlt ingest → DuckDB FILE + idempotent merge
+        # (by _source_period + content-hash). Default OFF → pandas path unchanged.
+        return _bool("HYBRID_DLT_INGEST", False)
+
+    @property
+    def FULL_PIPELINE(self) -> bool:
+        # NEWPIPE master flag: run all 15 stages (quality-gate, golden/answer eval,
+        # hybrid-index, brain-graph) in one train. Default OFF.
+        return _bool("HYBRID_FULL_PIPELINE", False)
+
+    @property
+    def POWERBI_USER(self) -> bool:
+        # Power BI semantic-model connector via USER sign-in (ROPC email+password)
+        # instead of a service principal. Gates visibility of the `powerbi_user`
+        # connector type in the add-connection grid. Default OFF.
+        return _bool("HYBRID_POWERBI_USER", False)
 
     @property
     def GOLDEN_QUERIES(self) -> bool:
@@ -917,6 +1080,19 @@ class HybridFlags:
             "MERGE_SAME_SCHEMA": self.MERGE_SAME_SCHEMA,
             "SMART_HEADER": self.SMART_HEADER,
             "TOTAL_ROW": self.TOTAL_ROW,
+            "AUTO_MAP_GLOSSARY": self.AUTO_MAP_GLOSSARY,
+            "ROBUST_INGEST": self.ROBUST_INGEST,
+            "INGEST_RECONCILE": self.INGEST_RECONCILE,
+            "PERSIST_WAREHOUSE": self.PERSIST_WAREHOUSE,
+            "ONE_TABLE_MERGE": self.ONE_TABLE_MERGE,
+            "COLUMN_PROFILE": self.COLUMN_PROFILE,
+            "DATA_VALIDATION": self.DATA_VALIDATION,
+            "DATA_TYPING": self.DATA_TYPING,
+            "RATIO_METRICS": self.RATIO_METRICS,
+            "LOGIC_PARSER": self.LOGIC_PARSER,
+            "DEF_REGISTRY": self.DEF_REGISTRY,
+            "VERIFIED_GOLDENS": self.VERIFIED_GOLDENS,
+            "QUERY_CORRECTION": self.QUERY_CORRECTION,
             "CONTEXT_COMPACT": self.CONTEXT_COMPACT,
             "SKILL_OPTIMIZE": self.SKILL_OPTIMIZE,
             "SUBAGENTS": self.SUBAGENTS,
@@ -933,6 +1109,9 @@ class HybridFlags:
             "SENSE_MAKING": self.SENSE_MAKING,
             "AUTO_MODEL": self.AUTO_MODEL,
             "FORECAST": self.FORECAST,
+            "DLT_INGEST": self.DLT_INGEST,
+            "FULL_PIPELINE": self.FULL_PIPELINE,
+            "POWERBI_USER": self.POWERBI_USER,
             "GOLDEN_QUERIES": self.GOLDEN_QUERIES,
             "VERIFIED_METRICS": self.VERIFIED_METRICS,
             "SEMANTIC_SEARCH": self.SEMANTIC_SEARCH,
@@ -953,6 +1132,8 @@ class HybridFlags:
             "AGENT_PLAN": self.AGENT_PLAN,
             "COWORK_PANEL": self.COWORK_PANEL,
             "SMART_UPLOAD": self.SMART_UPLOAD,
+            "TRAIN_ROUTING": self.TRAIN_ROUTING,
+            "AUTOPILOT_V2": self.AUTOPILOT_V2,
         }
 
 

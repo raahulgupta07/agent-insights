@@ -384,7 +384,7 @@
 							<!-- 2. Block content - assistant message (hybrid streaming) -->
 							<!-- Prioritize final_answer over assistant - final_answer is the actual response -->
 							<!-- Show content section when: content exists OR final_answer exists OR assistant exists -->
-							<div v-if="(block.content || block.plan_decision?.final_answer || block.plan_decision?.assistant) && block.status !== 'error' && block.tool_execution?.tool_name !== 'clarify'" class="block-content markdown-wrapper" dir="auto">
+							<div v-if="(block.content || block.plan_decision?.final_answer || block.plan_decision?.assistant) && block.status !== 'error' && block.tool_execution?.tool_name !== 'clarify' && block.source_type !== 'plan'" class="block-content markdown-wrapper" dir="auto">
 								<MarkdownRender
 									:content="block.content || block.plan_decision?.final_answer || block.plan_decision?.assistant || ''"
 									:final="isBlockFinalized(block)"
@@ -878,20 +878,8 @@
 				     ============================================================ -->
 				<template v-if="coworkEnabled">
 					<div class="p-3">
-						<!-- Create / Activity segmented toggle -->
-						<div class="flex gap-1 bg-[#F0EEEC] rounded-lg p-[3px] mb-3">
-							<button
-								@click="coworkTab = 'create'"
-								:class="['flex-1 text-[12px] font-semibold py-1.5 rounded-md transition-colors cursor-pointer', coworkTab === 'create' ? 'bg-white text-[#1f2329] shadow-sm' : 'text-gray-500 hover:text-gray-700']"
-							>+ Create</button>
-							<button
-								@click="coworkTab = 'activity'"
-								:class="['flex-1 text-[12px] font-semibold py-1.5 rounded-md transition-colors cursor-pointer', coworkTab === 'activity' ? 'bg-white text-[#1f2329] shadow-sm' : 'text-gray-500 hover:text-gray-700']"
-							>Activity</button>
-						</div>
-
-						<!-- ============ CREATE TAB ============ -->
-						<div v-show="coworkTab === 'create'">
+						<!-- ============ MERGED PANEL (Option A): Create grid on top, Activity below — no tabs ============ -->
+						<div>
 							<div class="flex items-center gap-2 mb-1.5">
 								<span class="text-[10px] font-bold uppercase tracking-wide text-gray-400">Make an output</span>
 								<span class="h-px flex-1 bg-gray-100"></span>
@@ -931,8 +919,12 @@
 							</div>
 						</div>
 
-						<!-- ============ ACTIVITY TAB ============ -->
-						<div v-show="coworkTab === 'activity'" class="space-y-2.5">
+						<!-- ============ ACTIVITY (always visible, below Create) ============ -->
+						<div class="space-y-2.5 mt-3 pt-3 border-t border-gray-100">
+							<div class="flex items-center gap-2 mb-0.5">
+								<span class="text-[10px] font-bold uppercase tracking-wide text-gray-400">Activity</span>
+								<span class="h-px flex-1 bg-gray-100"></span>
+							</div>
 
 							<!-- NOW -->
 							<div class="rounded-xl border border-[#EAD8CD] bg-[#FFF6F1] px-3 py-2 flex items-center gap-2">

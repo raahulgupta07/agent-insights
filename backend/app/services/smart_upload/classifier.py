@@ -413,7 +413,8 @@ _DEST_MENU = (
 )
 
 
-def _build_route_prompt(samples: List[Dict[str, Any]]) -> str:
+def _build_route_prompt(samples: List[Dict[str, Any]],
+                        excerpt_chars: int = 600) -> str:
     lines = [
         "You route uploaded files to ONE destination each. Destinations:",
         _DEST_MENU,
@@ -424,7 +425,7 @@ def _build_route_prompt(samples: List[Dict[str, Any]]) -> str:
     ]
     for i, s in enumerate(samples, 1):
         excerpt = (s.get("excerpt") or "").replace("\r", " ")
-        excerpt = re.sub(r"[ \t]+", " ", excerpt)[:600]
+        excerpt = re.sub(r"[ \t]+", " ", excerpt)[:max(200, int(excerpt_chars or 600))]
         lines.append(f"FILE {i}: name={s.get('filename','')!r}")
         lines.append(f"EXCERPT: {excerpt}")
         lines.append("")
@@ -473,8 +474,8 @@ def _parse_route_json(raw: str) -> Dict[str, Dict[str, Any]]:
     return out
 
 
-async def llm_route(samples: List[Dict[str, Any]], llm, organization=None
-                    ) -> Dict[str, Dict[str, Any]]:
+async def llm_route(samples: List[Dict[str, Any]], llm, organization=None,
+                    excerpt_chars: int = 600) -> Dict[str, Dict[str, Any]]:
     """ONE batched small-model call. Returns {filename: {dest,confidence,reason}}.
 
     ``llm`` is a resolved model object (as returned by
@@ -485,7 +486,7 @@ async def llm_route(samples: List[Dict[str, Any]], llm, organization=None
     if not samples or llm is None:
         return {}
     try:
-        prompt = _build_route_prompt(samples)
+        prompt = _build_route_prompt(samples, excerpt_chars=excerpt_chars)
 
         def _infer() -> str:
             from app.ai.llm.llm import LLM
@@ -504,24 +505,32 @@ async def llm_route(samples: List[Dict[str, Any]], llm, organization=None
 # --------------------------------------------------------------------------- #
 # 2. classify_batch — orchestrate heuristic + optional LLM ensemble
 # --------------------------------------------------------------------------- #
-def _excerpt_for(rec: Dict[str, Any], path: str) -> str:
-    """Build a short content excerpt for the LLM from the file."""
+def _excerpt_for(rec: Dict[str, Any], path: str, excerpt_chars: int = 600) -> str:
+    """Build a content excerpt for the LLM from the file.
+
+    ``excerpt_chars`` caps the excerpt length: ~600 for the live (latency-bound)
+    upload path, much larger (e.g. 4000) at train time where a sharper read on
+    borderline files is worth the extra tokens.
+    """
+    cap = max(200, int(excerpt_chars or 600))
     ext = rec.get("ext", "")
     try:
         if ext in _TABULAR_EXTS:
             df, _ = _read_tabular(path, ext)
             if df is not None:
-                head = df.head(8).to_csv(index=False)
-                return head[:600]
+                rows = 8 if cap <= 600 else 25
+                head = df.head(rows).to_csv(index=False)
+                return head[:cap]
             return ""
         text, _ = _extract_text(path, ext, rec.get("filename", ""))
-        return (text or "")[:600]
+        return (text or "")[:cap]
     except Exception:
         return ""
 
 
 async def classify_batch(files: List[Dict[str, Any]], llm=None,
-                         organization=None) -> List[Dict[str, Any]]:
+                         organization=None,
+                         excerpt_chars: int = 600) -> List[Dict[str, Any]]:
     """Classify a batch of files. ``files`` = [{path, filename}, ...].
 
     Runs the heuristic on every file. Any record with confidence < 85 OR
@@ -553,10 +562,11 @@ async def classify_batch(files: List[Dict[str, Any]], llm=None,
     if llm is not None and tiebreak_idx:
         samples = [
             {"filename": records[i].get("filename", ""),
-             "excerpt": _excerpt_for(records[i], paths[i])}
+             "excerpt": _excerpt_for(records[i], paths[i], excerpt_chars)}
             for i in tiebreak_idx
         ]
-        llm_map = await llm_route(samples, llm, organization)
+        llm_map = await llm_route(samples, llm, organization,
+                                  excerpt_chars=excerpt_chars)
         for i in tiebreak_idx:
             fn = records[i].get("filename", "")
             llm_res = llm_map.get(fn)

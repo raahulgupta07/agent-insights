@@ -58,3 +58,7 @@ backend/loadtest/*.json
 backend/loadtest/*.csv
 backend/loadtest/smoke.json
 backend/loadtest/smoke*.json
+
+# local junk (do not commit)
+backups/
+scratchpad/

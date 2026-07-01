@@ -90,7 +90,7 @@
           Upload a whole folder
         </button>
         <p class="mt-1.5 text-[11px] text-[#9a958c] text-center">
-          Picks every spreadsheet &amp; CSV in the folder — one data agent each. For continuous auto-sync, use <span class="text-[#C2541E]">Sync a folder ⟳</span>.
+          Spreadsheets &amp; CSVs become data agents; PDFs, Word &amp; slides go to the Inbox (routed to Knowledge on Train). For continuous auto-sync, use <span class="text-[#C2541E]">Sync a folder ⟳</span>.
         </p>
 
         <p v-if="error" class="mt-3 flex items-start gap-1.5 text-xs text-red-600">
@@ -438,8 +438,19 @@ function onDrop(e: DragEvent) {
 
 // ---- whole-folder upload (webkitdirectory) -------------------------------
 // The browser hands back every file in the picked folder (recursively). Keep
-// only spreadsheets/CSVs, drop Office lock files (~$...), then reuse batchUpload.
-const FOLDER_EXTS = ['.xlsx', '.xls', '.csv']
+// every SUPPORTED file, drop Office lock files (~$...), then reuse batchUpload —
+// which type-splits: spreadsheets → Data sources, docs (pdf/docx/pptx) → the
+// studio Inbox (routed to Knowledge on Train). Nothing supported is dropped.
+const DATA_EXTS = ['.xlsx', '.xls', '.csv', '.tsv', '.txt']
+const DOC_EXTS = ['.pdf', '.docx', '.doc', '.pptx', '.md']
+const FOLDER_EXTS = [...DATA_EXTS, ...DOC_EXTS]
+// 'data' → queryable table path; 'doc' → Inbox; null → unsupported.
+function fileKind(name: string): 'data' | 'doc' | null {
+  const n = (name || '').toLowerCase()
+  if (DATA_EXTS.some((x) => n.endsWith(x))) return 'data'
+  if (DOC_EXTS.some((x) => n.endsWith(x))) return 'doc'
+  return null
+}
 function onFolderInput(e: Event) {
   const all = Array.from((e.target as HTMLInputElement).files || [])
   ;(e.target as HTMLInputElement).value = ''
@@ -448,7 +459,7 @@ function onFolderInput(e: Event) {
     return !f.name.startsWith('~$') && FOLDER_EXTS.some((x) => n.endsWith(x))
   })
   if (!files.length) {
-    error.value = 'No .xlsx, .xls or .csv files found in that folder.'
+    error.value = 'No supported files (.xlsx, .csv, .pdf, .docx, .pptx) found in that folder.'
     return
   }
   error.value = ''
@@ -463,15 +474,38 @@ const batchTotal = ref(0)
 const batchDone = ref(0)
 const batchErrors = ref<string[]>([])
 
+// Phase 5 (HYBRID_INGEST_RECONCILE): the from-file response carries
+// `ingest_coverage` when the ingest reconcile gate ran. If a multi-file merge
+// dropped any file, surface it loudly instead of a green "ready" toast — so the
+// user sees the gap at upload time, not weeks later in a wrong answer.
+function coverageOf(ds: any): string | null {
+  const c = ds?.ingest_coverage
+  if (!c || c.status !== 'degraded') return null
+  const failed = (c.failed || [])
+    .map((f: any) => f?.label || f?.path)
+    .filter(Boolean)
+    .join(', ')
+  let msg = `Only ${c.loaded_files} of ${c.expected_files} file(s) loaded.`
+  if (failed) msg += ` Missing: ${failed}.`
+  return msg
+}
+
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024  // 50 MB, matches validate()
+
 async function batchUpload(files: File[]) {
   batching.value = true
   batchTotal.value = files.length
   batchDone.value = 0
   batchErrors.value = []
-  let ok = 0
+  const coverageWarnings: string[] = []
+  const skipped: string[] = []           // unsupported / no-agent — reported, never silent
+  const docFileIds: string[] = []        // doc file_ids to queue into the Inbox
+  const docNames: string[] = []
+  let dataOk = 0
   for (const f of files) {
-    const v = validate(f)
-    if (v) { batchErrors.value.push(`${f.name}: ${v}`); batchDone.value++; continue }
+    const kind = fileKind(f.name)
+    if (!kind) { skipped.push(`${f.name}: unsupported type`); batchDone.value++; continue }
+    if (f.size > MAX_UPLOAD_BYTES) { batchErrors.value.push(`${f.name}: too large (max 50MB)`); batchDone.value++; continue }
     try {
       const fd = new FormData()
       fd.append('file', f)
@@ -479,6 +513,13 @@ async function batchUpload(files: File[]) {
       const upRes = up.data?.value as any
       if (up.error?.value || !upRes?.id) { batchErrors.value.push(`${f.name}: upload failed`); batchDone.value++; continue }
 
+      if (kind === 'doc') {
+        // pdf/docx/pptx/md → stash for the Inbox (routed to Knowledge on Train).
+        docFileIds.push(String(upRes.id)); docNames.push(f.name)
+        batchDone.value++; continue
+      }
+
+      // spreadsheet → today's queryable Data-source path.
       const payload: Record<string, any> = {
         file_id: upRes.id,
         data_source_name: baseName(f.name),
@@ -494,21 +535,77 @@ async function batchUpload(files: File[]) {
       const ds = cr.data?.value as any
       if (cr.error?.value || !ds) { batchErrors.value.push(`${f.name}: create failed`); batchDone.value++; continue }
       emit('created', ds)   // parent pins it
-      ok++
+      const cw = coverageOf(ds)
+      if (cw) coverageWarnings.push(`${f.name}: ${cw}`)
+      dataOk++
     } catch (e: any) {
       batchErrors.value.push(`${f.name}: ${detailOf(e, 'failed')}`)
     } finally {
       batchDone.value++
     }
   }
+
+  // ---- Phase 2/4: queue docs into the studio Inbox (one call, fail-soft) ----
+  let queued = 0
+  const docFailed: string[] = []
+  if (docFileIds.length) {
+    if (!props.studioId) {
+      // No agent context → can't route docs. Report, don't drop silently.
+      docNames.forEach((n) => skipped.push(`${n}: open from an agent to add docs`))
+    } else {
+      try {
+        const res = await useMyFetch(`/studios/${props.studioId}/smart-upload/inbox`, {
+          method: 'POST',
+          body: JSON.stringify({ file_ids: docFileIds }),
+          headers: { 'Content-Type': 'application/json' },
+        })
+        if (res.error?.value) throw new Error('inbox unavailable')
+        const d = res.data?.value as any
+        queued = typeof d?.added === 'number' ? d.added : docFileIds.length
+      } catch {
+        // Smart-Upload flag off / endpoint missing → fail-soft, surface it.
+        docNames.forEach((n) => docFailed.push(`${n}: docs need Smart-Upload enabled`))
+      }
+    }
+  }
+
   batching.value = false
+
+  // ---- Phase 3: honest receipt ----
+  const lanes: string[] = []
+  if (dataOk) lanes.push(`${dataOk} → Data`)
+  if (queued) lanes.push(`${queued} → Inbox`)
+  const problems = [...skipped, ...docFailed, ...batchErrors.value]
   toast.add({
-    title: `${ok} of ${files.length} file${files.length === 1 ? '' : 's'} added`,
-    description: batchErrors.value.length ? `${batchErrors.value.length} failed — see console.` : 'All files uploaded & pinned.',
-    icon: ok ? 'i-heroicons-check-circle' : 'i-heroicons-exclamation-triangle',
-    color: batchErrors.value.length ? 'orange' : 'green',
+    title: `${dataOk + queued} of ${files.length} file${files.length === 1 ? '' : 's'} added`,
+    description: (lanes.join(' · ') || 'Nothing added')
+      + (queued ? ' — run Train to route docs → Knowledge.' : ''),
+    icon: (problems.length || coverageWarnings.length) ? 'i-heroicons-exclamation-triangle' : 'i-heroicons-check-circle',
+    color: (problems.length || coverageWarnings.length) ? 'orange' : 'green',
   })
-  if (batchErrors.value.length) console.warn('Batch upload errors:', batchErrors.value)
+
+  // Loud, separate warning per incomplete merged source (ingest-reconcile).
+  if (coverageWarnings.length) {
+    toast.add({
+      title: 'Data incomplete — some files did not load',
+      description: coverageWarnings.join(' · '),
+      icon: 'i-heroicons-exclamation-triangle',
+      color: 'red',
+      timeout: 0,
+    })
+    console.warn('Ingest coverage gaps:', coverageWarnings)
+  }
+  // No-silent-drop: anything skipped/failed gets its own loud toast.
+  if (problems.length) {
+    toast.add({
+      title: 'Some files were not added',
+      description: problems.join(' · '),
+      icon: 'i-heroicons-exclamation-triangle',
+      color: 'red',
+      timeout: 0,
+    })
+    console.warn('Folder upload problems:', problems)
+  }
   emit('close')
   resetAll()
 }
@@ -602,12 +699,23 @@ async function createDataSource() {
     }
 
     const ds = data.value as any
-    toast.add({
-      title: 'Data Agent created',
-      description: `“${ds.name || name.value}” is ready to use.`,
-      icon: 'i-heroicons-check-circle',
-      color: 'green',
-    })
+    const cw = coverageOf(ds)
+    if (cw) {
+      toast.add({
+        title: 'Created — but data is incomplete',
+        description: `“${ds.name || name.value}”: ${cw} Missing periods will NOT be answered.`,
+        icon: 'i-heroicons-exclamation-triangle',
+        color: 'red',
+        timeout: 0,
+      })
+    } else {
+      toast.add({
+        title: 'Data Agent created',
+        description: `“${ds.name || name.value}” is ready to use.`,
+        icon: 'i-heroicons-check-circle',
+        color: 'green',
+      })
+    }
     emit('created', ds)
     emit('close')
     resetAll()

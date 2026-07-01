@@ -1552,7 +1552,18 @@
     "autoReindexEvery": "Reindex every",
     "everyNHours": "Every {n} hours",
     "autoReindexLastError": "Last error",
-    "autoReindexSaveFailed": "Failed to save auto-reindex settings"
+    "autoReindexSaveFailed": "Failed to save auto-reindex settings",
+    "findMyTenants": "Find my tenants",
+    "pickTenantHint": "Pick the tenant whose Power BI workspaces you need (often a guest tenant).",
+    "enterEmailPasswordFirst": "Enter your email and password first.",
+    "noTenantsFound": "No tenants found for this account.",
+    "scanAllTenants": "Scan all my tenants",
+    "scanAllHint": "{n} tables across all your tenants are now available to this agent.",
+    "deviceCodeSignIn": "Sign in with a code (MFA-safe)",
+    "enterTenantFirst": "Enter your tenant ID first (or use Find my tenants).",
+    "deviceWaiting": "Waiting for you to approve in the browser…",
+    "deviceSuccess": "Signed in — your Power BI access is ready.",
+    "deviceCodeHint": "Open the link, enter the code, approve with your phone/MFA. No password stored."
   },
   "share": {
     "shareDashboard": "Share Dashboard",

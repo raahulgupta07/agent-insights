@@ -20,6 +20,7 @@ from app.schemas.data_source_schema import DataSourceUserStatus
 from app.schemas.data_source_registry import resolve_client_class
 import json
 import inspect
+import asyncio
 
 
 class UserDataSourceCredentialsService:
@@ -541,6 +542,58 @@ class UserDataSourceCredentialsService:
             pass
 
         return UserDataSourceCredentialsSchema.from_orm(row)
+
+    async def scan_all_tenants_overlay(
+        self,
+        db: AsyncSession,
+        data_source: DataSource,
+        user: User,
+        username: str,
+        password: str,
+        client_id: Optional[str] = None,
+    ) -> dict:
+        """Scan ALL of the user's reachable Power BI tenants → merged per-user overlay.
+
+        Discovers every tenant this identity can reach (home + B2B guest), scans each,
+        merges the tenant-tagged tables, and persists them as this user's schema overlay
+        using the SAME mechanism as the single-tenant refresh path
+        (``DataSourceService._upsert_user_overlay``). Returns only the light summary
+        (``tenants`` + ``table_count``); the heavy Table objects now live in the DB overlay.
+        """
+        from app.settings.hybrid_flags import flags
+        if not getattr(flags, "POWERBI_USER", False):
+            raise HTTPException(status_code=404, detail="Power BI user sign-in is not enabled")
+
+        from app.services.powerbi_multi_tenant_scan import scan_all_tenants
+
+        # Offload the blocking multi-tenant HTTP scan to a thread.
+        result = await asyncio.to_thread(scan_all_tenants, username, password, client_id)
+
+        # Reshape merged Table objects into the normalized dict the overlay upsert expects.
+        normalized: dict[str, dict] = {}
+        for t in result.get("tables") or []:
+            name = getattr(t, "name", None)
+            if not name:
+                continue
+            normalized[name] = {
+                "columns": [
+                    {"name": getattr(c, "name", None), "dtype": getattr(c, "dtype", None)}
+                    for c in (getattr(t, "columns", []) or [])
+                ],
+                "pks": [],
+                "fks": [],
+                "metadata_json": getattr(t, "metadata_json", None),
+            }
+
+        from app.services.data_source_service import DataSourceService
+        await DataSourceService()._upsert_user_overlay(
+            db=db, data_source=data_source, user=user, normalized=normalized
+        )
+
+        return {
+            "tenants": result.get("tenants", []),
+            "table_count": result.get("table_count", 0),
+        }
 
     async def delete_my_credentials(self, db: AsyncSession, data_source: DataSource, user: User) -> None:
         stmt = (

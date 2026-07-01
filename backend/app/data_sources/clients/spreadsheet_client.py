@@ -13,6 +13,7 @@ for `get_tables` / `get_schema` / `prompt_schema` by loading the spreadsheet
 into real tables inside a fresh in-memory connection on each `connect()`.
 """
 
+import logging
 import os
 import re
 from contextlib import contextmanager
@@ -23,6 +24,8 @@ import pandas as pd
 
 from app.ai.prompt_formatters import Table, TableColumn, TableFormatter
 from app.data_sources.clients.base import DataSourceClient
+
+logger = logging.getLogger(__name__)
 
 
 _CSV_EXTS = {".csv", ".tsv", ".txt"}
@@ -56,6 +59,10 @@ class SpreadsheetClient(DataSourceClient):
         )
         self.file_id = file_id
         self.merged_paths: List[dict] = list(merged_paths or [])
+        # Phase 1 (HYBRID_INGEST_RECONCILE): populated by _load_frames with the
+        # per-file ingest outcome when the flag is on; None otherwise. Read by
+        # the from-file route's reconcile gate (Phase 2+).
+        self.last_ingest_report: Optional[dict] = None
 
     # ── helpers ──────────────────────────────────────────────────────────
 
@@ -123,6 +130,53 @@ class SpreadsheetClient(DataSourceClient):
         except Exception:  # noqa: BLE001 - never break ingest on header heuristics
             return df
 
+    def _read_one_file_robust(self, path: str, ext: str) -> "Optional[dict[str, pd.DataFrame]]":
+        """Import v2 (P3, HYBRID_ROBUST_INGEST): read via the robust ingest readers
+        (encoding/delimiter sniff, real-header detection, banner skip, id-safe
+        numeric, bad-row skip) instead of the naive pandas read.
+
+        Returns the {name -> DataFrame} mapping, or ``None`` to signal the caller
+        should fall back to the naive reader (flag off, empty result, or error).
+
+        Phase 4 (HYBRID_INGEST_RECONCILE): the reconcile guard's purpose is "load
+        everything; never silently drop a file", and banner-header / odd-format
+        files are the #1 cause of a silent drop. So the reconcile flag ALSO
+        enables the robust readers here — turning the guard on makes the failing
+        months actually parse instead of throwing into the merge-loop swallow.
+        """
+        try:
+            from app.settings.hybrid_flags import flags
+
+            if not (flags.ROBUST_INGEST or flags.INGEST_RECONCILE):
+                return None
+            out: dict[str, pd.DataFrame] = {}
+            if ext in _CSV_EXTS:
+                from app.services.ingest.csv_reader import read_csv
+
+                df = read_csv(path)
+                if df is None or df.empty:
+                    return None
+                out[os.path.splitext(os.path.basename(path))[0]] = df
+                return out
+            if ext in _XLSX_EXTS or ext in _XLS_EXTS:
+                from app.services.ingest.excel_reader import read_excel
+
+                tables = read_excel(path)
+                if not tables:
+                    return None
+                wanted = self.sheet_names
+                for t in tables:
+                    sheet = str(t.get("sheet"))
+                    if wanted is not None and sheet not in wanted:
+                        continue
+                    df = t.get("df")
+                    if df is not None and not df.empty:
+                        out[sheet] = df
+                return out or None
+        except Exception:  # noqa: BLE001 - any robust-read failure -> naive fallback
+            return None
+        return None
+
     def _read_one_file(self, raw_path: str) -> "dict[str, pd.DataFrame]":
         """Read ONE file into {sheet/stem -> DataFrame}, applying smart-header.
 
@@ -133,6 +187,13 @@ class SpreadsheetClient(DataSourceClient):
         path = self._resolve_path(raw_path)
         ext = os.path.splitext(path)[1].lower()
         out: dict[str, pd.DataFrame] = {}
+
+        # Import v2 (P3): prefer the robust readers when enabled; fall back to the
+        # naive path below on None (flag off / empty / error) so behavior is
+        # unchanged when the flag is off.
+        robust = self._read_one_file_robust(path, ext)
+        if robust:
+            return robust
 
         if ext in _CSV_EXTS:
             sep = "\t" if ext == ".tsv" else None  # None → pandas sniffs ',' default
@@ -174,36 +235,158 @@ class SpreadsheetClient(DataSourceClient):
         if not self.merged_paths:
             return {self._safe_table_name(name, used): df for name, df in primary.items()}
 
-        from app.services.ingest.smart_upload import SOURCE_LABEL_COL, label_from_filename
+        from app.services.ingest.smart_upload import (
+            SOURCE_LABEL_COL,
+            SOURCE_PERIOD_COL,
+            label_from_filename,
+            period_label_from_filename,
+            normalize_columns,
+        )
 
-        # Stamp the primary file's rows with its own provenance label.
+        # Pipeline v1 (P1, HYBRID_ONE_TABLE_MERGE): same-schema files (e.g. 6
+        # monthly CSVs whose filename stems differ) should stack into ONE table
+        # keyed by their COLUMN SIGNATURE, not the per-file stem — so the agent
+        # queries `FROM crm` instead of UNION-ALL across N stem-named tables.
+        # Flag OFF -> group by stem name (exact prior behavior).
+        try:
+            from app.settings.hybrid_flags import flags as _otm_flags
+            one_table = bool(_otm_flags.ONE_TABLE_MERGE)
+        except Exception:  # noqa: BLE001
+            one_table = False
+
+        def _group_key(name: str, df) -> str:
+            if not one_table:
+                return name
+            try:
+                # signature = order-independent set of data column names (ignore
+                # the provenance/lineage columns we add).
+                cols = [c for c in df.columns
+                        if str(c) not in (SOURCE_LABEL_COL, SOURCE_PERIOD_COL)]
+                sig = normalize_columns(cols)
+                return "sig:" + str(hash(sig))
+            except Exception:  # noqa: BLE001
+                return name
+
+        # canonical display name per group (period token stripped from the stem)
+        group_name: dict[str, str] = {}
+
+        def _canon(name: str) -> str:
+            try:
+                from app.services.ingest.post_ingest import derive_period_and_stem
+                stem, _p = derive_period_and_stem(str(name))
+                return (stem or str(name)).strip("_") or "dataset"
+            except Exception:  # noqa: BLE001
+                return str(name)
+
+        # Phase 1 (HYBRID_INGEST_RECONCILE): make the merge fail-LOUD like the
+        # chat-upload path. We record each file's outcome (loaded|failed + rows
+        # + error) so a later reconcile gate can flip the source DEGRADED and
+        # tell the agent which periods are missing — instead of a bad file being
+        # silently swallowed by `except: continue`. The actual swallow still
+        # happens (queries never block on one bad file); we just stop hiding it.
+        try:
+            from app.settings.hybrid_flags import flags as _rec_flags
+            reconcile = bool(_rec_flags.INGEST_RECONCILE)
+        except Exception:  # noqa: BLE001
+            reconcile = False
+        file_reports: list[dict] = []
+
+        # Stamp the primary file's rows with its own provenance label (+ period
+        # when one is derivable from the filename — Import v2 P1).
         primary_label = label_from_filename(self.path or "primary")
+        primary_period = period_label_from_filename(self.path or "")
         merged: dict[str, list[pd.DataFrame]] = {}
+        primary_rows = 0
         for name, df in primary.items():
             d = df.copy()
             d[SOURCE_LABEL_COL] = primary_label
-            merged.setdefault(name, []).append(d)
+            if primary_period:
+                d[SOURCE_PERIOD_COL] = primary_period
+            k = _group_key(name, df)
+            group_name.setdefault(k, _canon(name) if one_table else name)
+            merged.setdefault(k, []).append(d)
+            primary_rows += len(df)
+        if reconcile:
+            file_reports.append({
+                "path": self.path,
+                "label": primary_label,
+                "period": primary_period or None,
+                "status": "loaded",
+                "rows": int(primary_rows),
+                "primary": True,
+                "error": None,
+            })
 
-        # Append each merged file, aligning by sheet/stem name (fail-soft per file).
+        # Append each merged file (fail-soft per file). With one_table on, same-
+        # signature frames from differently-named files join the same group.
         for spec in self.merged_paths:
+            mpath = spec.get("path") if isinstance(spec, dict) else spec
+            mlabel = (spec.get("label") if isinstance(spec, dict) else None) or label_from_filename(mpath)
+            mperiod = period_label_from_filename(mpath or "")
             try:
-                mpath = spec.get("path") if isinstance(spec, dict) else spec
-                mlabel = (spec.get("label") if isinstance(spec, dict) else None) or label_from_filename(mpath)
+                appended_rows = 0
                 for name, df in self._read_one_file(mpath).items():
                     d = df.copy()
                     d[SOURCE_LABEL_COL] = mlabel
-                    merged.setdefault(name, []).append(d)
-            except Exception:
-                # A bad merged file never blocks the primary upload's queries.
+                    if mperiod:
+                        d[SOURCE_PERIOD_COL] = mperiod
+                    k = _group_key(name, df)
+                    group_name.setdefault(k, _canon(name) if one_table else name)
+                    merged.setdefault(k, []).append(d)
+                    appended_rows += len(df)
+                if reconcile:
+                    file_reports.append({
+                        "path": mpath,
+                        "label": mlabel,
+                        "period": mperiod or None,
+                        "status": "loaded",
+                        "rows": int(appended_rows),
+                        "primary": False,
+                        "error": None,
+                    })
+            except Exception as e:  # noqa: BLE001
+                # A bad merged file never blocks the primary upload's queries —
+                # but with reconcile on we RECORD it (was: silent `continue`)
+                # and log it, so the gap is visible instead of invisible.
+                if reconcile:
+                    file_reports.append({
+                        "path": mpath,
+                        "label": mlabel,
+                        "period": mperiod or None,
+                        "status": "failed",
+                        "rows": 0,
+                        "primary": False,
+                        "error": str(e)[:500],
+                    })
+                    logger.warning(
+                        "spreadsheet merge: file failed to load, recorded as gap: %s (%s)",
+                        mpath, e,
+                    )
                 continue
 
         frames: dict[str, pd.DataFrame] = {}
-        for name, parts in merged.items():
+        for key, parts in merged.items():
             try:
                 combined = pd.concat(parts, ignore_index=True, sort=False) if len(parts) > 1 else parts[0]
             except Exception:
                 combined = parts[0]
-            frames[self._safe_table_name(name, used)] = combined
+            frames[self._safe_table_name(group_name.get(key, key), used)] = combined
+
+        # Stash the per-file ingest report on the instance so the from-file route
+        # (Phase 2+) can reconcile materialized rows vs source rows and surface
+        # coverage. None when the flag is off -> downstream treats it as "no
+        # reconcile data" and behaves exactly as today.
+        if reconcile:
+            expected = 1 + len(self.merged_paths)
+            loaded = [r for r in file_reports if r["status"] == "loaded"]
+            failed = [r for r in file_reports if r["status"] == "failed"]
+            self.last_ingest_report = {
+                "expected_files": int(expected),
+                "loaded_files": len(loaded),
+                "failed_files": len(failed),
+                "source_rows": int(sum(r["rows"] for r in loaded)),
+                "files": file_reports,
+            }
         return frames
 
     @contextmanager
@@ -211,6 +394,17 @@ class SpreadsheetClient(DataSourceClient):
         con: duckdb.DuckDBPyConnection | None = None
         try:
             frames = self._load_frames()
+            # E5 (HYBRID_DATA_TYPING): cast number/date-shaped columns to real
+            # types so DuckDB does true SUM/AVG + date math instead of string ops.
+            # Fail-soft + flag-gated; category/text/provenance columns untouched
+            # (protects the verified-golden COUNT filters). OFF -> raw frames.
+            try:
+                from app.settings.hybrid_flags import flags as _ty_flags
+                if _ty_flags.DATA_TYPING:
+                    from app.services.ingest.typing import apply_typing
+                    frames = {name: apply_typing(df) for name, df in frames.items()}
+            except Exception:  # noqa: BLE001 — typing never blocks a query
+                pass
             con = duckdb.connect(database=":memory:")
             for table_name, df in frames.items():
                 # Register the DataFrame then materialize a real table so the

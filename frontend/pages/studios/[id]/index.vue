@@ -189,6 +189,10 @@
 
                         <!-- AI AUTO-PILOT (studio home) -->
                         <section v-else-if="activeTab === 'autopilot'">
+                            <!-- Auto-pilot v2 (reordered ADD→QUEUE→TRAIN→RESULT) — flag HYBRID_AUTOPILOT_V2.
+                                 When OFF the original panel below renders byte-for-byte unchanged. -->
+                            <StudioAutopilotV2 v-if="autopilotV2Enabled" :studio-id="studio?.id" :sources="sources" :docs="docs" :readiness="readiness" :can-edit="canEdit" :training-all="trainingAll" :can-train="canTrain" :train-log="trainLog" :train-stages="trainStages" :train-log-lines="trainLogLines" :active-instr="activeInstr" :active-examples="activeExamples" :show-train-log-panel="showTrainLogPanel" @add="onAutopilotAdd" @train="runFullTrain" @open-tab="t => activeTab = t" />
+                            <template v-else>
                             <div class="flex items-start justify-between gap-4 mb-1">
                                 <div>
                                     <h2 class="text-lg font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">AI Auto-pilot</h2>
@@ -240,6 +244,9 @@
                                 </div>
 
                             </div>
+
+                            <!-- INBOX → TRAIN: queued files wait here, sorted when you Train (flag HYBRID_TRAIN_ROUTING) -->
+                            <StudioInbox v-if="trainRoutingEnabled && studio?.id" ref="inboxPanel" :studio-id="studio.id" class="mt-5" />
 
                             <!-- STEP 2 · ROUTE -->
                             <div class="relative mt-5 border border-[#E9E0D3] rounded-2xl bg-white p-4">
@@ -300,14 +307,14 @@
                                     <div class="text-[11.5px] text-[#6b6b6b]"><b class="text-[#1f2328]">{{ sources.length }} source{{ sources.length===1?'':'s' }} · {{ docs.length }} doc{{ docs.length===1?'':'s' }} · {{ activeInstr + activeExamples }} rule{{ (activeInstr+activeExamples)===1?'':'s' }}</b> routed · pending review</div>
                                     <div v-if="canEdit" class="flex gap-2 shrink-0">
                                         <button type="button" class="text-[11.5px] border border-[#E9E0D3] rounded-lg px-3 py-2 text-[#6b6b6b] hover:bg-[#faf8f3] font-medium" @click="activeTab='sources'">Review routing</button>
-                                        <button type="button" :disabled="trainingAll || !sources.length" class="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-lg px-3.5 py-2 transition-colors disabled:opacity-50" @click="runFullTrain">
+                                        <button type="button" :disabled="trainingAll || !canTrain" class="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-lg px-3.5 py-2 transition-colors disabled:opacity-50" @click="runFullTrain">
                                             <Spinner v-if="trainingAll" class="h-3.5 w-3.5 text-white" />
                                             <UIcon v-else name="i-heroicons-bolt" class="w-3.5 h-3.5" />
                                             {{ trainingAll ? 'Training…' : 'Auto-train everything' }}
                                         </button>
                                     </div>
                                 </div>
-                                <p class="text-[11px] text-[#9a958c] mt-2">One pass: profile data · extract knowledge · bind skill to columns · apply rules · mine joins · write goldens · build artifacts. Disabled until ≥1 source is added.</p>
+                                <p class="text-[11px] text-[#9a958c] mt-2">One pass: profile data · extract knowledge · bind skill to columns · apply rules · mine joins · write goldens · build artifacts. Needs ≥1 pinned source or a file queued in the inbox.</p>
 
                                 <!-- INLINE TRAIN LOG (Option A): per-stage ✓/✗ + error + Reset/Retry.
                                      Reads Studio.config['_train_status'] (poll + on-mount). Makes a
@@ -361,7 +368,7 @@
                                         <div v-if="canEdit && (trainHasError || (trainLog && trainLog.status !== 'running'))" class="flex items-center gap-2 mt-2.5 pt-2.5 border-t border-[#E9E0D3]">
                                             <span v-if="trainHasError" class="text-[10.5px] font-medium text-[#C0392B]">{{ trainErrorCount }} stage{{ trainErrorCount === 1 ? '' : 's' }} failed</span>
                                             <button type="button" :disabled="trainResetting" class="ml-auto text-[10.5px] border border-[#E9E0D3] rounded-md px-2.5 py-1 text-[#6b6b6b] hover:bg-white disabled:opacity-50" @click="resetTrain">Reset</button>
-                                            <button type="button" :disabled="trainingAll || !sources.length" class="text-[10.5px] font-semibold text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-md px-2.5 py-1 disabled:opacity-50" @click="runFullTrain">Retry</button>
+                                            <button type="button" :disabled="trainingAll || !canTrain" class="text-[10.5px] font-semibold text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-md px-2.5 py-1 disabled:opacity-50" @click="runFullTrain">Retry</button>
                                         </div>
                                     </div>
                                 </div>
@@ -429,6 +436,7 @@
                                         <button v-if="canEdit" type="button" class="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-white border border-[#E8C9B5] text-[#C2541E] hover:bg-[#F6EFEA] shrink-0" @click="doSuggestion(sg.fn)">{{ sg.action }}</button>
                                     </div>
                                 </div>
+                            </template>
                             </template>
                         </section>
 
@@ -1076,19 +1084,31 @@
                             <StudioConnectors :studio="studio" :can-edit="canEdit" />
                         </section>
 
-                        <!-- KNOWLEDGE: SEMANTIC -->
+                        <!-- KNOWLEDGE: SEMANTIC (+ Deep Profiler & Lazy/Drift folded in — was i_profiler/i_lazy) -->
                         <section v-else-if="activeTab === 'k_semantic'">
                             <StudioQueries :studio-id="studioId" :sources="sources" :can-edit="canEdit" :forceTab="'semantic'" />
+                            <div class="mt-8 pt-6 border-t border-[#E9E0D3]">
+                                <StudioIntelligence :studio-id="studioId" :sources="sources" :can-edit="canEdit" :forceLayer="'profiler'" />
+                            </div>
+                            <div class="mt-8 pt-6 border-t border-[#E9E0D3]">
+                                <StudioIntelligence :studio-id="studioId" :sources="sources" :can-edit="canEdit" :forceLayer="'lazy'" />
+                            </div>
                         </section>
 
-                        <!-- KNOWLEDGE: METRICS -->
+                        <!-- KNOWLEDGE: METRICS (+ Verified Metrics layer folded in — was i_metrics) -->
                         <section v-else-if="activeTab === 'k_metrics'">
                             <StudioQueries :studio-id="studioId" :sources="sources" :can-edit="canEdit" :forceTab="'metrics'" />
+                            <div class="mt-8 pt-6 border-t border-[#E9E0D3]">
+                                <StudioIntelligence :studio-id="studioId" :sources="sources" :can-edit="canEdit" :forceLayer="'metrics'" />
+                            </div>
                         </section>
 
-                        <!-- KNOWLEDGE: QUERIES -->
+                        <!-- KNOWLEDGE: QUERIES (+ Golden Queries layer folded in — was i_golden) -->
                         <section v-else-if="activeTab === 'k_queries'">
                             <StudioQueries :studio-id="studioId" :sources="sources" :can-edit="canEdit" :forceTab="'queries'" />
+                            <div class="mt-8 pt-6 border-t border-[#E9E0D3]">
+                                <StudioIntelligence :studio-id="studioId" :sources="sources" :can-edit="canEdit" :forceLayer="'golden'" />
+                            </div>
                         </section>
 
                         <!-- KNOWLEDGE: ASSETS -->
@@ -1106,27 +1126,16 @@
                             <StudioTeach :studio-id="studioId" :sources="sources" :can-edit="canEdit" />
                         </section>
 
-                        <!-- INTELLIGENCE — 8 hybrid layers (read-only v1, :forceLayer pinned) -->
-                        <section v-else-if="activeTab === 'i_profiler'">
-                            <StudioIntelligence :studio-id="studioId" :sources="sources" :can-edit="canEdit" :forceLayer="'profiler'" />
-                        </section>
+                        <!-- INTELLIGENCE — hybrid layers (read-only v1, :forceLayer pinned).
+                             Deep Profiler + Lazy/Drift folded into k_semantic (Knowledge › Semantic). -->
                         <section v-else-if="activeTab === 'i_codeenrich'">
                             <StudioIntelligence :studio-id="studioId" :sources="sources" :can-edit="canEdit" :forceLayer="'codeenrich'" />
-                        </section>
-                        <section v-else-if="activeTab === 'i_metrics'">
-                            <StudioIntelligence :studio-id="studioId" :sources="sources" :can-edit="canEdit" :forceLayer="'metrics'" />
-                        </section>
-                        <section v-else-if="activeTab === 'i_lazy'">
-                            <StudioIntelligence :studio-id="studioId" :sources="sources" :can-edit="canEdit" :forceLayer="'lazy'" />
                         </section>
                         <section v-else-if="activeTab === 'i_insights'">
                             <StudioIntelligence :studio-id="studioId" :sources="sources" :can-edit="canEdit" :forceLayer="'insights'" />
                         </section>
                         <section v-else-if="activeTab === 'i_forecast'">
                             <StudioIntelligence :studio-id="studioId" :sources="sources" :can-edit="canEdit" :forceLayer="'forecast'" />
-                        </section>
-                        <section v-else-if="activeTab === 'i_golden'">
-                            <StudioIntelligence :studio-id="studioId" :sources="sources" :can-edit="canEdit" :forceLayer="'golden'" />
                         </section>
                         <section v-else-if="activeTab === 'i_search'">
                             <StudioIntelligence :studio-id="studioId" :sources="sources" :can-edit="canEdit" :forceLayer="'search'" />
@@ -1292,8 +1301,10 @@
                 :studio-id="studioId"
                 :data-source-id="smartUploadDataSourceId"
                 :open="smartUploadOpen"
+                :train-routing-enabled="trainRoutingEnabled"
                 @close="smartUploadOpen = false"
                 @applied="onSmartApplied"
+                @inbox-updated="refreshInbox"
             />
 
             <!-- Connect a source (46 connectors) → creates org source, auto-pins -->
@@ -1536,6 +1547,52 @@ async function loadSmartUploadFlag() {
         if (row && typeof row.effective === 'boolean') smartUploadEnabled.value = row.effective
     } catch { /* flag plumbing absent → leave OFF */ }
 }
+// Inbox → Train routing (queue files, sort on Train) — gated by HYBRID_TRAIN_ROUTING. Fail-soft OFF.
+const trainRoutingEnabled = ref(false)
+async function loadTrainRoutingFlag() {
+    try {
+        const { data } = await useMyFetch<any>('/api/organization/hybrid-flags')
+        const rows: any[] = Array.isArray(data.value) ? (data.value as any[]) : []
+        const row = rows.find((r: any) => r?.env_name === 'HYBRID_TRAIN_ROUTING' || r?.key === 'train_routing')
+        if (row && typeof row.effective === 'boolean') trainRoutingEnabled.value = row.effective
+    } catch { /* flag plumbing absent → leave OFF */ }
+}
+// Auto-pilot v2 (reordered ADD→QUEUE→TRAIN→RESULT panel) — gated by HYBRID_AUTOPILOT_V2. Fail-soft OFF.
+const autopilotV2Enabled = ref(false)
+async function loadAutopilotV2Flag() {
+    try {
+        const { data } = await useMyFetch<any>('/api/organization/hybrid-flags')
+        const rows: any[] = Array.isArray(data.value) ? (data.value as any[]) : []
+        const row = rows.find((r: any) => r?.env_name === 'HYBRID_AUTOPILOT_V2' || r?.key === 'autopilot_v2')
+        if (row && typeof row.effective === 'boolean') autopilotV2Enabled.value = row.effective
+    } catch { /* flag plumbing absent → leave OFF */ }
+}
+// Auto-pilot v2 "ADD" lane → reuse the existing add entry points.
+function onAutopilotAdd(kind: 'connector' | 'upload' | 'folder') {
+    if (kind === 'connector') openAddPicker()
+    else if (kind === 'upload') openUploadSource()
+    else if (kind === 'folder') openFolderSync()
+}
+
+// StudioInbox panel ref → refetch after an inbox add or a Train run (queued→0 + any held items).
+const inboxPanel = ref<any>(null)
+// Count of files queued in the inbox — lets the Train button enable when data is
+// waiting in the inbox (route_inbox creates the sources ON Train), not only when
+// a source is already pinned. Without this, an inbox-only upload deadlocks: the
+// gate needs a source, but the source only appears after Train routes the inbox.
+const inboxCount = ref(0)
+async function loadInboxCount() {
+    try {
+        if (!trainRoutingEnabled.value || !studio.value?.id) { inboxCount.value = 0; return }
+        const { data } = await useMyFetch<any>(`/studios/${studio.value.id}/smart-upload/inbox`)
+        const q = (data.value as any)?.queued
+        inboxCount.value = Array.isArray(q) ? q.length : 0
+    } catch { inboxCount.value = 0 }
+}
+const refreshInbox = () => { try { inboxPanel.value?.refresh?.() } catch { /* fail-soft */ } ; loadInboxCount() }
+// Train can run when a source is pinned OR data is queued in the inbox.
+const canTrain = computed(() => sources.value.length > 0 || inboxCount.value > 0)
+
 // First pinned source's data_source_id (Source.agent_id is the data-source id used across this page); else undefined.
 const smartUploadDataSourceId = computed<string | undefined>(() => {
     const s = sources.value[0] as any
@@ -1558,10 +1615,22 @@ const loadingChats = ref(false)
 // via the studio-header button; it is just no longer the default surface.
 // Persist the active tab in the URL (?tab=) so a refresh keeps you on the same
 // sub-screen instead of resetting to Auto-pilot.
+// Merged/retired tabs → their canonical destination. Old deep-links redirect here.
+//   members         → access        (Access & Members)
+//   i_metrics        → k_metrics      (Metrics now shows the verified/locked panel inline)
+//   i_golden         → k_queries      (Queries now shows the golden panel inline)
+//   i_profiler       → k_semantic     (Semantic now shows the deep-profiler catalog inline)
+//   i_lazy           → k_semantic     (lazy/drift panel folded into Semantic alongside profiler)
+const TAB_REDIRECTS: Record<string, string> = {
+    members: 'access',
+    i_metrics: 'k_metrics',
+    i_golden: 'k_queries',
+    i_profiler: 'k_semantic',
+    i_lazy: 'k_semantic',
+}
 const activeTab = ref((() => {
     const q = typeof route.query.tab === 'string' ? route.query.tab : 'autopilot'
-    // 'members' tab merged into 'access' — redirect any old deep-link.
-    return q === 'members' ? 'access' : q
+    return TAB_REDIRECTS[q] || q
 })())
 watch(activeTab, (t) => {
     router.replace({ query: { ...route.query, tab: t } })
@@ -1945,7 +2014,10 @@ const TRAIN_STEP_LABEL: Record<string, string> = {
     evals: 'Writing eval goldens', artifacts: 'Generating artifacts', joins: 'Mining joins', done: 'Done',
 }
 async function runFullTrain() {
-    if (trainingAll.value || !sources.value.length) return
+    // canTrain = a pinned source OR files queued in the inbox (route_inbox makes
+    // the source during training). Guarding on sources.length alone deadlocked an
+    // inbox-only upload (button enabled but click no-op'd).
+    if (trainingAll.value || !canTrain.value) return
     trainingAll.value = true
     const act = useActivity()
     act.openPanel(); act.start('Auto-training studio'); act.setState('processing')
@@ -1981,6 +2053,12 @@ async function runFullTrain() {
             await Promise.all([fetchInstructions(), fetchExamples(), fetchDocs()])
             if (pendingInstructions.value.length + pendingExamples.value.length) await approveAllPending().catch(() => {})
         }
+        // training auto-runs the inbox routing now → refetch the panel (queued→0 + any held items)
+        // AND reload sources: route_inbox may have created + pinned a new data source
+        // (an inbox-only upload), which must now appear in the Data lane.
+        await fetchSources().catch(() => {})
+        refreshInbox()
+        for (const s of sources.value) fetchIntel((s as any).agent_id, true)
     } finally { trainingAll.value = false }
 }
 
@@ -2304,13 +2382,9 @@ const tabs = computed(() => [
     // data + knowledge. (Re-add with group:'behavior' to expose.)
     // INTELLIGENCE — the 8 hybrid capability layers (Wave 1+2). Additive group;
     // each item mounts StudioIntelligence pinned via :forceLayer (read-only v1).
-    { value: 'i_profiler', label: 'Deep Profiler', icon: 'i-heroicons-rectangle-group', group: 'intelligence' },
     { value: 'i_codeenrich', label: 'Code Enrich', icon: 'i-heroicons-code-bracket', group: 'intelligence' },
-    { value: 'i_metrics', label: 'Verified Metrics', icon: 'i-heroicons-lock-closed', group: 'intelligence' },
-    { value: 'i_lazy', label: 'Lazy Profile', icon: 'i-heroicons-arrow-path', group: 'intelligence' },
     { value: 'i_insights', label: 'Proactive Insights', icon: 'i-heroicons-sparkles', group: 'intelligence' },
     { value: 'i_forecast', label: 'Forecasting', icon: 'i-heroicons-presentation-chart-line', group: 'intelligence' },
-    { value: 'i_golden', label: 'Golden Queries', icon: 'i-heroicons-star', group: 'intelligence' },
     { value: 'i_search', label: 'Hybrid Search + KG', icon: 'i-heroicons-share', group: 'intelligence' },
     { value: 'evals', label: t('studio.tabEvals') || 'Evals', icon: 'i-heroicons-beaker', group: 'operate' },
     { value: 'monitoring', label: t('studio.tabMonitoring') || 'Monitoring', icon: 'i-heroicons-chart-bar', group: 'operate' },
@@ -3153,8 +3227,13 @@ onMounted(async () => {
             loadConnectorsFlag(),
             loadReportsFlag(),
             loadSmartUploadFlag(),
+            loadTrainRoutingFlag(),
+            loadAutopilotV2Flag(),
             loadTrainStatus(),
         ])
+        // after the routing flag is known, count inbox-queued files so the Train
+        // button can enable on an inbox-only upload (route_inbox makes the source).
+        loadInboxCount()
     }
 })
 </script>
