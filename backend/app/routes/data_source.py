@@ -98,6 +98,7 @@ async def create_data_source(
 # their own credentials → a private per-user clone with their own synced catalog.
 from pydantic import BaseModel as _BaseModel
 from app.services import per_user_connector
+from app.services import connector_sync
 
 
 class _RegisterConnectorRequest(_BaseModel):
@@ -171,18 +172,69 @@ async def connector_device_code_poll(
         user=current_user,
         device_code=payload.device_code,
     )
-    # On a fresh sign-in, auto-learn the clone in the background (description +
-    # conversation starters + primary overview instruction) so it lands as a
-    # ready-to-use agent — same as the manual "Use LLM to learn agent". Runs
-    # after the response so sign-in returns instantly.
+    # On a fresh sign-in, sync the clone in the background (discover tables →
+    # seed → auto-learn description/starters/overview) while writing a live,
+    # per-table sync log the FE can poll at GET /data_sources/{id}/sync-status.
+    # Runs after the response so sign-in returns instantly. sync_clone_bg also
+    # does the autolearn at the end, so it is not scheduled separately here.
     if result.get("status") == "success" and result.get("data_source_id"):
         background_tasks.add_task(
-            per_user_connector.autolearn_clone,
+            per_user_connector.sync_clone_bg,
             result["data_source_id"],
             str(organization.id),
             str(current_user.id),
         )
     return result
+
+
+class _ConnectRequest(_BaseModel):
+    email: str
+    password: str
+
+
+@router.post("/connectors/{template_id}/connect", response_model=dict)
+async def connector_connect(
+    template_id: str,
+    payload: _ConnectRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Adaptive sign-in: try email+password (ROPC); on MFA/policy, returns
+    status='mfa_required' + a device_code the caller polls via
+    /connectors/{id}/device-code/poll. On direct success, schedules the clone's
+    background sync (discover → seed → learn) with a live pollable sync log."""
+    result = await per_user_connector.connect(
+        db,
+        template_id=template_id,
+        organization=organization,
+        user=current_user,
+        email=payload.email,
+        password=payload.password,
+    )
+    if result.get("status") == "connected" and result.get("data_source_id"):
+        background_tasks.add_task(
+            per_user_connector.sync_clone_bg,
+            result["data_source_id"],
+            str(organization.id),
+            str(current_user.id),
+        )
+    return result
+
+
+@router.get("/data_sources/{data_source_id}/sync-status", response_model=dict)
+async def connector_sync_status(
+    data_source_id: str,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Live per-clone connector sync log (CLI-style terminal). Returns {} when no
+    run exists, else {phase, tables_total, tables_done, rows, log, error,
+    updated_at}. Lightweight (single-row read); cross-worker safe (log in DB)."""
+    run = await connector_sync.get_run(db, data_source_id)
+    return run or {}
 
 
 @router.delete("/data_sources/{data_source_id}")

@@ -3,6 +3,9 @@
         <!-- Hide content when there's a fetch error (layout shows error state) -->
         <div v-if="fetchError" />
         <div v-else>
+            <!-- Live sync-log terminal (self-hides when there's no active/recent sync run) -->
+            <AgentSyncLog :data-source-id="(route.params.id as string)" />
+
             <!-- Indexing banner: shown while any linked connection is discovering schema -->
             <div
                 v-if="indexingConnections.length > 0"
@@ -185,6 +188,7 @@ import InstructionGlobalCreateComponent from '~/components/InstructionGlobalCrea
 import InstructionText from '~/components/instructions/InstructionText.vue'
 import PrimaryInstructionPicker from '~/components/instructions/PrimaryInstructionPicker.vue'
 import PrimaryInstructionMenu from '~/components/instructions/PrimaryInstructionMenu.vue'
+import AgentSyncLog from '~/components/agents/AgentSyncLog.vue'
 import { useOrgSettings } from '~/composables/useOrgSettings'
 import type { Ref } from 'vue'
 

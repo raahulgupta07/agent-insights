@@ -453,8 +453,59 @@ Versioned feature feed surfaced as a 🔔 bell popover in TopNav (before profile
 
 **2026-06-29 FE EPHEMERAL (fe-sync only, NOT baked — pending `docker commit`):** (1) **plan-block chat leak FIXED** — `HYBRID_AGENT_PLAN` flag-on (org e02b1b04, default OFF) emits a `source_type='plan'` block; chat body renderer `reports/[id]/index.vue:387` was the 1-of-4 consumer missing the plan-skip guard → dumped raw `{"tasks":[...]}`. Fix = `&& block.source_type !== 'plan'`. RULE: skip `source_type='plan'` in EVERY render path (Progress=stepMap.ts:348/484, context=message_context_builder.py:597/1221 already do). (2) **merged Create/Activity into ONE no-tabs panel** (Option A) in the `coworkEnabled` block of `reports/[id]/index.vue` (removed `coworkTab` toggle; Create grid top + Activity below, one scroll). (3) **"only April summary" ROOT CAUSE = silent partial ingest:** CRM Agent source `0b9b39ac` has 1 table, 2447 rows ALL `_source_period=2025-04` (6 months uploaded, 5 never materialized; merged table mis-NAMED `_apr_25` → agent frames answer "April"). Guardrails proposed (manifest+reconcile / coverage-context to agent / neutral table naming / atomic batch merge / post-ingest verify-gate), NOT built. Detail → [[project_cityagent_panel_ingest_completeness]].
 
-**Current state (2026-07-02):** image `cityagent-analytics:dev` on `:3007` (baked `:v1.71.2`), branch `main`,
-mig head **`peruser_tmpl1`**, `VERSION_HYBRID`=**1.71.2**. **v1.71.2 = blank-clarify fix (3 layers):** prompt told model
+**Current state (2026-07-02):** image `cityagent-analytics:dev` on `:3007` (baked `:v1.74.4`), branch `main`,
+mig head **`connsyncrun1`**, `VERSION_HYBRID`=**1.74.4**. **v1.74.4 = P3 no-fail-cache** (`result_cache._looks_failed`
+guards store+lookup; a failed/empty create_data result is never persisted or replayed, legacy bad entries self-heal
+via soft-delete on lookup; unit 8/8). Completes the connector-reliability bundle. **v1.74.3 = connector query
+reliability + Data Agents UI redesign (baked, NOT git-pushed):** DataAgentCard Studios skin + Settings›Connectors
+(super-admin config, `manage_connections`) + ConnectorsMsHub sign-in-only + compact search + i18n leak fix. Backend
+flag `HYBRID_CONNECTOR_ROBUSTNESS` (OFF-default=byte-identical, ON org 7d372305; rollback img
+`cityagent-analytics:pre-connectorfix`). Live Power BI/Fabric agent Qs went 5-attempt/~148s flaky → **1 tool
+call/1 attempt clean** (subjects 7299, projects 258, sectors 8). Three fixes: **P1** auto-fill tables when the
+model omits `tables_by_source` (`create_data._resolve_all_active_tables`, cap 30); **P2** PBI 429 backoff on the
+DAX path (`powerbi_client._post_dax_with_retry`, honor Retry-After, +typed `PowerBIRateLimitError`); **P4**
+`dataset_id is required` ROOT = `execute_query`→`get_schema()` did a LIVE `get_schemas()` re-discovery that 429'd →
+fix = OFFLINE `set_table_index()` populated in `construct_client` from `ConnectionTable.metadata_json.powerbi`.
+Plus `TablesBySource` accepts `table_names`/`table` aliases + coercion (gemini arg-shape). LANDMINE: PBI
+`get_schema()`/`get_schemas()` = LIVE discovery, 429-prone — never on the query path; use the offline index.
+Deferred P3 (don't cache FAILED completions) → v1.74.4. — prior **v1.74.2 = 3 bug fixes (baked, NOT git-pushed):** (1)
+**connector connect 500** — per-user `connect()`/`device_code_poll()` fed the request session's expired `organization`
+into `create_connection`; sync `organization.id` access → AsyncSession lazy-load → `MissingGreenlet`. Fix
+(`per_user_connector.py`): `_register_clone_fresh_session()` builds the clone in a fresh `async_session_maker` session,
+`expunge()`s force-loaded org/user (detached+populated → no lazy-load), and offloads blocking MS `requests`
+(`ropc_token`/`start_device_code`/`poll_device_code`) via `asyncio.to_thread`. Verified E2E → 200 → 18/18 tables.
+(2) **query crash "Invalid format specifier" on every chat** — `prompt_builder_v3.py` f-string had unescaped literal
+JSON braces in the clarify examples (lines 217/223) → `{expr:format_spec}` misparse. Fix = doubled braces `{{ }}`.
+(3) **removed duplicate Available Connectors page** — nav item (`useAppNav.ts`) + `pages/connectors/available.vue`
+deleted; `/connectors/available` API endpoint STAYS (Data Agents hub loads templates from it). LANDMINE: any prompt
+f-string with literal JSON examples MUST double its braces. — prior **v1.74.0 = AUTO-LEARN→PRIMARY + rich learn log + dramatic
+terminal:** fixed "No primary instruction" — `sync_clone_bg` now promotes the `llm_sync` onboarding instruction to
+`status="published"` + sets `data_sources.primary_instruction_id` (was draft/unset). Learn runs AFTER seed → instruction
+references real tables; rich per-step `log_step(phase="learning")` lines (reading→joins→description→starters→overview→published);
+distinct-`ConnectionTable` dedup → `18/18` (was `26/18`). FE `AgentSyncLog.vue` dramatic terminal (typewriter reveal,
+spinning ⟳ + cursor, colored tokens, done=flash+✓pop+confetti+Start-chat; `‹table› · ‹msg›` separator, `· catalog` for
+0-row lines, `Math.min(done,total)`). LANDMINE: bare `docker exec python` on `sync_clone_bg` needs `import main` first
+(Widget/Report mapper); real BG task fine. **v1.73.0 = LIVE IN-AGENT SYNC LOG:** connector clone build moved
+to a BG task (`per_user_connector.sync_clone_bg`, scheduled by `connect`/`device_code_poll` after `register_template_for_user(defer_sync=True)`
+returns the shell fast) writing a DB-backed live log (`ConnectorSyncRun`, mig `connsyncrun1`, `services/connector_sync.py`
+`start_run`/`log_step`/`finish_run`) through phases connecting→syncing(per-table)→learning(auto-learn)→done. Route `GET
+/api/data_sources/{id}/sync-status`. FE `components/agents/AgentSyncLog.vue` = warm-dark CLI terminal on the agent
+Overview (poll 1.5s, self-hides on `{}`), hub navigates `/agents/{id}?sync=live`. LANDMINES: DB-backed (in-mem breaks
+across `--workers 4`); alembic dir = `backend/alembic/` NOT `backend/app/alembic/`; per-table `rows`=`ConnectionTable.no_rows`
+best-effort (0 for PBI/on-prem). **v1.72.1 = wired the adaptive modal into the `/agents` hub
+tiles** — `ConnectorsMsHub.vue` `startConnect(key)` now opens `ConnectorsRegisterModal` (email+pw→`/connect`→device-code
+fallback) instead of jumping straight to `/device-code/start` (the v1.72.0 modal was orphaned — tile showed the code
+screen directly). LANDMINE: the hub OWNS the connector tiles; the RegisterModal must be MOUNTED + wired there, not just
+built. **v1.72.0 = ADAPTIVE CONNECTOR SIGN-IN:** one flow — user
+types email+password, Connect. BE tries ROPC (`powerbi_device_code.ropc_token`, password grant + offline_access →
+refresh_token; classifies AADSTS 50076/50079/50158/50072/53000/7000218 = MFA→fallback, else real fail). No MFA →
+`per_user_connector.connect()` builds clone now (auth_mode `device_code`, `{refresh_token}` creds); MFA → auto
+`start_device_code` → `{status:"mfa_required",device_code,user_code,verification_uri}` → FE polls EXISTING
+`/device-code/poll`. Route `POST /api/connectors/{id}/connect` (auto-`autolearn_clone` on direct connect). FE
+`ConnectorsRegisterModal.vue` = in-modal device-code view + poll on `mfa_required`, 404→legacy `/register` fallback.
+**Both paths end at identical `refresh_token→clone` builder.** Flag `HYBRID_ADAPTIVE_CONNECT` (default OFF, DB-override ON
+org 7d372305). Built via 2 parallel subagents. LANDMINE: flag needs `load_overrides_from_db` (bare `import main` reads
+False); `--workers 4` → one `docker restart ca-app` to converge. **v1.71.2 = blank-clarify fix (3 layers):** prompt told model
 to emit singular `question` STRING but clarify schema wants `questions:[{text,options}]` → weak models emitted strings →
 `ClarifyTool.vue` read `q.text`=undefined → blank box. Fixed: (A) FE `ClarifyTool.vue` `questions` computed normalizes
 string/alt-key items→`{text}`+drops empties; (B) BE `ai/tools/schemas/clarify.py` `@field_validator("questions",before)`

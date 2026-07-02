@@ -73,6 +73,7 @@ export function useAppNav() {
     { name: 'ai_settings', label: 'settings.aiSettings', permission: 'manage_settings', icon: 'heroicons-sparkles' },
     { name: 'general', label: 'settings.general', permission: 'manage_settings', icon: 'heroicons-cog-6-tooth' },
     { name: 'integrations', label: 'settings.integrations.title', permission: 'manage_settings', icon: 'heroicons-squares-2x2' },
+    { name: 'connectors', label: 'Connectors', permission: 'manage_connections', icon: 'heroicons-link' },
     { name: 'folder-sync', label: 'Folder Sync', permission: 'manage_settings', icon: 'heroicons-folder-arrow-down' },
     { name: 'smtp', label: 'settings.smtpTab', permission: 'manage_settings', icon: 'heroicons-envelope' },
     { name: 'audit', label: 'settings.auditLogs', permission: 'view_audit_logs', icon: 'heroicons-clipboard-document-list' },
@@ -84,7 +85,7 @@ export function useAppNav() {
   const settingsSection: Record<string, string> = {
     members: 'PEOPLE',
     models: 'WORKSPACE', ai_settings: 'WORKSPACE', general: 'WORKSPACE',
-    integrations: 'INTEGRATIONS', 'folder-sync': 'INTEGRATIONS', smtp: 'INTEGRATIONS',
+    integrations: 'INTEGRATIONS', connectors: 'INTEGRATIONS', 'folder-sync': 'INTEGRATIONS', smtp: 'INTEGRATIONS',
     audit: 'SECURITY', 'identity-provider': 'SECURITY',
     features: 'ADVANCED', 'pack-analytics': 'ADVANCED',
   }
@@ -148,9 +149,9 @@ export function useAppNav() {
         // to them + org-wide, and can self-serve build/edit their own (per-user
         // connector visibility). Create-shared/org stays gated inside the page.
         { key: 'connectors', href: '/connectors', activePath: '/connectors', icon: 'heroicons-circle-stack', label: 'Connectors', section: 'DATA' },
-        // Self-serve: any member connects an admin-published connector with their
-        // own account → private, per-user data source.
-        { key: 'available-connectors', href: '/connectors/available', activePath: '/connectors/available', icon: 'heroicons-user-plus', label: 'nav.availableConnectors', section: 'DATA' },
+        // Self-serve per-user connect lives on the Data Agents page (/agents) — the
+        // MS Connectors Hub there is the single "connect with my account" surface.
+        // The old /connectors/available page was a duplicate door → removed.
         { key: 'monitoring', href: '/monitoring', activePath: '/monitoring', component: ActivityIcon, label: 'nav.monitoring', adminOnly: true, section: 'OBSERVE' },
         { key: 'evals', href: '/evals', activePath: '/evals', icon: 'heroicons-check-circle', label: 'nav.evals', permission: 'manage_evals', section: 'OBSERVE' },
         { key: 'workflows', href: '/workflows', activePath: '/workflows', icon: 'heroicons-arrow-path', label: 'Workflows', permission: 'manage_settings', section: 'AUTOMATE' },

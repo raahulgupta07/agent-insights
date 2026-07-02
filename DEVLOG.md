@@ -1750,3 +1750,167 @@ guard intact). U1's tables never visible to U2.
   mapper). `llm_sync` generated description + 4 conversation_starters + overview instruction (build #4) — persisted
   (`description` + `conversation_starters` len 4). NEW clones auto-learn by default (v1.71.0). LANDMINE: `autolearn_clone`
   is fail-soft — a swallowed error looks like "done"; verify DB fields actually populated. Un-baked (DB-only change).
+
+## 2026-07-02 — v1.74.0 auto-learn→primary instruction + rich learn log + dramatic terminal
+- **Bug fix (img-59 "No primary instruction"):** `llm_sync` generated the overview but left it `status='draft'` and never set `data_sources.primary_instruction_id` → Overview empty (the "before" R_OVERVIEW/D_OVERVIEW agents had a PUBLISHED primary from a full train). ROOT CAUSE DB-confirmed: new clone `d0c33ff1` had `primary_instruction_id=NULL` + instruction `e84759a2` stuck `draft`/`ai_source=onboarding`. FIX in `sync_clone_bg`: after `llm_sync`, read `result["onboarding_instruction"]["id"]` → set that Instruction `status="published"` (plain string, matches `Instruction.is_published`) + set clone `primary_instruction_id` → commit. Re-points on every resync (refreshes when tables change). Learn already runs AFTER seed → instruction references real synced tables.
+- **Rich learn log (user watches it think):** replaced the single "generating…" line with per-step `log_step(phase="learning")`: reading N tables+columns → analyzing joins → wrote agent description → drafted N starters → built overview instruction → published set-as-primary → agent ready. Honest — counts from `llm_sync`'s real return (one black-box call, so the before/after lines bracket it, no faked intermediate telemetry).
+- **Counter dedup (`26/18`→`18/18`):** build ONE distinct `ConnectionTable` list (dedupe by `ct.name`) BEFORE `set_totals` + loop; iterate that same list `inc_tables=True` once/table → `tables_done ≤ tables_total`.
+- **FE `AgentSyncLog.vue` dramatic terminal** (ported from mockup `scratchpad/sync_terminal_dramatic.html`): dark `#14110d` radial + warm top-glow + scanline grid, per-line `cai-reveal`, spinning `⟳` + blinking cursor on active line, colored tokens (ts dim / ▸grey / ✓green#5fbf86 / ⟳orange#e08a3c / table amber#e0b872 / rows gold#d9b66a), header pulsing dot + `rows·done/total·m:ss`. DONE = green flash sweep (`cai-flash`) + ✓ pop + 26-piece confetti burst (once, `watch(phase)`+`firedDone`) + green footer + Start-chat slide-in. Bug fixes: `‹table› · ‹msg›` separator (was glued "viewssynced"), `· catalog` for 0-row `ok` lines, `Math.min(done,total)` cap.
+- Deploy: 1 BE file hot-cp + `docker restart ca-app`, fe-sync. Smoke (ran `sync_clone_bg` on `d0c33ff1` via `import main`): primary_instruction_id SET + published, sync_run `18/18`, all 7 learn lines present. LANDMINE reconfirmed: bare `docker exec python` needs `import main` first (Widget/Report mapper) — real app BG task is fine. Built via 2 parallel subagents. Baked `:v1.74.0`=`:dev`, `VERSION_HYBRID`=1.74.0. **NOT git-pushed.**
+
+## 2026-07-02 — v1.73.0 live in-agent sync log (background clone build + CLI terminal)
+- After connect, the data agent opens with a live CLI terminal streaming the real background sync (per-table pulls → learn → ready).
+- **Background refactor:** connector clone build was inline in `register_template_for_user` step 4 (`refresh_schema`+`DataSourceService_seed`) + separate `autolearn_clone`. Now `register_template_for_user(defer_sync=True)` returns the clone SHELL fast (steps 1-3 only); `connect()`/`device_code_poll()` pass `defer_sync=True`; routes schedule NEW `sync_clone_bg(clone_id, org_id, user_id)` which does step-4 + auto-learn in its OWN session (greenlet-safe, ids-as-strings, reload-by-PK), logging each phase.
+- **DB-backed log (cross-worker, `--workers 4`):** NEW `models/connector_sync_run.py` (`ConnectorSyncRun`: `data_source_id` UNIQUE, `phase`, `tables_total/done`, `rows`, `log` JSON, `error`) + mig **`connsyncrun1`** off `peruser_tmpl1` (**new head**). NEW `services/connector_sync.py` — `start_run`/`log_step`(new-list reassign for JSON tracking, cap 300, commit each step so pollers see progress)/`set_totals`/`finish_run`/`get_run`. In-memory would NOT work across 4 workers → DB.
+- **`sync_clone_bg` sequence:** `start_run`→connecting "signed in" → syncing "discovering tables…"→`refresh_schema` → `set_totals(len)` + per-table `ok` line (`table=name`, `inc_tables`, `add_rows=ConnectionTable.no_rows` — best-effort, 0 for PBI/on-prem) → `DataSourceService_seed` → learning "generating description·starters·overview"→`llm_sync` (gated `use_llm_sync`) → `finish_run(done)`. Any exc → `finish_run(error)` in fresh session, never raises.
+- **Route:** `GET /api/data_sources/{id}/sync-status` → `{phase, tables_total, tables_done, rows, log[], error}` or `{}`.
+- **FE:** NEW `components/agents/AgentSyncLog.vue` — warm-dark `#1b1813` mono terminal (glyph/color by level: ▸step grey ✓ok green ⟳active orange-shimmer ✕error red; `table` amber prefix), header `rows·tables_done/total·m:ss` + phase dot, poll `/sync-status` 1500ms (chained setTimeout, stops on done/error), auto-scroll on growth, **self-hides on `{}`** (old clones), Start-chat button on done (POST `/reports`), unmount-guarded. **Explicit-imported** (Nuxt `AgentsAgentSyncLog` prefix landmine) + mounted top of `pages/agents/[id]/index.vue` Overview (id=`route.params.id`). Hub `onRegistered`→`/agents/{id}?sync=live`.
+- Deploy: 6 files hot-cp (4 app + migration + `alembic/env.py`), `alembic upgrade head` (peruser_tmpl1→connsyncrun1), `docker restart ca-app`, fe-sync. Smoke: table exists, route registered, model+`sync_clone_bg` load. Built via 2 parallel subagents. Baked `:v1.73.0`=`:dev`, `VERSION_HYBRID`=1.73.0. **NOT git-pushed.** LANDMINE: alembic dir = `backend/alembic/` (NOT `backend/app/alembic/`).
+
+## 2026-07-02 — v1.72.0 adaptive connector sign-in (email+password → auto device-code on MFA)
+- ONE sign-in flow for Microsoft per-user connectors. User types email+password, clicks Connect. Backend tries ROPC
+  (password grant) first: no MFA → connect immediately; MFA / conditional-access / legacy-auth blocked → auto-fall-back
+  to device-code (code + verify URL, approve on phone). User never picks a mode — backend decides from the AADSTS code.
+- **BE `powerbi_device_code.py`:** NEW `_MFA_FALLBACK_CODES` (`AADSTS50076/50079/50158/50072/53000/7000218`) +
+  `ropc_token(tenant, username, password, scope)` — password grant on the FOCI public client `1950a258…`; scope already
+  carries `offline_access` so success returns a refresh_token. Returns `{ok,refresh_token}` | `{ok:False,mfa:True}` |
+  `{ok:False,error}`. Never raises/logs tokens.
+- **BE `per_user_connector.connect()`** (gated `PER_USER_CONNECTOR` AND `ADAPTIVE_CONNECT`): `_template_tenant_and_scope`
+  → `dc.ropc_token`. refresh_token → `register_template_for_user(auth_mode="device_code", creds={refresh_token[,tenant_id]})`
+  → `{status:"connected", data_source_id}`. mfa → `dc.start_device_code(scope)` → `{status:"mfa_required", device_code,
+  user_code, verification_uri, interval, message}`. else `{status:"error"}`. **Both paths hit the identical
+  refresh_token→clone builder** (nothing downstream changed).
+- **BE route** `POST /api/connectors/{template_id}/connect` (`_ConnectRequest{email,password}` + `BackgroundTasks`):
+  on `connected` schedules `autolearn_clone` (same as poll route). MFA path → FE polls the EXISTING
+  `/connectors/{id}/device-code/poll` with the returned `device_code` (already auto-registers + autolearns).
+- **FE `ConnectorsRegisterModal.vue`:** submit → POST `/connect`; `connected`→emit `registered {id}`; `mfa_required`→swap
+  to in-modal device-code view (big mono `user_code` pill + clickable `verification_uri` + spinner) and poll loop
+  (`interval*1000`, `slow_down`+5s) → `success` emit/close, `error`→Start-over; `error`→form error. **404 fallback** →
+  legacy `/register {auth_mode,credentials}`. `stopPoll()` on close/unmount/reopen.
+- **Flag `HYBRID_ADAPTIVE_CONNECT`** (3-place in `hybrid_flags.py`, category Connectors, default OFF; DB override ON org
+  7d372305). Deploy: 4 BE files hot-cp + `docker restart ca-app` (all 4 workers reload overrides at boot → converged),
+  FE fe-sync. Smoke: route `/api/connectors/{template_id}/connect` registered, `ropc_token`/`connect` present, flag True
+  after `load_overrides_from_db` (bare `import main` reads False — known landmine, offline skips the loader). Built via
+  2 parallel subagents (BE + FE, disjoint files). Baked `:v1.72.0`=`:dev`, `VERSION_HYBRID`=1.72.0. **NOT git-pushed.**
+
+## 2026-07-02 — v1.74.2 · Connect greenlet fix + query f-string fix + drop Available Connectors page
+Three real bug fixes, all baked into `:v1.74.2`=`:dev` (VERSION_HYBRID 1.74.2, hot-cp + `docker commit ca-app`).
+
+1. **Connector connect 500 (`MissingGreenlet`).** UI "Failed to connect. Please check your credentials." was a
+   masked 500. Root cause: `services/per_user_connector.py::connect()` / `device_code_poll()` passed the request
+   session's `organization` ORM object down into `ConnectionService.create_connection`, which reads
+   `organization_id=organization.id` synchronously. By that point the object was EXPIRED → an implicit lazy-load
+   fired on the AsyncSession → `pool_pre_ping` `_async_ping` → `await_only()` with no greenlet → MissingGreenlet.
+   Isolated probe showed org never expires on its own; it's the request session + coexisting sessions + the blocking
+   MS call that poison it. Fix (3 parts): (a) new `_register_clone_fresh_session()` builds the clone in a brand-new
+   `async_session_maker()` session (same greenlet-safe pattern as `sync_clone_bg`); (b) re-load org+user fresh, touch
+   `.id`/`.email`, then `fresh.expunge()` both → detached+populated objects return cached scalars, so the deep sync
+   `organization.id` access can NEVER trigger a lazy-load; (c) blocking `requests`-based MS calls (`ropc_token`,
+   `start_device_code`, `poll_device_code`) wrapped in `asyncio.to_thread` so they don't run on the event loop.
+   Verified E2E with the real per-user creds: `POST /api/connectors/{tpl}/connect` → `200 {"status":"connected"}` →
+   BG `sync_clone_bg` → 18/18 tables → "agent ready". (Account had no ROPC-blocking MFA → password grant direct.)
+
+2. **Query crash "Invalid format specifier" on EVERY chat.** `ai/agents/planner/prompt_builder_v3.py::_build_system`
+   is one big f-string. The clarify-tool schema examples on lines 217 + 223 contained literal JSON with unescaped
+   braces (`{"text": "…", "options": […]}`) → Python's f-string parsed `{"text"` as an expression and everything
+   after the `:` as a format spec → `"text".__format__(' "<the question…>"…')` → runtime `Invalid format specifier`.
+   Compiles fine (format specs only validated at render). Fix: doubled the braces on both lines (`{{ … }}`). Verified
+   `_build_system(PlannerInput(mode=…))` renders in chat/deep/training (15.2k/15.4k/16.4k chars, no error).
+
+3. **Removed duplicate "Available Connectors" page.** Data Agents page (`/agents`) already has the self-serve
+   "Connect a Microsoft source" hub — `/connectors/available` was a second door to the same flow. Removed the
+   `available-connectors` nav item (`composables/useAppNav.ts`) and deleted `pages/connectors/available.vue`. The
+   `GET /connectors/available` API endpoint STAYS — the Data Agents hub (`ConnectorsMsHub.vue`) loads templates from
+   it. FE rebuilt + fe-sync'd; verified 0 `available-connectors` refs in dist and the `/connectors/available` route
+   gone. Manage sidebar now shows just "Connectors" (admin cockpit) under DATA.
+
+Deploy: 3 files hot-cp + `docker restart ca-app` (BE) + `scripts/fe-sync.sh` (FE) → verified in container →
+`docker commit ca-app cityagent-analytics:dev` + tag `:v1.74.2`. **NOT git-pushed** (baked-only, like v1.72.0→1.74.1).
+
+## 2026-07-02 — v1.74.3 · Connector query reliability (Power BI / Fabric)
+Symptom: agent questions against live Power BI / Fabric connectors flaked — 5 create_data attempts,
+~148s, mixed failures — even though the data-layer connector was proven working (PBI 18/18 tables,
+Fabric 19.6M rows). Root-caused THREE independent failure modes seen in every run, fixed each behind
+one flag `HYBRID_CONNECTOR_ROBUSTNESS` (default OFF → off = byte-identical; ON for org 7d372305).
+
+Phase 0 — baseline: backed 7 touched files to scratchpad; tagged rollback image
+`cityagent-analytics:pre-connectorfix`; added flag (registry + property + dict export in
+`app/settings/hybrid_flags.py`); DB override ON for org 7d372305; verified `flags.CONNECTOR_ROBUSTNESS`.
+
+P1 (auto-fill tables) — `ai/tools/implementations/create_data.py`: gemini-3-flash often OMITS
+`tables_by_source` → old code hard-failed "No active tables matched … or upload files". Added
+`_resolve_all_active_tables(schema_builder, cap=30)` (unfiltered `schema_builder.build()` → the report's
+attached sources' active tables) + a caller `elif not has_files:` branch that auto-fills when the flag is
+on. Downstream already drives off `resolved_tables`, so no other change. Proven: log
+`create_data.autofill_tables count=18` then correct answer.
+
+P2 (429 backoff) — `data_sources/clients/powerbi_client.py`: the DAX query path (`_execute_dax_internal`)
+raised raw on any ≥300; rapid calls hit PBI's 120/min cap → `HTTP 429` hard-fail. Added
+`_post_dax_with_retry` (honor `Retry-After`, exp backoff 2/4/8s, 3 retries) + typed
+`PowerBIRateLimitError`. Flag OFF = exactly one request. Unit-proven: 429→200 recovers (2 calls, ~1s);
+429×exhaust → typed raise after 4 calls; flag-off → 1 call passthrough.
+
+P4 (dataset_id) — root cause: `PowerBIClient.execute_query` looked up IDs via `get_schema(table_name)`,
+which calls LIVE `get_schemas()` (full re-discovery) → that 429'd → bare-except → `dataset_id` stayed None
+→ "dataset_id is required". Fix = OFFLINE index: `set_table_index()` / `_lookup_ids_offline()` on the
+client (keyed by full "Dataset/Table" AND bare DAX name), populated in `connection_service.construct_client`
+from cached `ConnectionTable.metadata_json.powerbi` (no live call). `execute_query` resolves from the index
+first, live `get_schema` only on miss, plus a single-dataset last-resort. `PowerBIUserClient` inherits it
+(subclass, calls super().__init__). Direct test: index=36 keys, `execute_query(table_name only)` → 258.
+
+Also shipped here (earlier same session): `TablesBySource` (`ai/tools/schemas/create_widget.py`) accepts
+`table_names`/`table` aliases + bare-string / single-dict coercion; shared `_coerce_tables_by_source`
+before-validator on both `CreateWidgetInput` and `CreateDataInput` — so the model's wrong arg shapes
+validate instead of failing 3× → clarify.
+
+Result: 5-attempt/148s flaky run → **1 tool call, 1 attempt** clean answers (subjects 7299, projects 258,
+sectors 8, owners 651). Deferred P3 (don't cache/replay FAILED completions) → v1.74.4.
+
+Deploy: hot-cp create_data.py (impl) + powerbi_client.py + connection_service.py + hybrid_flags.py +
+schemas → `py_compile` OK → `docker restart ca-app` → live-tested → `docker commit ca-app
+cityagent-analytics:dev` + tag `:v1.74.3`. **NOT git-pushed** (baked-only, like v1.72.0→1.74.2).
+
+## 2026-07-02 — v1.74.3 (FE) · Data Agents page redesign + Settings › Connectors
+UI pass on `/agents` (same baked image `:v1.74.3`, FE re-committed on top of the backend reliability fixes).
+
+- `components/DataAgentCard.vue` (NEW): agent cards restyled to the Studios v2 `cr-*` skin (dark banner + grid
+  drift + blob, status pill, overlapping icon badge, progress bar, action bar). Connected → green pulsing
+  "Connected" + live equalizer + 100% "Ready" + Chat/Open; needs-sign-in → amber "Needs data" + dashed
+  "awaiting sign-in" + 30% "Connect data to activate" + Connect. Whole card click → open (connected) / connect.
+  Microcopy HARDCODED English on purpose — the invented `data.ready`/`data.needsData`/… keys never existed in
+  locales/*.json, so `$t(key) || 'fallback'` leaked the raw key ($t returns the key string, which is truthy).
+- `components/connectors/ConnectorsMsHub.vue`: now SIGN-IN ONLY. Removed the "Manage connectors" button, the
+  inline admin config modal + publishTemplate/cfg/openAdminConfig, DRAFT/CONFIGURED chips, gear, and testClone.
+  Tiles: Connected (Open/Resync) · Sign in → (configured template) · Coming soon (not live OR not configured).
+  Quiet eyebrow "Connect a source" instead of a big header.
+- `pages/settings/connectors.vue` (NEW): the connector-template config (tenant + Fabric SQL endpoint → publish
+  `is_user_template`) moved here, gated `manage_connections` (super-admin). Nav wired in `composables/useAppNav.ts`
+  (settingsTabs + settingsSection INTEGRATIONS) and `layouts/settings.vue` (allTabs). Icon `heroicons-link`.
+- `pages/agents/index.vue`: card grid → `<DataAgentCard>`; added `openAgent()`; search shrunk to a compact
+  top-right field (w-40/56), shown only when >1 agent. Old flat-card markup + full-width search removed.
+
+Decisions (user): one Microsoft sign-in stays TWO separate agents (Fabric SQL + Power BI) — NOT merged (different
+engines); connecting Power BI does NOT sync Fabric (isolated by scope/endpoint — already true, no change).
+
+Deploy: `bash scripts/fe-sync.sh` (nuxt generate → push dist) → both pages 200, i18n leak gone (0 literal
+`data.ready` in bundle) → `docker commit ca-app cityagent-analytics:dev` + retag `:v1.74.3` (FE+backend together).
+NOT git-pushed.
+
+## 2026-07-02 — v1.74.4 · P3: never cache/replay a FAILED completion
+Last of the connector-reliability bundle (P1/P2/P4 shipped in v1.74.3). Defense-in-depth on the result cache.
+
+Context: the create_data result cache (`app/ai/knowledge/result_cache.py`, flag HYBRID_RESULT_CACHE) keys on
+normalized-question + per-table row-count watermark. The `store` call site (mcp/create_data.py:420) already sits
+on the success path, but nothing at the CACHE layer stopped a failed/empty payload from being persisted and then
+replayed forever for an identical prompt (a stale error surviving even after the bug is fixed).
+
+Fix: new `_looks_failed(payload)` — failure = `success is False`, non-empty `error`/`errors`, or a `formatted`
+block with neither columns nor rows (a valid 0-row answer WITH columns is still cacheable). Wired into:
+  - `store()` — refuse to write when `_looks_failed` (log + return False).
+  - `lookup()` — if a stored entry `_looks_failed`, treat as MISS, stamp `deleted_at` (self-heal legacy bad
+    entries), return None → next identical ask rebuilds and re-caches the real answer.
+Conservative: ambiguous payloads → OK, so a real hit is never dropped. Unit-tested 8/8 (`_looks_failed`).
+
+Deploy: hot-cp result_cache.py → py_compile OK → docker restart → no-regression run → VERSION_HYBRID 1.74.4 →
+`docker commit ca-app cityagent-analytics:dev` + tag `:v1.74.4`. NOT git-pushed. Connector-reliability bundle
+(P1 auto-fill · P2 429 backoff · P4 dataset-id · P3 no-fail-cache) now COMPLETE.

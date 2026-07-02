@@ -9,6 +9,63 @@ Bullet rules (this is the user-facing "What's new" feed):
     Hidden from the popover; shown collapsed on the full /changelog page only.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.74.4 — Never replay a failed answer  (2026-07-02)
+- If a question ever failed, asking it again now re-runs it fresh instead of showing the old error — and a fixed answer is cached going forward.
+  - `result_cache` (flag `HYBRID_RESULT_CACHE`): new `_looks_failed()` guard on BOTH `store` (refuse to persist a failed/empty result) and `lookup` (treat a legacy failure entry as a MISS + soft-delete it → self-heals). Failure = `success is False`, non-empty `error`/`errors`, or a `formatted` block with neither columns nor rows. Conservative: ambiguous → OK, never drops a real hit. Unit-verified 8/8.
+
+## v1.74.3 — Connector query reliability + Data Agents redesign  (2026-07-02)
+- Redesigned the Data Agents page — richer "Studio-style" agent cards (status, live activity, one-click Chat/Open) and a cleaner connector strip.
+  - `DataAgentCard.vue` reuses the Studios `cr-*` skin (dark banner, status pill, icon badge, progress bar). Whole card clickable → open (connected) / connect (needs sign-in). Hardcoded English microcopy (fixed the `data.ready`/`data.tables` i18n key leak — those keys never existed in the 9 locale files).
+  - `ConnectorsMsHub.vue` — sign-in only now: removed the "Manage connectors" button + inline admin config + DRAFT/CONFIGURED chips + gear. Tiles show Connected / Sign in → / Coming soon (unconfigured = Coming soon).
+  - Connector CONFIG moved to **Settings › Connectors** (`pages/settings/connectors.vue`), gated `manage_connections` (super-admin). Nav entry added in `useAppNav.ts` + `layouts/settings.vue` under INTEGRATIONS.
+  - Search box shrunk to a compact top-right field (was full-width); shows only with >1 agent.
+- Agents now answer questions against live connectors (Power BI, Microsoft Fabric) reliably in one shot — no more "couldn't find any data" or "please try again" on questions that should just work.
+- Rate-limited connectors (Power BI's request cap) now retry automatically instead of failing.
+  - New flag `HYBRID_CONNECTOR_ROBUSTNESS` (default OFF; ON for org 7d372305). Off = byte-identical to prior behavior.
+  - **P1 auto-fill**: `create_data` — when the model omits `tables_by_source`, resolve ALL active tables of the report's data sources instead of hard-failing "no tables matched". New `_resolve_all_active_tables` (cap 30) + caller `elif` branch in `ai/tools/implementations/create_data.py`.
+  - **P2 429 backoff**: `powerbi_client._post_dax_with_retry` — honor `Retry-After`, exp backoff 2/4/8s, 3 retries; typed `PowerBIRateLimitError` on exhaustion (clean message, not raw HTTP dump).
+  - **P4 dataset-id**: root cause = `execute_query`→`get_schema()` did a LIVE `get_schemas()` re-discovery that 429'd → "dataset_id is required". Fix = OFFLINE table→{datasetId,workspaceId} index installed at `construct_client` from cached `ConnectionTable.metadata_json.powerbi`; `execute_query` resolves IDs from it first (no live call) + single-dataset last-resort.
+  - Earlier same-session schema fix (shipped here): `TablesBySource` accepts `table_names`/`table` aliases + bare-string coercion so gemini-3-flash's arg-shape guesses validate (`ai/tools/schemas/create_widget.py` + `create_data.py`).
+  - Proven: 5-attempt/148s flaky PBI run → 1-attempt clean answer (subjects 7299, projects 258, sectors 8). Deferred P3 (don't cache failed completions) → v1.74.4.
+
+## v1.74.2 — Connect fix, query fix, one connector page  (2026-07-02)
+- Fixed: signing in to a Microsoft source no longer fails with "check your credentials." It connects and builds your agent.
+- Fixed: chats no longer error out with a technical "Invalid format specifier" message. You can ask for data again.
+- Removed the duplicate "Available Connectors" page — connect a source from the Data Agents page, one place.
+  - Connect 500 (`MissingGreenlet`): per-user `connect()`/`device_code_poll()` passed the request session's `organization` ORM object into `create_connection`; by the time it read `organization.id` the object was expired → a SYNC lazy-load on the AsyncSession → MissingGreenlet. Fix in `services/per_user_connector.py`: build the clone in a fresh `async_session_maker` session with `_register_clone_fresh_session()`, force-load + `expunge()` org/user (detached+populated → cached scalars, no lazy-load), and offload blocking MS `requests` (`ropc_token`/`start_device_code`/`poll_device_code`) via `asyncio.to_thread`. Verified E2E: POST /connect → 200 → BG sync 18/18 tables → agent ready.
+  - Query crash: planner system prompt (`ai/agents/planner/prompt_builder_v3.py`) is an f-string; clarify-tool JSON examples on lines 217/223 had unescaped literal braces `{"text":…}` → Python parsed `{expr:format_spec}` → `Invalid format specifier` on EVERY turn. Doubled the braces (`{{ }}`). Verified `_build_system` renders in chat/deep/training modes.
+  - Nav: removed `available-connectors` item (`composables/useAppNav.ts`) + deleted `pages/connectors/available.vue`. The `/connectors/available` API endpoint stays (Data Agents hub loads templates from it). Baked `:v1.74.2`.
+
+## v1.74.1 — Deleting a connector agent no longer errors  (2026-07-02)
+- Fixed: deleting a Power BI / Fabric agent that had a sync log could fail. It now deletes cleanly.
+  - `connector_sync_run.data_source_id` FK was NO ACTION (v1.73.0 regression) → blocked `delete_data_source` when a sync-run row existed. Changed to `ON DELETE CASCADE` (model + mig `connsyncrun1` + live `ALTER TABLE`, verified `confdeltype='c'`). Baked `:v1.74.1`.
+
+## v1.74.0 — Agent auto-learns after sync (and you watch it happen)  (2026-07-02)
+- After your tables sync, the agent now reads them, writes its own overview, and sets it as the primary instruction automatically — no more empty "No primary instruction". The learning steps stream in the live log so you can watch it think.
+- Cleaner log: a space before "synced", a "catalog" label where Power BI reports no row counts, and the table counter no longer overshoots (18/18, not 26/18). Plus a more alive terminal — typewriter reveal, colored lines, a green flourish when it's ready.
+  - **Instruction→primary fix:** `sync_clone_bg` now promotes the `llm_sync` onboarding instruction → `status="published"` + sets `data_sources.primary_instruction_id` (was left draft/unset → empty Overview). Re-points primary on every resync so it refreshes when tables change. Verified: clone `d0c33ff1` → primary set, published.
+  - **Rich learn log:** replaced the single "generating…" line with real per-step `log_step(phase="learning")` lines — reading N tables → analyzing joins → wrote description → drafted N starters → built overview → published set-as-primary → agent ready (results from `llm_sync`'s return, not faked).
+  - **Counter dedup:** distinct `ConnectionTable` list (dedupe by name) before `set_totals` + loop → `tables_done ≤ tables_total`.
+  - **FE `AgentSyncLog.vue` dramatic terminal:** ported from the mockup — warm top-glow + scanline grid on `#14110d`, per-line reveal, spinning `⟳` + blinking cursor on the active line, colored tokens (table amber, rows gold, ✓ green), and a done sequence (green flash sweep + ✓ pop + confetti + green footer + Start-chat). Fixes: `‹table› · ‹msg›` separator, `· catalog` for 0-row lines, `Math.min(done,total)` cap. Baked `:v1.74.0`.
+
+## v1.73.0 — Live sync log inside your data agent  (2026-07-02)
+- After you connect a Microsoft source, the agent opens with a live terminal that streams the sync as it happens — each table as it's pulled, then the "learning" step, then "agent ready". No more wondering if it's stuck.
+  - Connector clone build moved to a BACKGROUND task with a DB-backed, cross-worker-safe live log (`connector_sync_run` table, mig `connsyncrun1` off `peruser_tmpl1`). `per_user_connector.register_template_for_user(defer_sync=True)` returns the clone shell fast; NEW `sync_clone_bg(clone_id, org, user)` runs `refresh_schema` → per-table log lines (`ConnectionTable.no_rows`, best-effort) → `DataSourceService_seed` → `llm_sync` (auto-learn), writing phases connecting→syncing→learning→done via `services/connector_sync.py` (`start_run`/`log_step`/`finish_run`, JSON log capped 300, commits each step). `connect()`/`device_code_poll()` pass `defer_sync=True`; routes schedule `sync_clone_bg` (it now owns auto-learn). NEW `GET /api/data_sources/{id}/sync-status` → `{phase, tables_total, tables_done, rows, log[], error}`. FE `components/agents/AgentSyncLog.vue` = warm-dark `#1b1813` CLI terminal (glyph/color by level, auto-scroll, `rows·tables·m:ss` counter, Start-chat on done, self-hides when `{}`), explicit-imported + mounted top of `pages/agents/[id]/index.vue`; hub `onRegistered`→`/agents/{id}?sync=live`. Built via 2 parallel subagents. Baked `:v1.73.0`.
+
+## v1.72.2 — Live progress while your connector syncs  (2026-07-02)
+- Connecting a source now shows a clear step checklist — Signing in → Syncing your tables → Learning your data — with a moving progress bar and an elapsed timer, so you know it's working (the sync can take a moment).
+  - `ConnectorsRegisterModal.vue`: while the `/connect` POST is in flight, the password form is replaced by a time-paced checklist (`steps`/`stepIdx`/`elapsed`+`mmss`). One POST can't stream sub-steps, so sign-in flips to ✓ after ~1.6s and "sync" spins until the call resolves; "learn" stays pending (auto-learn is background). Active step has a text shimmer (`.cai-shimmer`) + indeterminate sweep bar (`.cai-indeterminate`); Cancel = `forceClose` (releases UI, server may still finish). `startProgress`/`stopProgress` timers cleaned on finally + unmount. Baked `:v1.72.2`.
+
+## v1.72.1 — Wire the simple sign-in into the connector tiles  (2026-07-02)
+- The Power BI / Fabric "Sign in" button now opens the new one-step email + password form (and only shows a code if your account needs MFA). Before, it jumped straight to the code screen.
+  - The `/agents` hub tile "Sign in" action was still calling `startConnect`→`/device-code/start` directly (old inline device-code modal in `ConnectorsMsHub.vue`), so the adaptive `ConnectorsRegisterModal` shipped in v1.72.0 was orphaned. Rewired: `startConnect(key)` now opens `ConnectorsRegisterModal` (email+password → `/connect` → device-code fallback); mounted the modal + `onRegistered`→refresh+`/agents/{id}`; explicit import; old device-code modal/funcs kept as inert fallback. Baked `:v1.72.1`.
+
+## v1.72.0 — One simple connector sign-in (auto device-code only if you have MFA)  (2026-07-02)
+- Connecting a Microsoft data source is now one step: enter your email and password and click Connect.
+- If your account has no two-factor, you're connected straight away.
+- If your account needs two-factor, we automatically switch to a quick code sign-in — open the link, enter the short code, approve on your phone. No option to pick, no guessing.
+  - Adaptive per-user connector login. NEW `powerbi_device_code.ropc_token()` (password grant + `offline_access` → refresh_token; classifies AADSTS 50076/50079/50158/50072/53000/7000218 as MFA→fallback, others as real failure). NEW `per_user_connector.connect()` pre-flight ROPC → on refresh_token build the private clone (auth_mode `device_code`, same shape as device-code path); on MFA auto-`start_device_code` and return `{status:"mfa_required", device_code, user_code, verification_uri, interval}`; else `{status:"error"}`. NEW route `POST /connectors/{id}/connect` (auto-`autolearn_clone` on direct connect). FE `ConnectorsRegisterModal.vue` posts `/connect`, swaps to an in-modal device-code view + poll loop on `mfa_required`, graceful 404 fallback to legacy `/register`. Flag `HYBRID_ADAPTIVE_CONNECT` (default OFF; ON org 7d372305). Both paths end at the identical `refresh_token → clone` builder. Baked `:v1.72.0`.
+
 ## v1.71.2 — Fix blank clarifying-question boxes  (2026-07-01)
 - When the agent asks a clarifying question, the question text now always shows (before, you sometimes saw empty answer boxes with no question).
   - Root cause: planner prompt told the model to use a `question` string, but the clarify tool schema wants `questions: [{text, options}]` → weak models emitted plain strings → `ClarifyTool.vue` read `q.text` = undefined → blank boxes. Fixed in 3 layers:

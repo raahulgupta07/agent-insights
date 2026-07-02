@@ -975,7 +975,37 @@ class ConnectionService:
             allowed = params
 
         logger.info(f"construct_client: Final param keys={list(allowed.keys())}")
-        return ClientClass(**allowed)
+        client = ClientClass(**allowed)
+
+        # P4 (flag CONNECTOR_ROBUSTNESS): give Power BI clients an OFFLINE
+        # table → {datasetId, workspaceId} index built from the cached
+        # ConnectionTable metadata, so generated code calling
+        # execute_query(table_name) resolves IDs without a live get_schemas()
+        # discovery (which rate-limits / 429s). No-op for non-PBI clients.
+        try:
+            from app.settings.hybrid_flags import flags as _hflags
+            if getattr(_hflags, "CONNECTOR_ROBUSTNESS", False) and hasattr(client, "set_table_index"):
+                rows = (await db.execute(
+                    select(ConnectionTable).where(ConnectionTable.connection_id == str(connection.id))
+                )).scalars().all()
+                idx: dict = {}
+                for r in rows:
+                    pbi = ((r.metadata_json or {}).get("powerbi")) or {}
+                    if pbi.get("datasetId"):
+                        idx[r.name] = {
+                            "datasetId": pbi.get("datasetId"),
+                            "workspaceId": pbi.get("workspaceId"),
+                        }
+                if idx:
+                    client.set_table_index(idx)
+                    logger.info(
+                        "construct_client: installed PBI table_index size=%d conn=%s",
+                        len(idx), connection.id,
+                    )
+        except Exception:
+            logger.debug("construct_client: PBI table_index install skipped", exc_info=True)
+
+        return client
 
     async def resolve_credentials(
         self,

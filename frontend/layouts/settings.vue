@@ -37,6 +37,7 @@ const allTabs = [
     { name: 'ai_settings', label: 'settings.aiSettings', requiredPermission: "manage_settings", description: 'Tune agent behaviour and AI defaults.' },
     { name: 'general', label: 'settings.general', requiredPermission: "manage_settings", description: 'Workspace name, branding, and general preferences.' },
     { name: "integrations", label: "settings.integrations.title", requiredPermission: "manage_settings", description: 'Connect external channels and integrations.' },
+    { name: 'connectors', label: 'Connectors', requiredPermission: "manage_connections", description: 'Configure Microsoft connector templates (tenant, SQL endpoint) once. Members then sign in with their own account from the Data Agents page.' },
     { name: 'folder-sync', label: 'Folder Sync', requiredPermission: "manage_settings", description: 'Auto-ingest a local folder into an agent via the desktop sync app — like Claude Code.' },
     { name: 'audit', label: 'settings.auditLogs', requiredPermission: "view_audit_logs", description: 'Review activity and security events across the workspace.' },
     { name: 'identity-provider', label: 'settings.identityProviderTab', requiredPermission: "manage_identity_providers", description: 'Configure SSO, SCIM provisioning, and LDAP.' },

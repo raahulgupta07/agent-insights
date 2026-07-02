@@ -26,8 +26,37 @@
         </button>
       </div>
 
-      <!-- Body -->
-      <form class="px-5 py-4 space-y-3" @submit.prevent="submit">
+      <!-- Body: PROGRESS checklist (while connecting/syncing) -->
+      <div v-if="submitting && !mfaStep" class="px-5 py-5 space-y-4">
+        <p class="text-sm font-medium text-[#211B14]">Setting up your data agent…</p>
+        <ul class="space-y-2.5">
+          <li v-for="(s, i) in steps" :key="s.key" class="flex items-center gap-2.5 text-sm">
+            <span class="w-4 h-4 flex items-center justify-center shrink-0">
+              <UIcon v-if="i < stepIdx" name="heroicons-check-circle-solid" class="h-4 w-4 text-[#3f9e6a]" />
+              <Spinner v-else-if="i === stepIdx" class="h-3.5 w-3.5 animate-spin text-[#C2541E]" />
+              <span v-else class="h-2 w-2 rounded-full bg-[#D8CFC0]"></span>
+            </span>
+            <span
+              :class="i < stepIdx
+                ? 'text-[#6b6b6b]'
+                : i === stepIdx ? 'text-[#211B14] font-medium cai-shimmer' : 'text-[#B3AB9E]'"
+            >{{ s.label }}</span>
+          </li>
+        </ul>
+        <div class="flex items-center gap-2.5 pt-0.5">
+          <div class="flex-1 h-1 rounded-full bg-[#EDE7DC] overflow-hidden">
+            <div class="h-full w-1/3 rounded-full bg-[#C2541E]/70 cai-indeterminate"></div>
+          </div>
+          <span class="text-[11px] tabular-nums text-[#9a958c]">{{ mmss }}</span>
+        </div>
+        <p class="text-[11px] text-[#9a958c] leading-relaxed">This can take a moment while we sync every table your account can see.</p>
+        <div class="flex justify-end">
+          <button type="button" class="text-xs text-[#9a958c] hover:text-[#211B14]" @click="forceClose">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Body: password form -->
+      <form v-else-if="!mfaStep" class="px-5 py-4 space-y-3" @submit.prevent="submit">
         <div>
           <label class="mb-1 block text-xs font-medium text-gray-700">Email</label>
           <input
@@ -35,7 +64,6 @@
             type="email"
             autocomplete="username"
             placeholder="you@company.com"
-            :disabled="submitting"
             class="block w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-[#C2541E] focus:outline-none"
           />
         </div>
@@ -46,7 +74,6 @@
             type="password"
             autocomplete="current-password"
             placeholder="••••••••"
-            :disabled="submitting"
             class="block w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-[#C2541E] focus:outline-none"
           />
         </div>
@@ -65,19 +92,52 @@
           <button
             type="button"
             class="rounded-lg px-3 py-1.5 text-sm text-[#6b6b6b] hover:text-[#211B14]"
-            :disabled="submitting"
             @click="close"
           >Cancel</button>
           <button
             type="submit"
             class="inline-flex items-center gap-2 rounded-lg bg-[#C2541E] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#A8330F] transition-colors disabled:opacity-60"
-            :disabled="submitting || !canSubmit"
-          >
-            <Spinner v-if="submitting" class="h-4 w-4 animate-spin" />
-            {{ submitting ? 'Connecting & syncing your data…' : 'Connect with my account' }}
-          </button>
+            :disabled="!canSubmit"
+          >Connect with my account</button>
         </div>
       </form>
+
+      <!-- Body: device-code (MFA) view -->
+      <div v-else class="px-5 py-4 space-y-3">
+        <p class="text-[12px] text-[#6b6b6b] leading-relaxed">
+          Your account uses multi-factor sign-in. Finish in your browser:
+        </p>
+
+        <!-- Error in device view -->
+        <template v-if="deviceError">
+          <p class="text-[12px] text-red-600 bg-red-50 border border-red-200 rounded-md px-2.5 py-2">
+            {{ deviceError }}
+          </p>
+          <div class="flex items-center justify-end pt-1">
+            <button
+              type="button"
+              class="rounded-lg bg-[#C2541E] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#A8330F] transition-colors"
+              @click="startOver"
+            >Start over</button>
+          </div>
+        </template>
+
+        <template v-else>
+          <ol class="text-sm text-[#211B14] space-y-2">
+            <li>
+              1. Open
+              <a :href="verificationUri" target="_blank" class="text-[#A8330F] font-semibold underline">{{ verificationUri }}</a>
+            </li>
+            <li>2. Enter this code:</li>
+          </ol>
+          <div class="font-mono text-2xl font-bold tracking-widest text-center text-[#A8330F] bg-[#FBF3EB] border border-dashed border-[#C2541E] rounded-xl py-4 select-all">
+            {{ userCode }}
+          </div>
+          <div class="flex items-center gap-2 text-xs text-[#6b6b6b] bg-[#F6F1EA] rounded-lg p-2.5">
+            <Spinner class="h-3.5 w-3.5 animate-spin" /> Waiting for you to approve…
+          </div>
+        </template>
+      </div>
     </div>
   </div>
 </template>
@@ -100,10 +160,58 @@ const password = ref('')
 const submitting = ref(false)
 const errorMessage = ref('')
 
+// ---- progress checklist (while /connect is in flight) ----
+// One POST can't stream sub-steps, so these are time-paced to the real phases:
+// sign-in returns fast (~1-2s), then the server seeds every table (slow). We flip
+// sign-in to done after a short delay and leave "sync" spinning until the call
+// resolves. "Learn" stays pending (auto-learn runs in the background after connect).
+const steps = computed(() => [
+  { key: 'signin', label: `Signing in as ${email.value.trim() || 'your account'}` },
+  { key: 'sync', label: 'Syncing your tables' },
+  { key: 'learn', label: 'Learning your data' },
+])
+const stepIdx = ref(0)
+const elapsed = ref(0)
+const mmss = computed(() => {
+  const m = Math.floor(elapsed.value / 60)
+  const s = elapsed.value % 60
+  return `${m}:${s.toString().padStart(2, '0')}`
+})
+let elapsedTimer: ReturnType<typeof setInterval> | null = null
+let signinTimer: ReturnType<typeof setTimeout> | null = null
+
+function startProgress() {
+  stepIdx.value = 0
+  elapsed.value = 0
+  elapsedTimer = setInterval(() => { elapsed.value += 1 }, 1000)
+  // sign-in usually done within ~1.6s → advance to the (slow) sync step
+  signinTimer = setTimeout(() => { if (stepIdx.value < 1) stepIdx.value = 1 }, 1600)
+}
+function stopProgress() {
+  if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null }
+  if (signinTimer) { clearTimeout(signinTimer); signinTimer = null }
+}
+function forceClose() {
+  // Leaving mid-connect: the server may finish the clone anyway; just release the UI.
+  stopProgress()
+  submitting.value = false
+  stopPoll()
+  emit('update:modelValue', false)
+}
+
+// device-code (MFA) state
+const mfaStep = ref(false)
+const userCode = ref('')
+const verificationUri = ref('')
+const deviceCode = ref('')
+const deviceError = ref('')
+let pollHandle: ReturnType<typeof setTimeout> | null = null
+let pollInterval = 5000
+
 const isPowerBiUser = computed(() => props.template?.type === 'powerbi_user')
 
 // auth_mode: powerbi_user signs in with userpass; otherwise fall back to the
-// template's first allowed user auth mode.
+// template's first allowed user auth mode. (used only in the 404 fallback path)
 const authMode = computed<string>(() => {
   if (isPowerBiUser.value) return 'userpass'
   return props.template?.allowed_user_auth_modes?.[0] || 'userpass'
@@ -111,7 +219,23 @@ const authMode = computed<string>(() => {
 
 const canSubmit = computed(() => !!email.value.trim() && !!password.value)
 
-// Reset the form whenever a new template is opened.
+function stopPoll() {
+  if (pollHandle) {
+    clearTimeout(pollHandle)
+    pollHandle = null
+  }
+}
+
+function resetDevice() {
+  mfaStep.value = false
+  userCode.value = ''
+  verificationUri.value = ''
+  deviceCode.value = ''
+  deviceError.value = ''
+  stopPoll()
+}
+
+// Reset the form whenever a new template is opened (or the modal closes).
 watch(
   () => props.modelValue,
   (open) => {
@@ -120,43 +244,153 @@ watch(
       password.value = ''
       errorMessage.value = ''
       submitting.value = false
+      resetDevice()
+    } else {
+      stopPoll()
     }
   }
 )
 
 function close() {
   if (submitting.value) return
+  stopPoll()
   emit('update:modelValue', false)
+}
+
+function startOver() {
+  resetDevice()
+  errorMessage.value = ''
 }
 
 async function submit() {
   if (submitting.value || !canSubmit.value || !props.template?.id) return
   submitting.value = true
   errorMessage.value = ''
+  startProgress()
   try {
-    const body = {
-      auth_mode: authMode.value,
-      credentials: {
-        username: email.value.trim(),
-        password: password.value,
-      } as Record<string, string>,
-    }
-    const res = await useMyFetch(`/connectors/${props.template.id}/register`, {
+    const res = await useMyFetch(`/connectors/${props.template.id}/connect`, {
       method: 'POST',
-      body: JSON.stringify(body),
+      body: JSON.stringify({ email: email.value.trim(), password: password.value }),
       headers: { 'Content-Type': 'application/json' },
     })
-    if ((res.error as any)?.value) {
-      errorMessage.value =
-        (res.error as any).value?.data?.detail || 'Failed to connect. Please check your credentials.'
+
+    const err = (res.error as any)?.value
+    if (err) {
+      // Graceful fallback: adaptive-connect flag off on the server → old /register path.
+      const code = err?.statusCode ?? err?.status
+      if (code === 404) {
+        await legacyRegister()
+        return
+      }
+      errorMessage.value = err?.data?.detail || 'Failed to connect. Please check your credentials.'
       return
     }
-    const dataSource = (res.data as any)?.value
-    emit('registered', dataSource)
+
+    const r = (res.data as any)?.value || {}
+    if (r.status === 'connected') {
+      emit('registered', { id: r.data_source_id })
+      close()
+      return
+    }
+    if (r.status === 'mfa_required') {
+      // Switch to the device-code view and start polling.
+      userCode.value = r.user_code || ''
+      verificationUri.value = r.verification_uri || ''
+      deviceCode.value = r.device_code || ''
+      deviceError.value = ''
+      pollInterval = (r.interval || 5) * 1000
+      mfaStep.value = true
+      schedulePoll()
+      return
+    }
+    if (r.status === 'error') {
+      errorMessage.value = r.error || 'Failed to connect. Please check your credentials.'
+      return
+    }
+    errorMessage.value = 'Unexpected response from server.'
   } catch (e: any) {
     errorMessage.value = e?.data?.detail || e?.message || 'Failed to connect. Please check your credentials.'
   } finally {
+    stopProgress()
     submitting.value = false
   }
 }
+
+// Fallback (server has no /connect endpoint): original /register behavior.
+async function legacyRegister() {
+  const body = {
+    auth_mode: authMode.value,
+    credentials: {
+      username: email.value.trim(),
+      password: password.value,
+    } as Record<string, string>,
+  }
+  const res = await useMyFetch(`/connectors/${props.template.id}/register`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json' },
+  })
+  if ((res.error as any)?.value) {
+    errorMessage.value =
+      (res.error as any).value?.data?.detail || 'Failed to connect. Please check your credentials.'
+    return
+  }
+  const dataSource = (res.data as any)?.value
+  emit('registered', dataSource)
+}
+
+function schedulePoll() {
+  pollHandle = setTimeout(poll, pollInterval)
+}
+
+async function poll() {
+  if (!mfaStep.value) return
+  try {
+    const res = await useMyFetch(`/connectors/${props.template?.id}/device-code/poll`, {
+      method: 'POST',
+      body: JSON.stringify({ device_code: deviceCode.value }),
+      headers: { 'Content-Type': 'application/json' },
+    })
+    if ((res.error as any)?.value) throw (res.error as any).value
+    const r = (res.data as any)?.value || {}
+    if (r.status === 'pending') {
+      if (r.slow_down) pollInterval += 5000
+      schedulePoll()
+      return
+    }
+    if (r.status === 'success') {
+      stopPoll()
+      emit('registered', { id: r.data_source_id })
+      close()
+      return
+    }
+    deviceError.value = r.error || 'Sign-in failed. Please start over.'
+    stopPoll()
+  } catch (e: any) {
+    deviceError.value = e?.data?.detail || e?.message || 'Sign-in failed. Please start over.'
+    stopPoll()
+  }
+}
+
+onBeforeUnmount(() => { stopPoll(); stopProgress() })
 </script>
+
+<style scoped>
+/* active-step text shimmer */
+.cai-shimmer {
+  background: linear-gradient(90deg, #211B14 0%, #211B14 35%, #C2541E 50%, #211B14 65%, #211B14 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: cai-shimmer 1.8s linear infinite;
+}
+@keyframes cai-shimmer { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }
+
+/* indeterminate progress sweep */
+.cai-indeterminate { animation: cai-sweep 1.3s ease-in-out infinite; }
+@keyframes cai-sweep {
+  0% { transform: translateX(-120%) }
+  100% { transform: translateX(320%) }
+}
+</style>

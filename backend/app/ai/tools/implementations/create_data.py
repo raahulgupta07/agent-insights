@@ -864,6 +864,57 @@ Do not use generic placeholders like "value" unless that is the actual column na
             span.set_attribute("tables.resolved_count", sum(len(g.get("tables", [])) for g in resolved))
             return resolved, warnings
 
+    # Cap on auto-filled tables when the model omitted an explicit target, so a
+    # wide connector (dozens of tables) can't blow up the schema excerpt.
+    _AUTOFILL_MAX_TABLES = 30
+
+    @staticmethod
+    async def _resolve_all_active_tables(
+        schema_builder,
+        cap: int = 30,
+    ) -> tuple[List[Dict[str, Any]], List[str]]:
+        """Auto-fill: resolve ALL active tables of the report's attached data
+        sources (P1, flag CONNECTOR_ROBUSTNESS).
+
+        Used when the model omits `tables_by_source` — the report already knows
+        its data sources, so a live connector query should not hard-fail with
+        "no tables matched". `schema_builder` is constructed with the report's
+        data sources, so an unfiltered `build()` returns exactly their active
+        tables. Returns (resolved_tables_by_source, warnings).
+        """
+        with tracer.start_as_current_span("create_data.resolve_all_active_tables") as span:
+            if not schema_builder:
+                return [], ["No schema_builder available for auto-fill"]
+            try:
+                ctx = await schema_builder.build(with_stats=False)
+            except Exception as e:
+                return [], [f"Auto-fill schema build failed: {str(e)}"]
+
+            resolved: List[Dict[str, Any]] = []
+            total = 0
+            for ds in (getattr(ctx, "data_sources", []) or []):
+                ds_info = getattr(ds, "info", None)
+                ds_id = getattr(ds_info, "id", None) if ds_info else None
+                names: List[str] = []
+                for t in (getattr(ds, "tables", []) or []):
+                    tbl_name = getattr(t, "name", None)
+                    if not tbl_name:
+                        continue
+                    names.append(tbl_name)
+                    total += 1
+                    if total >= cap:
+                        break
+                if names:
+                    resolved.append({"data_source_id": str(ds_id) if ds_id else None, "tables": names})
+                if total >= cap:
+                    break
+
+            warnings: List[str] = []
+            if not resolved:
+                warnings.append("Auto-fill found no active tables in the report's data sources")
+            span.set_attribute("tables.autofilled_count", total)
+            return resolved, warnings
+
     @staticmethod
     def _summarize_errors(errors) -> dict:
         """Summarize retry errors for the planner observation.
@@ -1016,7 +1067,30 @@ Do not use generic placeholders like "value" unless that is the actual column na
                     data.tables_by_source,
                     context_hub.schema_builder,
                 )
-        
+        elif not has_files:
+            # P1 (flag CONNECTOR_ROBUSTNESS): the model omitted `tables_by_source`
+            # and there are no uploaded files. Rather than hard-fail with
+            # "no tables matched", auto-fill from the report's attached data
+            # sources — the report already knows what it's connected to. This
+            # kills the wasted first-attempt miss against live connectors.
+            try:
+                from app.settings.hybrid_flags import flags as _hflags
+                _robust = bool(_hflags.CONNECTOR_ROBUSTNESS)
+            except Exception:
+                _robust = False
+            if _robust and context_hub and getattr(context_hub, "schema_builder", None):
+                yield ToolProgressEvent(type="tool.progress", payload={"stage": "resolving_tables"})
+                resolved_tables, resolution_warnings = await self._resolve_all_active_tables(
+                    context_hub.schema_builder,
+                    self._AUTOFILL_MAX_TABLES,
+                )
+                if resolved_tables:
+                    logger.info(
+                        "create_data.autofill_tables count=%d groups=%d (model omitted tables_by_source)",
+                        sum(len(g.get("tables", [])) for g in resolved_tables),
+                        len(resolved_tables),
+                    )
+
         # Check if we have any data sources (tables or files)
         total_resolved = sum(len(g.get("tables", [])) for g in resolved_tables)
 

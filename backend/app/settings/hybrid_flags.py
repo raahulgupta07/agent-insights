@@ -122,7 +122,9 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_FULL_PIPELINE": {"label": "Full Pipeline (15 stages)", "role": "agent", "category": "Core", "status": "experimental", "note": "Quality-gate + golden/answer eval + hybrid-index + brain-graph in one train. See NEWPIPE.md."},
     "HYBRID_POWERBI_USER": {"label": "Power BI Connector (User Sign-in)", "role": "user", "category": "Connectors", "status": "experimental", "note": "Adds a Power BI semantic-model connector that signs in with email+password (ROPC) — no app registration. Needs MFA off + Build permission on the datasets. Default OFF."},
     "HYBRID_CONNECTOR_AS_AGENT": {"label": "Connector → Data Agent (auto)", "role": "admin", "category": "Connectors", "status": "experimental", "note": "When an admin connects a data source, auto-create an org-shared agent (Studio) bound to it, so every member can chat it immediately. For user_required connectors (e.g. Power BI user sign-in) each member signs in with their own account. Default OFF."},
+    "HYBRID_CONNECTOR_ROBUSTNESS": {"label": "Connector query robustness", "role": "agent", "category": "Connectors", "status": "experimental", "note": "Hardens the create_data → connector query path so agents answer reliably against live connectors (Power BI, Fabric): (P1) auto-fill target tables from the report's data sources when the model omits them — no wasted 'no tables matched' retry; (P2) honor rate-limit Retry-After with backoff on the DAX/query path instead of hard-failing; (P4) thread dataset/workspace IDs into generated code. Off = byte-identical to today. Default OFF."},
     "HYBRID_PER_USER_CONNECTOR": {"label": "Per-User Connector (self-register)", "role": "admin", "category": "Connectors", "status": "experimental", "note": "Admin configures a connector template once (tenant/client, no creds). Each member registers with their own email+password → gets a PRIVATE copy with their own synced tables (not shared org-wide). Each builds their own analysis. Microsoft/source access control enforced per user. Default OFF."},
+    "HYBRID_ADAPTIVE_CONNECT": {"label": "Adaptive connector sign-in (email+password, auto device-code on MFA)", "role": "admin", "category": "Connectors", "status": "experimental", "note": "One sign-in flow for per-user connectors: a member enters email+password and the backend tries ROPC (password grant) first. No MFA → connects immediately; MFA / conditional access / legacy-auth blocked → auto-falls-back to device-code sign-in. Both paths build the same private per-user clone. Default OFF."},
     "HYBRID_SEMANTIC_SEARCH": {"label": "Hybrid Search (FTS + embeddings)", "role": "agent", "category": "Intelligence", "status": "experimental", "note": "Uses your OpenRouter key for embeddings (text-embedding-3-small). After enabling, click Rebuild search index."},
 
     # --- Agents & Access --------------------------------------------------
@@ -1018,6 +1020,12 @@ class HybridFlags:
         return _bool("HYBRID_CONNECTOR_AS_AGENT", False)
 
     @property
+    def CONNECTOR_ROBUSTNESS(self) -> bool:
+        # Harden the create_data → live-connector query path (auto-fill tables,
+        # rate-limit backoff, dataset-id threading). Default OFF.
+        return _bool("HYBRID_CONNECTOR_ROBUSTNESS", False)
+
+    @property
     def PER_USER_CONNECTOR(self) -> bool:
         # Admin marks a connector as a per-user TEMPLATE (tenant/client config,
         # no user creds). Each member registers with their own credentials →
@@ -1025,6 +1033,14 @@ class HybridFlags:
         # catalog (isolated: is_public=False + owner_user_id + MS access control).
         # Default OFF.
         return _bool("HYBRID_PER_USER_CONNECTOR", False)
+
+    @property
+    def ADAPTIVE_CONNECT(self) -> bool:
+        # Adaptive per-user connector sign-in: a member enters email+password →
+        # backend tries ROPC (password grant); if the account has no MFA it
+        # connects immediately, else it auto-falls-back to device-code sign-in.
+        # Both paths funnel to the SAME refresh_token→clone builder. Default OFF.
+        return _bool("HYBRID_ADAPTIVE_CONNECT", False)
 
     @property
     def GOLDEN_QUERIES(self) -> bool:
@@ -1131,7 +1147,9 @@ class HybridFlags:
             "FULL_PIPELINE": self.FULL_PIPELINE,
             "POWERBI_USER": self.POWERBI_USER,
             "CONNECTOR_AS_AGENT": self.CONNECTOR_AS_AGENT,
+            "CONNECTOR_ROBUSTNESS": self.CONNECTOR_ROBUSTNESS,
             "PER_USER_CONNECTOR": self.PER_USER_CONNECTOR,
+            "ADAPTIVE_CONNECT": self.ADAPTIVE_CONNECT,
             "GOLDEN_QUERIES": self.GOLDEN_QUERIES,
             "VERIFIED_METRICS": self.VERIFIED_METRICS,
             "SEMANTIC_SEARCH": self.SEMANTIC_SEARCH,

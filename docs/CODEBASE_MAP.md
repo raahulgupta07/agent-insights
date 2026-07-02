@@ -5,7 +5,23 @@
 > Companion: `CLAUDE.md` (rules/current state), `DEVLOG.md` (dated history), `ROADMAP.md` (forward plan),
 > `docs/INGEST_BRAIN_DESIGN.md` (F09 universal-ingest design).
 > **Keep current:** when a ship changes a load-bearing path/pattern, update this file (same habit as DEVLOG bump).
-> Last verified: 2026-07-01 · `VERSION_HYBRID` 1.69.5 · mig head `peruser_tmpl1`.
+> Last verified: 2026-07-02 · `VERSION_HYBRID` 1.74.2 · mig head `connsyncrun1`.
+> v1.74.2: 3 bug fixes (baked, NOT pushed) — (1) per-user connector connect 500: `per_user_connector.connect()` fed an
+> EXPIRED request-session `organization` into `create_connection`; sync `organization.id` → AsyncSession lazy-load →
+> MissingGreenlet. Fix = `_register_clone_fresh_session()` (fresh `async_session_maker` + `expunge()` force-loaded
+> org/user → detached+populated, no lazy-load) + blocking MS `requests` offloaded via `asyncio.to_thread`.
+> (2) query crash on every chat: `ai/agents/planner/prompt_builder_v3.py` f-string had unescaped literal JSON braces in
+> the clarify examples (`{"text":…}`) → `Invalid format specifier`. Fix = double the braces. LANDMINE: any prompt
+> f-string with literal JSON MUST use `{{ }}`. (3) removed duplicate `/connectors/available` page (nav item +
+> `pages/connectors/available.vue`); the `/connectors/available` API endpoint STAYS (Data Agents hub reads it).
+> v1.73.0: live in-agent sync log — connector clone build moved to BG task `per_user_connector.sync_clone_bg`
+> (after `register_template_for_user(defer_sync=True)` returns shell); DB-backed `ConnectorSyncRun` (mig `connsyncrun1`,
+> `services/connector_sync.py`); route `GET /data_sources/{id}/sync-status`; FE `components/agents/AgentSyncLog.vue`
+> CLI terminal on agent Overview. LANDMINE: alembic dir = `backend/alembic/` (NOT `backend/app/alembic/`); DB-backed
+> because in-mem breaks across `--workers 4`.
+> v1.72.0–1.72.2: adaptive connector sign-in — `powerbi_device_code.ropc_token` (email+pw, AADSTS MFA-codes→device
+> fallback) + `per_user_connector.connect()` + route `POST /connectors/{id}/connect`; FE `ConnectorsRegisterModal.vue`
+> (email+pw→device-code fallback + step-checklist progress), wired into `ConnectorsMsHub.vue` tiles. Flag `HYBRID_ADAPTIVE_CONNECT`.
 > v1.69.1–5: PowerBI (User Sign-in) LIVE in hub (`powerbi_user`); admin no-typed-DB (`MSFabricConfig.database`
 > optional + `MsFabricClient._accessible_databases`/`_get_tables_for_db`, NEEDS-LIVE-TEST); COMPACT tiles + ⚙gear;
 > Connections chips REMOVED; NEW `pages/connectors/manage.vue`. LANDMINES: private (owner_user_id) conns must skip

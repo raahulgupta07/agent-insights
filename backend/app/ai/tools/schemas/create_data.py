@@ -1,8 +1,8 @@
 from typing import Dict, Any, Optional, List, Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # Reuse per-source targeting schema for consistent behavior
-from .create_widget import TablesBySource
+from .create_widget import TablesBySource, _coerce_tables_by_source
 from .create_data_model import DataModel
 
 
@@ -40,11 +40,18 @@ class CreateDataInput(BaseModel):
     tables_by_source: Optional[List[TablesBySource]] = Field(
         default=None,
         description=(
-            "Compact per-source table targeting: [{data_source_id, tables:[...]}, ...]. "
-            "Avoids repeating ds_id per table and supports cross-source patterns when data_source_id is null."
+            "Compact per-source table targeting. MUST be a list of objects: "
+            '[{"data_source_id": null, "tables": ["Open Project Tracking/projects"]}]. '
+            "Use the field name `tables` (a list of strings). data_source_id may be null for cross-source. "
             "For file analysis only, keep this empty."
         ),
     )
+
+    @field_validator("tables_by_source", mode="before")
+    @classmethod
+    def _normalize_tables_by_source(cls, v):
+        return _coerce_tables_by_source(v)
+
     visualization_type: Optional[VisualizationType] = Field(
         default=None,
         description="Type of visualization to create. If not provided, a table will be created.",

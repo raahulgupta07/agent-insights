@@ -109,6 +109,36 @@ def _read_row_count(tbl) -> Optional[int]:
         return None
 
 
+def _looks_failed(payload: Any) -> bool:
+    """True when a cache payload represents a FAILED / empty create_data result.
+
+    Defense-in-depth (P3): the create_data tool only calls `store` on the success
+    path, but a cache must never persist or replay a failure — a stale error would
+    then be served forever for an identical prompt, even after the underlying bug
+    is fixed. So both `store` and `lookup` refuse any payload that:
+      - explicitly flags failure (`success is False`), or
+      - carries a non-empty `error` / `errors`, or
+      - produced no data at all (a `formatted` block with neither columns nor rows).
+    Conservative: anything ambiguous is treated as OK so we never drop a real hit.
+    """
+    if not isinstance(payload, dict) or not payload:
+        return True
+    if payload.get("success") is False:
+        return True
+    if payload.get("error"):
+        return True
+    errs = payload.get("errors")
+    if isinstance(errs, (list, tuple)) and len(errs) > 0:
+        return True
+    fmt = payload.get("formatted")
+    if isinstance(fmt, dict):
+        has_cols = bool(fmt.get("columns"))
+        has_rows = bool(fmt.get("rows"))
+        if not has_cols and not has_rows:
+            return True
+    return False
+
+
 def make_cache_key(question: str, watermark_sig: str) -> str:
     """Deterministic SHA-256 cache key. Empty when uncacheable (no signature)."""
     qn = normalize_question(question)
@@ -148,6 +178,17 @@ async def lookup(
         payload = row.result_json
         if not isinstance(payload, dict) or not payload:
             return None
+        # P3 self-heal: a legacy entry that stored a failure/empty result must not
+        # be replayed. Treat it as a MISS and soft-delete it so the next identical
+        # ask rebuilds cleanly (and re-caches the real answer).
+        if _looks_failed(payload):
+            try:
+                from datetime import datetime
+                row.deleted_at = datetime.utcnow()
+                await db.flush()
+            except Exception:
+                pass
+            return None
         try:
             row.hit_count = (row.hit_count or 0) + 1
             await db.flush()
@@ -174,6 +215,11 @@ async def store(
     Never raises — a cache write must never break a successful create_data turn.
     """
     if not cache_key or not isinstance(result_json, dict) or not result_json:
+        return False
+    # P3: never persist a failed / empty result (would be replayed forever for an
+    # identical prompt). Callers store on success, but guard here too.
+    if _looks_failed(result_json):
+        logger.debug("result_cache: refusing to store failed/empty result")
         return False
     try:
         from app.models.result_cache import ResultCacheEntry

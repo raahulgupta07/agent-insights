@@ -1,5 +1,12 @@
-from typing import Dict, Any, Optional, List
-from pydantic import BaseModel, Field
+from typing import Dict, Any, Optional, List, Union
+from pydantic import (
+    BaseModel,
+    Field,
+    AliasChoices,
+    ConfigDict,
+    field_validator,
+    model_validator,
+)
 
 from .create_data_model import DataModel
 
@@ -13,13 +20,61 @@ class TablesBySource(BaseModel):
       Examples: "film", "public.inventory", "Regional Sales Sample (2)/Opportunities".
     """
 
+    # Accept `tables` by field name even when an alias is defined.
+    model_config = ConfigDict(populate_by_name=True)
+
     data_source_id: Optional[str] = Field(
         default=None,
         description="UUID of the data source to scope these tables. If null, applies to all sources.",
     )
     tables: List[str] = Field(
-        ..., description="Table names (literal, case-insensitive). Schema or dataset prefix (. or /) is optional."
+        ...,
+        # LLMs frequently emit `table_names`/`table`; accept them as aliases for `tables`.
+        validation_alias=AliasChoices("tables", "table_names", "table"),
+        description="Table names (literal, case-insensitive). Schema or dataset prefix (. or /) is optional.",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_shape(cls, v):
+        # A bare string entry ("projects") → {"tables": ["projects"]}.
+        if isinstance(v, str):
+            return {"tables": [v]}
+        # A dict whose `tables`/alias is a single string → wrap in a list.
+        if isinstance(v, dict):
+            for key in ("tables", "table_names", "table"):
+                if isinstance(v.get(key), str):
+                    v = {**v, key: [v[key]]}
+                    break
+        return v
+
+
+def _coerce_tables_by_source(v):
+    """Normalize the many shapes an LLM emits for `tables_by_source` into
+    List[TablesBySource]-compatible input.
+
+    Accepts:
+      - None                                    → None
+      - "projects"                              → [{"tables": ["projects"]}]
+      - ["projects", "owners"]                  → [{"tables": ["projects", "owners"]}]
+      - {"tables": [...]} / single dict         → [ {...} ]
+      - [{"table_names": [...], ...}, ...]       → handled via field alias
+    """
+    if v is None:
+        return v
+    if isinstance(v, str):
+        return [{"tables": [v]}]
+    if isinstance(v, dict):
+        return [v]
+    if isinstance(v, list):
+        # Whole list is bare strings → collapse to one cross-source entry.
+        if v and all(isinstance(x, str) for x in v):
+            return [{"tables": list(v)}]
+        out = []
+        for item in v:
+            out.append({"tables": [item]} if isinstance(item, str) else item)
+        return out
+    return v
 
 
 class CreateWidgetInput(BaseModel):
@@ -35,10 +90,17 @@ class CreateWidgetInput(BaseModel):
     tables_by_source: Optional[List[TablesBySource]] = Field(
         default=None,
         description=(
-            "Compact per-source table targeting: [{data_source_id, tables:[...]}, ...]. "
-            "Avoids repeating ds_id per table and supports cross-source patterns when data_source_id is null."
+            "Compact per-source table targeting. MUST be a list of objects: "
+            '[{"data_source_id": null, "tables": ["Open Project Tracking/projects"]}]. '
+            "Use the field name `tables` (a list of strings). data_source_id may be null for cross-source."
         ),
     )
+
+    @field_validator("tables_by_source", mode="before")
+    @classmethod
+    def _normalize_tables_by_source(cls, v):
+        return _coerce_tables_by_source(v)
+
     schema_limit: int = Field(
         default=10,
         ge=1,

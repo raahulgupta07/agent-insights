@@ -13,8 +13,8 @@
 
                 <!-- Data Agents Section - show once the user has any agent -->
                 <div v-if="allAgents.length > 0" class="mb-6">
-                    <!-- Header: title + subtitle (left), primary actions top-right (canonical) -->
-                    <div class="flex items-start justify-between gap-4">
+                    <!-- Header: title + subtitle (left), compact search (top-right) -->
+                    <div class="flex items-start justify-between gap-4 mb-5">
                         <div>
                             <h1
                                 class="text-[32px] font-medium text-[#211B14] tracking-tight flex items-center gap-2"
@@ -25,20 +25,17 @@
                             </h1>
                             <p class="mt-2 text-[#6b6b6b] leading-relaxed max-w-2xl">{{ $t('data.agentsAutoHint') }}</p>
                         </div>
-                    </div>
-
-                    <!-- Search (full width, below header) -->
-                    <div class="my-4">
-                        <div class="relative">
+                        <!-- Compact search — only once the user has agents to filter -->
+                        <div v-if="allAgents.length > 1" class="relative shrink-0 mt-1.5 w-40 sm:w-56">
                             <input
                                 v-model="searchQuery"
                                 type="text"
                                 :placeholder="$t('data.searchAgents')"
-                                class="w-full ps-10 pe-4 py-2.5 bg-white border border-[#E9E0D3] rounded-xl text-[#1f2328] placeholder:text-[#9a958c] focus:outline-none focus:ring-2 focus:ring-[#C2541E]/40 focus:border-[#C2541E]"
+                                class="w-full ps-9 pe-3 py-2 text-[13px] bg-white border border-[#E9E0D3] rounded-lg text-[#1f2328] placeholder:text-[#9a958c] focus:outline-none focus:ring-2 focus:ring-[#C2541E]/40 focus:border-[#C2541E]"
                             />
                             <UIcon
                                 name="i-heroicons-magnifying-glass"
-                                class="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9a958c]"
+                                class="absolute start-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9a958c]"
                             />
                         </div>
                     </div>
@@ -62,106 +59,20 @@
                         </div>
                     </div>
 
-                    <!-- Data Agents grid -->
+                    <!-- Data Agents grid — Studios-style cards (DataAgentCard) -->
                     <div v-if="filteredAgents.length > 0" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                        <div
+                        <DataAgentCard
                             v-for="ds in filteredAgents"
                             :key="ds.id"
-                            class="block h-full p-5 rounded-2xl border border-[#E9E0D3] bg-white transition-all duration-200 group"
-                            :class="userHasAccess(ds) ? 'cursor-pointer hover:-translate-y-0.5 hover:shadow-md hover:border-[#C2541E]/30' : 'opacity-75'"
-                        >
-                            <component :is="userHasAccess(ds) ? NuxtLink : 'div'" :to="userHasAccess(ds) ? `/agents/${ds.id}` : undefined" class="block">
-                                <!-- Top row: clay icon tile + connection status pill -->
-                                <div class="flex items-start justify-between gap-2 mb-3">
-                                    <!-- Connector clones show the Microsoft product logo; file/DB
-                                         agents keep the generic clay tile. -->
-                                    <div class="w-10 h-10 rounded-xl bg-white border border-[#E9E0D3] flex items-center justify-center p-1.5" v-if="connectorMeta(ds)">
-                                        <img :src="connectorMeta(ds).logo" :alt="connectorMeta(ds).name" class="w-full h-full object-contain" />
-                                    </div>
-                                    <div v-else class="w-10 h-10 rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] flex items-center justify-center">
-                                        <UIcon name="i-heroicons-circle-stack" class="w-5 h-5 text-[#C2541E]" />
-                                    </div>
-                                    <!-- Connect-state pill only for CONNECTOR agents (user_required).
-                                         Plain file/warehouse agents (CSV, DuckDB…) always have their
-                                         data — no "connect" concept, so no pill. -->
-                                    <template v-if="requiresUserAuth(ds)">
-                                        <div
-                                            v-if="userHasAccess(ds)"
-                                            class="inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] font-medium rounded-full text-[#3f9e6a] bg-[#eef6f0] border border-[#d7ebde]"
-                                        >
-                                            <span class="w-1.5 h-1.5 rounded-full bg-[#3f9e6a]"></span>
-                                            {{ $t('data.connected') }}
-                                        </div>
-                                        <div
-                                            v-else
-                                            class="inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] font-medium rounded-full text-[#6b6b6b] bg-[#F4EEE5] border border-[#E9E0D3]"
-                                        >
-                                            <span class="w-1.5 h-1.5 rounded-full bg-[#9a958c]"></span>
-                                            {{ $t('data.disconnected') }}
-                                        </div>
-                                    </template>
-                                </div>
-
-                                <!-- Name + badges. Connector clones show the clean product
-                                     name; the signed-in identity moves to a subtitle. -->
-                                <div class="flex items-center gap-1.5 mb-1">
-                                    <span
-                                        class="text-[#1f2328] text-base leading-tight"
-                                        style="font-family: 'Spectral', ui-serif, Georgia, serif"
-                                    >{{ connectorMeta(ds) ? connectorMeta(ds).name : ds.name }}</span>
-                                    <UTooltip v-if="ds.admin_only" :text="$t('data.adminOnlyHint')">
-                                        <span class="text-[9px] font-medium uppercase tracking-wide text-[#C2541E] bg-[#F4EEE5] border border-[#E9E0D3] px-1.5 py-0.5 rounded">{{ $t('data.adminOnlyTag') }}</span>
-                                    </UTooltip>
-                                    <UTooltip v-if="ds.publish_status && ds.publish_status !== 'published'" :text="publishStatusDescription(ds.publish_status)">
-                                        <span :class="['text-[9px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded border', publishStatusBadgeClass(ds.publish_status)]">{{ publishStatusLabel(ds.publish_status) }}</span>
-                                    </UTooltip>
-                                </div>
-
-                                <!-- Connector clone → signed-in identity as subtitle -->
-                                <p v-if="connectorMeta(ds)" class="mt-1 text-xs text-[#6b6b6b] leading-relaxed truncate">
-                                    <span v-if="connectorMeta(ds).subtitle">{{ connectorMeta(ds).subtitle }}</span>
-                                    <span v-else class="text-[#9a958c]">{{ $t('data.signedInPrivate') }}</span>
-                                </p>
-                                <!-- Description (2 lines max) -->
-                                <p v-else-if="ds.description" class="mt-1 text-xs text-[#6b6b6b] leading-relaxed line-clamp-2">
-                                    {{ ds.description }}
-                                </p>
-                                <p v-else class="mt-1 text-xs text-[#9a958c] italic">
-                                    {{ $t('data.noDescription') }}
-                                </p>
-
-                                <!-- Footer: connector icon(s) + counts on ONE line (de-duped) -->
-                                <div class="mt-3 pt-3 border-t border-[#E9E0D3] flex items-center gap-2 text-[11px] text-[#9a958c]">
-                                    <UTooltip v-for="conn in (ds.connections || []).slice(0, 3)" :key="conn.id" :text="conn.name">
-                                        <DataSourceIcon class="h-3.5" :type="conn.type" />
-                                    </UTooltip>
-                                    <span v-if="(ds.connections || []).length > 3">+{{ (ds.connections || []).length - 3 }}</span>
-                                    <span class="ms-0.5">{{ getTableCount(ds) }} {{ $t('data.tables') }} &middot; {{ (ds.connections || []).length }} {{ (ds.connections || []).length === 1 ? 'source' : 'sources' }}</span>
-                                </div>
-                            </component>
-
-                            <!-- Connect button for user auth required but not connected -->
-                            <button
-                                v-if="needsUserConnection(ds)"
-                                @click.stop="openCredentialsModal(ds)"
-                                :disabled="connectingId === ds.id"
-                                class="mt-3 w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-xl transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                            >
-                                <Spinner v-if="connectingId === ds.id" class="w-3.5 h-3.5" />
-                                <UIcon v-else name="heroicons-key" class="w-3.5 h-3.5" />
-                                {{ $t('data.connect') }}
-                            </button>
-                            <!-- Admin/owner runs via the connection's system (service
-                                 principal) credentials — no personal sign-in needed. -->
-                            <div
-                                v-else-if="usesServiceAccount(ds)"
-                                class="mt-3 w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs text-[#6b6b6b] bg-[#F4EEE5] border border-[#E9E0D3] rounded-xl"
-                            >
-                                <UIcon name="heroicons-shield-check" class="w-3.5 h-3.5" />
-                                Service account
-                            </div>
-                        </div>
-
+                            :ds="ds"
+                            :meta="connectorMeta(ds)"
+                            :connected="userHasAccess(ds)"
+                            :connecting="connectingId === ds.id"
+                            :table-count="getTableCount(ds)"
+                            :source-count="(ds.connections || []).length"
+                            @open="openAgent(ds)"
+                            @connect="openCredentialsModal(ds)"
+                        />
                     </div>
 
                     <!-- Empty state for search with no results -->
@@ -220,6 +131,7 @@ import UserDataSourceCredentialsModal from '~/components/UserDataSourceCredentia
 import ConnectionDetailModal from '~/components/ConnectionDetailModal.vue'
 import AddConnectionModal from '~/components/AddConnectionModal.vue'
 import ConnectorsMsHub from '~/components/connectors/ConnectorsMsHub.vue'
+import DataAgentCard from '~/components/DataAgentCard.vue'
 import Spinner from '~/components/Spinner.vue'
 import { useCan } from '~/composables/usePermissions'
 import {
@@ -426,6 +338,13 @@ function findPendingSignInConnection(ds: any): any | null {
 }
 
 const signIn = useConnectionSignIn()
+
+// Open a connected agent's chat. (Not-connected cards emit `connect` instead,
+// which routes to openCredentialsModal.)
+function openAgent(ds: any) {
+    if (!userHasAccess(ds)) return
+    navigateTo(`/agents/${ds.id}`)
+}
 
 // Check if connection is healthy - uses agent data to derive status
 function isConnectionHealthy(conn: any): boolean {

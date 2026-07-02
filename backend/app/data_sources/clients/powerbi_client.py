@@ -4,7 +4,22 @@ from typing import List, Dict, Optional, Tuple
 import requests
 import pandas as pd
 import re
+import time
+import logging
 from urllib.parse import unquote
+
+logger = logging.getLogger(__name__)
+
+
+class PowerBIRateLimitError(RuntimeError):
+    """Raised when Power BI returns HTTP 429 and retries are exhausted.
+
+    Distinct type so the create_data tool can surface a clean 'rate-limited,
+    retry shortly' message instead of a raw HTTP dump.
+    """
+    def __init__(self, message: str, retry_after: Optional[float] = None):
+        super().__init__(message)
+        self.retry_after = retry_after
 
 
 # Storage modes that are queryable via the REST executeQueries DAX API.
@@ -117,6 +132,44 @@ class PowerBIClient(DataSourceClient):
 
         self._access_token: Optional[str] = access_token
         self._http: Optional[requests.Session] = None
+        # Offline table → {datasetId, workspaceId} index (P4). Populated at
+        # construct time from the connection's cached ConnectionTable metadata
+        # so execute_query(table_name) resolves IDs WITHOUT a live get_schemas()
+        # discovery call (which rate-limits / triggers 429). Keyed by both the
+        # full "Dataset/Table" name and the bare DAX table name.
+        self._table_index: Dict[str, Dict[str, Optional[str]]] = {}
+
+    def set_table_index(self, mapping: Dict[str, Dict[str, Optional[str]]]) -> None:
+        """Install an offline name → {datasetId, workspaceId} map (P4).
+
+        Accepts entries keyed by full "Dataset/Table" and/or bare table name.
+        Best-effort: silently ignores malformed input.
+        """
+        if not isinstance(mapping, dict):
+            return
+        for name, ids in mapping.items():
+            if not name or not isinstance(ids, dict):
+                continue
+            ds_id = ids.get("datasetId") or ids.get("dataset_id")
+            ws_id = ids.get("workspaceId") or ids.get("workspace_id")
+            if not ds_id:
+                continue
+            entry = {"datasetId": ds_id, "workspaceId": ws_id}
+            self._table_index[name] = entry
+            # Also index by the bare DAX table name (after last '/').
+            if "/" in name:
+                self._table_index.setdefault(name.split("/")[-1], entry)
+
+    def _lookup_ids_offline(self, table_name: str) -> Tuple[Optional[str], Optional[str]]:
+        """Resolve (dataset_id, workspace_id) from the offline index. (None, None) on miss."""
+        if not table_name:
+            return None, None
+        entry = self._table_index.get(table_name)
+        if not entry and "/" in table_name:
+            entry = self._table_index.get(table_name.split("/")[-1])
+        if entry:
+            return entry.get("datasetId"), entry.get("workspaceId")
+        return None, None
 
     def connect(self):
         """
@@ -898,20 +951,98 @@ class PowerBIClient(DataSourceClient):
         if not query:
             raise ValueError("DAX query is required")
 
-        # If table_name provided (but not dataset_id), look up the IDs
+        # If table_name provided (but not dataset_id), look up the IDs.
         if table_name and not dataset_id:
-            try:
-                table = self.get_schema(table_name)
-                pbi = (table.metadata_json or {}).get("powerbi") or {}
-                dataset_id = pbi.get("datasetId")
-                workspace_id = workspace_id or pbi.get("workspaceId")
-            except Exception:
-                pass
+            # P4: try the offline index FIRST (no live call, no 429). Falls back
+            # to a live get_schema() only on a miss / empty index.
+            off_ds, off_ws = self._lookup_ids_offline(table_name)
+            if off_ds:
+                dataset_id = off_ds
+                workspace_id = workspace_id or off_ws
+            else:
+                try:
+                    table = self.get_schema(table_name)
+                    pbi = (table.metadata_json or {}).get("powerbi") or {}
+                    dataset_id = pbi.get("datasetId")
+                    workspace_id = workspace_id or pbi.get("workspaceId")
+                except Exception:
+                    pass
+
+        # Last-resort: if still no dataset_id but the index has exactly one
+        # dataset, use it — a single-model connection is unambiguous.
+        if not dataset_id and self._table_index:
+            ds_ids = {e.get("datasetId") for e in self._table_index.values() if e.get("datasetId")}
+            if len(ds_ids) == 1:
+                dataset_id = next(iter(ds_ids))
+                if workspace_id is None:
+                    for e in self._table_index.values():
+                        if e.get("datasetId") == dataset_id:
+                            workspace_id = e.get("workspaceId"); break
 
         if not dataset_id:
             raise ValueError("dataset_id is required (pass table_name or dataset_id)")
 
         return self._execute_dax_internal(workspace_id, dataset_id, query, max_rows=max_rows)
+
+    @staticmethod
+    def _parse_retry_after(resp) -> Optional[float]:
+        """Extract a wait time (seconds) from a 429/503 response.
+
+        Power BI returns `Retry-After` in seconds (per Microsoft docs). Falls
+        back to None when absent/malformed so the caller uses exp backoff.
+        """
+        for h in ("Retry-After", "retry-after"):
+            v = resp.headers.get(h) if resp is not None and resp.headers else None
+            if v:
+                try:
+                    return max(0.0, float(str(v).strip()))
+                except (TypeError, ValueError):
+                    return None
+        return None
+
+    def _post_dax_with_retry(self, url: str, body: dict, headers: dict):
+        """POST executeQueries with rate-limit backoff (P2, flag
+        CONNECTOR_ROBUSTNESS).
+
+        On HTTP 429/503, honor `Retry-After` (else exp backoff 2/4/8s) and
+        retry up to 3 times. On exhaustion raise :class:`PowerBIRateLimitError`
+        with a clean message. When the flag is OFF this makes exactly one
+        request (byte-identical to the prior behavior).
+        """
+        try:
+            from app.settings.hybrid_flags import flags as _hflags
+            robust = bool(_hflags.CONNECTOR_ROBUSTNESS)
+        except Exception:
+            robust = False
+
+        if not robust:
+            return self._http.post(url, json=body, headers=headers, timeout=120)
+
+        max_retries = 3
+        backoff = [2.0, 4.0, 8.0]
+        last_resp = None
+        for attempt in range(max_retries + 1):
+            resp = self._http.post(url, json=body, headers=headers, timeout=120)
+            last_resp = resp
+            if resp.status_code not in (429, 503):
+                return resp
+            if attempt >= max_retries:
+                break
+            wait = self._parse_retry_after(resp)
+            if wait is None:
+                wait = backoff[min(attempt, len(backoff) - 1)]
+            logger.warning(
+                "powerbi.dax.rate_limited status=%s attempt=%d/%d wait=%.1fs",
+                resp.status_code, attempt + 1, max_retries, wait,
+            )
+            time.sleep(wait)
+
+        wait = self._parse_retry_after(last_resp) if last_resp is not None else None
+        raise PowerBIRateLimitError(
+            "Power BI is rate-limiting requests (HTTP 429). Please retry in a "
+            f"{'few' if not wait else int(wait)} seconds.",
+            retry_after=wait,
+        )
 
     def _execute_dax_internal(
         self,
@@ -934,7 +1065,7 @@ class PowerBIClient(DataSourceClient):
             "serializerSettings": {"includeNulls": True},
         }
 
-        resp = self._http.post(url, json=body, headers=headers, timeout=120)
+        resp = self._post_dax_with_retry(url, body, headers)
         if resp.status_code >= 300:
             raise RuntimeError(f"DAX query failed: HTTP {resp.status_code} {resp.text}")
 

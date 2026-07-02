@@ -121,6 +121,65 @@ def poll_device_code(tenant_id: str, device_code: str, client_id: str | None = N
     return {"status": "error", "error": _err_detail(resp)}
 
 
+# AADSTS codes that mean "password alone can't finish — MFA / conditional access /
+# legacy-auth blocked" → the caller should fall back to the device-code flow.
+_MFA_FALLBACK_CODES = (
+    "AADSTS50076",   # MFA required this session
+    "AADSTS50079",   # MFA enrollment required
+    "AADSTS50158",   # external security challenge (conditional access)
+    "AADSTS50072",   # MFA enrollment required (variant)
+    "AADSTS53000",   # device not compliant (conditional access)
+    "AADSTS7000218", # tenant blocks ROPC / legacy auth
+)
+
+
+def ropc_token(
+    tenant_id: str,
+    username: str,
+    password: str,
+    scope: str,
+    client_id: str | None = None,
+) -> dict:
+    """Resource-Owner-Password (ROPC) grant — email + password → token.
+
+    The ``scope`` already carries ``offline_access`` so a success also yields a
+    refresh_token (which the caller stores, exactly like the device-code path).
+
+    Returns one of:
+      ``{"ok": True, "access_token", "refresh_token", "expires_in"}``  (no MFA)
+      ``{"ok": False, "mfa": True, "error": str}``   (MFA / policy → device-code fallback)
+      ``{"ok": False, "error": str}``                (bad password / other — real failure)
+    """
+    if not (tenant_id and username and password and scope):
+        return {"ok": False, "error": "tenant_id, username, password and scope are required"}
+    try:
+        resp = requests.post(
+            _TOKEN_URL.format(tenant=tenant_id),
+            data={
+                "grant_type": "password",
+                "client_id": client_id or _PUBLIC_CLIENT,
+                "username": username,
+                "password": password,
+                "scope": scope,
+            },
+            timeout=30,
+        )
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)}
+    if resp.status_code < 300:
+        j = resp.json() or {}
+        return {
+            "ok": True,
+            "access_token": j.get("access_token"),
+            "refresh_token": j.get("refresh_token"),
+            "expires_in": j.get("expires_in"),
+        }
+    detail = _err_detail(resp)
+    if any(code in detail for code in _MFA_FALLBACK_CODES):
+        return {"ok": False, "mfa": True, "error": detail}
+    return {"ok": False, "error": detail}
+
+
 def refresh_to_access_token(
     tenant_id: str,
     refresh_token: str,
