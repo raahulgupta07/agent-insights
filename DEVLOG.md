@@ -2045,3 +2045,88 @@ Makes the connect flow gate on the user (mockup made real). Flag HYBRID_CONNECTO
   success when `r.needs_sync`; resets on modal open. Legacy (flag OFF) = unchanged (auto emit+close+auto-sync).
 EPHEMERAL FE (fe-sync). Verified: "Sync my data" in served bundle, health 200. Step 4 (live sync log) reuses
 existing AgentSyncLog; step 5 view-only result cards deferred (needs a view_only endpoint from _last_view_only).
+
+## 2026-07-02 — v1.74.9 Agent Overview redesign (knowledge in the center)
+
+Redesigned the Data-Agent Overview into a two-column "what this agent knows" page (built via 2 parallel
+subagents on disjoint files — backend route + FE page — no race). Grounded in REAL data only; the whole point
+was to kill the earlier hallucinated overview (tester3 `@SignIns/@Locations` fake).
+
+- **Backend** `routes/data_source.py` new `GET /data_sources/{id}/overview` (registered `/api/...`, inserted
+  after `/full_schema`, ~L407). Flag-gated via existing `_journey_v2()` (`HYBRID_CONNECTOR_JOURNEY_V2`) → returns
+  `{}` before any DB work when OFF. Reuses `data_source_service.get_data_source_schema(include_inactive=True)`
+  (same path `/full_schema` uses). Returns:
+  - `stats{active_tables,total_columns,connections}` (connections via `selectinload(DataSource.connections)`).
+  - `tables[]` active-only, sorted `centrality_score` desc (None last), cap 40; `column_count`=len(columns),
+    `row_count`=no_rows, `entity_like`, `centrality`, `purpose` = `metadata_json['description']` else an APPROVED
+    (`status=='approved'`, `invalid_at IS NULL`) `SemanticTable.description` else **null** (never invented).
+  - `joins[]` from REAL `fks` (shape `{column{name},references_name,references_column{name}}`), deduped, cap 30,
+    `[]` when the source has no FKs (PBI/warehouse) — do NOT synthesize.
+  - `view_only[]` = `[]` (no live client constructed — avoids slow/429-prone PBI path).
+  - Every stage try/except fail-soft (`logging.getLogger(__name__)`) → partial/empty, never 500.
+- **Frontend** `pages/agents/[id]/index.vue` re-laid-out `flex-col lg:flex-row` (rail stacks on small screens),
+  ALL existing script logic preserved (primary-instruction create/edit/read/empty, starters edit modal, sync log):
+  - CENTER: **Launcher** (`launchReport(text)` guards empty → POST `/reports` `{title,files:[],data_sources:[id]}`
+    → `router.push(/reports/{newId}?prompt=<enc>)`; reports page reads `route.query.prompt`, prefills non-submitting)
+    + starter chips → **"What this agent knows"** = the EXISTING primary-instruction block, moved verbatim into a
+    titled card → **Core tables** (`v-if hasOverview && tables.length`, icon+mono name+entity/table tag+purpose-if-
+    non-null+cols/rows, cap 8, "See all N →" to `/agents/{id}/tables`) → **Key relationships & joins**
+    (`v-if joins.length` only) → EXISTING starters block.
+  - RIGHT rail (`v-if hasOverview`, `lg:w-[300px]`): At-a-glance (2 stat tiles + connections) + View-only
+    (`v-if view_only.length`) + Guiding-instruction CTA (✓ set, or gated `creatingInstruction=true` +
+    `startTrainingSession()`).
+  - `fetchOverview()` (onMounted + watch route id) fail-soft; missing `stats` ⇒ `hasOverview=false` ⇒ endpoint
+    cards hidden, degrades to launcher+instruction+starters (flag-OFF safe). Does NOT block instruction/starters render.
+  - Layout `data.vue` already owns identity bar / editable description / New-Report / Test / Disconnect —
+    intentionally NOT duplicated in the slot.
+- **Verified live** (in-container handler call after `load_overrides_from_db`): demo clone `db1e4234` 18 active
+  tables / 165 cols; tester3 `2abfdd4f` 25 / 242; real table names (`…/projects` 17 cols, `…/subjects` 33 cols);
+  `purpose` null (no semantic descs — no fabrication); `joins` [] (PBI schema carries no fks → FE hides the card);
+  `view_only` []. LANDMINE reconfirmed: offline `docker exec python` needs `load_overrides_from_db(db)` or the flag
+  reads OFF and the endpoint returns `{}` (misleads a smoke test into "empty").
+- Deploy: backend hot-cp'd + `docker restart ca-app`; FE `scripts/fe-sync.sh` (exit 0). Baked into
+  `cityagent-analytics:dev` + tag `:v1.74.9`; rollback tag `pre-overview-v3`.
+
+## 2026-07-02 — v1.75.0 Auto table relevance (relevance classifier)
+Problem: connecting Power BI surfaces every table in every semantic model — including
+PBI's own "Usage Metrics Report" adoption telemetry (12 tables on tester3 agent),
+staging copies (`Stg_*`), and measure/empty holders. Left active they bloat the schema
+prompt, get promoted into the agent's Key Tables, and seed telemetry sample questions
+("Report Usage Analytics") a business user never wanted.
+- New pure module `app/services/table_relevance.py`: `classify_table(name, columns)` →
+  `{role, audience, useful, reason, score, version}`. Deterministic, no LLM, never raises.
+  NOISE rules (first-match): usage-metrics (dataset name `usage metrics` OR
+  `IsUsageMetricsReport*` column) → telemetry/admin; PBI auto date (`DateTableTemplate*`/
+  `LocalDateTable*`) → system; `#Measure`/`Model measures`/`Refresh Stats` + `*measures`
+  (≤2 cols) → meta/system; `Stg_/staging/_raw/raw_/tmp/temp_` → staging/admin; no real
+  columns (RowNumber-only) → meta/system. POSITIVE: `Dim_*` → dimension; `Fct_/Fact_` →
+  fact (agg if year/month/count/total); heuristic fact (metric col + dim/date col, ≥4 cols);
+  ≤4 cols → small dimension; else permissive keep. `_real_col_names` strips PBI internal
+  `RowNumber-*` index col.
+- Wiring (2 sites, both flag-gated `flags.AUTO_TABLE_RELEVANCE`, idempotent, fail-soft):
+  (a) `per_user_connector.sync_clone_bg` — step 4b after `DataSourceService_seed`, before
+  llm_sync, so the LLM never sees noise; logs `relevance: deactivated N noise tables`.
+  (b) top of `DataSourceService.llm_sync` — so a manual re-learn re-classifies too.
+  Both write `DataSourceTable.metadata_json['classification']` + set `is_active = useful`;
+  a `metadata_json['manual_active'] is True` marker is never auto-hidden (Tables-tab
+  override wins).
+- Train ride-along: schema builder `SchemaContextBuilder(...).build()` defaults
+  `active_only=True`, so summary / conversation_starters / Key-Tables regenerate from the
+  useful set with zero extra code. `llm_sync` also appends a `### Query Efficiency` block
+  (aggregate at source: SUMMARIZECOLUMNS/TOPN/GROUP BY, filter early) to the generated
+  instruction when the flag is on.
+- Flag `HYBRID_AUTO_TABLE_RELEVANCE` added to the 3-place registry (label dict +
+  `AUTO_TABLE_RELEVANCE` property default False + snapshot). Default OFF; ON via
+  `organization_settings.config.hybrid_overrides` for org 7d372305 (note: `config` column
+  is `json` not `jsonb` → cast `config::jsonb ... ::json` in the UPDATE).
+- Proof (live, agent 1b90c476 tester3): dry-run then applied — 25 → 10 useful / 15 noise
+  (all 12 `Usage Metrics Report/*` + `Stg_Member_Account` + `#Measure`). Re-learn produced
+  business-only starters (Top Products / Project Status / Member Demographics /
+  Transactions), new primary instruction with 0 telemetry mentions (was 6) + efficiency
+  block; old telemetry instruction `a820073e` archived, new `7f6fe00d` set primary.
+- Deploy: backend files hot-`docker cp`'d into `ca-app:/app/backend/...` + `docker restart
+  ca-app` (container path is `/app/backend/app`, NOT `/app/app`). Rollback tag
+  `pre-relevance-classifier`. NOT yet baked into `:dev` / committed / pushed.
+- LANDMINE: offline `docker exec python` must `import main` first (registers all SQLAlchemy
+  mappers — `import app.models.*` alone leaves `Completion`/`DataSourceApplicationAssociation`
+  unresolved) AND `await load_overrides_from_db(db)` or the flag reads OFF.

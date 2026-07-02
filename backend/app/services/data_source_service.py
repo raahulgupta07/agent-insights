@@ -662,6 +662,35 @@ class DataSourceService:
         if not getattr(data_source, "use_llm_sync", True):
             return {"skipped": True, "reason": "LLM sync disabled for this data source"}
 
+        # Relevance pass (flag AUTO_TABLE_RELEVANCE, default OFF): classify every
+        # table and deactivate noise (Power BI usage-metrics telemetry, staging,
+        # measure/empty holders) BEFORE the LLM reads the schema — so a re-learn
+        # (not just the first connector sync) re-derives description / starters /
+        # Key Tables from business-useful tables only. Idempotent + fail-soft.
+        try:
+            from app.settings.hybrid_flags import flags as _rflags
+            if bool(_rflags.AUTO_TABLE_RELEVANCE):
+                from app.services.table_relevance import classify_table
+                from app.models.datasource_table import DataSourceTable as _DST
+                _rows = (await db.execute(
+                    select(_DST).where(_DST.datasource_id == str(data_source_id))
+                )).scalars().all()
+                for _t in _rows:
+                    _c = classify_table(_t.name, _t.columns)
+                    _meta = dict(_t.metadata_json or {})
+                    _meta["classification"] = _c
+                    _t.metadata_json = _meta
+                    if _meta.get("manual_active") is not True and not _c["useful"] and _t.is_active:
+                        _t.is_active = False
+                    db.add(_t)
+                await db.commit()
+        except Exception as _re:
+            logger.warning(f"llm_sync relevance classify skipped: {_re}")
+            try:
+                await db.rollback()
+            except Exception:
+                pass
+
         try:
             summary = await self.generate_data_source_items(db=db, item="summary", data_source_id=data_source_id, organization=organization, current_user=current_user or User())
             result.update(summary)
@@ -698,6 +727,22 @@ class DataSourceService:
 
             text = (instruction_data_raw or {}).get("text", "").strip()
             title = (instruction_data_raw or {}).get("title", "").strip()
+
+            # Append a query-efficiency rule (flag AUTO_TABLE_RELEVANCE): push
+            # aggregation to the source instead of pulling whole tables — big win
+            # for Power BI/DAX (aggregate in the model, return small result sets).
+            try:
+                from app.settings.hybrid_flags import flags as _eflags
+                if text and bool(_eflags.AUTO_TABLE_RELEVANCE) and "Query Efficiency" not in text:
+                    text = text.rstrip() + (
+                        "\n\n### Query Efficiency\n"
+                        "- Aggregate at the source: use GROUP BY / SUMMARIZECOLUMNS / "
+                        "TOPN to return summarised rows, never `SELECT *` or a full-table "
+                        "`EVALUATE 'Table'` when a total or top-N is what's asked.\n"
+                        "- Filter early (date ranges, status) so only the needed rows are scanned."
+                    )
+            except Exception:
+                pass
             category = (instruction_data_raw or {}).get("category", "general")
             load_mode = (instruction_data_raw or {}).get("load_mode", "always")
 
@@ -2745,9 +2790,32 @@ class DataSourceService:
                     .values(is_active=False)
                 )
             deactivated_count = deactivate_result.rowcount
-        
+
+        # Sticky override for the relevance classifier: when the user explicitly
+        # re-activates a table (flag HYBRID_AUTO_TABLE_RELEVANCE), stamp
+        # metadata_json.manual_active so a future connector sync / re-learn never
+        # auto-hides it again — the classifier honours this marker. Small lists
+        # (user toggles), so load+mutate is cheap. Fail-soft.
+        if activate:
+            try:
+                _col = DataSourceTable.id if use_ids else DataSourceTable.name
+                _rows = (await db.execute(
+                    select(DataSourceTable).where(
+                        DataSourceTable.datasource_id == data_source_id,
+                        _col.in_(activate),
+                    )
+                )).scalars().all()
+                for _t in _rows:
+                    _meta = dict(_t.metadata_json or {})
+                    if _meta.get("manual_active") is not True:
+                        _meta["manual_active"] = True
+                        _t.metadata_json = _meta
+                        db.add(_t)
+            except Exception:
+                pass
+
         await db.commit()
-        
+
         # Get new total selected count
         selected_count_result = await db.execute(
             select(func.count(DataSourceTable.id)).where(

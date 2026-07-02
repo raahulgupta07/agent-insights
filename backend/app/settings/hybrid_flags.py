@@ -189,6 +189,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_RESULT_CACHE": {"label": "Result Cache", "role": "agent", "category": "Learning", "status": "stable", "note": "Uses Redis."},
     "HYBRID_PARQUET_RESULTS": {"label": "Parquet Result Storage", "role": "agent", "category": "Advanced", "status": "stable", "note": "ON by default. Large step results stored as compressed Parquet on disk instead of inline JSON; smaller DB, faster dashboards. Threshold: HYBRID_PARQUET_MIN_ROWS (default 2000)."},
     "HYBRID_ANSWER_CACHE": {"label": "Answer Cache (Tier-0)", "role": "agent", "category": "Learning", "status": "stable", "note": "Uses Redis."},
+    "HYBRID_AUTO_TABLE_RELEVANCE": {"label": "Auto Table Relevance", "role": "agent", "category": "Advanced", "status": "beta", "note": "At connector sync, auto-classify tables (fact/dim/measure/staging/telemetry) and deactivate noise (Power BI usage-metrics, Stg_ staging, empty/measure holders) so the agent carries only business-useful tables. Manual override in Tables tab wins. Default OFF."},
     "HYBRID_CODE_BANK": {"label": "Code Bank (proven snippets)", "role": "agent", "category": "Learning", "status": "stable"},
     "HYBRID_AGENT_MEMORY": {"label": "Agent Memory", "role": "review", "category": "Learning", "status": "stable"},
     "HYBRID_SKILL_AUTOGROW": {"label": "Skill Auto-grow", "role": "review", "category": "Learning", "status": "stable"},
@@ -947,6 +948,18 @@ class HybridFlags:
         return _int("HYBRID_PARQUET_MIN_ROWS", 2000)
 
     @property
+    def AUTO_TABLE_RELEVANCE(self) -> bool:
+        # At connector sync, classify each discovered table (fact / dimension /
+        # measure / staging / telemetry / meta) and mark noise tables inactive so
+        # the agent's schema, Key Tables, and starters carry only business-useful
+        # tables. Deterministic rules (Power BI usage-metrics, Stg_ staging, empty
+        # / RowNumber-only, measure holders → noise). Verdict stored on the table's
+        # metadata_json.classification; is_active set from it. Manual override in
+        # the Tables tab always wins. Default OFF (opt-in per org). See
+        # app.services.table_relevance.classify_table.
+        return _bool("HYBRID_AUTO_TABLE_RELEVANCE", False)
+
+    @property
     def QUERY_LEARNING(self) -> bool:
         # Task 8: live query-learning. When a create_data step SUCCEEDS, persist its
         # working SQL/approach to the query library tagged with the question (review-
@@ -1124,6 +1137,7 @@ class HybridFlags:
             "DOC_KNOWLEDGE": self.DOC_KNOWLEDGE,
             "RESULT_CACHE": self.RESULT_CACHE,
             "PARQUET_RESULTS": self.PARQUET_RESULTS,
+            "AUTO_TABLE_RELEVANCE": self.AUTO_TABLE_RELEVANCE,
             "QUERY_LEARNING": self.QUERY_LEARNING,
             "MERGE_SAME_SCHEMA": self.MERGE_SAME_SCHEMA,
             "SMART_HEADER": self.SMART_HEADER,

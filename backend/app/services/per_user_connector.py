@@ -672,6 +672,62 @@ async def sync_clone_bg(clone_id: str, org_id: str, user_id: str) -> None:
             if fresh and fresh.connections:
                 await DataSourceService_seed(db, fresh, fresh.connections[0])
 
+            # 4b. Relevance: classify each seeded table and deactivate noise
+            #     (Power BI usage-metrics telemetry, staging copies, measure/empty
+            #     holders) so the schema + Key Tables + starters carry only
+            #     business-useful tables. Flag-gated (AUTO_TABLE_RELEVANCE, default
+            #     OFF). Runs BEFORE llm_sync so the LLM never sees the noise. Fully
+            #     fail-soft: a failure just leaves every table active (today's path).
+            try:
+                from app.settings.hybrid_flags import flags as _rflags
+                _relevance_on = bool(_rflags.AUTO_TABLE_RELEVANCE)
+            except Exception:
+                _relevance_on = False
+            if _relevance_on:
+                try:
+                    from app.services.table_relevance import classify_table
+                    from app.models.datasource_table import DataSourceTable
+                    dst_rows = (
+                        await db.execute(
+                            select(DataSourceTable).where(
+                                DataSourceTable.datasource_id == clone_id
+                            )
+                        )
+                    ).scalars().all()
+                    n_off = 0
+                    for t in dst_rows:
+                        c = classify_table(t.name, t.columns)
+                        meta = dict(t.metadata_json or {})
+                        # Respect a prior manual override: never re-hide a table the
+                        # user explicitly re-activated in the Tables tab.
+                        if meta.get("manual_active") is True:
+                            meta["classification"] = c
+                            t.metadata_json = meta
+                            db.add(t)
+                            continue
+                        meta["classification"] = c
+                        t.metadata_json = meta
+                        if not c["useful"] and t.is_active:
+                            t.is_active = False
+                            n_off += 1
+                        db.add(t)
+                    await db.commit()
+                    if n_off:
+                        await connector_sync.log_step(
+                            db, clone_id, level="ok", phase="syncing",
+                            msg=f"relevance: deactivated {n_off} noise tables "
+                                f"(telemetry/staging/meta)",
+                        )
+                except Exception as re:
+                    logger.warning(
+                        "per_user_connector.sync_clone_bg: relevance classify "
+                        "failed for %s: %s", clone_id, re,
+                    )
+                    try:
+                        await db.rollback()
+                    except Exception:
+                        pass
+
             # 5. Learn: description + conversation starters + overview instruction
             #    (same work as autolearn_clone), gated on the clone's use_llm_sync.
             #    llm_sync is one black-box LLM call, so we log real inputs BEFORE it

@@ -403,6 +403,181 @@ async def get_data_source_full_schema(
     # Legacy behavior: return full list
     return await data_source_service.get_data_source_schema(db, data_source_id, include_inactive=True, organization=organization, current_user=current_user, with_stats=with_stats)
 
+
+@router.get("/data_sources/{data_source_id}/overview")
+@requires_resource_permission('data_source', 'view_schema')
+async def get_data_source_overview(
+    data_source_id: str,
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+    current_user: User = Depends(current_user),
+):
+    """GROUNDED agent-knowledge for the redesigned agent Overview page.
+
+    Every field is derived from real DB data (schema tables, real FKs, approved
+    semantic descriptions). NO fabrication. Flag-gated (HYBRID_CONNECTOR_JOURNEY_V2)
+    and fully fail-soft — never 500s on a data issue, returns partial instead.
+    """
+    import logging
+    _log = logging.getLogger(__name__)
+
+    if not _journey_v2():
+        return {}
+
+    empty = {
+        "stats": {"active_tables": 0, "total_columns": 0, "connections": 0},
+        "tables": [],
+        "joins": [],
+        "view_only": [],
+    }
+
+    # --- Load the data source (for connection count) ------------------------
+    try:
+        ds_result = await db.execute(
+            select(DataSource)
+            .options(selectinload(DataSource.connections))
+            .filter(DataSource.id == data_source_id, DataSource.organization_id == organization.id)
+        )
+        data_source = ds_result.scalar_one_or_none()
+    except Exception:
+        _log.exception("overview: failed loading data source %s", data_source_id)
+        data_source = None
+    if data_source is None:
+        return empty
+    conn_count = len(data_source.connections or [])
+    empty["stats"]["connections"] = conn_count
+
+    # --- Load ALL tables (same path /full_schema legacy uses) ---------------
+    try:
+        all_tables = await data_source_service.get_data_source_schema(
+            db, data_source_id, include_inactive=True,
+            organization=organization, current_user=current_user, with_stats=False,
+        )
+    except Exception:
+        _log.exception("overview: failed loading schema for %s", data_source_id)
+        return empty
+
+    # --- Approved semantic descriptions (fallback purpose source) -----------
+    semantic_desc = {}
+    try:
+        from app.models.semantic_table import SemanticTable
+        sem_result = await db.execute(
+            select(SemanticTable).filter(
+                SemanticTable.organization_id == organization.id,
+                SemanticTable.data_source_id == data_source_id,
+                SemanticTable.status == 'approved',
+                SemanticTable.invalid_at.is_(None),
+            )
+        )
+        for row in sem_result.scalars().all():
+            d = (row.description or '').strip()
+            if d and row.table_name not in semantic_desc:
+                semantic_desc[row.table_name] = d
+    except Exception:
+        _log.exception("overview: failed loading semantic descriptions for %s", data_source_id)
+
+    active = []
+    try:
+        active = [t for t in (all_tables or []) if getattr(t, 'is_active', False)]
+    except Exception:
+        _log.exception("overview: failed filtering active tables for %s", data_source_id)
+        active = []
+
+    # --- stats ---------------------------------------------------------------
+    total_columns = 0
+    for t in active:
+        try:
+            total_columns += len(getattr(t, 'columns', None) or [])
+        except Exception:
+            pass
+
+    # --- tables (sorted by centrality desc, None last, cap 40) --------------
+    tables_out = []
+    try:
+        def _cent(t):
+            c = getattr(t, 'centrality_score', None)
+            return c if c is not None else float('-inf')
+        ordered = sorted(active, key=_cent, reverse=True)[:40]
+        for t in ordered:
+            name = getattr(t, 'name', None)
+            col_count = len(getattr(t, 'columns', None) or [])
+            row_count = getattr(t, 'no_rows', None) or 0
+            centrality = getattr(t, 'centrality_score', None)
+            entity_like = bool(getattr(t, 'entity_like', False))
+            # purpose: metadata_json.description first, else approved semantic layer
+            purpose = None
+            meta = getattr(t, 'metadata_json', None) or {}
+            if isinstance(meta, dict):
+                md = (meta.get('description') or '').strip() if meta.get('description') else ''
+                if md:
+                    purpose = md
+            if not purpose:
+                purpose = semantic_desc.get(name) or None
+            tables_out.append({
+                "name": name,
+                "column_count": col_count,
+                "row_count": row_count,
+                "entity_like": entity_like,
+                "centrality": centrality,
+                "purpose": purpose,
+            })
+    except Exception:
+        _log.exception("overview: failed building tables for %s", data_source_id)
+        tables_out = []
+
+    # --- joins from REAL foreign keys (dedup, cap 30) -----------------------
+    joins_out = []
+    try:
+        seen = set()
+        for t in active:
+            fks = getattr(t, 'fks', None) or []
+            for fk in fks:
+                try:
+                    col = fk.get('column') or {}
+                    ref_col = fk.get('references_column') or {}
+                    tup = (
+                        getattr(t, 'name', None),
+                        col.get('name'),
+                        fk.get('references_name'),
+                        ref_col.get('name'),
+                    )
+                    if None in tup or tup in seen:
+                        continue
+                    seen.add(tup)
+                    joins_out.append({
+                        "from_table": tup[0],
+                        "from_column": tup[1],
+                        "to_table": tup[2],
+                        "to_column": tup[3],
+                    })
+                    if len(joins_out) >= 30:
+                        break
+                except Exception:
+                    continue
+            if len(joins_out) >= 30:
+                break
+    except Exception:
+        _log.exception("overview: failed building joins for %s", data_source_id)
+        joins_out = []
+
+    # --- view_only: only trivially-available stored source ------------------
+    # Live Power BI clients stash view-only datasets on the client instance
+    # (_last_view_only). Constructing a live client here is slow / 429-prone,
+    # so we do NOT — empty is a correct, FE-handled answer.
+    view_only_out = []
+
+    return {
+        "stats": {
+            "active_tables": len(active),
+            "total_columns": total_columns,
+            "connections": conn_count,
+        },
+        "tables": tables_out,
+        "joins": joins_out,
+        "view_only": view_only_out,
+    }
+
+
 @router.put("/data_sources/{data_source_id}/update_schema", response_model=DataSourceSchema)
 @requires_resource_permission('data_source', 'view_schema')
 async def update_table_status_in_schema(

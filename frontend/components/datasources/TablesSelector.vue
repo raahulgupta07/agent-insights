@@ -272,6 +272,12 @@
                       <span class="text-[9px] px-1 py-0.5 rounded bg-gray-100 text-gray-500 me-1.5 flex-shrink-0 truncate max-w-[120px]">{{ table.connection_name || table.connection_type }}</span>
                     </template>
                     <span class="text-sm text-gray-800 truncate">{{ table.name }}</span>
+                    <UTooltip v-if="relevanceOf(table)" :text="relevanceOf(table).reason || ''">
+                      <span
+                        class="ms-2 text-[10px] px-1 py-0.5 rounded whitespace-nowrap"
+                        :class="relevanceClass(relevanceOf(table).audience)"
+                      >{{ relevanceOf(table).audience }} · {{ relevanceOf(table).role }}</span>
+                    </UTooltip>
                     <span v-if="!isTableActive(tableKey(table)) && canUpdate" class="ms-2 text-[10px] px-1 py-0.5 rounded bg-gray-100 text-gray-500">inactive</span>
                     <span v-if="isTableDirty(tableKey(table))" class="ms-1 text-[10px] px-1 py-0.5 rounded bg-yellow-100 text-yellow-700">modified</span>
                   </div>
@@ -695,6 +701,20 @@ const hasPendingChanges = computed(() => {
 // Helper functions
 function tableKey(table: Table): string {
   return table.id || table.name
+}
+
+// Relevance classification (flag HYBRID_AUTO_TABLE_RELEVANCE): the connector sync
+// tags each table {role, audience, useful, reason} on metadata_json.classification.
+// Show it as a small badge so the user can see at a glance which tables are business
+// data vs Power BI admin telemetry / system noise (and why they were auto-deactivated).
+function relevanceOf(table: any): any | null {
+  const c = table?.metadata_json?.classification
+  return c && c.audience && c.role ? c : null
+}
+function relevanceClass(audience: string): string {
+  if (audience === 'business') return 'bg-green-50 text-green-700'
+  if (audience === 'admin') return 'bg-amber-50 text-amber-700'
+  return 'bg-gray-100 text-gray-500' // system
 }
 
 function isTableActive(key: string): boolean {
