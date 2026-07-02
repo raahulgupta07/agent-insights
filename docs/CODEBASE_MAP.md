@@ -5,7 +5,19 @@
 > Companion: `CLAUDE.md` (rules/current state), `DEVLOG.md` (dated history), `ROADMAP.md` (forward plan),
 > `docs/INGEST_BRAIN_DESIGN.md` (F09 universal-ingest design).
 > **Keep current:** when a ship changes a load-bearing path/pattern, update this file (same habit as DEVLOG bump).
-> Last verified: 2026-07-02 · `VERSION_HYBRID` 1.74.2 · mig head `connsyncrun1`.
+> Last verified: 2026-07-02 · `VERSION_HYBRID` 1.76.0 · mig head `connsyncrun1`.
+> v1.76.0: **learn-from-data** — kills connector domain hallucination. A per-user PBI connector named
+> after its sign-in method ("Power BI (User Sign-in)") + a name-only schema (PBI has no FKs) made the
+> onboarding generators invent a fake domain (@SignInLogs). Fix1 (always-on, `ai/agents/data_source/data_source.py`):
+> `_clean_ds_name` strips auth framing, `_grounding_block`+`_table_allowlist` inject "ignore the name for
+> domain; reference ONLY these real tables; never invent" into all 4 generators. Fix2 (flag
+> `HYBRID_LEARN_FROM_DATA`, new `services/connector_sampler.py`): sample `EVALUATE TOPN(8)` per active
+> table → example values into `DataSourceTable.columns[].metadata['values']` (schema renderer already
+> surfaces `values="…"`); PII col-names never sampled; wired `per_user_connector.sync_clone_bg` 4b-2.
+> LANDMINES: PBI TOPN df cols come as `Table[col` (pandas drops `]`) → `_strip_bracket` handles both;
+> flag DB override MUST use ENV-key `HYBRID_LEARN_FROM_DATA` (`load_overrides_from_db` only honours
+> `UPGRADE_FLAGS` keys); `llm_sync` audit_log needs a real attached User (None → FK rollback of the learn).
+> Rollback tag `pre-learn-from-data`. Detail → memory `project_cityagent_table_relevance`.
 > v1.74.2: 3 bug fixes (baked, NOT pushed) — (1) per-user connector connect 500: `per_user_connector.connect()` fed an
 > EXPIRED request-session `organization` into `create_connection`; sync `organization.id` → AsyncSession lazy-load →
 > MissingGreenlet. Fix = `_register_clone_fresh_session()` (fresh `async_session_maker` + `expunge()` force-loaded

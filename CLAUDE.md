@@ -453,8 +453,28 @@ Versioned feature feed surfaced as a 🔔 bell popover in TopNav (before profile
 
 **2026-06-29 FE EPHEMERAL (fe-sync only, NOT baked — pending `docker commit`):** (1) **plan-block chat leak FIXED** — `HYBRID_AGENT_PLAN` flag-on (org e02b1b04, default OFF) emits a `source_type='plan'` block; chat body renderer `reports/[id]/index.vue:387` was the 1-of-4 consumer missing the plan-skip guard → dumped raw `{"tasks":[...]}`. Fix = `&& block.source_type !== 'plan'`. RULE: skip `source_type='plan'` in EVERY render path (Progress=stepMap.ts:348/484, context=message_context_builder.py:597/1221 already do). (2) **merged Create/Activity into ONE no-tabs panel** (Option A) in the `coworkEnabled` block of `reports/[id]/index.vue` (removed `coworkTab` toggle; Create grid top + Activity below, one scroll). (3) **"only April summary" ROOT CAUSE = silent partial ingest:** CRM Agent source `0b9b39ac` has 1 table, 2447 rows ALL `_source_period=2025-04` (6 months uploaded, 5 never materialized; merged table mis-NAMED `_apr_25` → agent frames answer "April"). Guardrails proposed (manifest+reconcile / coverage-context to agent / neutral table naming / atomic batch merge / post-ingest verify-gate), NOT built. Detail → [[project_cityagent_panel_ingest_completeness]].
 
-**Current state (2026-07-02):** image `cityagent-analytics:dev` on `:3007` (baked `:v1.74.5`), branch `main`,
-mig head **`connsyncrun1`**, `VERSION_HYBRID`=**1.74.5**. **v1.74.5 = Power BI query SPEEDUP + reliability** (flag
+**Current state (2026-07-02):** image `cityagent-analytics:dev` on `:3007` (baked `:v1.76.0`), branch
+**`feature/table-relevance-overview`** (HEAD `1421d518`, NOT pushed), mig head **`connsyncrun1`**,
+`VERSION_HYBRID`=**1.76.0**. **v1.76.0 = LEARN-FROM-DATA (kills connector domain hallucination; committed
+`1421d518`, baked via `docker commit`, NOT pushed, rollback tag `pre-learn-from-data`).** A per-user Power BI
+connector named after its sign-in method ("Power BI (User Sign-in)") + a name-only schema (PBI has no FKs / col
+descriptions) made the 4 onboarding generators in `ai/agents/data_source/data_source.py` anchor on the name and
+INVENT a fake domain (@SignInLogs, "Frequent Sign-in Failures") for data that's actually retail membership +
+project tracking. **Fix1 grounding (always-on):** `_clean_ds_name` strips "(User Sign-in) · email"→"Power BI";
+`_grounding_block`+`_table_allowlist` inject "name = login method IGNORE for domain; reference ONLY these real
+tables; never invent" into all 4 prompts. **Fix2 learn-from-data (flag `HYBRID_LEARN_FROM_DATA`, default OFF, ON
+org 7d372305):** new `services/connector_sampler.py` samples `EVALUATE TOPN(8,'Table')` per ACTIVE table → ≤6
+example values/col into `DataSourceTable.columns[i].metadata['values']` (schema renderer already surfaces
+`values="…"`); PII col-names never sampled; 429-abort, per-table timeout, fail-soft, PBI-only; wired
+`per_user_connector.sync_clone_bg` 4b-2 (after relevance, before llm_sync). PROVEN live agent d305b1a4: grounded
+summary/starters/primary-instruction w/ SAMPLED values (sectors CH/CP/CV, status On-Track/Off-Track), 10/25 active,
+sign-in fabrication gone. **LANDMINES:** (1) PBI TOPN df cols come as `Table[col` (pandas drops trailing `]`) →
+`_strip_bracket` handles both. (2) flag DB override MUST use ENV-key `HYBRID_LEARN_FROM_DATA` (short key silently
+ignored — `load_overrides_from_db` only honours `UPGRADE_FLAGS` keys). (3) `llm_sync` writes an `audit_logs` row
+w/ `current_user.id` — a None/detached user → `ForeignKeyViolationError` rolls back the WHOLE learn; pass a real
+attached User. (4) sync diff-gate (4c) skips re-learn on unchanged table-set (new connectors always learn, so the
+hallucination can't recur on new agents; force an existing agent by nulling `primary_instruction_id` then llm_sync
++ promote). Detail → memory `project_cityagent_table_relevance` + DEVLOG 2026-07-02. — prior **v1.74.5 = Power BI query SPEEDUP + reliability** (flag
 `HYBRID_CONNECTOR_ROBUSTNESS`, OFF=byte-identical, ON org 7d372305; rollback img `pre-connectorfix`; NOT git-pushed).
 ROOT CAUSE of "PBI query slow" = the QUERY path builds its client via `data_source_service.construct_client(s)`,
 which NEVER installed the offline table→{datasetId,workspaceId} index (only `connection_service.construct_client`

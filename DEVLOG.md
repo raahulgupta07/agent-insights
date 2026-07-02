@@ -2130,3 +2130,58 @@ prompt, get promoted into the agent's Key Tables, and seed telemetry sample ques
 - LANDMINE: offline `docker exec python` must `import main` first (registers all SQLAlchemy
   mappers — `import app.models.*` alone leaves `Completion`/`DataSourceApplicationAssociation`
   unresolved) AND `await load_overrides_from_db(db)` or the flag reads OFF.
+
+## 2026-07-02 — v1.76.0 Data agents learn from real data (kill domain hallucination)
+
+**Problem.** A per-user Power BI connector is named after the sign-in method ("Power BI (User
+Sign-in) · tester3@test.com"). `DataSourceAgent`'s 4 onboarding generators (summary / description /
+conversation_starters / datasource_instruction) were fed that display name + a NAME-ONLY schema
+(Power BI has no FKs, no column descriptions). Weak models anchored on "User Sign-in" and invented a
+whole fake domain — `@SignInLogs`, "authentication attempts", starters "Frequent Sign-in Failures" —
+for data that is actually retail membership + project tracking. Upstream bagofwords onboards from
+schema STRUCTURE ONLY (names + dtypes + PK/FK + descriptions); its FK graph normally anchors it, but
+Power BI has no FKs so there was nothing grounding our generators except the poison name.
+
+**Fix 1 — grounding + name-neutralize** (`app/ai/agents/data_source/data_source.py`, no flag, always on):
+- `_clean_ds_name()` — strip auth framing: "Power BI (User Sign-in) · email" → "Power BI".
+- `_table_allowlist()` — extract real table names from the rendered schema (XML `<table name>` +
+  plain-text fallback).
+- `_grounding_block()` — hard preamble prepended to all 4 prompts: "the connector NAME = login
+  method, ignore it for domain; infer domain ONLY from tables/columns/values below; reference ONLY
+  these tables […]; never invent (no @SignInLogs)." Applied to summary/description/starters/instruction.
+- Proven offline on the real schema: instruction regenerated as "retail membership + project +
+  usage" with sign-in check = False (was full fabrication).
+
+**Fix 2 — learn-from-data sampling** (`app/services/connector_sampler.py`, flag `HYBRID_LEARN_FROM_DATA`,
+default OFF; BEYOND upstream): at learn time, per active table run `EVALUATE TOPN(8, 'ModelTable')`,
+collect ≤6 distinct example values/column, write into `DataSourceTable.columns[i].metadata['values']`
+(+ `values_source='sample'`). The schema renderer (`tables_schema_section`) already surfaces
+`metadata['values']` as `values="…"`, so the generators now see real data. PII column names
+(passport/identity/nric/birth/dob/phone/email/address/tax/account-number) are NEVER sampled. Bounds:
+8 rows/table, 40 tables/pass, 10s/table timeout, abort whole pass on 429, fully fail-soft.
+
+**Wiring**: `per_user_connector.sync_clone_bg` step 4b-2 (after 4b relevance → only samples
+business-useful active tables, before 4c diff / llm_sync). Flag 3-place in `hybrid_flags.py`
+(property + `UPGRADE_FLAGS` + `snapshot()`), rollback tag `pre-learn-from-data`.
+
+**Proven live** (agent `d305b1a4`, tester3, org 7d372305, both flags ON):
+- Summary: "project management and retail analytics — project lifecycles, task statuses, member
+  demographics, transaction volumes, sales performance." (was: "Power BI user sign-in log …")
+- Starters: Project Risk/Completion · Member Demographics · Sales by Location · CityRewards
+  Transactions. (was: Frequent Sign-in Failures · Active Power BI Users · Sign-ins by Location · …)
+- Primary instruction cites SAMPLED values: status "On Track / Off Track", "sectors like CH, CP, CV".
+- 10/25 tables active (relevance), 8+ columns carry real sampled values, sign-in fabrication = False.
+
+**LANDMINES**:
+1. Power BI TOPN returns DataFrame columns as `Table[col` — pandas drops the trailing `]`.
+   `_strip_bracket` handles both `Table[col]` and `Table[col`.
+2. Flag DB overrides MUST use the ENV-prefixed key: `config['hybrid_overrides']['HYBRID_LEARN_FROM_DATA']`.
+   `load_overrides_from_db` only merges keys present in `UPGRADE_FLAGS` (env-name keyed); a short key
+   (`LEARN_FROM_DATA`) is silently ignored.
+3. `llm_sync` writes an `audit_logs` row with `current_user.id`; passing `None`/a detached user →
+   `ForeignKeyViolationError (user_id=None)` rolls back the WHOLE learn (description/starters never
+   land). Always pass a real attached `User`.
+4. The connector sync diff-gate (4c) skips re-learn when the table-set is unchanged — correct for
+   scheduled syncs, but a CODE change to the generators won't re-apply on an existing agent until a
+   schema change or `primary_instruction_id` is cleared. NEW connectors (first_run) always learn, so
+   they get grounding + sampling from the first sync — the hallucination can't occur on new agents.

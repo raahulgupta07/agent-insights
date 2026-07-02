@@ -190,6 +190,8 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_PARQUET_RESULTS": {"label": "Parquet Result Storage", "role": "agent", "category": "Advanced", "status": "stable", "note": "ON by default. Large step results stored as compressed Parquet on disk instead of inline JSON; smaller DB, faster dashboards. Threshold: HYBRID_PARQUET_MIN_ROWS (default 2000)."},
     "HYBRID_ANSWER_CACHE": {"label": "Answer Cache (Tier-0)", "role": "agent", "category": "Learning", "status": "stable", "note": "Uses Redis."},
     "HYBRID_AUTO_TABLE_RELEVANCE": {"label": "Auto Table Relevance", "role": "agent", "category": "Advanced", "status": "beta", "note": "At connector sync, auto-classify tables (fact/dim/measure/staging/telemetry) and deactivate noise (Power BI usage-metrics, Stg_ staging, empty/measure holders) so the agent carries only business-useful tables. Manual override in Tables tab wins. Default OFF."},
+    "HYBRID_CONNECTOR_AUTO_SYNC": {"label": "Connector Auto-Sync (scheduled)", "role": "agent", "category": "Advanced", "status": "beta", "note": "Scheduler sweeps connector clones with per-agent auto-sync enabled and re-runs the sync pipeline on the configured interval. Re-training is diff-gated (no LLM cost when the schema is unchanged). Default OFF."},
+    "HYBRID_LEARN_FROM_DATA": {"label": "Learn From Data (sample rows)", "role": "agent", "category": "Advanced", "status": "beta", "note": "At connector learn time, sample a few real rows per table and feed example column values into the onboarding LLM so the generated description/starters/instruction are grounded in actual data, not just table names. Kills domain hallucination on FK-less sources (Power BI). PII columns never sampled. Default OFF."},
     "HYBRID_CODE_BANK": {"label": "Code Bank (proven snippets)", "role": "agent", "category": "Learning", "status": "stable"},
     "HYBRID_AGENT_MEMORY": {"label": "Agent Memory", "role": "review", "category": "Learning", "status": "stable"},
     "HYBRID_SKILL_AUTOGROW": {"label": "Skill Auto-grow", "role": "review", "category": "Learning", "status": "stable"},
@@ -948,6 +950,15 @@ class HybridFlags:
         return _int("HYBRID_PARQUET_MIN_ROWS", 2000)
 
     @property
+    def CONNECTOR_AUTO_SYNC(self) -> bool:
+        # Master gate for scheduled connector auto-sync. When ON, a scheduler job
+        # sweeps connector clones that have per-agent auto-sync enabled (stored in
+        # organization_settings.config['connector_auto_sync'][ds_id]) and re-runs
+        # sync_clone_bg on the configured interval. Re-training is diff-gated inside
+        # sync_clone_bg, so a no-change sweep costs no LLM calls. Default OFF.
+        return _bool("HYBRID_CONNECTOR_AUTO_SYNC", False)
+
+    @property
     def AUTO_TABLE_RELEVANCE(self) -> bool:
         # At connector sync, classify each discovered table (fact / dimension /
         # measure / staging / telemetry / meta) and mark noise tables inactive so
@@ -958,6 +969,17 @@ class HybridFlags:
         # the Tables tab always wins. Default OFF (opt-in per org). See
         # app.services.table_relevance.classify_table.
         return _bool("HYBRID_AUTO_TABLE_RELEVANCE", False)
+
+    @property
+    def LEARN_FROM_DATA(self) -> bool:
+        # At connector learn time, pull a tiny sample of REAL rows from each active
+        # table and record a few example values per column into the schema the
+        # onboarding LLM reads. Grounds the generated description / starters /
+        # instruction in actual data (not just table names + the connector's
+        # display name) — kills domain hallucination on sources that lack FKs /
+        # column descriptions (e.g. Power BI). PII columns are never sampled.
+        # Default OFF. See app.services.connector_sampler.
+        return _bool("HYBRID_LEARN_FROM_DATA", False)
 
     @property
     def QUERY_LEARNING(self) -> bool:
@@ -1138,6 +1160,8 @@ class HybridFlags:
             "RESULT_CACHE": self.RESULT_CACHE,
             "PARQUET_RESULTS": self.PARQUET_RESULTS,
             "AUTO_TABLE_RELEVANCE": self.AUTO_TABLE_RELEVANCE,
+            "CONNECTOR_AUTO_SYNC": self.CONNECTOR_AUTO_SYNC,
+            "LEARN_FROM_DATA": self.LEARN_FROM_DATA,
             "QUERY_LEARNING": self.QUERY_LEARNING,
             "MERGE_SAME_SCHEMA": self.MERGE_SAME_SCHEMA,
             "SMART_HEADER": self.SMART_HEADER,

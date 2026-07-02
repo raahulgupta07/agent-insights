@@ -1,5 +1,6 @@
 from app.project_manager import ProjectManager
 import os
+import re
 from app.models.data_source import DataSource
 from app.ai.llm import LLM
 import pandas as pd
@@ -10,16 +11,68 @@ from app.dependencies import async_session_maker
 """
 """
 
+
+def _clean_ds_name(raw: str | None) -> str:
+    """Strip connector auth-method framing from a data-source display name so it
+    can't poison LLM domain inference.
+
+    The per-user connector names a source after HOW we connect, not WHAT the data
+    is — e.g. "Power BI (User Sign-in) · tester3@test.com". A weak model reads
+    "User Sign-in" and invents a whole authentication-log schema (@SignInLogs …)
+    that does not exist. Neutralise it to just the platform ("Power BI").
+    """
+    n = (raw or "datasource").split("·")[0]                       # drop " · email"
+    n = re.sub(r"\(\s*(user\s*)?sign[\s-]?in\s*\)", "", n, flags=re.I)  # drop "(User Sign-in)"
+    n = re.sub(r"\s+", " ", n).strip(" -–—")
+    return n or "datasource"
+
+
+def _table_allowlist(schema: str) -> list[str]:
+    """Best-effort extract the real table names present in a rendered schema string.
+
+    Supports both the XML render (`<table name="...">`) and the plain
+    TableFormatter render (`Table: Foo` / bare `Foo/Bar` dataset-qualified names).
+    Used to hard-forbid the LLM inventing tables not in the schema.
+    """
+    names: list[str] = []
+    names += re.findall(r'<table[^>]*\bname="([^"]+)"', schema)
+    # plain-text fallback (TableFormatter): "Dataset Name/Table" or "Table:" lines
+    names += re.findall(r'(?im)^\s*(?:table:\s*)?([A-Za-z0-9_][A-Za-z0-9_ ]*/[A-Za-z0-9_ #]+?)\s*(?:\(|:|$)', schema)
+    # dedup preserve order
+    seen, out = set(), []
+    for x in names:
+        x = x.strip()
+        if x and x.lower() not in seen:
+            seen.add(x.lower())
+            out.append(x)
+    return out[:80]
+
+
+def _grounding_block(clean_name: str, schema: str) -> str:
+    """Hard grounding preamble prepended to every onboarding generator prompt."""
+    tables = _table_allowlist(schema)
+    tbl_line = (", ".join(tables)) if tables else "(see schema below)"
+    return f"""CRITICAL GROUNDING RULES — read before writing anything:
+- The connector/agent name ("{clean_name}") describes the PLATFORM and how we connect (login method). It does NOT tell you what the data is about. Do NOT infer the business domain from the name.
+- Infer the domain ONLY from the actual table names, column names, and any example values in the schema below.
+- You may reference ONLY these tables that actually exist: {tbl_line}. NEVER invent a table, column, or concept that is not in the schema (e.g. do not write about "sign-in logs", "authentication attempts", "@SignInLogs" unless such a table literally appears above).
+- If the schema does not contain data for a concept, do not describe that concept at all.
+
+"""
+
+
 class DataSourceAgent:
 
     def __init__(self, data_source: DataSource, schema: str, model: LLMModel):
         self.data_source = data_source
         self.llm = LLM(model, usage_session_maker=async_session_maker)
         self.schema = schema
+        self.clean_name = _clean_ds_name(getattr(data_source, "name", None))
+        self.grounding = _grounding_block(self.clean_name, schema or "")
 
     def generate_summary(self):
-        prompt = f"""
-Data source name: {self.data_source.name}
+        prompt = f"""{self.grounding}
+Data source name: {self.clean_name}
 
 Schema:
 {self.schema}
@@ -35,14 +88,14 @@ Rules:
         return response
 
     def generate_conversation_starters(self):
-        prompt = f"""
+        prompt = f"""{self.grounding}
 Given this data source:
-{self.data_source.name}
+{self.clean_name}
 
 And this schema
 {self.schema}
 
-Please generate 4 conversation starters. Return them in a strict JSON array format.
+Please generate 4 conversation starters grounded in the ACTUAL tables and columns above (never about concepts not present in the schema). Return them in a strict JSON array format.
 
 The response should be an array of strings, where each string contains a title and detailed prompt separated by a newline character.
 
@@ -89,11 +142,12 @@ Do not add prefix ``` or markdown or anything. just the list of conversation sta
         Returns a dict with keys: title, text, category, load_mode, confidence.
         Title follows the pattern {DS_NAME}_OVERVIEW.
         """
-        ds_name = self.data_source.name or "datasource"
+        ds_name = self.clean_name or "datasource"
         title = ds_name.upper().replace(" ", "_").replace("-", "_") + "_OVERVIEW"
 
         prompt = f"""You are a data analyst onboarding a new data source for an AI analytics agent.
 
+{self.grounding}
 Data source/Agent name: {ds_name}
 
 Schema:
@@ -140,14 +194,14 @@ Return JSON only:
 
 
     def generate_description(self):
-        prompt = f"""
+        prompt = f"""{self.grounding}
 Given this data source:
-{self.data_source.name}
+{self.clean_name}
 
 And this schema
 {self.schema}
 
-Please review the schema and the data source name and it client. Then, understand the nature of the data source, think about the purpose of the data source, and generate a description for the data source. Make it useful for a non-technical audience. 
+Please review the schema (tables, columns, example values). Then, understand the nature of the data source FROM THE SCHEMA ONLY, think about the purpose of the data source, and generate a description for the data source. Make it useful for a non-technical audience.
 Description should be max 3 sentences. Should be concise, valuable, and useful.
 
 Guidelines:

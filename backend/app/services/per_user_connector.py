@@ -570,7 +570,8 @@ async def autolearn_clone(clone_id: str, org_id: str, user_id: str) -> None:
         logger.warning("per_user_connector: autolearn failed for %s: %s", clone_id, e)
 
 
-async def sync_clone_bg(clone_id: str, org_id: str, user_id: str) -> None:
+async def sync_clone_bg(clone_id: str, org_id: str, user_id: str,
+                        learn: bool = True, trigger: str = "manual") -> None:
     """Background worker: sync a freshly-created connector clone under the user's
     own credentials and write a live, per-table sync log to the DATABASE
     (connector_sync) so the frontend can poll a CLI-style terminal — cross-worker
@@ -619,6 +620,18 @@ async def sync_clone_bg(clone_id: str, org_id: str, user_id: str) -> None:
                 )
                 return
             conn = clone.connections[0]
+
+            # Snapshot the active-table set BEFORE re-discovery + whether a primary
+            # instruction already exists — used after seeding to diff and skip
+            # re-training when nothing changed (cost guard for manual "Sync now"
+            # and scheduled auto-sync alike).
+            from app.models.datasource_table import DataSourceTable as _DST0
+            _before_tables = set(
+                (await db.execute(
+                    select(_DST0.name).where(_DST0.datasource_id == clone_id)
+                )).scalars().all()
+            )
+            _had_primary = bool(getattr(clone, "primary_instruction_id", None))
 
             # 3. Discover tables under the user's own credentials.
             await connector_sync.log_step(
@@ -728,6 +741,86 @@ async def sync_clone_bg(clone_id: str, org_id: str, user_id: str) -> None:
                     except Exception:
                         pass
 
+            # 4b-2. Learn-from-data: sample a few REAL rows per active table and
+            #     record example column values into the schema the LLM reads. This
+            #     grounds the generated description / starters / instruction in
+            #     actual data (not just table names + the connector display name),
+            #     killing domain hallucination on FK-less sources (Power BI). Runs
+            #     AFTER relevance (only samples business-useful active tables) and
+            #     BEFORE llm_sync. Flag-gated (LEARN_FROM_DATA, default OFF),
+            #     PII-safe, fully fail-soft. Power BI only today.
+            try:
+                from app.settings.hybrid_flags import flags as _lflags
+                _learn_data_on = bool(_lflags.LEARN_FROM_DATA)
+            except Exception:
+                _learn_data_on = False
+            if _learn_data_on:
+                try:
+                    from app.services.connector_sampler import sample_active_tables
+                    fresh2 = (
+                        await db.execute(
+                            select(DataSource)
+                            .options(selectinload(DataSource.connections))
+                            .where(DataSource.id == clone_id)
+                        )
+                    ).scalars().first()
+                    if fresh2 and fresh2.connections:
+                        _s_conn = fresh2.connections[0]
+                        _client = await DataSourceService().construct_client(
+                            db, fresh2, _s_conn
+                        )
+                        _n = await sample_active_tables(
+                            db, _client, fresh2, conn_type=getattr(_s_conn, "type", ""),
+                        )
+                        if _n:
+                            await connector_sync.log_step(
+                                db, clone_id, level="ok", phase="syncing",
+                                msg=f"learned from data: sampled real values from "
+                                    f"{_n} tables",
+                            )
+                except Exception as se:
+                    logger.warning(
+                        "per_user_connector.sync_clone_bg: learn-from-data sample "
+                        "failed for %s: %s", clone_id, se,
+                    )
+                    try:
+                        await db.rollback()
+                    except Exception:
+                        pass
+
+            # 4c. Schema diff + re-train decision. Re-learning is the expensive
+            #     part (LLM calls), so on a re-sync we only re-train when the table
+            #     set actually changed OR there is no primary instruction yet. This
+            #     keeps repeated / scheduled syncs cheap ("up to date, nothing
+            #     changed") while still picking up newly-granted reports/datasets.
+            _after_tables = set(
+                (await db.execute(
+                    select(_DST0.name).where(_DST0.datasource_id == clone_id)
+                )).scalars().all()
+            )
+            _added = sorted(_after_tables - _before_tables)
+            _removed = sorted(_before_tables - _after_tables)
+            _schema_changed = bool(_added or _removed)
+            _first_run = not _before_tables
+            if _added or _removed:
+                await connector_sync.log_step(
+                    db, clone_id, level="ok", phase="syncing",
+                    msg=f"schema diff: +{len(_added)} new / -{len(_removed)} removed table(s)",
+                )
+            elif not _first_run:
+                await connector_sync.log_step(
+                    db, clone_id, level="ok", phase="syncing",
+                    msg="schema unchanged since last sync",
+                )
+            # Re-train when: caller asked to learn AND (schema changed, or this is
+            # the first run, or there is no primary instruction to serve yet).
+            _should_learn = bool(learn) and (_schema_changed or _first_run or not _had_primary)
+            if learn and not _should_learn:
+                await connector_sync.log_step(
+                    db, clone_id, level="ok", phase="learning",
+                    msg="no schema change — skipped re-training (agent already current)",
+                )
+
             # 5. Learn: description + conversation starters + overview instruction
             #    (same work as autolearn_clone), gated on the clone's use_llm_sync.
             #    llm_sync is one black-box LLM call, so we log real inputs BEFORE it
@@ -749,7 +842,8 @@ async def sync_clone_bg(clone_id: str, org_id: str, user_id: str) -> None:
                         "(view-only access or nothing shared) — skipping learn",
                 )
             try:
-                if (getattr(fresh or clone, "use_llm_sync", False) and org is not None
+                if (_should_learn
+                        and getattr(fresh or clone, "use_llm_sync", False) and org is not None
                         and not (_journey_v2 and tables_total == 0)):
                     await connector_sync.log_step(
                         db, clone_id, level="step", phase="learning",
