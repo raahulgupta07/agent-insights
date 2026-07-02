@@ -1965,3 +1965,12 @@ at click time. FIX (`pages/agents/index.vue`): `watch(allAgents, list => preload
 before any click → first Open instant. EPHEMERAL (fe-sync: host `nuxt generate` + docker cp to
 `ca-app:/app/frontend/dist`, NOT baked — lost on `--force-recreate`; verified `preloadRouteComponents` present in
 served bundle, health 200). Fold into next FE image bake.
+
+## 2026-07-02 — v1.74.5 FE: stop agent Overview "blink" during sync
+Symptom: agent detail Overview blinked every ~2s while a connector sync was running. Cause =
+`layouts/data.vue` `maybeStartPolling()` refetches the whole data source every 2s (POLL_INTERVAL_MS) to
+update sync progress, and `fetchIntegration()` set `isLoading.value=true` at the top of EVERY call → the
+Overview flipped to its loading skeleton on each poll tick (skeleton→content→skeleton). FIX:
+`fetchIntegration(silent=false)` — poll calls pass `silent=true` so background refetches DON'T toggle the
+global loading flag; only the initial mount + id-change show the loader. EPHEMERAL (fe-sync + re-commit into
+`:dev`/`:v1.74.5`). Data was always correct; only the loading flag flicker was the bug.

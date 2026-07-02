@@ -403,9 +403,13 @@ async function startChat() {
     }
 }
 
-async function fetchIntegration() {
+async function fetchIntegration(silent = false) {
     if (!id.value) return
-    isLoading.value = true
+    // Background sync polls refetch every 2s — do NOT toggle the global loading
+    // flag on those, or the Overview flips to its loading skeleton on every tick
+    // (the "screen blinks again and again" during sync). Only the first/initial
+    // load + id-change show the loader.
+    if (!silent) isLoading.value = true
     fetchError.value = null
 
     try {
@@ -428,7 +432,7 @@ async function fetchIntegration() {
         fetchError.value = e?.response?.status || e?.status || e?.statusCode || 500
     }
 
-    isLoading.value = false
+    if (!silent) isLoading.value = false
     maybeStartPolling()
 }
 
@@ -455,7 +459,7 @@ function maybeStartPolling() {
                 stopPolling()
                 return
             }
-            fetchIntegration().then(() => {
+            fetchIntegration(true).then(() => {
                 if (!hasAnyActiveIndexing(integration.value?.connections)) {
                     stopPolling()
                 }
