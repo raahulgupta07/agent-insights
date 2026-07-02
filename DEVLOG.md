@@ -1914,3 +1914,54 @@ Conservative: ambiguous payloads → OK, so a real hit is never dropped. Unit-te
 Deploy: hot-cp result_cache.py → py_compile OK → docker restart → no-regression run → VERSION_HYBRID 1.74.4 →
 `docker commit ca-app cityagent-analytics:dev` + tag `:v1.74.4`. NOT git-pushed. Connector-reliability bundle
 (P1 auto-fill · P2 429 backoff · P4 dataset-id · P3 no-fail-cache) now COMPLETE.
+
+## 2026-07-02 — v1.74.5 Power BI query speedup: offline index on the QUERY path (root cause) + DAX cache + 401 reauth + fail-loud Fabric
+ROOT CAUSE of "Power BI query takes long": the QUERY path builds its client via
+`data_source_service.construct_client` / `construct_clients`, which NEVER installed the offline
+table→{datasetId,workspaceId} index — only `connection_service.construct_client` had the P4 block. So
+every query missed the offline lookup in `powerbi_client.execute_query` and fell back to a LIVE
+`get_schema()`→`get_schemas()` that fans `COLUMNSTATISTICS` across EVERY dataset in the tenant (slow +
+429/400 spam; empty per-user datasets return HTTP 400 "DAX Evaluate queries work only on databases which
+have at least one table"). Confirmed live: Run B logged ~11 COLUMNSTATISTICS 400s mid-query.
+FIX (flag `HYBRID_CONNECTOR_ROBUSTNESS`, fail-soft, PBI-only via `hasattr(client,'set_table_index')`):
+- New `DataSourceService._install_pbi_offline_index(db, client, connection)` — queries `ConnectionTable`
+  rows for the connection, builds `{name: {datasetId, workspaceId}}` from `metadata_json.powerbi`, calls
+  `client.set_table_index(idx)`. Called from BOTH `construct_client` (line ~1647) and `construct_clients`
+  (after `client = ClientClass(**allowed)`). Now a query resolves its dataset offline and runs exactly ONE DAX.
+- VERIFIED live org 7d372305 (demo@test.com clone 04d59c32, conn 6fff7c47, 18 tables): index size=18,
+  COLUMNSTATISTICS discovery calls 0 (was ~11), cold query 46.7s→26.5s, answer unchanged (258 projects).
+ALSO in this bundle (all flag-gated, fail-soft):
+- **DAX result cache** `powerbi_client._dax_cache` (class-level dict, TTL 300s, cap 256, key =
+  sha256(tenant|workspace|dataset|max_rows|dax)). `execute_query` serves a `.copy()` on hit BEFORE
+  `_execute_dax_internal`; stores on miss. Collapses intra-completion retry loops + exact repeats to <1ms.
+  Helpers `_dax_cache_get`/`_dax_cache_put` (lazy TTL evict + oldest-expiry size cap). Unit PASS
+  (put-copy-isolation, TTL expiry, size cap). Note: cross-session repeats often MISS because gemini
+  regenerates non-identical DAX — the question-keyed cache (deferred) is what fixes those.
+- **401 auto-reauth** on DAX path: `_execute_dax_internal` → on 401, `_reauth()` clears token+session,
+  re-runs `connect()` (refresh_token / client_credentials), retries once. Fail-soft (delegated-token-only
+  client that can't re-mint keeps the 401).
+- **Fail-loud Fabric reindex** `ms_fabric_client.get_tables`: added module `logger`; the per-DB
+  `except: continue` now logs the swallowed exc, the no-accessible-DB case + the 0-tables case log WHY.
+  Kills the silent 0/0 (reindexprobe subagent traced it to credential/permission no-op, not stale cache).
+- **Quieter discovery:** empty-dataset COLUMNSTATISTICS 400 → DEBUG (was WARN).
+DEAD-CODE FINDING: the earlier result-cache serve/store + the "line 106 lazy `report.data_sources`" fix
+live in `mcp/create_data.py` (`CreateDataMCPTool`) — a separate MCP-server tool the agent NEVER calls. The
+live tool is `implementations/create_data.py` (`CreateDataTool`), which has NO cache. That's why 0 rows ever
+cached. The subagent's line-106 fix is harmless (valid for the MCP path) but was not the query path.
+DEFERRED (own verified change): question-keyed data cache in the LIVE `create_data` tool (skip codegen+DAX on
+a normalized-question hit, build Step/viz from stored data) for sub-2s cross-session repeats — medium risk
+(touches core tool), user chose to bake the safe wins first.
+Files: `data_sources/clients/powerbi_client.py` (dax cache + reauth + empty-db log), `ms_fabric_client.py`
+(fail-loud), `services/data_source_service.py` (offline index installer + 2 call sites). Deploy: hot-cp +
+py_compile + `docker restart` (×3 iterations) → VERSION_HYBRID 1.74.5 → `docker commit ca-app
+cityagent-analytics:dev` + tag `:v1.74.5`. Rollback `cityagent-analytics:pre-connectorfix`. NOT git-pushed.
+
+## 2026-07-02 — v1.74.5 FE: kill first-"Open" stall on Data Agents (prefetch)
+Symptom: clicking **Open** on a Data Agent card stalled the FIRST time, then was instant. Investigated:
+ALL detail-page APIs are fast (`GET /data_sources/{id}` 0.015s, `/sync-status` 0.006s, `/tables` 0.002s) —
+backend was NEVER the delay. Cause = the Open button uses `navigateTo('/agents/{id}')` (programmatic), which
+Nuxt does NOT auto-prefetch like a `<NuxtLink>`, so the `/agents/[id]` + `layouts/data.vue` JS chunk downloaded
+at click time. FIX (`pages/agents/index.vue`): `watch(allAgents, list => preloadRouteComponents('/agents/'+list[0].id), {immediate:true})` — all agents share the one `[id]` component, so preloading once warms the chunk
+before any click → first Open instant. EPHEMERAL (fe-sync: host `nuxt generate` + docker cp to
+`ca-app:/app/frontend/dist`, NOT baked — lost on `--force-recreate`; verified `preloadRouteComponents` present in
+served bundle, health 200). Fold into next FE image bake.

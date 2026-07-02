@@ -7,20 +7,42 @@
             <div class="h-px flex-1 bg-[#E9E0D3]"></div>
         </div>
 
-        <!-- Clean connector tiles: logo + name + one status line + one action.
-             No DRAFT/CONFIGURED chips, no gear. Unconfigured → "Coming soon". -->
+        <!-- Connector tiles. Members see: logo · name · status · one action.
+             Super-admins ALSO get a hover gear + config chip + "Set up".
+             Config is gated on manage_connections — members' DOM never has it. -->
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <div
                 v-for="c in catalog"
                 :key="c.key"
-                class="group p-4 rounded-2xl border bg-white transition-all duration-200"
-                :class="isReady(c) ? 'border-[#E9E0D3] hover:-translate-y-0.5 hover:shadow-md hover:border-[#C2541E]/30' : 'border-[#EFE7DA] opacity-70'"
+                class="group relative p-4 rounded-2xl border bg-white transition-all duration-200"
+                :class="isReady(c) ? 'border-[#E9E0D3] hover:-translate-y-0.5 hover:shadow-md hover:border-[#C2541E]/30' : 'border-[#EFE7DA] opacity-80'"
             >
-                <div class="flex items-center gap-2.5 mb-3">
+                <!-- ADMIN gear (hover-reveal) -->
+                <button
+                    v-if="canManage && c.live"
+                    @click.stop="openAdminConfig(c.key)"
+                    :title="templateFor(c.key) ? $t('common.edit') : $t('connectors.configure')"
+                    class="absolute top-3 right-3 w-7 h-7 grid place-items-center rounded-lg text-[#9a958c] opacity-0 group-hover:opacity-100 hover:bg-[#F4EEE5] hover:text-[#C2541E] transition"
+                >
+                    <UIcon name="i-heroicons-cog-6-tooth" class="w-4 h-4" />
+                </button>
+
+                <div class="flex items-center gap-2.5 mb-2.5 pe-6">
                     <div class="w-9 h-9 rounded-xl bg-white border border-[#E9E0D3] flex items-center justify-center p-1.5 shrink-0">
                         <img :src="c.icon" :alt="c.name" class="w-full h-full object-contain" />
                     </div>
                     <h3 class="text-[13.5px] font-semibold text-[#1f2328] leading-tight">{{ c.name }}</h3>
+                </div>
+
+                <!-- ADMIN config chip -->
+                <div v-if="canManage && c.live" class="mb-2">
+                    <span
+                        class="inline-flex items-center gap-1 text-[9.5px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded"
+                        :class="templateFor(c.key) ? 'text-[#3f9e6a] bg-[#eef6f0]' : 'text-[#B85C2E] bg-[#FBEFE4]'"
+                    >
+                        <span class="w-1 h-1 rounded-full" :class="templateFor(c.key) ? 'bg-[#3f9e6a]' : 'bg-[#D67037]'"></span>
+                        {{ templateFor(c.key) ? $t('connectors.configured') : 'Needs setup' }}
+                    </span>
                 </div>
 
                 <!-- CONNECTED -->
@@ -34,23 +56,69 @@
                     </div>
                 </template>
 
-                <!-- CONFIGURED, NOT CONNECTED → Sign in -->
+                <!-- CONFIGURED, NOT CONNECTED → Sign in (any user) -->
                 <template v-else-if="c.live && templateFor(c.key)">
                     <div class="text-[11px] flex items-center gap-1.5 text-[#9a958c] mb-3">
-                        <span class="w-1.5 h-1.5 rounded-full bg-[#C9BCA9]"></span>{{ $t('connectors.notConnected') }}
+                        <span class="w-1.5 h-1.5 rounded-full bg-[#3f9e6a]"></span>Ready to connect
                     </div>
                     <button @click="startConnect(c.key)" class="w-full text-xs font-semibold px-3 py-2 rounded-lg bg-[#C2541E] text-white hover:bg-[#A8330F] transition-colors">{{ $t('connectors.signIn') }} →</button>
                 </template>
 
-                <!-- NOT LIVE or NOT CONFIGURED → Coming soon (config done in Settings) -->
-                <template v-else>
+                <!-- LIVE but NOT CONFIGURED -->
+                <template v-else-if="c.live">
                     <div class="text-[11px] flex items-center gap-1.5 text-[#B9AE9C] mb-3">
                         <span class="w-1.5 h-1.5 rounded-full bg-[#D8CDBB]"></span>{{ $t('connectors.comingSoon') }}
+                    </div>
+                    <!-- admin sees actionable "Set up"; member sees nothing -->
+                    <button v-if="canManage" @click="openAdminConfig(c.key)" class="w-full text-xs font-semibold px-3 py-2 rounded-lg bg-[#C2541E] text-white hover:bg-[#A8330F] transition-colors">Set up →</button>
+                    <span v-else class="inline-block text-xs font-medium text-[#B9AE9C]">{{ $t('connectors.signIn') }}</span>
+                </template>
+
+                <!-- NOT LIVE (SharePoint / OneDrive) → not available yet -->
+                <template v-else>
+                    <div class="text-[11px] flex items-center gap-1.5 text-[#B9AE9C] mb-3">
+                        <span class="w-1.5 h-1.5 rounded-full bg-[#D8CDBB]"></span>Not available yet
                     </div>
                     <span class="inline-block text-xs font-medium text-[#B9AE9C]">{{ $t('connectors.signIn') }}</span>
                 </template>
             </div>
         </div>
+
+        <!-- SUPER-ADMIN CONFIG MODAL (tenant / SQL endpoint → publish template) -->
+        <UModal v-if="canManage" v-model="showAdmin">
+            <div class="p-6">
+                <div class="flex items-start gap-2.5 mb-1">
+                    <div class="w-8 h-8 rounded-lg bg-white border border-[#E9E0D3] flex items-center justify-center p-1 shrink-0">
+                        <img :src="editingConn.icon" :alt="editingConn.name" class="w-full h-full object-contain" />
+                    </div>
+                    <div>
+                        <h3 class="text-base text-[#1f2328]" style="font-family:'Spectral',serif">Configure · {{ editingConn.name }}</h3>
+                        <p class="text-[11px] text-[#9a958c]">Set once. Members sign in with their own account.</p>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <template v-if="editingConn.fields.includes('server_hostname')">
+                        <label class="block text-xs font-semibold text-[#6b6b6b] mb-1">{{ $t('connectors.sqlEndpoint') }}</label>
+                        <input v-model="cfg.server_hostname" placeholder="xxxxx.datawarehouse.fabric.microsoft.com" class="w-full border border-[#E9E0D3] rounded-lg px-3 py-2 text-sm bg-[#FCFAF6] focus:outline-none focus:border-[#C2541E] mb-3" />
+                    </template>
+                    <label class="block text-xs font-semibold text-[#6b6b6b] mb-1">{{ $t('connectors.tenantId') }}</label>
+                    <input v-model="cfg.tenant_id" placeholder="00000000-0000-0000-0000-000000000000" class="w-full border border-[#E9E0D3] rounded-lg px-3 py-2 text-sm bg-[#FCFAF6] focus:outline-none focus:border-[#C2541E] mb-3" />
+                    <p class="text-[11px] text-[#9a958c] bg-[#FCFAF6] border border-[#E9E0D3] rounded-lg p-2.5 leading-relaxed">{{ $t('connectors.autoDbNote') }}</p>
+                    <div v-if="adminError" class="text-xs text-[#B4432B] bg-[#F7E7E2] rounded-lg p-2.5 mt-2">{{ adminError }}</div>
+                </div>
+                <div class="flex items-center gap-2 mt-4">
+                    <button v-if="templateFor(editingKey)" @click="resetTemplate" :disabled="resetting" class="text-xs font-medium text-[#a13d3d] hover:bg-[#fdf6f6] px-2.5 py-2 rounded-lg">
+                        <Spinner v-if="resetting" class="w-3.5 h-3.5 inline" /> Reset
+                    </button>
+                    <div class="ms-auto flex gap-2">
+                        <button @click="showAdmin = false" class="text-sm px-3 py-2 rounded-lg bg-white border border-[#E9E0D3]">{{ $t('common.cancel') }}</button>
+                        <button @click="publishTemplate" :disabled="publishing" class="text-sm px-4 py-2 rounded-lg bg-[#C2541E] text-white hover:bg-[#A8330F] disabled:opacity-50">
+                            <Spinner v-if="publishing" class="w-3.5 h-3.5 inline" /> Save config
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </UModal>
 
         <!-- DEVICE-CODE CONNECT MODAL -->
         <UModal v-model="showConnect" :prevent-close="connecting">
@@ -95,6 +163,7 @@
 <script lang="ts" setup>
 import Spinner from '~/components/Spinner.vue'
 import ConnectorsRegisterModal from '~/components/connectors/ConnectorsRegisterModal.vue'
+import { useCan } from '~/composables/usePermissions'
 
 const props = defineProps<{ agents: any[] }>()
 const emit = defineEmits<{ (e: 'refresh'): void }>()
@@ -104,6 +173,8 @@ const toast = useToast()
 
 const enabled = ref(false)
 const templates = ref<any[]>([])
+// Super-admin only: gates the gear, config chip, "Set up", and the config modal.
+const canManage = computed(() => useCan('manage_connections'))
 
 // A tile is "ready" (full-color, actionable) when the connector is live AND a
 // super-admin has configured its template. Otherwise it renders "Coming soon".
@@ -150,8 +221,71 @@ async function loadTemplates() {
     } catch { templates.value = [] }
 }
 
-// (Admin connector CONFIG moved to Settings › Connectors — super-admin only.
-//  This hub is now sign-in / connect only.)
+// ---- super-admin inline config (gear / Set up → configure template) ----------
+// Same fields + publish as Settings › Connectors, gated on manage_connections.
+const showAdmin = ref(false)
+const publishing = ref(false)
+const resetting = ref(false)
+const adminError = ref('')
+const cfg = reactive<{ server_hostname: string; tenant_id: string }>({ server_hostname: '', tenant_id: '' })
+const editingKey = ref('fabric')
+const editingConn = computed(() => catalog.find(c => c.key === editingKey.value) || catalog[0])
+
+function openAdminConfig(key: string) {
+    editingKey.value = key
+    const tpl = templateFor(key)
+    cfg.server_hostname = tpl?.config?.server_hostname || ''
+    cfg.tenant_id = tpl?.config?.tenant_id || ''
+    adminError.value = ''
+    showAdmin.value = true
+}
+
+async function publishTemplate() {
+    publishing.value = true
+    adminError.value = ''
+    try {
+        const c = editingConn.value
+        // Database is NEVER set here — auto-discovered per user at sign-in.
+        const config: any = {}
+        if (c.fields.includes('server_hostname')) config.server_hostname = cfg.server_hostname.trim()
+        config.tenant_id = cfg.tenant_id.trim() || null
+        const body = {
+            name: c.name, type: c.type, config,
+            auth_policy: 'user_required', allowed_user_auth_modes: ['device_code'],
+            is_user_template: true,
+        }
+        const { error } = await useMyFetch('/data_sources', { method: 'POST', body })
+        if (error.value) throw error.value
+        toast.add({ title: t('connectors.published'), color: 'green', icon: 'i-heroicons-check-circle' })
+        showAdmin.value = false
+        await loadTemplates()
+        emit('refresh')
+    } catch (e: any) {
+        adminError.value = e?.data?.detail || e?.message || t('connectors.publishFailed')
+    } finally {
+        publishing.value = false
+    }
+}
+
+async function resetTemplate() {
+    const tpl = templateFor(editingKey.value)
+    if (!tpl) return
+    if (!confirm(`Reset ${editingConn.value.name}? Members will no longer be able to sign in until it is configured again.`)) return
+    resetting.value = true
+    adminError.value = ''
+    try {
+        const { error } = await useMyFetch(`/data_sources/${tpl.id}`, { method: 'DELETE' })
+        if (error.value) throw error.value
+        toast.add({ title: 'Connector reset', color: 'green', icon: 'i-heroicons-check-circle' })
+        showAdmin.value = false
+        await loadTemplates()
+        emit('refresh')
+    } catch (e: any) {
+        adminError.value = e?.data?.detail || e?.message || 'Reset failed'
+    } finally {
+        resetting.value = false
+    }
+}
 
 // ---- adaptive connect modal (email+password → auto device-code on MFA) ----
 const showRegister = ref(false)

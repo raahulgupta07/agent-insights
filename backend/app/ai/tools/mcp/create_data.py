@@ -56,9 +56,26 @@ class CreateDataMCPTool(MCPTool):
     def input_schema(self) -> Dict[str, Any]:
         return MCPCreateDataInput.model_json_schema()
     
+    async def _resolve_report_ds_ids(self, db: AsyncSession, report_id: str) -> list:
+        """Resolve the report's data-source ids via an EXPLICIT assoc-table query.
+        The `report.data_sources` lazy m2m is empty/unloaded in the MCP tool context,
+        so we read `report_data_source_association` directly. Fail-soft → []."""
+        try:
+            from sqlalchemy import text
+            result = await db.execute(
+                text(
+                    "SELECT data_source_id FROM report_data_source_association "
+                    "WHERE report_id = :rid"
+                ),
+                {"rid": report_id},
+            )
+            return [str(row[0]) for row in result.fetchall()]
+        except Exception:
+            return []
+
     async def execute(
-        self, 
-        args: Dict[str, Any], 
+        self,
+        args: Dict[str, Any],
         db: AsyncSession,
         user: User,
         organization: Organization,
@@ -103,7 +120,8 @@ class CreateDataMCPTool(MCPTool):
             from app.settings.hybrid_flags import flags as _hflags
             if _hflags.RESULT_CACHE:
                 from app.ai.knowledge import result_cache as _rc
-                _ds_ids = [str(d.id) for d in (getattr(report, "data_sources", []) or [])]
+                # lazy m2m `report.data_sources` is empty in MCP context → explicit assoc query
+                _ds_ids = await self._resolve_report_ds_ids(db, str(report.id))
                 _watermark_sig = await _rc.compute_watermark_signature(db, _ds_ids)
                 _cache_key = _rc.make_cache_key(input_data.prompt, _watermark_sig)
                 if _cache_key:

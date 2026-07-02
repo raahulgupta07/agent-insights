@@ -119,6 +119,19 @@ class PowerBIClient(DataSourceClient):
     AUTH_URL = "https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
     SCOPE = "https://analysis.windows.net/powerbi/api/.default"
 
+    # Process-local DAX result cache (flag CONNECTOR_ROBUSTNESS). The slow part of
+    # a Power BI query is Microsoft's executeQueries engine (40-84s). Identical DAX
+    # against the same dataset returns identical data, so we memoize it briefly:
+    # this collapses the agent's intra-completion retry loop (the old "5 attempts"
+    # flakiness) and back-to-back repeat questions to <1ms. Bounded by TTL + size so
+    # it never serves meaningfully-stale data (PBI models change slowly) and never
+    # grows unbounded. Class-level so every PBI client instance in the worker shares
+    # it. Key includes tenant_id + dataset_id (globally-unique GUID) so it can never
+    # cross tenants/users. OFF by default -> byte-identical to prior behavior.
+    _dax_cache: Dict[str, tuple] = {}
+    _DAX_CACHE_TTL = 300.0
+    _DAX_CACHE_MAX = 256
+
     def __init__(
         self,
         tenant_id: str = None,
@@ -471,7 +484,13 @@ class PowerBIClient(DataSourceClient):
             # table" = the dataset is an empty database, not a blocked one → don't
             # bother with the REST/brute fallbacks.
             empty_db = "at least one table" in msg
-            logging.warning(f"COLUMNSTATISTICS failed for dataset {dataset_id}: {e}")
+            # An empty dataset is expected noise (many per-user tenants carry blank
+            # models) — log it at debug so it doesn't spam WARN. Real failures stay
+            # at warning.
+            if empty_db:
+                logging.debug(f"COLUMNSTATISTICS: dataset {dataset_id} is empty (no tables), skipping")
+            else:
+                logging.warning(f"COLUMNSTATISTICS failed for dataset {dataset_id}: {e}")
             return [], empty_db
 
     def _brute_discover_tables(self, workspace_id: str, dataset_id: str) -> tuple:
@@ -982,7 +1001,63 @@ class PowerBIClient(DataSourceClient):
         if not dataset_id:
             raise ValueError("dataset_id is required (pass table_name or dataset_id)")
 
-        return self._execute_dax_internal(workspace_id, dataset_id, query, max_rows=max_rows)
+        # DAX result cache (flag CONNECTOR_ROBUSTNESS). Serve a fresh-enough
+        # identical result without hitting Microsoft's slow engine. Fail-soft: any
+        # cache error falls through to a normal live execution.
+        try:
+            from app.settings.hybrid_flags import flags as _hflags
+            _robust = bool(_hflags.CONNECTOR_ROBUSTNESS)
+        except Exception:
+            _robust = False
+
+        _key = None
+        if _robust:
+            try:
+                import hashlib as _hl
+                _sig = f"{self.tenant_id or ''}|{workspace_id or ''}|{dataset_id}|{max_rows}|{query}"
+                _key = _hl.sha256(_sig.encode("utf-8")).hexdigest()
+                _cached = self._dax_cache_get(_key)
+                if _cached is not None:
+                    logger.info("powerbi.dax.cache_hit dataset=%s", dataset_id)
+                    return _cached.copy()
+            except Exception:
+                _key = None
+
+        df = self._execute_dax_internal(workspace_id, dataset_id, query, max_rows=max_rows)
+
+        if _robust and _key is not None and df is not None:
+            try:
+                self._dax_cache_put(_key, df)
+            except Exception:
+                pass
+        return df
+
+    @classmethod
+    def _dax_cache_get(cls, key: str):
+        """Return a cached DataFrame if present and unexpired, else None (evicts
+        expired entries lazily). Never raises."""
+        entry = cls._dax_cache.get(key)
+        if not entry:
+            return None
+        expiry, df = entry
+        if time.time() >= expiry:
+            cls._dax_cache.pop(key, None)
+            return None
+        return df
+
+    @classmethod
+    def _dax_cache_put(cls, key: str, df) -> None:
+        """Store a DataFrame with a TTL. Enforces a hard size cap by dropping the
+        oldest-expiring entries first. Stores a copy so callers can't mutate it."""
+        if len(cls._dax_cache) >= cls._DAX_CACHE_MAX:
+            # evict expired first, then the soonest-to-expire, to stay bounded
+            now = time.time()
+            for k in [k for k, (exp, _) in cls._dax_cache.items() if exp <= now]:
+                cls._dax_cache.pop(k, None)
+            while len(cls._dax_cache) >= cls._DAX_CACHE_MAX:
+                oldest = min(cls._dax_cache.items(), key=lambda kv: kv[1][0])[0]
+                cls._dax_cache.pop(oldest, None)
+        cls._dax_cache[key] = (time.time() + cls._DAX_CACHE_TTL, df.copy())
 
     @staticmethod
     def _parse_retry_after(resp) -> Optional[float]:
@@ -1044,6 +1119,24 @@ class PowerBIClient(DataSourceClient):
             retry_after=wait,
         )
 
+    def _reauth(self) -> bool:
+        """Force a fresh access token for 401 recovery (flag CONNECTOR_ROBUSTNESS).
+
+        Clears the cached token + HTTP session and re-runs ``connect()`` — which
+        re-mints via refresh_token (per-user client) or client_credentials (base).
+        Returns True only if a new token was obtained. NEVER raises: a client that
+        was constructed with a delegated access_token and no way to re-mint simply
+        returns False and the caller keeps the original 401.
+        """
+        try:
+            self._access_token = None
+            self._http = None
+            self.connect()
+            return bool(self._access_token)
+        except Exception:
+            logger.warning("powerbi.reauth failed", exc_info=True)
+            return False
+
     def _execute_dax_internal(
         self,
         workspace_id: Optional[str],
@@ -1066,6 +1159,19 @@ class PowerBIClient(DataSourceClient):
         }
 
         resp = self._post_dax_with_retry(url, body, headers)
+        # 401 auto-reauth (flag CONNECTOR_ROBUSTNESS): the access token can expire
+        # mid-session -> remint once (refresh_token / client_credentials) and retry
+        # the SAME query. Fail-soft: if reauth can't mint, fall through with the 401
+        # so the error path is byte-identical to before.
+        if resp.status_code == 401:
+            try:
+                from app.settings.hybrid_flags import flags as _hflags
+                _robust = bool(_hflags.CONNECTOR_ROBUSTNESS)
+            except Exception:
+                _robust = False
+            if _robust and self._reauth():
+                headers = self._build_headers()
+                resp = self._post_dax_with_retry(url, body, headers)
         if resp.status_code >= 300:
             raise RuntimeError(f"DAX query failed: HTTP {resp.status_code} {resp.text}")
 

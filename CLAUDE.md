@@ -453,8 +453,28 @@ Versioned feature feed surfaced as a 🔔 bell popover in TopNav (before profile
 
 **2026-06-29 FE EPHEMERAL (fe-sync only, NOT baked — pending `docker commit`):** (1) **plan-block chat leak FIXED** — `HYBRID_AGENT_PLAN` flag-on (org e02b1b04, default OFF) emits a `source_type='plan'` block; chat body renderer `reports/[id]/index.vue:387` was the 1-of-4 consumer missing the plan-skip guard → dumped raw `{"tasks":[...]}`. Fix = `&& block.source_type !== 'plan'`. RULE: skip `source_type='plan'` in EVERY render path (Progress=stepMap.ts:348/484, context=message_context_builder.py:597/1221 already do). (2) **merged Create/Activity into ONE no-tabs panel** (Option A) in the `coworkEnabled` block of `reports/[id]/index.vue` (removed `coworkTab` toggle; Create grid top + Activity below, one scroll). (3) **"only April summary" ROOT CAUSE = silent partial ingest:** CRM Agent source `0b9b39ac` has 1 table, 2447 rows ALL `_source_period=2025-04` (6 months uploaded, 5 never materialized; merged table mis-NAMED `_apr_25` → agent frames answer "April"). Guardrails proposed (manifest+reconcile / coverage-context to agent / neutral table naming / atomic batch merge / post-ingest verify-gate), NOT built. Detail → [[project_cityagent_panel_ingest_completeness]].
 
-**Current state (2026-07-02):** image `cityagent-analytics:dev` on `:3007` (baked `:v1.74.4`), branch `main`,
-mig head **`connsyncrun1`**, `VERSION_HYBRID`=**1.74.4**. **v1.74.4 = P3 no-fail-cache** (`result_cache._looks_failed`
+**Current state (2026-07-02):** image `cityagent-analytics:dev` on `:3007` (baked `:v1.74.5`), branch `main`,
+mig head **`connsyncrun1`**, `VERSION_HYBRID`=**1.74.5**. **v1.74.5 = Power BI query SPEEDUP + reliability** (flag
+`HYBRID_CONNECTOR_ROBUSTNESS`, OFF=byte-identical, ON org 7d372305; rollback img `pre-connectorfix`; NOT git-pushed).
+ROOT CAUSE of "PBI query slow" = the QUERY path builds its client via `data_source_service.construct_client(s)`,
+which NEVER installed the offline table→{datasetId,workspaceId} index (only `connection_service.construct_client`
+did) → every query fell back to LIVE `get_schemas()` fanning `COLUMNSTATISTICS` across EVERY dataset (slow +
+429/400 spam on empty datasets). FIX = new `DataSourceService._install_pbi_offline_index()` called from BOTH
+construct paths (built from `ConnectionTable.metadata_json.powerbi`). VERIFIED live: index size=18, discovery
+calls 0 (was ~11), 46.7s→26.5s, answer unchanged (258 projects). +DAX result cache (`powerbi_client._dax_cache`,
+class-level, TTL 300s/cap 256, keyed tenant|ws|dataset|max_rows|dax, serves `.copy()`; unit PASS) collapses
+intra-completion retries + exact repeats. +401 auto-reauth on DAX path (`_reauth()` re-mints once, fail-soft).
++fail-loud Fabric reindex (`ms_fabric_client.get_tables` logs WHY on 0/0 — was silent). +empty-dataset
+COLUMNSTATISTICS 400 → DEBUG. **LANDMINE: the result-cache serve/store lives in `mcp/create_data.py`
+(`CreateDataMCPTool`) = a SEPARATE MCP-server tool the agent NEVER calls; the live tool =
+`implementations/create_data.py` (`CreateDataTool`) has NO cache → that's why 0 rows ever cached. A question-keyed
+cache in the LIVE tool (sub-2s cross-session repeats) is DEFERRED to its own verified change.** ALSO v1.74.5
+FE (EPHEMERAL fe-sync, NOT baked): first-"Open" on a Data Agent stalled because the Open button uses
+`navigateTo` (programmatic) which Nuxt does NOT auto-prefetch → the `/agents/[id]` JS chunk downloaded at
+click time. Fixed: `pages/agents/index.vue` `watch(allAgents,…,{immediate:true})` calls
+`preloadRouteComponents('/agents/'+first.id)` (all agents share the `[id]` chunk) → first Open instant. All
+detail-page APIs already <0.02s (backend was never the delay). — prior
+**v1.74.4 = P3 no-fail-cache** (`result_cache._looks_failed`
 guards store+lookup; a failed/empty create_data result is never persisted or replayed, legacy bad entries self-heal
 via soft-delete on lookup; unit 8/8). Completes the connector-reliability bundle. **v1.74.3 = connector query
 reliability + Data Agents UI redesign (baked, NOT git-pushed):** DataAgentCard Studios skin + Settings›Connectors

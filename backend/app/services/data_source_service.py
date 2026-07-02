@@ -1315,31 +1315,85 @@ class DataSourceService:
         # Apply deletions before removing the data source to avoid NULLing non-nullable FKs
         await db.commit()
 
-        # 6) Delete schema tables and the data source, retrying if a concurrent
-        #    connection-indexing job re-creates datasource_tables rows in between.
-        #    Creating a domain from an existing connection can start background
-        #    indexing that syncs DataSourceTable for every linked data source, so
-        #    rows may reappear after we clear them but before the data source is
-        #    removed, causing a foreign-key violation. Re-clear and retry until
-        #    the indexer stops producing rows.
+        # The commit EXPIRES `data_source` (expire_on_commit). Deleting an expired
+        # ORM object below triggers a synchronous lazy-load of its attributes,
+        # which fires pool pre-ping -> await_only OUTSIDE the async greenlet ->
+        # MissingGreenlet (the "Remove agent" 500). Re-fetch a fresh, fully
+        # populated instance so `db.delete()` needs no lazy IO.
+        result = await db.execute(
+            select(DataSource).filter(
+                DataSource.id == data_source_id,
+                DataSource.organization_id == organization.id,
+            )
+        )
+        data_source = result.scalar_one_or_none()
+        if data_source is None:
+            return {"message": "Data source deleted successfully"}
+
+        # 6) Delete the data source row itself.
+        #
+        #    We CANNOT use ORM `db.delete(data_source)` here: DataSource has many
+        #    `cascade="all, delete-orphan"` relationships (tables, table_stats,
+        #    instructions, entities, files, …) that are lazy-loaded. Under the
+        #    async engine, the delete-cascade unit-of-work tries to lazy-load each
+        #    of those collections DURING flush — which fires synchronous IO
+        #    outside the greenlet -> MissingGreenlet (the "Remove agent" 500).
+        #
+        #    Instead: clear every child table with a Core DELETE (no ORM cascade,
+        #    no lazy IO), then Core-DELETE the data source row. Idempotent, so we
+        #    can retry the datasource_tables clear if a concurrent indexing job
+        #    re-creates rows (see the original race note).
+        from sqlalchemy import text as _text
+
+        # Child tables keyed by data_source_id (idempotent; already-cleared = no-op).
+        _child_by_ds = [
+            "answer_cache", "brain_graph_edges", "code_cache", "connector_sync_run",
+            "data_source_connection_tool", "data_source_file_association",
+            "data_source_memberships", "entity_data_source_association",
+            "instruction_data_source_association", "knowledge_docs",
+            "metadata_indexing_jobs", "metadata_resources", "metric_definitions",
+            "query_cache", "query_library_items", "report_data_source_association",
+            "semantic_tables", "table_edges", "table_feedback_events", "table_stats",
+            "table_usage_events", "user_data_source_credentials",
+            "user_data_source_tables",
+        ]
+
+        async def _sweep_children():
+            for tbl in _child_by_ds:
+                try:
+                    await db.execute(
+                        _text(f"DELETE FROM {tbl} WHERE data_source_id = :id"),
+                        {"id": data_source_id},
+                    )
+                except Exception:
+                    # Table may not exist in a given deployment / already empty.
+                    pass
+            # Differently-named FK columns + the connection m2m association.
+            for stmt in (
+                "DELETE FROM datasource_tables WHERE datasource_id = :id",
+                "DELETE FROM studio_data_sources WHERE agent_id = :id",
+                "DELETE FROM domain_connection WHERE data_source_id = :id",
+            ):
+                try:
+                    await db.execute(_text(stmt), {"id": data_source_id})
+                except Exception:
+                    pass
+
         max_attempts = 8
         for attempt in range(max_attempts):
-            # Delete (possibly re-created) schema tables for this data source
-            await self.delete_data_source_tables(db=db, data_source_id=data_source_id, organization=organization, current_user=current_user)
+            await _sweep_children()
             try:
-                await db.delete(data_source)
+                await db.execute(
+                    delete(DataSource).where(DataSource.id == data_source_id)
+                )
                 await db.commit()
                 break
             except IntegrityError:
+                # A concurrent indexing job re-created datasource_tables between the
+                # sweep and the parent delete — roll back and retry the sweep.
                 await db.rollback()
                 if attempt == max_attempts - 1:
                     raise
-                # The data source object is expired after rollback; re-fetch it.
-                result = await db.execute(select(DataSource).filter(DataSource.id == data_source_id, DataSource.organization_id == organization.id))
-                data_source = result.scalar_one_or_none()
-                if not data_source:
-                    # Already removed elsewhere; nothing left to delete.
-                    break
                 await asyncio.sleep(min(0.2 * (attempt + 1), 1.0))
 
         # Audit log
@@ -1590,7 +1644,9 @@ class DataSourceService:
                 allowed = {k: v for k, v in params.items() if k in sig.parameters and k != "self"}
         except Exception:
             allowed = params
-        return ClientClass(**allowed)
+        client = ClientClass(**allowed)
+        await self._install_pbi_offline_index(db, client, conn)
+        return client
 
     async def filter_user_visible_data_sources(
         self,
@@ -1758,6 +1814,7 @@ class DataSourceService:
                 allowed = params
 
             client = ClientClass(**allowed)
+            await self._install_pbi_offline_index(db, client, conn)
             self._attach_client_quota_metadata(client, data_source, conn, key)
             clients[key] = client
 
@@ -1768,6 +1825,49 @@ class DataSourceService:
             clients[data_source.name] = first_client
 
         return clients
+
+    async def _install_pbi_offline_index(self, db: AsyncSession, client, connection) -> None:
+        """Give a Power BI client an OFFLINE table -> {datasetId, workspaceId} index
+        built from cached ConnectionTable metadata (flag CONNECTOR_ROBUSTNESS).
+
+        The QUERY path builds its client here, not via ConnectionService — so without
+        this, execute_query(table_name) misses the offline index and falls back to a
+        LIVE get_schemas() discovery that fans COLUMNSTATISTICS across every dataset
+        (slow + rate-limits + 400s on empty datasets). Installing the index lets a
+        query resolve its dataset_id offline and run exactly ONE DAX (the answer).
+        No-op for non-PBI clients / flag off. Never raises.
+        """
+        try:
+            from app.settings.hybrid_flags import flags as _hflags
+            if not getattr(_hflags, "CONNECTOR_ROBUSTNESS", False):
+                return
+            if not hasattr(client, "set_table_index"):
+                return
+            from sqlalchemy import select as _select
+            from app.models.connection_table import ConnectionTable
+            rows = (await db.execute(
+                _select(ConnectionTable).where(
+                    ConnectionTable.connection_id == str(connection.id)
+                )
+            )).scalars().all()
+            idx: dict = {}
+            for r in rows:
+                pbi = ((r.metadata_json or {}).get("powerbi")) or {}
+                if pbi.get("datasetId"):
+                    idx[r.name] = {
+                        "datasetId": pbi.get("datasetId"),
+                        "workspaceId": pbi.get("workspaceId"),
+                    }
+            if idx:
+                client.set_table_index(idx)
+                logging.getLogger(__name__).info(
+                    "construct_clients: installed PBI offline table_index size=%d conn=%s",
+                    len(idx), connection.id,
+                )
+        except Exception:
+            logging.getLogger(__name__).debug(
+                "construct_clients: PBI offline index install skipped", exc_info=True
+            )
 
     def _attach_client_quota_metadata(self, client, data_source: DataSource, connection, client_key: str) -> None:
         try:

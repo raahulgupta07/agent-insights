@@ -9,6 +9,19 @@ Bullet rules (this is the user-facing "What's new" feed):
     Hidden from the popover; shown collapsed on the full /changelog page only.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.74.5 — Power BI questions run about twice as fast  (2026-07-02)
+- Opening a Data Agent is now instant the first time (no more short stall on the first click).
+- Asking a Power BI / Fabric agent a question is now roughly twice as fast — a real query dropped from ~47s to ~26s in testing.
+- Repeated or retried queries return instantly instead of re-hitting Microsoft's slow engine.
+- If your sign-in quietly expires mid-session, the agent silently refreshes it and keeps working instead of failing.
+- When a Fabric agent finds no tables, it now tells you why (permissions / empty warehouse) instead of showing a silent "0 tables".
+  - **Root cause of the slowness (fixed):** the QUERY path built its client via `data_source_service.construct_client(s)`, which never installed the offline table→{datasetId,workspaceId} index (only `connection_service.construct_client` did). So every query fell back to a LIVE `get_schemas()` that fanned `COLUMNSTATISTICS` across every dataset (slow + 429/400 spam on empty datasets). New `_install_pbi_offline_index()` (flag `HYBRID_CONNECTOR_ROBUSTNESS`, fail-soft) is now called from BOTH `construct_client` and `construct_clients`, built from cached `ConnectionTable.metadata_json.powerbi`. A query now resolves its dataset offline and runs exactly ONE DAX. Verified live: index size=18, COLUMNSTATISTICS discovery calls 0 (was ~11), 46.7s→26.5s, answer unchanged (258 projects).
+  - **DAX result cache** (`powerbi_client._dax_cache`, class-level, flag-gated, TTL 300s / 256-entry cap, keyed by tenant+workspace+dataset+max_rows+DAX): memoizes identical `executeQueries` calls → collapses the agent's intra-completion retry loop + exact repeats to <1ms. Serves a `.copy()` so callers can't mutate the cache. Unit-verified: put-copy-isolation + TTL-expiry + size-cap.
+  - **401 auto-reauth** on the DAX path (`_execute_dax_internal` → `_reauth()`): on a 401, clears the token + re-runs `connect()` (refresh_token / client_credentials) once and retries the same query. Fail-soft — a delegated-token-only client with no way to re-mint keeps the original 401.
+  - **Fail-loud Fabric reindex** (`ms_fabric_client.get_tables`): the per-database `except: continue` and the no-accessible-DB path now log WHY (perms / 429 / empty) so a 0/0 is diagnosable instead of silent.
+  - **Quieter discovery:** empty-dataset `COLUMNSTATISTICS` (`DAX Evaluate queries work only on databases which have at least one table`) drops from WARN to DEBUG.
+  - All flag-gated on `HYBRID_CONNECTOR_ROBUSTNESS` (OFF = byte-identical; ON org 7d372305). Rollback image `cityagent-analytics:pre-connectorfix`. NOTE: a follow-up (question-keyed result cache in the live `create_data` tool, for sub-2s cross-session repeats) is deliberately deferred to its own verified change — the earlier result-cache serve/store lives in `mcp/create_data.py` (`CreateDataMCPTool`, a separate MCP-server path) and never ran for agent queries.
+
 ## v1.74.4 — Never replay a failed answer  (2026-07-02)
 - If a question ever failed, asking it again now re-runs it fresh instead of showing the old error — and a fixed answer is cached going forward.
   - `result_cache` (flag `HYBRID_RESULT_CACHE`): new `_looks_failed()` guard on BOTH `store` (refuse to persist a failed/empty result) and `lookup` (treat a legacy failure entry as a MISS + soft-delete it → self-heals). Failure = `success is False`, non-empty `error`/`errors`, or a `formatted` block with neither columns nor rows. Conservative: ambiguous → OK, never drops a real hit. Unit-verified 8/8.

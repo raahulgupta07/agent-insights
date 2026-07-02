@@ -10,7 +10,10 @@ from app.ai.prompt_formatters import TableFormatter
 import time
 
 import pyodbc
+import logging
 from azure.identity import ClientSecretCredential
+
+logger = logging.getLogger(__name__)
 
 
 # Fabric's redirect-policy endpoint intermittently throws 08001/(26)
@@ -190,12 +193,29 @@ class MsFabricClient(DataSourceClient):
                 return self._get_tables_basic()
 
         out: List[Table] = []
-        for db in self._accessible_databases():
+        dbs = self._accessible_databases()
+        if not dbs:
+            logger.warning(
+                "ms_fabric.get_tables: no accessible databases for this principal "
+                "(sys.databases HAS_DBACCESS returned none) -> 0 tables"
+            )
+        for db in dbs:
             try:
                 out.extend(self._get_tables_for_db(db))
-            except Exception:
-                # A single inaccessible/locked warehouse must not abort the rest.
+            except Exception as exc:
+                # A single inaccessible/locked warehouse must not abort the rest —
+                # but surface WHY (perms/429/redirect) instead of a silent 0/0.
+                logger.warning(
+                    "ms_fabric.get_tables: skipped database %r: %s: %s",
+                    db, type(exc).__name__, str(exc)[:200],
+                )
                 continue
+        if not out:
+            logger.warning(
+                "ms_fabric.get_tables: enumerated %d database(s) but found 0 "
+                "SELECT-able tables (check the account's table-level permissions)",
+                len(dbs),
+            )
         return out
 
     def _accessible_databases(self) -> List[str]:

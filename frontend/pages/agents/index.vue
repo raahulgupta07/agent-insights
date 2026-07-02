@@ -346,6 +346,16 @@ function openAgent(ds: any) {
     navigateTo(`/agents/${ds.id}`)
 }
 
+// Prefetch the agent-detail route chunk as soon as agents are known, so the FIRST
+// "Open" doesn't stall downloading JS at click time. The Open button uses
+// navigateTo (programmatic) which Nuxt does NOT auto-prefetch like a <NuxtLink>.
+// All agents share the same /agents/[id] component, so preloading one is enough.
+watch(allAgents, (list) => {
+    if (list && list.length) {
+        try { preloadRouteComponents(`/agents/${list[0].id}`) } catch {}
+    }
+}, { immediate: true })
+
 // Check if connection is healthy - uses agent data to derive status
 function isConnectionHealthy(conn: any): boolean {
     // Check connection's own status fields

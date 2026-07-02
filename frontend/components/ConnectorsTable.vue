@@ -89,24 +89,29 @@
 
           <!-- Actions -->
           <td class="px-3.5 py-2.5 text-right">
-            <div v-if="row.can_edit" class="relative inline-block">
+            <div v-if="row.can_edit" class="inline-block">
               <button
                 type="button"
                 class="w-7 h-7 grid place-items-center rounded-lg text-[#6b6b6b] hover:bg-[#F0EAE0] transition"
-                @click="toggleMenu(row.id)"
+                @click.stop="toggleMenu(row.id, $event)"
                 aria-label="Actions"
               >⋯</button>
-              <div
-                v-if="openMenuId === row.id"
-                class="absolute right-0 z-20 mt-1 w-36 rounded-lg border border-[#E9E0D3] bg-white shadow-lg py-1 text-left"
-              >
-                <button type="button" class="block w-full px-3 py-1.5 text-[13px] text-[#1f2328] hover:bg-[#FBFAF6]"
-                  @click="pick('test', row)">Test</button>
-                <button type="button" class="block w-full px-3 py-1.5 text-[13px] text-[#1f2328] hover:bg-[#FBFAF6]"
-                  @click="pick('edit', row)">Edit</button>
-                <button type="button" class="block w-full px-3 py-1.5 text-[13px] text-[#a13d3d] hover:bg-[#fdf6f6]"
-                  @click="pick('delete', row)">Delete</button>
-              </div>
+              <!-- Teleport to body + fixed position so the menu escapes the
+                   table's overflow-x-auto clip context (Delete was cut off). -->
+              <Teleport to="body">
+                <div
+                  v-if="openMenuId === row.id"
+                  class="fixed z-50 w-36 rounded-lg border border-[#E9E0D3] bg-white shadow-lg py-1 text-left"
+                  :style="{ top: menuPos.top + 'px', left: menuPos.left + 'px' }"
+                >
+                  <button type="button" class="block w-full px-3 py-1.5 text-[13px] text-[#1f2328] hover:bg-[#FBFAF6]"
+                    @click="pick('test', row)">Test</button>
+                  <button type="button" class="block w-full px-3 py-1.5 text-[13px] text-[#1f2328] hover:bg-[#FBFAF6]"
+                    @click="pick('edit', row)">Edit</button>
+                  <button type="button" class="block w-full px-3 py-1.5 text-[13px] text-[#a13d3d] hover:bg-[#fdf6f6]"
+                    @click="pick('delete', row)">Delete</button>
+                </div>
+              </Teleport>
             </div>
             <span v-else class="text-[#cbb9a0]">—</span>
           </td>
@@ -117,7 +122,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 
 defineProps<{
   rows: any[]
@@ -134,13 +139,45 @@ const emit = defineEmits<{
 }>()
 
 const openMenuId = ref<string | null>(null)
-function toggleMenu(id: string) {
-  openMenuId.value = openMenuId.value === id ? null : id
+const menuPos = ref<{ top: number; left: number }>({ top: 0, left: 0 })
+const MENU_W = 144   // w-36
+const MENU_H = 112   // ~3 items + padding
+
+function toggleMenu(id: string, ev: MouseEvent) {
+  if (openMenuId.value === id) { openMenuId.value = null; return }
+  const btn = ev.currentTarget as HTMLElement
+  const r = btn.getBoundingClientRect()
+  // Right-align under the trigger; flip up if it would run off the bottom.
+  let top = r.bottom + 4
+  if (top + MENU_H > window.innerHeight) top = r.top - MENU_H - 4
+  let left = r.right - MENU_W
+  if (left < 8) left = 8
+  menuPos.value = { top, left }
+  openMenuId.value = id
 }
+function closeMenu() { openMenuId.value = null }
 function pick(action: 'test' | 'edit' | 'delete', row: any) {
   openMenuId.value = null
   emit(action, row)
 }
+
+// Close on any outside click / scroll / resize / Escape so a body-teleported
+// menu never lingers detached from its row.
+function onDocClick() { if (openMenuId.value) closeMenu() }
+function onScroll() { if (openMenuId.value) closeMenu() }
+function onKey(e: KeyboardEvent) { if (e.key === 'Escape') closeMenu() }
+onMounted(() => {
+  document.addEventListener('click', onDocClick)
+  window.addEventListener('scroll', onScroll, true)
+  window.addEventListener('resize', onScroll)
+  document.addEventListener('keydown', onKey)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('click', onDocClick)
+  window.removeEventListener('scroll', onScroll, true)
+  window.removeEventListener('resize', onScroll)
+  document.removeEventListener('keydown', onKey)
+})
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const EMOJI: Record<string, string> = {
