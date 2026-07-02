@@ -2032,3 +2032,16 @@ multi-dataset sweep → retry or misclassify; (4) a script named enum.py/inspect
 FOLLOW-UPS (not built): FE journey (consent gate + "Sync my data" button + queryable/view-only result cards); a
 MEMBER (non-admin) who owns a connected agent gets "Permission denied" creating a report/chat — separate RBAC
 (RoleAssignment) gate, blocks actually USING a member-connected agent.
+
+## 2026-07-02 — v1.74.8 Connector journey v2 FE: confirm identity → consent → explicit sync
+Makes the connect flow gate on the user (mockup made real). Flag HYBRID_CONNECTOR_JOURNEY_V2.
+- Backend `routes/data_source.py`: `_journey_v2()` helper; both connect paths (`connector_connect`,
+  `connector_device_code_poll`) — when flag ON, DON'T auto-schedule sync_clone_bg; return `needs_sync:true`
+  (result already carries `ms_account_email` from v1.74.7). New `POST /connectors/{data_source_id}/sync`
+  (owner-gated via connection.owner_user_id, admins pass) → schedules sync_clone_bg. Verified: tester3 → {status:syncing}.
+- FE `ConnectorsRegisterModal.vue`: new CONNECTED step (v-if connectedStep) — "Connected as {ms_account_email}",
+  "● Sign-in verified" + "⚡ instant" (when !wasMfa), consent checkbox (required), "Sync my data →" (POST /sync
+  then emit registered + close) / "Later". `enterConnected(r, viaMfa)` fired on connect success or device-poll
+  success when `r.needs_sync`; resets on modal open. Legacy (flag OFF) = unchanged (auto emit+close+auto-sync).
+EPHEMERAL FE (fe-sync). Verified: "Sync my data" in served bundle, health 200. Step 4 (live sync log) reuses
+existing AgentSyncLog; step 5 view-only result cards deferred (needs a view_only endpoint from _last_view_only).

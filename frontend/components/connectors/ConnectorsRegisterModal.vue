@@ -26,8 +26,42 @@
         </button>
       </div>
 
+      <!-- Body: CONNECTED — confirm identity + consent + explicit sync (journey v2) -->
+      <div v-if="connectedStep" class="px-5 py-5 space-y-3.5">
+        <template v-if="!syncing">
+          <div class="flex items-center gap-3 rounded-xl border border-[#d4e3d4] bg-[#ECF1EC] px-3.5 py-3">
+            <span class="w-9 h-9 rounded-full bg-[#2F6F4F] text-white grid place-items-center text-sm font-semibold shrink-0">{{ (connectedEmail[0] || 'U').toUpperCase() }}</span>
+            <div class="min-w-0">
+              <div class="text-[13px] font-semibold text-[#211B14]">Connected as</div>
+              <div class="text-[12px] text-[#4a4034] truncate">{{ connectedEmail || 'your account' }}</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#ECF1EC] text-[#2F6F4F] border border-[#d4e3d4]">● Sign-in verified</span>
+            <span v-if="!wasMfa" class="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#E4F0F4] text-[#1F6F8B] border border-[#cfe2e8]">⚡ instant</span>
+          </div>
+          <p class="text-[11px] text-[#9a958c] leading-relaxed">We'll import only the reports &amp; datasets your account can query. Confirm to continue:</p>
+          <label class="flex items-start gap-2.5 rounded-xl border border-[#E9E0D3] bg-white px-3 py-2.5 cursor-pointer hover:border-[#D8CFC0]">
+            <input type="checkbox" v-model="consent" class="mt-0.5 h-4 w-4 accent-[#C2541E]" />
+            <span class="text-[12px] text-[#4a4034] leading-relaxed"><b>I agree</b> to sync the Power BI reports &amp; datasets <b>my account has access to</b>. Only data I can query is imported.</span>
+          </label>
+          <div class="flex items-center justify-end gap-2 pt-0.5">
+            <button type="button" class="rounded-lg px-3 py-1.5 text-sm text-[#6b6b6b] hover:text-[#211B14]" @click="forceClose">Later</button>
+            <button
+              type="button"
+              class="inline-flex items-center gap-2 rounded-lg bg-[#C2541E] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#A8330F] transition-colors disabled:opacity-50"
+              :disabled="!consent"
+              @click="startSync"
+            >Sync my data →</button>
+          </div>
+        </template>
+        <div v-else class="flex items-center gap-2.5 py-4 text-sm text-[#211B14]">
+          <Spinner class="h-4 w-4 animate-spin text-[#C2541E]" /> Starting your sync…
+        </div>
+      </div>
+
       <!-- Body: PROGRESS checklist (while connecting/syncing) -->
-      <div v-if="submitting && !mfaStep" class="px-5 py-5 space-y-4">
+      <div v-else-if="submitting && !mfaStep" class="px-5 py-5 space-y-4">
         <p class="text-sm font-medium text-[#211B14]">Setting up your data agent…</p>
         <ul class="space-y-2.5">
           <li v-for="(s, i) in steps" :key="s.key" class="flex items-center gap-2.5 text-sm">
@@ -160,6 +194,41 @@ const password = ref('')
 const submitting = ref(false)
 const errorMessage = ref('')
 
+// ---- journey v2: connected → consent → explicit sync ----
+const connectedStep = ref(false)
+const connectedEmail = ref('')
+const connectedDsId = ref('')
+const consent = ref(false)
+const syncing = ref(false)
+const wasMfa = ref(false)
+
+function enterConnected(r: any, viaMfa: boolean) {
+  stopProgress()
+  stopPoll()
+  submitting.value = false
+  mfaStep.value = false
+  wasMfa.value = viaMfa
+  connectedEmail.value = r?.ms_account_email || email.value.trim()
+  connectedDsId.value = r?.data_source_id || ''
+  consent.value = false
+  syncing.value = false
+  connectedStep.value = true
+}
+
+async function startSync() {
+  if (!consent.value || !connectedDsId.value) return
+  syncing.value = true
+  try {
+    await useMyFetch(`/connectors/${connectedDsId.value}/sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    })
+  } catch (e) { /* fire-and-forget; the agent page shows the live sync log */ }
+  emit('registered', { id: connectedDsId.value })
+  connectedStep.value = false
+  emit('update:modelValue', false)
+}
+
 // ---- progress checklist (while /connect is in flight) ----
 // One POST can't stream sub-steps, so these are time-paced to the real phases:
 // sign-in returns fast (~1-2s), then the server seeds every table (slow). We flip
@@ -244,6 +313,11 @@ watch(
       password.value = ''
       errorMessage.value = ''
       submitting.value = false
+      connectedStep.value = false
+      connectedEmail.value = ''
+      connectedDsId.value = ''
+      consent.value = false
+      syncing.value = false
       resetDevice()
     } else {
       stopPoll()
@@ -288,6 +362,7 @@ async function submit() {
 
     const r = (res.data as any)?.value || {}
     if (r.status === 'connected') {
+      if (r.needs_sync) { enterConnected(r, false); return }   // journey v2: consent gate
       emit('registered', { id: r.data_source_id })
       close()
       return
@@ -360,6 +435,7 @@ async function poll() {
     }
     if (r.status === 'success') {
       stopPoll()
+      if (r.needs_sync) { enterConnected(r, true); return }   // journey v2: consent gate
       emit('registered', { id: r.data_source_id })
       close()
       return

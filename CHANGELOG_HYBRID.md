@@ -9,6 +9,11 @@ Bullet rules (this is the user-facing "What's new" feed):
     Hidden from the popover; shown collapsed on the full /changelog page only.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.74.8 — Connector: confirm sign-in, then choose to sync  (2026-07-02)
+- Signing in to a Power BI connector now shows "Connected as <your Microsoft account>" and asks you to agree before importing anything — nothing syncs until you click "Sync my data".
+- No-2FA accounts sign in instantly (no code screen); 2FA accounts get the code step, then the same confirm-and-consent gate.
+  - `ConnectorsRegisterModal.vue`: new Connected step (identity + "instant" badge when no MFA + consent checkbox + "Sync my data"/"Later"). Backend returns `needs_sync` instead of auto-syncing when `HYBRID_CONNECTOR_JOURNEY_V2` is on; new `POST /connectors/{id}/sync` (owner-gated) starts the sync after consent. Flag default OFF (legacy auto-sync).
+
 ## v1.74.7 — Connectors: get your shared reports' data too  (2026-07-02)
 - Power BI users who only have shared reports or apps (not full workspace access) now get their data synced — before, those agents showed 0 tables even though the data was there.
 - We now capture which Microsoft account you signed in with (shown on the agent), and never invent a fake schema when an account has no data.

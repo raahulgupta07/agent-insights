@@ -1,5 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Body, Query, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+
+
+def _journey_v2() -> bool:
+    """Connector journey v2 (flag HYBRID_CONNECTOR_JOURNEY_V2): confirm identity +
+    consent + explicit sync instead of auto-sync. Fail-soft → False (legacy)."""
+    try:
+        from app.settings.hybrid_flags import flags as _jf
+        return bool(getattr(_jf, "CONNECTOR_JOURNEY_V2", False))
+    except Exception:
+        return False
 from app.dependencies import get_async_db
 from typing import Optional, List, Union
 
@@ -178,12 +190,18 @@ async def connector_device_code_poll(
     # Runs after the response so sign-in returns instantly. sync_clone_bg also
     # does the autolearn at the end, so it is not scheduled separately here.
     if result.get("status") == "success" and result.get("data_source_id"):
-        background_tasks.add_task(
-            per_user_connector.sync_clone_bg,
-            result["data_source_id"],
-            str(organization.id),
-            str(current_user.id),
-        )
+        if _journey_v2():
+            # Journey v2: DON'T auto-sync. Return the captured MS identity so the UI
+            # shows "Connected as <email>" + a consent gate; the user then explicitly
+            # calls POST /connectors/{data_source_id}/sync.
+            result["needs_sync"] = True
+        else:
+            background_tasks.add_task(
+                per_user_connector.sync_clone_bg,
+                result["data_source_id"],
+                str(organization.id),
+                str(current_user.id),
+            )
     return result
 
 
@@ -214,13 +232,55 @@ async def connector_connect(
         password=payload.password,
     )
     if result.get("status") == "connected" and result.get("data_source_id"):
-        background_tasks.add_task(
-            per_user_connector.sync_clone_bg,
-            result["data_source_id"],
-            str(organization.id),
-            str(current_user.id),
-        )
+        if _journey_v2():
+            result["needs_sync"] = True
+        else:
+            background_tasks.add_task(
+                per_user_connector.sync_clone_bg,
+                result["data_source_id"],
+                str(organization.id),
+                str(current_user.id),
+            )
     return result
+
+
+@router.post("/connectors/{data_source_id}/sync", response_model=dict)
+async def connector_sync_now(
+    data_source_id: str,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Journey v2: start the clone's sync AFTER the user has confirmed identity +
+    consented. Owner-gated (only the user who owns the private clone). Schedules
+    sync_clone_bg (discover → seed → learn) with the live pollable sync log."""
+    ds = (
+        await db.execute(
+            select(DataSource)
+            .options(selectinload(DataSource.connections))
+            .where(DataSource.id == data_source_id,
+                   DataSource.organization_id == str(organization.id),
+                   DataSource.deleted_at.is_(None))
+        )
+    ).scalars().first()
+    if ds is None:
+        raise HTTPException(status_code=404, detail="Data agent not found")
+    # owner check: the private clone's connection is owned by the caller (admins pass)
+    owner_ok = False
+    for c in (ds.connections or []):
+        if str(getattr(c, "owner_user_id", "") or "") == str(current_user.id):
+            owner_ok = True
+            break
+    if not owner_ok and not getattr(current_user, "is_superuser", False):
+        raise HTTPException(status_code=403, detail="Only the connecting user can sync this agent")
+    background_tasks.add_task(
+        per_user_connector.sync_clone_bg,
+        data_source_id,
+        str(organization.id),
+        str(current_user.id),
+    )
+    return {"status": "syncing", "data_source_id": data_source_id}
 
 
 @router.get("/data_sources/{data_source_id}/sync-status", response_model=dict)
