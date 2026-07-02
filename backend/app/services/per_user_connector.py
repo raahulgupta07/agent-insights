@@ -37,6 +37,53 @@ from app.settings.hybrid_flags import flags
 logger = logging.getLogger(__name__)
 
 
+def _ms_identity_from_token(token_res: dict) -> dict:
+    """Decode the MS id_token from a token response into a durable identity dict
+    (CONNECTOR_JOURNEY_V2). Returns {} when the flag is OFF or nothing decodes —
+    fully fail-soft so it can never break the connect flow. Never logs claims."""
+    if not flags.CONNECTOR_JOURNEY_V2:
+        return {}
+    try:
+        from app.services import powerbi_device_code as dc
+        claims = dc.decode_id_token((token_res or {}).get("id_token") or "")
+        if not claims:
+            return {}
+        from datetime import datetime, timezone
+        out: dict = {"connected_at": datetime.now(timezone.utc).isoformat()}
+        email = claims.get("preferred_username")
+        if email:
+            out["ms_account_email"] = email
+        name = claims.get("name")
+        if name:
+            out["ms_account_name"] = name
+        tid = claims.get("tid")
+        if tid:
+            out["ms_tenant_id"] = tid
+        return out
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _merge_ms_identity_into_config(conn, ms_identity: dict) -> None:
+    """Merge the captured MS identity into a connection's config JSON (the same
+    durable, non-secret store that already holds tenant_id), without clobbering
+    existing keys. Fail-soft: any error is swallowed so connect never breaks."""
+    if not ms_identity:
+        return
+    try:
+        cfg = conn.config
+        if isinstance(cfg, str):
+            try:
+                cfg = json.loads(cfg)
+            except Exception:
+                cfg = {}
+        cfg = dict(cfg or {})
+        cfg.update(ms_identity)  # identity keys merge over; tenant_id etc. preserved
+        conn.config = json.dumps(cfg)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 async def list_available_templates(db, organization: Organization) -> list[dict]:
     """Templates a member can self-register against (admin-published shells)."""
     if not flags.PER_USER_CONNECTOR:
@@ -90,6 +137,7 @@ async def register_template_for_user(
     auth_mode: str,
     credentials: dict,
     defer_sync: bool = False,
+    ms_identity: Optional[dict] = None,
 ) -> DataSource:
     """Clone a template into a private data source for `user` and sync under
     their own credentials. Idempotent per (template, user): re-registering
@@ -149,6 +197,9 @@ async def register_template_for_user(
             new_conn.credentials = None
             new_conn.encrypt_credentials(creds)
             new_conn.auth_policy = "system_only"
+            # Capture the signed-in MS identity (CONNECTOR_JOURNEY_V2) onto the
+            # connection config so it's durable + shown in the UI. Fail-soft.
+            _merge_ms_identity_into_config(new_conn, ms_identity or {})
             db.add(new_conn)
             await db.commit()
             await db.refresh(new_conn)
@@ -185,6 +236,22 @@ async def register_template_for_user(
                 raise
         if new_conn is None:
             raise HTTPException(status_code=409, detail="Could not create your connection")
+
+        # Capture the signed-in MS identity (CONNECTOR_JOURNEY_V2) onto the new
+        # connection's config so it's durable + shown in the UI. Fail-soft — the
+        # clone commit below persists it alongside the connection.
+        if ms_identity:
+            _merge_ms_identity_into_config(new_conn, ms_identity)
+            db.add(new_conn)
+            try:
+                await db.commit()
+                await db.refresh(new_conn)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("per_user_connector: ms identity stamp failed: %s", e)
+                try:
+                    await db.rollback()
+                except Exception:
+                    pass
 
         # 2. Private, owner-scoped DataSource clone bound to that connection.
         clone = None
@@ -345,7 +412,8 @@ async def device_code_start(db, *, template_id: str, organization: Organization)
 
 
 async def _register_clone_fresh_session(
-    *, template_id: str, org_id: str, user_id: str, credentials: dict
+    *, template_id: str, org_id: str, user_id: str, credentials: dict,
+    ms_identity: Optional[dict] = None,
 ) -> str | None:
     """Build the private clone in a BRAND-NEW db session with freshly-loaded org +
     user. The request session that served /connect is fragile here — by the time
@@ -379,6 +447,7 @@ async def _register_clone_fresh_session(
             auth_mode="device_code",
             credentials=credentials,
             defer_sync=True,
+            ms_identity=ms_identity,
         )
         return str(clone.id) if clone else None
 
@@ -408,10 +477,16 @@ async def device_code_poll(
     creds = {"refresh_token": refresh_token}
     if tenant_id and tenant_id != "organizations":
         creds["tenant_id"] = tenant_id
+    # Capture the signed-in MS identity from the token's id_token (flag-gated, fail-soft).
+    ms_identity = _ms_identity_from_token(res)
     clone_id = await _register_clone_fresh_session(
-        template_id=template_id, org_id=str(organization.id), user_id=str(user.id), credentials=creds
+        template_id=template_id, org_id=str(organization.id), user_id=str(user.id),
+        credentials=creds, ms_identity=ms_identity,
     )
-    return {"status": "success", "data_source_id": clone_id}
+    out = {"status": "success", "data_source_id": clone_id}
+    if ms_identity.get("ms_account_email"):
+        out["ms_account_email"] = ms_identity["ms_account_email"]
+    return out
 
 
 async def connect(
@@ -441,10 +516,16 @@ async def connect(
         creds = {"refresh_token": res["refresh_token"]}
         if tenant_id and tenant_id != "organizations":
             creds["tenant_id"] = tenant_id
+        # Capture the signed-in MS identity from the token's id_token (flag-gated, fail-soft).
+        ms_identity = _ms_identity_from_token(res)
         clone_id = await _register_clone_fresh_session(
-            template_id=template_id, org_id=str(organization.id), user_id=str(user.id), credentials=creds
+            template_id=template_id, org_id=str(organization.id), user_id=str(user.id),
+            credentials=creds, ms_identity=ms_identity,
         )
-        return {"status": "connected", "data_source_id": clone_id}
+        out = {"status": "connected", "data_source_id": clone_id}
+        if ms_identity.get("ms_account_email"):
+            out["ms_account_email"] = ms_identity["ms_account_email"]
+        return out
 
     # MFA / conditional access / legacy blocked — fall back to device-code.
     if res.get("mfa"):
@@ -596,8 +677,24 @@ async def sync_clone_bg(clone_id: str, org_id: str, user_id: str) -> None:
             #    llm_sync is one black-box LLM call, so we log real inputs BEFORE it
             #    and real results AFTER it (no faked intermediate telemetry), then
             #    promote the drafted overview instruction to the agent's PRIMARY.
+            # Honest empty-state (flag CONNECTOR_JOURNEY_V2): if discovery found NO
+            # queryable tables, do NOT run llm_sync — with zero real tables the LLM
+            # invents a fictional schema (e.g. a fake "@SignIns" overview). Instead
+            # log the truth so the agent shows "no queryable data" not a hallucination.
             try:
-                if getattr(fresh or clone, "use_llm_sync", False) and org is not None:
+                from app.settings.hybrid_flags import flags as _jflags
+                _journey_v2 = bool(_jflags.CONNECTOR_JOURNEY_V2)
+            except Exception:
+                _journey_v2 = False
+            if _journey_v2 and tables_total == 0:
+                await connector_sync.log_step(
+                    db, clone_id, level="warn", phase="learning",
+                    msg="no queryable Power BI datasets for this account "
+                        "(view-only access or nothing shared) — skipping learn",
+                )
+            try:
+                if (getattr(fresh or clone, "use_llm_sync", False) and org is not None
+                        and not (_journey_v2 and tables_total == 0)):
                     await connector_sync.log_step(
                         db, clone_id, level="step", phase="learning",
                         msg=f"reading {tables_total} tables + columns",

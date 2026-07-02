@@ -24,11 +24,18 @@ Read-only: the client only ever issues DAX EVALUATE / discovery calls.
 """
 from __future__ import annotations
 
-from typing import Optional
+import logging
+from typing import Dict, List, Optional
 
 import requests
 
-from app.data_sources.clients.powerbi_client import PowerBIClient
+from app.ai.prompt_formatters import Table, TableColumn
+from app.data_sources.clients.powerbi_client import (
+    PowerBIClient,
+    _clean_table_display_name,
+)
+
+logger = logging.getLogger(__name__)
 
 # Microsoft Azure PowerShell — a well-known Microsoft FOCI public client that
 # permits the ROPC (password) grant. Used only to mint a delegated user token;
@@ -157,3 +164,338 @@ class PowerBIUserClient(PowerBIClient):
 
         self._access_token = token
         self._http = requests.Session()
+
+    # ------------------------------------------------------------------
+    # Report / App-based dataset discovery
+    #
+    # A user whose Power BI access comes via a SHARED REPORT or an APP gets an
+    # EMPTY /datasets list (they aren't a workspace member), so the normal
+    # get_schemas() finds 0 tables. But the REPORTS they can see carry a
+    # datasetId + datasetWorkspaceId — following those back to the dataset, and
+    # probing executeQueries, surfaces the datasets they can actually query.
+    # ------------------------------------------------------------------
+
+    _DISCOVERY_TIMEOUT = 40
+
+    def _get_json(self, url: str) -> Optional[dict]:
+        """GET a Power BI REST URL, returning parsed JSON or None (fail-soft)."""
+        try:
+            resp = self._http.get(url, headers=self._build_headers(), timeout=self._DISCOVERY_TIMEOUT)
+        except Exception:  # noqa: BLE001 — network hiccup, skip this source
+            return None
+        if resp.status_code >= 300:
+            return None
+        try:
+            return resp.json() or {}
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _probe_queryable(self, dataset_id: str, workspace_id: Optional[str]) -> str:
+        """Probe whether the user can run DAX against a dataset.
+
+        Tries the My-Workspace scope first, then the group scope if the first
+        attempt returns 401/404 and a workspace_id is known. Returns one of
+        "queryable" (HTTP 200), "view_only" (HTTP 401 — no Build permission),
+        or "unreachable" (404 / other / hard error).
+        """
+        body = {
+            "queries": [{"query": 'EVALUATE ROW("ok",1)'}],
+            "serializerSettings": {"includeNulls": True},
+        }
+
+        def _post(url: str) -> Optional[int]:
+            # Retry transient failures + 429 throttling — a full report sweep probes
+            # many datasets fast and Power BI rate-limits, which would otherwise
+            # misclassify a genuinely-queryable dataset as "unreachable".
+            import time as _t
+            for _attempt in range(3):
+                try:
+                    resp = self._http.post(
+                        url, json=body, headers=self._build_headers(), timeout=self._DISCOVERY_TIMEOUT
+                    )
+                except Exception:  # noqa: BLE001
+                    _t.sleep(1.5)
+                    continue
+                if resp.status_code == 429:
+                    try:
+                        wait = float(resp.headers.get("Retry-After", 3)) or 3
+                    except (TypeError, ValueError):
+                        wait = 3
+                    _t.sleep(min(wait, 10))
+                    continue
+                return resp.status_code
+            return None
+
+        # My-Workspace scope
+        status = _post(f"{self.BASE_URL}/datasets/{dataset_id}/executeQueries")
+        if status == 200:
+            return "queryable"
+
+        # Group scope (only if the first attempt didn't clearly succeed)
+        if workspace_id and status in (401, 404, None):
+            g_status = _post(
+                f"{self.BASE_URL}/groups/{workspace_id}/datasets/{dataset_id}/executeQueries"
+            )
+            if g_status == 200:
+                return "queryable"
+            if g_status == 401:
+                return "view_only"
+            if g_status is not None:
+                status = g_status
+
+        if status == 401:
+            return "view_only"
+        return "unreachable"
+
+    def _exec_dax_rows(self, ds_id: str, ws_id: Optional[str], query: str) -> Optional[list]:
+        """Run a DAX query against a dataset (My-Workspace scope, then group scope)
+        and return the result rows, or None on failure. Fail-soft."""
+        body = {"queries": [{"query": query}], "serializerSettings": {"includeNulls": True}}
+        urls = [f"{self.BASE_URL}/datasets/{ds_id}/executeQueries"]
+        if ws_id:
+            urls.append(f"{self.BASE_URL}/groups/{ws_id}/datasets/{ds_id}/executeQueries")
+        for url in urls:
+            try:
+                r = self._http.post(url, json=body, headers=self._build_headers(),
+                                    timeout=self._DISCOVERY_TIMEOUT)
+                if r.status_code == 200:
+                    return r.json()["results"][0]["tables"][0]["rows"]
+            except Exception:  # noqa: BLE001
+                continue
+        return None
+
+    def _enumerate_tables_via_info_view(self, ds_id: str, ws_id: Optional[str]) -> list:
+        """Enumerate a queryable dataset's real tables + columns via INFO.VIEW.*.
+
+        INFO.TABLES()/DMV are blocked (400/401) for non-admins, but INFO.VIEW.TABLES()
+        and INFO.VIEW.COLUMNS() are permitted for a user with Build permission — this
+        is the reliable schema path (vs brute-guessing table names). Returns a list of
+        {"name": str, "columns": [{"name": str, "dataType": str}]}. Empty on failure.
+        """
+        trows = self._exec_dax_rows(
+            ds_id, ws_id,
+            'EVALUATE SELECTCOLUMNS(FILTER(INFO.VIEW.TABLES(), NOT [IsHidden]), "t", [Name])',
+        )
+        if not trows:
+            return []
+        names = [str(list(r.values())[0]) for r in trows if list(r.values())[0]]
+        crows = self._exec_dax_rows(
+            ds_id, ws_id,
+            'EVALUATE SELECTCOLUMNS(INFO.VIEW.COLUMNS(), "t", [Table], "c", [Name], "d", [DataType])',
+        ) or []
+        cols_by: Dict[str, list] = {}
+        for r in crows:
+            vals = list(r.values())
+            if len(vals) < 2:
+                continue
+            tname, cname = str(vals[0]), str(vals[1])
+            dt = str(vals[2]) if len(vals) > 2 and vals[2] is not None else "unknown"
+            if tname and cname:
+                cols_by.setdefault(tname, []).append({"name": cname, "dataType": dt})
+        out = []
+        for n in names:
+            # skip Power BI internal auto date/time tables
+            if n.startswith("DateTableTemplate") or n.startswith("LocalDateTable"):
+                continue
+            out.append({"name": n, "columns": cols_by.get(n, [])})
+        return out
+
+    def _collect_reports(self) -> List[dict]:
+        """Enumerate reports the user can see across My Workspace + apps + groups.
+
+        Each returned report dict carries at least ``datasetId`` and
+        ``datasetWorkspaceId`` when Power BI provides them. Fail-soft per source:
+        a failing source simply contributes nothing.
+        """
+        reports: List[dict] = []
+
+        # 1. My Workspace reports
+        my = self._get_json(f"{self.BASE_URL}/reports")
+        if my:
+            reports.extend(my.get("value") or [])
+
+        # 2. App reports
+        apps = self._get_json(f"{self.BASE_URL}/apps")
+        for app in (apps or {}).get("value") or []:
+            app_id = app.get("id")
+            if not app_id:
+                continue
+            app_reports = self._get_json(f"{self.BASE_URL}/apps/{app_id}/reports")
+            if app_reports:
+                reports.extend(app_reports.get("value") or [])
+
+        # 3. Group (workspace) reports
+        groups = self._get_json(f"{self.BASE_URL}/groups")
+        for grp in (groups or {}).get("value") or []:
+            gid = grp.get("id")
+            if not gid:
+                continue
+            grp_reports = self._get_json(f"{self.BASE_URL}/groups/{gid}/reports")
+            if grp_reports:
+                # groups/{id}/reports omits datasetWorkspaceId → default to the group id
+                for rpt in grp_reports.get("value") or []:
+                    rpt.setdefault("datasetWorkspaceId", gid)
+                    reports.extend([rpt])
+
+        return reports
+
+    def discover_via_reports(self) -> dict:
+        """Discover queryable datasets via the reports/apps the user can see.
+
+        Returns::
+
+            {
+              "queryable": [Table, ...],
+              "view_only": [{"name":.., "dataset_id":.., "reason":".."}, ...],
+              "counts": {"reports":N, "queryable":X, "view_only":Y},
+            }
+
+        Never raises — returns an empty-but-well-formed dict on hard error.
+        Computed once per instance and cached (both get_report_based_tables and
+        the get_schemas view_only summary read the same cache — no double scan).
+        """
+        cached = getattr(self, "_report_discovery_cache", None)
+        if cached is not None:
+            return cached
+        result = self._discover_via_reports_uncached()
+        self._report_discovery_cache = result
+        return result
+
+    def _discover_via_reports_uncached(self) -> dict:
+        try:
+            self.connect()
+
+            reports = self._collect_reports()
+
+            # Dedupe datasetId -> {name, workspace_id}
+            ds_map: Dict[str, Dict[str, Optional[str]]] = {}
+            for rpt in reports:
+                ds_id = rpt.get("datasetId")
+                if not ds_id:
+                    continue
+                if ds_id not in ds_map:
+                    ds_map[ds_id] = {
+                        "name": rpt.get("name") or ds_id,
+                        "workspace_id": rpt.get("datasetWorkspaceId"),
+                    }
+                elif not ds_map[ds_id].get("workspace_id") and rpt.get("datasetWorkspaceId"):
+                    ds_map[ds_id]["workspace_id"] = rpt.get("datasetWorkspaceId")
+
+            queryable_tables: List[Table] = []
+            view_only: List[dict] = []
+
+            for ds_id, info in ds_map.items():
+                ds_name = info["name"]
+                ws_id = info["workspace_id"]
+                verdict = self._probe_queryable(ds_id, ws_id)
+
+                if verdict == "view_only":
+                    view_only.append(
+                        {"name": ds_name, "dataset_id": ds_id, "reason": "no build permission"}
+                    )
+                    continue
+                if verdict != "queryable":
+                    continue
+
+                # Queryable → enumerate real tables + columns via INFO.VIEW.* (the
+                # reliable path; INFO.TABLES/DMV are blocked for non-admins). Fall
+                # back to the parent's brute-guess probe only if INFO.VIEW yields
+                # nothing.
+                tables = self._enumerate_tables_via_info_view(ds_id, ws_id)
+                if not tables:
+                    try:
+                        tables, _rels = self._brute_discover_tables(ws_id, ds_id)
+                    except Exception:  # noqa: BLE001
+                        tables = []
+
+                for tbl in tables:
+                    tbl_name = tbl.get("name") or ""
+                    if not tbl_name:
+                        continue
+                    tbl_display = _clean_table_display_name(tbl_name)
+                    columns: List[TableColumn] = []
+                    for col in tbl.get("columns") or []:
+                        col_name = col.get("name") or ""
+                        if col_name:
+                            columns.append(
+                                TableColumn(
+                                    name=col_name,
+                                    dtype=col.get("dataType") or "unknown",
+                                    description=None,
+                                    metadata={"role": "column"},
+                                )
+                            )
+                    queryable_tables.append(
+                        Table(
+                            name=f"{ds_name}/{tbl_display}",
+                            description=None,
+                            columns=columns,
+                            pks=[],
+                            fks=[],
+                            is_active=True,
+                            metadata_json={
+                                "powerbi": {
+                                    "datasetId": ds_id,
+                                    "workspaceId": ws_id,
+                                    "datasetName": ds_name,
+                                    "tableName": tbl_name,
+                                    "queryable": True,
+                                    "discoveredVia": "reports",
+                                }
+                            },
+                        )
+                    )
+
+            return {
+                "queryable": queryable_tables,
+                "view_only": view_only,
+                "counts": {
+                    "reports": len(reports),
+                    "queryable": len(queryable_tables),
+                    "view_only": len(view_only),
+                },
+            }
+        except Exception:  # noqa: BLE001 — discovery must never raise
+            logger.warning("powerbi.discover_via_reports failed", exc_info=True)
+            return {
+                "queryable": [],
+                "view_only": [],
+                "counts": {"reports": 0, "queryable": 0, "view_only": 0},
+            }
+
+    def get_report_based_tables(self) -> List[Table]:
+        """Convenience: the queryable Table objects from report/app discovery.
+
+        This is what the sync path calls to add datasets a user can reach only
+        through shared reports / apps (their /datasets list is empty).
+        """
+        return self.discover_via_reports()["queryable"]
+
+    def get_schemas(self) -> List[Table]:
+        """Parent /datasets discovery, plus report/app-based tables when the
+        CONNECTOR_JOURNEY_V2 flag is on.
+
+        Flag OFF (or any error) → returns the parent result byte-identical, so
+        a user whose datasets ARE visible sees no change. Flag ON → merges the
+        report-based queryable tables (deduped by Table.name) so users whose
+        only access is via shared reports/apps still get queryable tables. The
+        view_only summary is stashed on ``self._last_view_only`` (best-effort).
+        """
+        base = super().get_schemas()
+        try:
+            from app.settings.hybrid_flags import flags
+
+            if not flags.CONNECTOR_JOURNEY_V2:
+                return base
+        except Exception:  # noqa: BLE001
+            return base
+
+        try:
+            discovery = self.discover_via_reports()
+            report_tables = discovery.get("queryable") or []
+            self._last_view_only = discovery.get("view_only") or []
+            seen = {t.name for t in base}
+            return list(base) + [t for t in report_tables if t.name not in seen]
+        except Exception:  # noqa: BLE001 — never break schema discovery
+            self._last_view_only = []
+            return base

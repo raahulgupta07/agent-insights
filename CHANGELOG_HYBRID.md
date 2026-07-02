@@ -9,6 +9,11 @@ Bullet rules (this is the user-facing "What's new" feed):
     Hidden from the popover; shown collapsed on the full /changelog page only.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.74.7 — Connectors: get your shared reports' data too  (2026-07-02)
+- Power BI users who only have shared reports or apps (not full workspace access) now get their data synced — before, those agents showed 0 tables even though the data was there.
+- We now capture which Microsoft account you signed in with (shown on the agent), and never invent a fake schema when an account has no data.
+  - Report/app-based dataset discovery (`powerbi_user_client.discover_via_reports`): enumerate reports across My Workspace + apps + groups, probe each dataset's queryability (My-Workspace scope then group scope, 429-retry), enumerate real tables/columns via INFO.VIEW.TABLES/COLUMNS (INFO.TABLES is blocked for non-admins). Flag-gated get_schemas() merge so the sync path picks it up. Capture MS id_token (openid/profile) → ms_account_email/tenant on the connection. Skip the hallucinated overview on 0 tables. Flag HYBRID_CONNECTOR_JOURNEY_V2 (default OFF, ON org 7d372305). Verified: winhtutthein 0→13 tables (Campaign_Analysis) + 9 correctly view-only.
+
 ## v1.74.6 — Each agent sees only its own data  (2026-07-02)
 - An agent no longer picks up instructions or reports that belong to a different agent in the same workspace — it stays focused on its own data.
 - Fixed the Power BI agent chasing tables from old, unrelated projects (it was reading leftover instructions that mentioned data it can't see).

@@ -1999,3 +1999,36 @@ Flag `HYBRID_SCOPED_INSTRUCTIONS` default OFF, ON org 7d372305 (DB override). VE
 do you have" → only its Power BI source, leak terms (Call Category/candle/bitcoin/conso_data/Q8-Q11) ALL absent.
 Deploy: hot-cp 3 files + py_compile + docker restart → VERSION_HYBRID 1.74.6 → docker commit :dev + tag :v1.74.6.
 LANDMINE: "no data source = global" was the leak; a fresh multi-agent org must run with SCOPED_INSTRUCTIONS ON.
+
+## 2026-07-02 — v1.74.7 Connector journey v2 (backend): report/app dataset discovery + capture MS email + honest empty-state
+Built via 2 subagents (disjoint files) + my integration. Flag HYBRID_CONNECTOR_JOURNEY_V2 (default OFF, ON org
+7d372305). Rollback img `cityagent-analytics:pre-journey-v2`.
+PROBLEM: per-user PBI users whose access is via SHARED REPORTS / APPS synced 0 tables — our discovery lists
+`/datasets` (empty for shared content). Live proof: winhtutthein@cityholdings has 16 reports but /datasets=0.
+FIX (all in powerbi_user_client.py unless noted):
+- **Report/app discovery** `discover_via_reports()` (cached `_report_discovery_cache`) — enumerate reports across
+  My Workspace + `/apps/{id}/reports` + `/groups/{id}/reports` (`_collect_reports`), dedupe by datasetId, probe
+  `executeQueries EVALUATE ROW("ok",1)` per dataset (`_probe_queryable`: My-Workspace scope FIRST then group scope;
+  200=queryable, 401=view_only/no-Build, 404=unreachable). `_post` retries 429/transient (a fast sweep throttles →
+  would misclassify a queryable dataset).
+- **Table enumeration** `_enumerate_tables_via_info_view(ds,ws)` — INFO.TABLES()/DMV are 400/401 for non-admins,
+  but **`EVALUATE INFO.VIEW.TABLES()` + `INFO.VIEW.COLUMNS()` WORK** for a Build user → real tables+columns
+  (skip DateTableTemplate/LocalDateTable internals). Brute-guess only as fallback. `_exec_dax_rows` = My-WS then group scope.
+- **get_schemas() override** (flag-gated): parent `/datasets` result + report-based tables, deduped by name;
+  stashes `_last_view_only`. Flag OFF → parent byte-identical. So the existing sync path (refresh_schema→get_schemas)
+  picks up report data with NO sync-code change.
+- **Capture MS email** (subagent, powerbi_device_code.py + per_user_connector.py): scopes now include `openid profile`
+  → token carries id_token; `decode_id_token()` reads preferred_username/name/tid; per_user_connector stores
+  `ms_account_email`/`ms_tenant_id`/`connected_at` on the connection config (flag-gated, fail-soft) + returns
+  ms_account_email in the connect result.
+- **Honest empty-state** (per_user_connector.sync_clone_bg): when flag ON AND tables_total==0, SKIP llm_sync (it
+  hallucinates a fake `@SignIns` schema on 0 tables) + log "no queryable Power BI datasets for this account".
+VERIFIED LIVE (winhtutthein clone 5dae9d47, flag ON): discover → queryable=13 (Campaign_Analysis: CR_Aggre,
+Campaign_Measures, cohort tables…), view_only=9 ("no build permission"); sync wrote **0→13** DataSourceTable rows;
+llm_sync ran on REAL tables (no hallucination). demo (18 tables) unaffected (>0 → honest-state no-op; get_schemas
+merge additive). LANDMINES: (1) INFO.TABLES=400/401, use INFO.VIEW.TABLES/COLUMNS; (2) probe MUST try My-Workspace
+scope before group scope (shared datasets live in workspaces the user isn't a member of); (3) 429 throttle on a
+multi-dataset sweep → retry or misclassify; (4) a script named enum.py/inspect.py shadows stdlib → circular import.
+FOLLOW-UPS (not built): FE journey (consent gate + "Sync my data" button + queryable/view-only result cards); a
+MEMBER (non-admin) who owns a connected agent gets "Permission denied" creating a report/chat — separate RBAC
+(RoleAssignment) gate, blocks actually USING a member-connected agent.

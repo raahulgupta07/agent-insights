@@ -17,21 +17,27 @@ Never raises; network/HTTP failures come back as ``{"ok": False, ...}`` /
 """
 from __future__ import annotations
 
+import base64
+import json
+
 import requests
 
 _PUBLIC_CLIENT = "1950a258-227b-4e31-a9cf-717495945fc2"  # MS FOCI public client (no secret)
 _DEVICECODE_URL = "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/devicecode"
 _TOKEN_URL = "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token"
-# offline_access = REQUIRED to receive a refresh_token back.
-_SCOPE = "https://analysis.windows.net/powerbi/api/.default offline_access"
+# openid profile = get an id_token back (carries the signed-in MS account
+# identity: preferred_username / name / tid); offline_access = REQUIRED to
+# receive a refresh_token back.
+_SCOPE = "https://analysis.windows.net/powerbi/api/.default offline_access openid profile"
 
 # Per-connector device-code scopes. All use the SAME FOCI public client above —
 # a refresh_token issued for one family member (e.g. Power BI) can be redeemed for
 # a token to another (Fabric SQL / Graph) via the refresh-grant helper below.
-# offline_access on every scope so we always get a refresh_token back.
+# offline_access on every scope so we always get a refresh_token back;
+# openid profile so the token response also carries an id_token (MS identity).
 SCOPE_POWERBI = _SCOPE
-SCOPE_FABRIC = "https://database.windows.net/.default offline_access"
-SCOPE_GRAPH = "https://graph.microsoft.com/.default offline_access"
+SCOPE_FABRIC = "https://database.windows.net/.default offline_access openid profile"
+SCOPE_GRAPH = "https://graph.microsoft.com/.default offline_access openid profile"
 # Fabric SQL endpoint token audience (used when minting an access token to feed
 # the ODBC driver via attrs_before={1256: ...}).
 FABRIC_TOKEN_SCOPE = "https://database.windows.net/.default"
@@ -43,6 +49,25 @@ def _err_detail(resp: requests.Response) -> str:
         return f"{j.get('error')}: {j.get('error_description', '')[:300]}"
     except Exception:  # noqa: BLE001
         return resp.text[:300]
+
+
+def decode_id_token(id_token: str) -> dict:
+    """Decode an OIDC id_token's payload (claims) WITHOUT verifying the signature.
+
+    We only read display-identity claims (``preferred_username`` = the MS account
+    email/UPN, ``name`` = display name, ``tid`` = tenant id) that we already trust
+    because the token came straight from the Microsoft token endpoint over TLS —
+    no signature check needed for a display label. Fail-soft: returns ``{}`` on any
+    error. Never logs the token or the claims.
+    """
+    if not id_token:
+        return {}
+    try:
+        payload_b64 = id_token.split(".")[1]
+        payload_b64 += "=" * (-len(payload_b64) % 4)  # restore base64 padding
+        return json.loads(base64.urlsafe_b64decode(payload_b64)) or {}
+    except Exception:  # noqa: BLE001
+        return {}
 
 
 def start_device_code(tenant_id: str, client_id: str | None = None, scope: str | None = None) -> dict:
@@ -106,6 +131,9 @@ def poll_device_code(tenant_id: str, device_code: str, client_id: str | None = N
             "access_token": j.get("access_token"),
             "refresh_token": j.get("refresh_token"),
             "expires_in": j.get("expires_in"),
+            # id_token carries the signed-in MS account identity (decode with
+            # decode_id_token → preferred_username / name / tid).
+            "id_token": j.get("id_token"),
         }
 
     # HTTP 400 carries the flow state in `error`.
@@ -173,6 +201,9 @@ def ropc_token(
             "access_token": j.get("access_token"),
             "refresh_token": j.get("refresh_token"),
             "expires_in": j.get("expires_in"),
+            # id_token carries the signed-in MS account identity (decode with
+            # decode_id_token → preferred_username / name / tid).
+            "id_token": j.get("id_token"),
         }
     detail = _err_detail(resp)
     if any(code in detail for code in _MFA_FALLBACK_CODES):
@@ -222,4 +253,7 @@ def refresh_to_access_token(
         # Azure returns a rotated refresh_token on some tenants; keep the old one if absent.
         "refresh_token": j.get("refresh_token"),
         "expires_in": j.get("expires_in"),
+        # id_token carries the signed-in MS account identity (decode with
+        # decode_id_token → preferred_username / name / tid).
+        "id_token": j.get("id_token"),
     }
