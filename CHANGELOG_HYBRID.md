@@ -9,6 +9,15 @@ Bullet rules (this is the user-facing "What's new" feed):
     Hidden from the popover; shown collapsed on the full /changelog page only.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.74.6 — Each agent sees only its own data  (2026-07-02)
+- An agent no longer picks up instructions or reports that belong to a different agent in the same workspace — it stays focused on its own data.
+- Fixed the Power BI agent chasing tables from old, unrelated projects (it was reading leftover instructions that mentioned data it can't see).
+  - Root cause: an instruction with NO data-source link was treated as "global" and injected into every agent's context. Org 7d372305 had 16 unscoped instructions from past projects (CRM call-center Q8-Q11 "Call Category" definitions, crypto "candle/bitcoin", CFC Fabric) leaking into the Power BI agent → it searched for tables that don't exist there.
+  - **A (data):** soft-deleted the 10 junk unscoped instructions (CRM + crypto). **B (scope):** linked the 5 Power BI overview instructions to the Power BI clone (`db1e4234`) so they only apply there; the primary was already scoped.
+  - **C (rule):** `instruction_context_builder.py` — flag `HYBRID_SCOPED_INSTRUCTIONS`: when ON, an instruction with no data-source link is NOT auto-global (applies only to its own source unless it carries an explicit `global_status`). OFF (default) = legacy (unscoped = global).
+  - **D (search):** `search_reports` now, under the same flag, only surfaces reports that share a data source with the current report — so one agent's chat can't discover another agent's reports. Fail-soft (can't resolve sources → falls back to user+org scope).
+  - Flag `HYBRID_SCOPED_INSTRUCTIONS` (default OFF, ON org 7d372305). Verified live: asking the PBI agent "what data do you have" now returns ONLY its Power BI source — leak terms (Call Category / candle / bitcoin / conso_data / Q8-Q11) all absent.
+
 ## v1.74.5 — Power BI questions run about twice as fast  (2026-07-02)
 - Opening a Data Agent is now instant the first time (no more short stall on the first click).
 - Asking a Power BI / Fabric agent a question is now roughly twice as fast — a real query dropped from ~47s to ~26s in testing.

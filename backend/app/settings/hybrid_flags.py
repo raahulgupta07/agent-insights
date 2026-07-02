@@ -123,6 +123,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_POWERBI_USER": {"label": "Power BI Connector (User Sign-in)", "role": "user", "category": "Connectors", "status": "experimental", "note": "Adds a Power BI semantic-model connector that signs in with email+password (ROPC) — no app registration. Needs MFA off + Build permission on the datasets. Default OFF."},
     "HYBRID_CONNECTOR_AS_AGENT": {"label": "Connector → Data Agent (auto)", "role": "admin", "category": "Connectors", "status": "experimental", "note": "When an admin connects a data source, auto-create an org-shared agent (Studio) bound to it, so every member can chat it immediately. For user_required connectors (e.g. Power BI user sign-in) each member signs in with their own account. Default OFF."},
     "HYBRID_CONNECTOR_ROBUSTNESS": {"label": "Connector query robustness", "role": "agent", "category": "Connectors", "status": "experimental", "note": "Hardens the create_data → connector query path so agents answer reliably against live connectors (Power BI, Fabric): (P1) auto-fill target tables from the report's data sources when the model omits them — no wasted 'no tables matched' retry; (P2) honor rate-limit Retry-After with backoff on the DAX/query path instead of hard-failing; (P4) thread dataset/workspace IDs into generated code. Off = byte-identical to today. Default OFF."},
+    "HYBRID_SCOPED_INSTRUCTIONS": {"label": "Scoped instructions (per-agent isolation)", "role": "agent", "category": "Connectors", "status": "experimental", "note": "Stops one agent's instructions bleeding into another agent in the SAME org. When ON, an instruction with NO data-source link applies ONLY to its own source(s) instead of being treated as org-global — so old CRM/crypto 'definitions' can't leak into a Power BI agent's context. Also scopes the agent's search_reports/search_data tools to the report's own data sources. An instruction can still be org-wide by setting an explicit global_status. Off = legacy (unscoped = global). Default OFF."},
     "HYBRID_PER_USER_CONNECTOR": {"label": "Per-User Connector (self-register)", "role": "admin", "category": "Connectors", "status": "experimental", "note": "Admin configures a connector template once (tenant/client, no creds). Each member registers with their own email+password → gets a PRIVATE copy with their own synced tables (not shared org-wide). Each builds their own analysis. Microsoft/source access control enforced per user. Default OFF."},
     "HYBRID_ADAPTIVE_CONNECT": {"label": "Adaptive connector sign-in (email+password, auto device-code on MFA)", "role": "admin", "category": "Connectors", "status": "experimental", "note": "One sign-in flow for per-user connectors: a member enters email+password and the backend tries ROPC (password grant) first. No MFA → connects immediately; MFA / conditional access / legacy-auth blocked → auto-falls-back to device-code sign-in. Both paths build the same private per-user clone. Default OFF."},
     "HYBRID_SEMANTIC_SEARCH": {"label": "Hybrid Search (FTS + embeddings)", "role": "agent", "category": "Intelligence", "status": "experimental", "note": "Uses your OpenRouter key for embeddings (text-embedding-3-small). After enabling, click Rebuild search index."},
@@ -1026,6 +1027,12 @@ class HybridFlags:
         return _bool("HYBRID_CONNECTOR_ROBUSTNESS", False)
 
     @property
+    def SCOPED_INSTRUCTIONS(self) -> bool:
+        # Per-agent instruction + search isolation: unscoped instruction != global,
+        # and search tools filter to the report's own data sources. Default OFF.
+        return _bool("HYBRID_SCOPED_INSTRUCTIONS", False)
+
+    @property
     def PER_USER_CONNECTOR(self) -> bool:
         # Admin marks a connector as a per-user TEMPLATE (tenant/client config,
         # no user creds). Each member registers with their own credentials →
@@ -1148,6 +1155,7 @@ class HybridFlags:
             "POWERBI_USER": self.POWERBI_USER,
             "CONNECTOR_AS_AGENT": self.CONNECTOR_AS_AGENT,
             "CONNECTOR_ROBUSTNESS": self.CONNECTOR_ROBUSTNESS,
+            "SCOPED_INSTRUCTIONS": self.SCOPED_INSTRUCTIONS,
             "PER_USER_CONNECTOR": self.PER_USER_CONNECTOR,
             "ADAPTIVE_CONNECT": self.ADAPTIVE_CONNECT,
             "GOLDEN_QUERIES": self.GOLDEN_QUERIES,

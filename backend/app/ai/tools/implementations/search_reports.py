@@ -131,6 +131,31 @@ class SearchReportsTool(Tool):
                 like = f"%{data.query.strip()}%"
                 stmt = stmt.where(Report.title.ilike(like))
 
+            # Per-agent isolation (flag HYBRID_SCOPED_INSTRUCTIONS): only surface
+            # reports that share at least one data source with the CURRENT report,
+            # so one agent's chat can't discover another agent's reports. Fail-soft:
+            # if we can't resolve the current report's sources, fall back to the
+            # user+org scope above (no regression).
+            try:
+                from app.settings.hybrid_flags import flags as _hflags
+                if getattr(_hflags, "SCOPED_INSTRUCTIONS", False):
+                    from sqlalchemy import text as _text
+                    cur_report = runtime_ctx.get("report")
+                    if cur_report is not None and getattr(cur_report, "id", None):
+                        cur_ds_ids = [str(x[0]) for x in (await db.execute(
+                            _text("SELECT data_source_id FROM report_data_source_association WHERE report_id = :rid"),
+                            {"rid": str(cur_report.id)},
+                        )).fetchall()]
+                        if cur_ds_ids:
+                            allowed_ids = [str(x[0]) for x in (await db.execute(
+                                _text("SELECT DISTINCT report_id FROM report_data_source_association "
+                                      "WHERE data_source_id = ANY(:dsids)"),
+                                {"dsids": cur_ds_ids},
+                            )).fetchall()]
+                            stmt = stmt.where(Report.id.in_(allowed_ids or ["__none__"]))
+            except Exception:
+                pass
+
             stmt = stmt.order_by(Report.created_at.desc()).limit(data.limit)
             reports = (await db.execute(stmt)).scalars().all()
 

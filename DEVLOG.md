@@ -1974,3 +1974,28 @@ Overview flipped to its loading skeleton on each poll tick (skeleton→content�
 `fetchIntegration(silent=false)` — poll calls pass `silent=true` so background refetches DON'T toggle the
 global loading flag; only the initial mount + id-change show the loader. EPHEMERAL (fe-sync + re-commit into
 `:dev`/`:v1.74.5`). Data was always correct; only the loading flag flicker was the bug.
+
+## 2026-07-02 — v1.74.6 Per-agent isolation: instructions + search scoped (fix cross-agent context leak)
+Symptom: the Power BI agent chatted about / searched for tables from OTHER projects (CRM
+`conso_data_report_apr_25`, "Call Category", crypto `candle`, CFC) → failed table describes → hunted across
+sources. ROOT CAUSE: `instruction_context_builder.py:168` `if not inst_ds_ids or inst_ds_ids.intersection(...)`
+treats an instruction with NO data-source link as GLOBAL → injected into EVERY agent. Org 7d372305 (ONE org,
+many agents over time) had 16 unscoped published instructions from dead projects → all leaked into the PBI agent.
+FIX (4 parts):
+- A (DB data): soft-deleted 10 junk unscoped instructions (8 CRM call-center DEFINITIONs `Q8-Q11`/`Lead`/`New
+  User`/`Successful/Unsuccessful Calls`, 2 crypto `gold vs bitcoin`/`candle`). `UPDATE instructions SET
+  deleted_at=now() WHERE left(id::text,8) IN (...)`.
+- B (DB scope): linked the 5 remaining PBI overview instructions to the clone `db1e4234` via
+  `instruction_data_source_association` (primary `e4c6596f` already linked). Now 6 PBI instructions scoped, 1
+  generic ("top X by Y") left unscoped.
+- C (code): `instruction_context_builder.py` — flag `HYBRID_SCOPED_INSTRUCTIONS`: when ON, unscoped instruction
+  is NOT auto-global (included only if `intersection(data_source_ids)` OR explicit `global_status`). OFF
+  (default) = legacy `not inst_ds_ids` = global. Flag registered in `hybrid_flags.py` (property +
+  UPGRADE_FLAGS + snapshot), category Connectors.
+- D (code): `search_reports.py` — under same flag, resolve the current report's data_source_ids
+  (report_data_source_association) and restrict results to reports sharing a source (`Report.id.in_(allowed)`).
+  Fail-soft: no sources resolved → user+org scope (no regression).
+Flag `HYBRID_SCOPED_INSTRUCTIONS` default OFF, ON org 7d372305 (DB override). VERIFIED live: PBI agent "what data
+do you have" → only its Power BI source, leak terms (Call Category/candle/bitcoin/conso_data/Q8-Q11) ALL absent.
+Deploy: hot-cp 3 files + py_compile + docker restart → VERSION_HYBRID 1.74.6 → docker commit :dev + tag :v1.74.6.
+LANDMINE: "no data source = global" was the leak; a fresh multi-agent org must run with SCOPED_INSTRUCTIONS ON.

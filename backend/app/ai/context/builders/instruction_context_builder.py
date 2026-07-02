@@ -160,14 +160,33 @@ class InstructionContextBuilder:
         result = await self.db.execute(stmt)
         instructions = result.scalars().all()
 
-        # Filter by data sources: include global instructions (no data sources assigned)
-        # and instructions associated with the specified data sources
+        # Filter by data sources: include instructions associated with the specified
+        # data sources, plus (legacy) instructions with NO data source = global.
+        #
+        # Scoped-instructions mode (flag HYBRID_SCOPED_INSTRUCTIONS): an instruction
+        # with NO data-source link is NOT auto-global — it applies only to its own
+        # source(s). This stops one agent's instructions bleeding into another agent
+        # in the SAME org (e.g. old CRM/crypto "definitions" leaking into a Power BI
+        # agent). An instruction can still be org-wide by setting an explicit
+        # global_status. Flag OFF (default) = legacy behavior (unscoped = global).
         if data_source_ids is not None:
+            try:
+                from app.settings.hybrid_flags import flags as _hflags
+                _scoped = bool(getattr(_hflags, "SCOPED_INSTRUCTIONS", False))
+            except Exception:
+                _scoped = False
             filtered = []
             for inst in instructions:
                 inst_ds_ids = {str(ds.id) for ds in inst.data_sources} if inst.data_sources else set()
-                if not inst_ds_ids or inst_ds_ids.intersection(data_source_ids):
+                if inst_ds_ids.intersection(data_source_ids):
                     filtered.append(inst)
+                    continue
+                if not inst_ds_ids:
+                    # unscoped: global in legacy mode; in scoped mode only if it
+                    # carries an explicit global_status
+                    is_global = bool(getattr(inst, "global_status", None)) if _scoped else True
+                    if is_global:
+                        filtered.append(inst)
             instructions = filtered
 
         # Filter by per-user table accessibility (user_data_source_tables overlay)
