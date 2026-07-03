@@ -155,6 +155,7 @@ export function useAppNav() {
         // The old /connectors/available page was a duplicate door → removed.
         { key: 'monitoring', href: '/monitoring', activePath: '/monitoring', component: ActivityIcon, label: 'nav.monitoring', adminOnly: true, section: 'OBSERVE' },
         { key: 'evals', href: '/evals', activePath: '/evals', icon: 'heroicons-check-circle', label: 'nav.evals', permission: 'manage_evals', section: 'OBSERVE' },
+        { key: 'eval-health', href: '/eval-health', activePath: '/eval-health', icon: 'heroicons-heart', label: 'Eval Health', permission: 'manage_evals', section: 'OBSERVE' },
         { key: 'workflows', href: '/workflows', activePath: '/workflows', icon: 'heroicons-arrow-path', label: 'Workflows', permission: 'manage_settings', section: 'AUTOMATE' },
         {
           key: 'mcp',

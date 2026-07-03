@@ -331,6 +331,22 @@ class SchemaContextBuilder:
             if with_stats:
                 scored.sort(key=lambda x: x[0], reverse=True)
                 tables = [t for (_, t) in scored]
+                # HYBRID_USAGE_TRUST (P2): blend real usage trust (verified
+                # queries / dashboard-backing / goldens) into the ranking so a
+                # trusted table outranks a one-off. Empty trust (flag OFF) ->
+                # rank_tables returns the same order = byte-identical.
+                try:
+                    from app.services.knowledge.usage_trust import (
+                        table_trust_scores, rank_tables,
+                    )
+                    _trust = await table_trust_scores(
+                        self.db, organization_id=str(self.organization.id),
+                        data_source_id=str(ds.id),
+                    )
+                    if _trust:
+                        tables = rank_tables(tables, _trust, weight=0.5)
+                except Exception:
+                    pass
 
             # Apply alternate sorts if requested
             try:

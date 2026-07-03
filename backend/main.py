@@ -109,6 +109,7 @@ from app.routes import (
     excel,
     agent_yaml,
     eval_yaml,
+    eval_canary,
     data_source_tools,
     knowledge,
     intelligence,
@@ -305,6 +306,7 @@ app.include_router(studio_sources.router, prefix="/api")
 app.include_router(studio_artifacts.router, prefix="/api")
 app.include_router(auto_queries.router, prefix="/api")
 app.include_router(auto_evals.router, prefix="/api")
+app.include_router(eval_canary.router, prefix="/api")  # P5: eval canary health + drift (gated HYBRID_EVAL_CANARY)
 app.include_router(studio_train.router, prefix="/api")
 app.include_router(value_joins.router, prefix="/api")
 app.include_router(followups.router)

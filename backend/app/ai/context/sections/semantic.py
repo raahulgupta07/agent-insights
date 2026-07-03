@@ -32,6 +32,7 @@ class SemanticTablesSection(ContextSection):
     tag_name: ClassVar[str] = "semantic_tables"
     items: List[SemanticTableItem] = []
     data_as_of: str = ""          # latest source sync (ISO date), governance only
+    extra_cards: List[str] = []   # HYBRID_TABLE_CARD: pre-rendered unified table cards
 
     def render(self) -> str:
         if not self.items:
@@ -69,5 +70,8 @@ class SemanticTablesSection(ContextSection):
             for c in t.columns:
                 if c.meaning and c.meaning.strip():
                     lines.append(f"    {c.name} -> {c.meaning.strip()}")
+        for _card in self.extra_cards:
+            if _card and _card.strip():
+                lines.append(_card)
         lines.append("</semantic_tables>")
         return "\n".join(lines)

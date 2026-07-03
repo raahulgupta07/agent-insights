@@ -169,6 +169,45 @@ class SemanticContextBuilder:
                         pii_columns=pii_cols_by_table.get(str(t.id), []) if gov else [],
                     )
                 )
-            return SemanticTablesSection(items=items, data_as_of=data_as_of)
+            # HYBRID_TABLE_CARD (P3): merge every layer for each table into ONE
+            # card and overlay approved Shared-Memory corrections (corrected
+            # baseline). Self-contained + fail-soft; OFF -> no extra_cards ->
+            # byte-identical section. Coupled to SEMANTIC_LAYER (this builder).
+            extra_cards: List[str] = []
+            try:
+                from app.settings.hybrid_flags import flags as _tc_flags
+                if _tc_flags.TABLE_CARD:
+                    from app.services.knowledge.table_card import (
+                        build_table_card, overlay_memory, render_card,
+                    )
+                    from app.services.knowledge.retrieve import recall_items
+                    from app.models.data_source import DataSource as _DS
+                    _ds_rows = list((await self.db.execute(
+                        select(_DS).where(_DS.id.in_([str(d) for d in self.data_source_ids]))
+                    )).scalars().all())
+                    _ds_by_id = {str(d.id): d for d in _ds_rows}
+                    _recall = await recall_items(
+                        self.db,
+                        organization_id=str(self.organization.id),
+                        current_user_id=None,
+                        data_source_ids=[str(d) for d in self.data_source_ids],
+                    )
+                    for t in tables:
+                        _ds = _ds_by_id.get(str(t.data_source_id))
+                        if _ds is None:
+                            continue
+                        _card = await build_table_card(
+                            self.db,
+                            organization_id=str(self.organization.id),
+                            data_source=_ds,
+                            table=t.table_name,
+                        )
+                        _card = overlay_memory(_card, _recall)
+                        _txt = render_card(_card)
+                        if _txt:
+                            extra_cards.append(_txt)
+            except Exception:
+                extra_cards = []
+            return SemanticTablesSection(items=items, data_as_of=data_as_of, extra_cards=extra_cards)
         except Exception:
             return SemanticTablesSection(items=[])

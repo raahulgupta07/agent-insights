@@ -2286,6 +2286,27 @@ class AgentV2:
                         instructions = (instructions + "\n\n" + _docs_block) if instructions else _docs_block
             except Exception:
                 pass
+            # Institutional knowledge (HYBRID_INSTITUTIONAL_KB, P4): ground the
+            # planner with access-controlled institutional docs (metric defs,
+            # incidents, launches) retrieved by the question. Org-scoped +
+            # approved-only. Empty when flag OFF or nothing matched.
+            try:
+                from app.settings.hybrid_flags import flags as _inst_flags
+                if _inst_flags.INSTITUTIONAL_KB:
+                    from app.services.knowledge.institutional import (
+                        retrieve_institutional, institutional_block,
+                    )
+                    _inst_items = await retrieve_institutional(
+                        self.db,
+                        organization_id=str(self.organization.id),
+                        user=self.user,
+                        question=prompt_text,
+                    )
+                    _inst_block = institutional_block(_inst_items)
+                    if _inst_block:
+                        instructions = (instructions + "\n\n" + _inst_block) if instructions else _inst_block
+            except Exception:
+                pass
             # Hybrid Agent Memory (read): relevant remembered notes (own
             # personal + approved shared) recalled by AgentMemoryContextBuilder
             # into _static_cache['agent_memory'] via a query-driven vectorless

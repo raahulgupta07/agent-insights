@@ -9,6 +9,16 @@ Bullet rules (this is the user-facing "What's new" feed):
     Hidden from the popover; shown collapsed on the full /changelog page only.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.88.0 — OpenAI-data-agent gap-closers: usage-trust · table cards · institutional knowledge · eval health  (2026-07-03)
+- Five improvements inspired by OpenAI's in-house data agent, all off by default (Settings → Features):
+  - **Smarter table picking** — the agent now favours tables that are actually trusted and used (backed by saved/verified queries and dashboards) over one-off tables, so it lands on the right table more often. Flag HYBRID_USAGE_TRUST.
+  - **One card per table** — everything known about a table (meaning, how it's built, freshness, owner, sensitive columns, example values) is gathered into a single card, and any past corrections the agent learned are laid on top so it always starts from the corrected version. Flag HYBRID_TABLE_CARD.
+  - **Company knowledge in answers** — approved internal docs (metric definitions, incident/launch notes) can now ground answers, so business-term questions resolve to the right meaning. Scoped to your organization's approved docs. Flag HYBRID_INSTITUTIONAL_KB.
+  - **Answer-quality health** — a new Eval Health page shows how each saved test is doing and flags any that just started failing, so accuracy drift is caught early. Flag HYBRID_EVAL_CANARY.
+  - **Tool audit** — a full review of the agent's tools with a plan to trim overlapping ones (findings in docs/TOOL_AUDIT.md); no behaviour change yet.
+  - Built by 5 parallel sub-agents; all default OFF (byte-identical when off), ON for the demo org. Durably baked into the image.
+    - Backend: services/knowledge/{usage_trust,table_card,institutional}.py, services/evals/canary_health.py, routes/eval_canary.py. Wiring: schema_context_builder (trust blend after composite sort), semantic_context_builder + sections/semantic.py extra_cards (table cards + overlay_memory), agent_v2 institutional block (after DOC_KNOWLEDGE), main.py eval_canary router, useAppNav Eval Health item, frontend/pages/eval-health.vue. Flags 3-place in hybrid_flags.py. KnowledgeDoc access = org+approved granularity (no per-viewer ACL yet). Table cards coupled to SEMANTIC_LAYER (need an approved semantic layer to surface). Proven live org 7d372305 (47 overrides): card renders `<table_card name=…>` on real table, all paths fail-soft.
+
 ## v1.87.0 — Dash-inspired hardening: safety evals · read-only · materialize · gotchas · remember  (2026-07-03)
 - Five upgrades borrowed from the agno-agi/dash self-learning agent, all off by default (Settings → Features):
   - **Safety & reliability evals** — beyond "is the number right", the agent's answers are now judged for four safety checks: no secret/credential leak, refuses destructive SQL, stays inside its own data (verifies the Shared-Memory isolation), and picks the right tool. Clear violations fail-closed instantly; infra hiccups never block. Flag HYBRID_SAFETY_EVALS.
