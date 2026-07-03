@@ -9,6 +9,15 @@ Bullet rules (this is the user-facing "What's new" feed):
     Hidden from the popover; shown collapsed on the full /changelog page only.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.79.2 — No more duplicate connector agents  (2026-07-03)
+- Reconnecting the same Power BI account no longer creates a second, empty agent named "… (2)". Connecting now reuses your existing agent, and removing an agent fully cleans up after itself so nothing is left behind to collide with next time.
+  - Root cause: deleting a per-user connector agent removed the DataSource but left its private Connection orphaned; the leftover held the base name, so the next connect hit a name clash and was forced to append " (2)". Fixes in `services/per_user_connector.py` + `services/data_source_service.py`:
+    - `_conn_account_email` now also reads `ms_account_email`/`preferred_username` (the write side stamps these), so account matching can't miss.
+    - `_merge_ms_identity_into_config` stores the config **dict** instead of a `json.dumps` string — the JSON column was double-encoding (`"{...}"`), which made SQL-level `config::jsonb->>'email'` matching return null.
+    - New `_find_reusable_connection` + `_strip_name_suffix`: on connect, ADOPT an existing owner-private connection for this account (matched by stamped email, or by base name ignoring any ` (N)` suffix; orphans preferred) instead of creating a new one.
+    - `delete_data_source` now captures the owner-private connection(s) bound 1:1 to the deleted agent and cascade-deletes them (+ child rows) fail-soft, so no orphans accumulate. Shared / other-linked connections are never touched.
+  - One-time cleanup: removed 6 dead orphaned connections + renamed 2 live connections back to their clean base name. Verified: each account now has exactly one clean agent, zero orphans, zero " (2)".
+
 ## v1.79.1 — At-a-glance KPIs on the agent page (Hot Start, front end)  (2026-07-03)
 - Opening a Power BI data agent now shows a strip of **real headline numbers** — the model's own measures (e.g. Total Projects 258, On Risk 26, Avg Progress 82%) — **before you type anything**, so you see live data immediately and your first question isn't the first thing that touches the model. Each KPI card is clickable — tapping it asks the agent about that metric.
   - `pages/agents/[id]/index.vue`: "At a glance" strip driven by a `headline` ref + `fetchHeadline()` (polls while `status==='off'`/empty until ready, then stops); cards `@click="launchReport('Show me ' + kpi.label)"`. Numbers come per-user from the headline endpoint; nothing shows until the user's own client returns values (RLS-safe — never another user's data). FE rebuilt (`nuxt generate`) + deployed.
@@ -119,7 +128,7 @@ Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 ## v1.74.7 — Connectors: get your shared reports' data too  (2026-07-02)
 - Power BI users who only have shared reports or apps (not full workspace access) now get their data synced — before, those agents showed 0 tables even though the data was there.
 - We now capture which Microsoft account you signed in with (shown on the agent), and never invent a fake schema when an account has no data.
-  - Report/app-based dataset discovery (`powerbi_user_client.discover_via_reports`): enumerate reports across My Workspace + apps + groups, probe each dataset's queryability (My-Workspace scope then group scope, 429-retry), enumerate real tables/columns via INFO.VIEW.TABLES/COLUMNS (INFO.TABLES is blocked for non-admins). Flag-gated get_schemas() merge so the sync path picks it up. Capture MS id_token (openid/profile) → ms_account_email/tenant on the connection. Skip the hallucinated overview on 0 tables. Flag HYBRID_CONNECTOR_JOURNEY_V2 (default OFF, ON org 7d372305). Verified: winhtutthein 0→13 tables (Campaign_Analysis) + 9 correctly view-only.
+  - Report/app-based dataset discovery (`powerbi_user_client.discover_via_reports`): enumerate reports across My Workspace + apps + groups, probe each dataset's queryability (My-Workspace scope then group scope, 429-retry), enumerate real tables/columns via INFO.VIEW.TABLES/COLUMNS (INFO.TABLES is blocked for non-admins). Flag-gated get_schemas() merge so the sync path picks it up. Capture MS id_token (openid/profile) → ms_account_email/tenant on the connection. Skip the hallucinated overview on 0 tables. Flag HYBRID_CONNECTOR_JOURNEY_V2 (default OFF, ON org 7d372305). Verified: <pbi-test-user> 0→13 tables (Campaign_Analysis) + 9 correctly view-only.
 
 ## v1.74.6 — Each agent sees only its own data  (2026-07-02)
 - An agent no longer picks up instructions or reports that belong to a different agent in the same workspace — it stays focused on its own data.

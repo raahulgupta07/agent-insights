@@ -62,3 +62,6 @@ backend/loadtest/smoke*.json
 # local junk (do not commit)
 backups/
 scratchpad/
+
+# full-project backups (contain .env secrets — never commit)
+backups/full-project-*/

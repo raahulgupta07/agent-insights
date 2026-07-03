@@ -79,7 +79,11 @@ def _merge_ms_identity_into_config(conn, ms_identity: dict) -> None:
                 cfg = {}
         cfg = dict(cfg or {})
         cfg.update(ms_identity)  # identity keys merge over; tenant_id etc. preserved
-        conn.config = json.dumps(cfg)
+        # Store the dict directly. The `config` column is a JSON type, so assigning a
+        # `json.dumps(...)` STRING double-encodes it (`"{...}"`) and breaks SQL-level
+        # matching (config::jsonb->>'email' returns null). A fresh dict object is a new
+        # ref, so SQLAlchemy detects the change without flag_modified.
+        conn.config = cfg
     except Exception:  # noqa: BLE001
         pass
 
@@ -124,7 +128,14 @@ def _conn_account_email(conn) -> str:
         if isinstance(cfg, str):
             cfg = _json.loads(cfg) if cfg else {}
         cfg = cfg or {}
-        return str(cfg.get("email") or cfg.get("upn") or cfg.get("username") or "").strip().lower()
+        return str(
+            cfg.get("email")
+            or cfg.get("ms_account_email")
+            or cfg.get("upn")
+            or cfg.get("preferred_username")
+            or cfg.get("username")
+            or ""
+        ).strip().lower()
     except Exception:
         return ""
 
@@ -161,6 +172,68 @@ async def _existing_clone(db, *, template_id: str, user_id: str, pbi_email: str 
         if nm.endswith("· " + want) or nm == want or ("· " + want + " (") in nm:
             return c
     return None  # same user, different account → caller creates a new agent
+
+
+def _strip_name_suffix(name: str) -> str:
+    """Drop a trailing ` (N)` collision suffix so '... · a@b (2)' == '... · a@b'."""
+    import re
+    return re.sub(r"\s*\(\d+\)\s*$", "", str(name or "")).strip().lower()
+
+
+async def _find_reusable_connection(
+    db, *, user_id: str, conn_type: str, base_name: str, pbi_email: str
+):
+    """Find an owner-private connection this user already owns that we can ADOPT
+    instead of creating a new one — so reconnecting the same account never spawns
+    a duplicate ` (2)` connection. Matches by stamped account email first, then by
+    the base name (ignoring any ` (N)` suffix). Prefers a connection not linked to
+    any live DataSource (an orphan left by a prior delete), else any match. Returns
+    the Connection or None. Fail-soft."""
+    try:
+        from app.models.domain_connection import DomainConnection
+    except Exception:
+        DomainConnection = None
+    try:
+        conns = (
+            await db.execute(
+                select(Connection).where(
+                    Connection.owner_user_id == str(user_id),
+                    Connection.type == conn_type,
+                )
+            )
+        ).scalars().all()
+    except Exception:
+        return None
+    if not conns:
+        return None
+    want_email = str(pbi_email or "").strip().lower()
+    want_base = _strip_name_suffix(base_name)
+
+    def _matches(c) -> bool:
+        if want_email and _conn_account_email(c) == want_email:
+            return True
+        return _strip_name_suffix(c.name) == want_base
+
+    candidates = [c for c in conns if _matches(c)]
+    if not candidates:
+        return None
+
+    # Which candidates are orphaned (no live DataSource link)? Prefer those.
+    linked_ids: set = set()
+    if DomainConnection is not None:
+        try:
+            rows = (
+                await db.execute(
+                    select(DomainConnection.connection_id).where(
+                        DomainConnection.connection_id.in_([str(c.id) for c in candidates])
+                    )
+                )
+            ).scalars().all()
+            linked_ids = {str(r) for r in rows}
+        except Exception:
+            linked_ids = set()
+    orphans = [c for c in candidates if str(c.id) not in linked_ids]
+    return (orphans[0] if orphans else candidates[0])
 
 
 async def register_template_for_user(
@@ -268,7 +341,42 @@ async def register_template_for_user(
         conn_svc = ConnectionService()
         base_name = f"{tmpl_name} · {pbi_email}"
         new_conn = None
+
+        # Adopt an existing owner-private connection for this account (e.g. an orphan
+        # left by a prior agent delete) instead of creating a new one — prevents the
+        # duplicate ` (2)` connection that a base-name collision would otherwise force.
+        adopt = await _find_reusable_connection(
+            db, user_id=user_id, conn_type=conn_type, base_name=base_name, pbi_email=pbi_email
+        )
+        if adopt is not None:
+            try:
+                adopt.credentials = None
+                adopt.encrypt_credentials(creds)
+                adopt.auth_policy = "system_only"
+                adopt.owner_user_id = user_id
+                _merge_ms_identity_into_config(adopt, {**(ms_identity or {}), "email": pbi_email})
+                # Normalise the name back to the clean base (drop any ` (N)`); on a
+                # residual name clash keep the current name rather than fail.
+                if _strip_name_suffix(adopt.name) == _strip_name_suffix(base_name):
+                    adopt.name = base_name
+                db.add(adopt)
+                await db.commit()
+                await db.refresh(adopt)
+                new_conn = adopt
+            except IntegrityError:
+                await db.rollback()
+                new_conn = None  # fall through to create a fresh connection
+            except Exception as e:  # noqa: BLE001
+                logger.warning("per_user_connector: adopt connection failed: %s", e)
+                try:
+                    await db.rollback()
+                except Exception:
+                    pass
+                new_conn = None
+
         for attempt in range(4):
+            if new_conn is not None:
+                break
             name_try = base_name if attempt == 0 else f"{base_name} ({attempt+1})"
             try:
                 new_conn = await conn_svc.create_connection(

@@ -1424,6 +1424,28 @@ class DataSourceService:
                 except Exception:
                     pass
 
+        # Capture owner-private connections bound ONLY to this data source. A per-user
+        # connector clone owns its connection 1:1; if we delete the data source but
+        # leave the connection behind, its name orphans and the NEXT connect collides
+        # -> a duplicate ` (2)` connection. Shared / other-linked connections are never
+        # touched (owner_user_id IS NULL, or still linked to another data source).
+        _private_conn_ids: list[str] = []
+        try:
+            _rows = (await db.execute(_text(
+                "SELECT c.id FROM connections c "
+                "JOIN domain_connection dc ON dc.connection_id = c.id "
+                "WHERE dc.data_source_id = :id AND c.owner_user_id IS NOT NULL"
+            ), {"id": data_source_id})).scalars().all()
+            for _cid in _rows:
+                _other = (await db.execute(_text(
+                    "SELECT COUNT(*) FROM domain_connection "
+                    "WHERE connection_id = :cid AND data_source_id <> :id"
+                ), {"cid": str(_cid), "id": data_source_id})).scalar()
+                if not _other:
+                    _private_conn_ids.append(str(_cid))
+        except Exception:
+            _private_conn_ids = []
+
         max_attempts = 8
         for attempt in range(max_attempts):
             await _sweep_children()
@@ -1440,6 +1462,45 @@ class DataSourceService:
                 if attempt == max_attempts - 1:
                     raise
                 await asyncio.sleep(min(0.2 * (attempt + 1), 1.0))
+
+        # Delete the now-orphaned owner-private connections (+ their child rows), so a
+        # per-user clone leaves nothing behind to collide with on the next connect.
+        # Fail-soft per connection: a failure just leaves an orphan, which the connect
+        # path adopts instead of duplicating.
+        for _cid in _private_conn_ids:
+            try:
+                for _tbl in (
+                    "connection_indexings", "connection_tables", "connection_tools",
+                    "user_connection_credentials", "user_connection_tables",
+                    "user_connection_tools", "usage_policy_connection_overrides",
+                    "domain_connection",
+                ):
+                    try:
+                        await db.execute(
+                            _text(f"DELETE FROM {_tbl} WHERE connection_id = :cid"),
+                            {"cid": _cid},
+                        )
+                    except Exception:
+                        pass
+                try:
+                    await db.execute(
+                        _text(
+                            "DELETE FROM resource_grants "
+                            "WHERE resource_type = 'connection' AND resource_id = :cid"
+                        ),
+                        {"cid": _cid},
+                    )
+                except Exception:
+                    pass
+                await db.execute(
+                    _text("DELETE FROM connections WHERE id = :cid"), {"cid": _cid}
+                )
+                await db.commit()
+            except Exception:
+                try:
+                    await db.rollback()
+                except Exception:
+                    pass
 
         # Audit log
         try:

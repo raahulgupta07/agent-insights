@@ -2239,3 +2239,38 @@ LANDMINE: `warm_agent`/`compute_headline` run OFFLINE-style in their own session
 carry `datasetId` (added in `fetch_model_metadata`) or `compute_headline` can't route the
 `EVALUATE ROW("v",[M])` to the right dataset. Rollback: image `pre-pbi-semantic` era + git tag before this
 commit. Flag `HYBRID_HOT_START` ON org 7d372305.
+
+---
+
+## 2026-07-03 — Duplicate connector agent fix (v1.79.2)
+Reconnecting the same Power BI account spawned a second empty agent named "… (2)".
+ROOT CAUSE: `delete_data_source` deleted the DataSource + `domain_connection` LINK but never the
+per-user clone's private `connections` ROW. Orphaned connections accumulated (6 found: rahul/demo/
+tester2/tester3 ×N), each holding the base name. Next connect → `create_connection(base_name)` name
+clash → attempt loop appended " (2)". Compounded by two matching weaknesses. Fixes:
+
+- `services/per_user_connector.py`:
+  - `_conn_account_email` now also reads `ms_account_email` + `preferred_username` (write side stamps
+    `ms_account_email`; read side only checked email/upn/username → could miss).
+  - `_merge_ms_identity_into_config` stores the **dict** (`conn.config = cfg`) not `json.dumps(cfg)`.
+    The `config` column is JSON type → a dumped string double-encodes to `"{...}"`, so SQL-level
+    `config::jsonb->>'email'` returned null (confirmed live: stored `"{\"tenant_id\":...}"`).
+  - NEW `_strip_name_suffix` (drops trailing ` (N)`) + `_find_reusable_connection(db, user_id,
+    conn_type, base_name, pbi_email)`: finds an owner-private connection to ADOPT — match by stamped
+    account email, else base name ignoring ` (N)`; prefers orphans (no live domain_connection link).
+  - register_template_for_user create-branch: before the create loop, adopt a reusable connection
+    (re-cred + `owner_user_id` + normalise name back to base) instead of creating a new one; on
+    IntegrityError fall through to a fresh create. Kills the ` (2)` at the source.
+- `services/data_source_service.py` `delete_data_source`: before the delete loop, capture
+  owner-private connection ids linked ONLY to this data source (owner_user_id NOT NULL AND no other
+  domain_connection). After the data source is gone, cascade-delete those connections + child rows
+  (connection_indexings/connection_tables/connection_tools/user_connection_*/usage_policy_connection_
+  overrides/domain_connection/resource_grants), fail-soft per connection.
+- DB cleanup (one-time): deleted 6 orphaned connections (+132 child rows) + renamed 2 live connections
+  (rahul, demo) back to clean base. Verified: 3 connections all linked, zero orphans, zero ` (2)`;
+  rahul has exactly one agent.
+
+LANDMINE: connections.id + resource_grants.resource_id are `character varying` (not uuid) — `::uuid`
+cast in cleanup SQL aborts the txn on any non-uuid value; compare as text. LANDMINE: multi-statement
+psql via `docker exec ... <<heredoc` gets mangled (rtk/stdin) — write the SQL to a file, `docker cp`,
+run `psql -f`. Hot-deployed then baked. Rollback: image `pre-consolidate`.
