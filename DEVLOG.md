@@ -2323,3 +2323,33 @@ button grid + artifact panel).
   both by hand. Verify a merged `hybrid_flags.py` with `py_compile` + `flags.<X>` access, not just grep.
 - Verified: FE build exits 0, 660 routes, all 3 flags 3-place + OFF default + in snapshot, health 200.
   Flags flipped ON org 7d372305 for live test. Baked + committed. Rollback tag `pre-smart`.
+
+---
+
+## 2026-07-03 — Universal Ingest Brain F09 merged (v1.83.0)
+Cherry-picked `feature/ingest-brain` (6 commits `eb163d96`…`432d1d5c` → `6652aacb`…`ae51c2c0`) into
+`feature/table-relevance-overview`. 18 new files (`services/ingest_brain/*` 15 modules + model +
+route + FE `components/ingest/Preview.vue`), additive. Flag `HYBRID_INGEST_BRAIN` (3-place, OFF).
+Sidecar: `/api/ingest-brain/preview` (read-only, flag-gated → `{disabled:true}` when OFF) +
+`/profiles/{ds}` (review-gated pending). Decoupled from `create_data_source_from_file` → flag OFF =
+ingest byte-identical.
+
+Post-cherry-pick fixes (all required — branch cut from an old base):
+- **Migration re-parent (blocking):** `colprofile1.down_revision` `sessumm1` → `connsyncrun1` (else a
+  SECOND alembic head → `upgrade head` fails "multiple heads"). Verified single head `colprofile1`,
+  applied, `column_profiles` table created.
+- **Dep review:** dropped `camelot-py==0.11.0` from requirements (needs ghostscript system binary +
+  opencv chain = base rebuild). It's lazy-imported inside a try/except (`pdf_extract.py`) → absence
+  just skips opportunistic camelot table-rescue; pdfplumber still handles PDF. Kept `ebooklib` (pure).
+- **OpenRouter resolver:** `ingest_brain/vision_client.py` called `LLMService()._find_openrouter_provider`
+  (does NOT exist on this codebase — same bug as MoA). Replaced with a direct enabled-provider query
+  (`.unique().scalars()`, prefer provider_type openrouter / openrouter.ai base_url). Fail-soft: no
+  provider → vision skipped.
+- **@property drop:** keep-both perl on the additive `hybrid_flags.py` dropped the `@property` on
+  `INGEST_BRAIN` (printed as a bound method, always truthy). Re-added; a full scan for
+  `def X(self)->bool` without a preceding `@property` returned none. RULE (repeat): after a keep-both
+  merge of `hybrid_flags.py`, verify each flag with `flags.<X>` returning a bool + py_compile, and scan
+  for orphaned property defs — grep count alone lies.
+
+Verified: 664 routes, 4 ingest-brain endpoints, `INGEST_BRAIN` False + in snapshot, single head, FE
+build clean, health 200. Baked. Rollback tag `pre-ingestbrain`.

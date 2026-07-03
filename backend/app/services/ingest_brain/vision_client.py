@@ -43,9 +43,27 @@ async def build_vision_infer(
     access.
     """
     try:
-        from app.services.llm_service import LLMService
+        # Resolve the org's enabled OpenRouter provider directly. (The old code
+        # called LLMService()._find_openrouter_provider, which does not exist on
+        # this codebase — the branch was cut from an older base.) Seeded as a
+        # `custom` provider with an openrouter.ai base_url, or a native `openrouter`.
+        from sqlalchemy import select as _sel
+        from app.models.llm_provider import LLMProvider
+        _rows = (await db.execute(
+            _sel(LLMProvider)
+            .where(LLMProvider.organization_id == organization.id)
+            .where(LLMProvider.deleted_at.is_(None))
+            .where(LLMProvider.is_enabled.is_(True))
+        )).unique().scalars().all()
 
-        provider = await LLMService()._find_openrouter_provider(db, organization)
+        def _is_openrouter(p) -> bool:
+            if (getattr(p, "provider_type", "") or "").lower() == "openrouter":
+                return True
+            cfg = getattr(p, "additional_config", None) or {}
+            base = str((cfg.get("base_url") if isinstance(cfg, dict) else "") or "")
+            return "openrouter" in base.lower()
+
+        provider = next((p for p in _rows if _is_openrouter(p)), (_rows[0] if _rows else None))
         if provider is None:
             logger.info("build_vision_infer: no OpenRouter provider found; skipping vision")
             return None

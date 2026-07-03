@@ -95,7 +95,11 @@ openai==1.107.2
 openpyxl==3.1.5
 # F09 Ingest Brain (flag HYBRID_INGEST_BRAIN, all lazy-imported + fail-soft).
 # camelot/ebooklib are OPTIONAL: missing → that format degrades gracefully, never errors.
-camelot-py==0.11.0
+# camelot-py deliberately NOT pinned here: it needs the ghostscript system binary +
+# a heavy opencv chain (base-image rebuild). It's lazy-imported (pdf_extract.py, inside
+# try/except) so its absence just skips opportunistic camelot table-rescue — pdfplumber
+# still handles PDF text/tables. Add camelot-py==0.11.0 + ghostscript to Dockerfile.base
+# if lattice table-rescue is needed later.
 ebooklib==0.18
 ordered-set==4.1.0
 packaging==24.0

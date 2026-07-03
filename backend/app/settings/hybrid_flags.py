@@ -950,6 +950,8 @@ class HybridFlags:
         # VIEW can physically materialize -- instead of the in-memory DuckDB that
         # is lost on restart. Default OFF (proven on a copy before recommending).
         return _bool("HYBRID_PERSIST_WAREHOUSE", False)
+
+    @property
     def INGEST_BRAIN(self) -> bool:
         # ROADMAP F09: Universal Ingest Brain. A 6-stage pipeline behind the
         # existing from-file ingest — DETECT → EXTRACT (messy Excel regions /
