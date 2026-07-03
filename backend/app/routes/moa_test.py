@@ -11,7 +11,7 @@ from __future__ import annotations
 import time
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +19,7 @@ from app.dependencies import get_async_db, get_current_organization
 from app.models.organization import Organization
 from app.models.user import User
 from app.core.auth import current_user
+from app.settings.hybrid_flags import flags
 from app.ai.mixture_of_agents import (
     consult,
     aggregate,
@@ -62,6 +63,10 @@ async def moa_test(
     db: AsyncSession = Depends(get_async_db),
     organization: Organization = Depends(get_current_organization),
 ):
+    # Runtime flag gate (honors the Settings -> Features DB override, which loads
+    # after import). OFF -> the endpoint behaves as if it doesn't exist.
+    if not flags.MOA:
+        raise HTTPException(status_code=404, detail="Not found")
     panel = body.models or DEFAULT_PANEL
     started = time.monotonic()
     analyses = await consult(

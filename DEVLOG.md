@@ -2274,3 +2274,24 @@ LANDMINE: connections.id + resource_grants.resource_id are `character varying` (
 cast in cleanup SQL aborts the txn on any non-uuid value; compare as text. LANDMINE: multi-statement
 psql via `docker exec ... <<heredoc` gets mangled (rtk/stdin) — write the SQL to a file, `docker cp`,
 run `psql -f`. Hot-deployed then baked. Rollback: image `pre-consolidate`.
+
+---
+
+## 2026-07-03 — Mixture-of-Agents merged behind a flag (v1.80.0)
+Step 2 of the branch-consolidation: pulled the parked `feature/mixture-of-agents` into
+`feature/table-relevance-overview` (cherry-pick `e21dcfb6` → `722bc578`) and put it behind a real flag.
+Investigated first (subagent): 1 commit, 3 files (`ai/mixture_of_agents.py` + `routes/moa_test.py` new,
+`main.py` +2 lines), OpenRouter-only, no new pip dep, no migration, fail-soft, measurement-only. Clean
+cherry-pick, zero conflicts. Gap: NO flag → endpoint was always-on.
+
+- Feature: `POST /api/llm/moa/test` fires a panel of 4 diverse OpenRouter models
+  (deepseek-v4-pro / minimax-m3 / qwen3.7-plus / gemini-3.1-flash-lite) in parallel (20s/model,
+  fail-soft), assembles a peer block, and optionally A/Bs a GLM-5.2 aggregator with vs without it.
+  Returns per-advisor analysis + peer block + latency + rough cost. NOT wired into AgentV2/planner/
+  reports — pure eval surface.
+- Flag `HYBRID_MOA` added 3-place (`hybrid_flags.py`: @property + UPGRADE_FLAGS + snapshot, default OFF).
+  Gate is INSIDE the handler (`moa_test.py`: `if not flags.MOA: raise HTTPException(404)`), NOT at the
+  module-level router mount — the mount runs at import, before `load_overrides_from_db`, so a
+  mount-time gate would ignore the Settings→Features DB override. Runtime gate honors the toggle.
+- Verified: cherry-pick clean, py_compile OK, health 200, `flags.MOA=False` default, MOA in snapshot,
+  route mounted. Hot-deployed; bake + user UI test pending. Rollback image `pre-moa`.

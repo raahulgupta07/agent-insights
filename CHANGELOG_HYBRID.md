@@ -9,6 +9,11 @@ Bullet rules (this is the user-facing "What's new" feed):
     Hidden from the popover; shown collapsed on the full /changelog page only.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.80.0 — Mixture-of-Agents peer-consult (experimental, off by default)  (2026-07-03)
+- New experimental tool for comparing answers: ask one question and a small panel of different AI models each answer in parallel, then an aggregator can combine their views. It's a measurement surface for evaluating answer quality — it does not change how the normal agent, dashboards, or reports work. Off unless you turn it on in Settings → Features.
+  - Merged the parked `feature/mixture-of-agents` branch (cherry-pick `e21dcfb6`). New files `ai/mixture_of_agents.py` (`consult`/`aggregate`/`build_peer_block`, 4 diverse OpenRouter panel models + a GLM aggregator, parallel, 20s/model timeout, fail-soft → `[]`) + route `routes/moa_test.py` (`POST /api/llm/moa/test`, returns each advisor's analysis + peer block + per-model latency + rough cost). OpenRouter-only (uses the org's provider via `LLMService`, no direct SDKs), no new pip dependency, no migration.
+  - Gated behind new flag `HYBRID_MOA` (3-place: property + UPGRADE_FLAGS + snapshot, default OFF). The router is mounted but the handler checks `flags.MOA` first and returns 404 when OFF, so the Settings → Features toggle controls it at runtime (the DB override loads after import). NOT wired into AgentV2 / planner / completion.
+
 ## v1.79.2 — No more duplicate connector agents  (2026-07-03)
 - Reconnecting the same Power BI account no longer creates a second, empty agent named "… (2)". Connecting now reuses your existing agent, and removing an agent fully cleans up after itself so nothing is left behind to collide with next time.
   - Root cause: deleting a per-user connector agent removed the DataSource but left its private Connection orphaned; the leftover held the base name, so the next connect hit a name clash and was forced to append " (2)". Fixes in `services/per_user_connector.py` + `services/data_source_service.py`:

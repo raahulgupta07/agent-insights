@@ -193,6 +193,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_CONNECTOR_AUTO_SYNC": {"label": "Connector Auto-Sync (scheduled)", "role": "agent", "category": "Advanced", "status": "beta", "note": "Scheduler sweeps connector clones with per-agent auto-sync enabled and re-runs the sync pipeline on the configured interval. Re-training is diff-gated (no LLM cost when the schema is unchanged). Default OFF."},
     "HYBRID_LEARN_FROM_DATA": {"label": "Learn From Data (sample rows)", "role": "agent", "category": "Advanced", "status": "beta", "note": "At connector learn time, sample a few real rows per table and feed example column values into the onboarding LLM so the generated description/starters/instruction are grounded in actual data, not just table names. Kills domain hallucination on FK-less sources (Power BI). PII columns never sampled. Default OFF."},
     "HYBRID_HOT_START": {"label": "Hot Start (pre-warm + headline)", "role": "agent", "category": "Advanced", "status": "beta", "note": "On agent open, pre-warm the user's Power BI model and pre-compute its headline measures into the per-user query cache, so the first question is instant (cache hit) instead of a cold 40-84s query, and the Overview can show real numbers before the user types. Per-user, PBI-only, background, throttled, fail-soft. Default OFF. See services.connector_warm."},
+    "HYBRID_MOA": {"label": "Mixture-of-Agents (peer-consult test)", "role": "admin", "category": "Experimental", "status": "experimental", "note": "Measurement-only endpoint POST /api/llm/moa/test: fires a panel of cheap diverse OpenRouter models in parallel, assembles a peer block, and optionally A/Bs a GLM aggregator with/without it. NOT wired into the agent/planner/reports. OpenRouter-only, fail-soft. When OFF the router is not mounted. Default OFF."},
     "HYBRID_CODE_BANK": {"label": "Code Bank (proven snippets)", "role": "agent", "category": "Learning", "status": "stable"},
     "HYBRID_AGENT_MEMORY": {"label": "Agent Memory", "role": "review", "category": "Learning", "status": "stable"},
     "HYBRID_SKILL_AUTOGROW": {"label": "Skill Auto-grow", "role": "review", "category": "Learning", "status": "stable"},
@@ -993,6 +994,15 @@ class HybridFlags:
         return _bool("HYBRID_HOT_START", False)
 
     @property
+    def MOA(self) -> bool:
+        # Mixture-of-Agents "peer-consult" sidecar: a measurement-only endpoint
+        # (POST /api/llm/moa/test) that fires a panel of cheap diverse OpenRouter
+        # models in parallel, assembles a peer block, and optionally A/Bs a GLM
+        # aggregator with/without it. NOT wired into AgentV2 / planner / reports.
+        # OpenRouter-only, fail-soft. When OFF the router is not even mounted.
+        return _bool("HYBRID_MOA", False)
+
+    @property
     def QUERY_LEARNING(self) -> bool:
         # Task 8: live query-learning. When a create_data step SUCCEEDS, persist its
         # working SQL/approach to the query library tagged with the question (review-
@@ -1174,6 +1184,7 @@ class HybridFlags:
             "CONNECTOR_AUTO_SYNC": self.CONNECTOR_AUTO_SYNC,
             "LEARN_FROM_DATA": self.LEARN_FROM_DATA,
             "HOT_START": self.HOT_START,
+            "MOA": self.MOA,
             "QUERY_LEARNING": self.QUERY_LEARNING,
             "MERGE_SAME_SCHEMA": self.MERGE_SAME_SCHEMA,
             "SMART_HEADER": self.SMART_HEADER,
