@@ -201,6 +201,10 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_CODE_BANK": {"label": "Code Bank (proven snippets)", "role": "agent", "category": "Learning", "status": "stable"},
     "HYBRID_AGENT_MEMORY": {"label": "Agent Memory", "role": "review", "category": "Learning", "status": "stable"},
     "HYBRID_SHARED_MEMORY": {"label": "Shared Memory (cross-user reuse, no leak)", "role": "agent", "category": "Learning", "status": "experimental", "note": "Singularized, reusable agent knowledge. When an agent solves something (verified query, a fixed error, a how-to), it's SANITIZED (no data values) and stored ONCE per fact, keyed by SCOPE — a Power BI semantic model, a DB schema, a file, or (private) the user. Another agent/user who shares that SAME scope reuses it ('how it was done before') so the agent gets smarter over time; users who don't share the scope never see it. Personal-agent memory stays private. Off = byte-identical (nothing captured or injected). Default OFF."},
+    "HYBRID_USAGE_TRUST": {"label": "Usage-Trust Table Ranking", "role": "agent", "category": "Learning", "status": "experimental", "note": "Rank tables for retrieval by REAL usage trust — a table backed by many saved/verified queries or popular dashboards outranks a one-off exploratory table (OpenAI data-agent 'dashboard-backed > exploratory'). Lifts table-selection accuracy so the agent picks the right table first-try. Off = today's semantic-only relevance. Default OFF."},
+    "HYBRID_TABLE_CARD": {"label": "Unified Table Card (+memory overlay)", "role": "agent", "category": "Learning", "status": "experimental", "note": "Merge every context layer for a table — schema/usage metadata, human + AI annotations, code-enrich grain/formulas, freshness, owner, PII flags — into ONE card, then OVERLAY approved Shared-Memory corrections onto it so the agent always sees a corrected baseline (OpenAI data-agent core pattern). Off = piecemeal per-builder context. Default OFF."},
+    "HYBRID_INSTITUTIONAL_KB": {"label": "Institutional Knowledge into answers", "role": "agent", "category": "Learning", "status": "experimental", "note": "Retrieve access-controlled institutional docs (metric definitions, incident notes, launch context from knowledge_doc / connected docs) and ground the planner with them so business-term questions resolve to the right metric. Access-filtered per viewer. Off = docs exist but never feed data answers. Default OFF."},
+    "HYBRID_EVAL_CANARY": {"label": "Eval Canary Health + Drift Alert", "role": "review", "category": "Learning", "status": "experimental", "note": "Turn the nightly result-set goldens into continuous canaries: compute a per-table eval pass-rate health badge and alert on regression-vs-last-green so drift is caught before a user hits it. Off = nightly evals run but health isn't surfaced. Default OFF."},
     "HYBRID_SAFETY_EVALS": {"label": "Safety & Reliability Evals", "role": "review", "category": "Learning", "status": "experimental", "note": "Beyond accuracy, run LLM-as-judge binary checks on answers/changes: SECURITY (no secret/credential/PII leak), GOVERNANCE (refuses destructive SQL/DDL), BOUNDARIES (agent stayed inside its own data scope — verifies the Shared-Memory isolation), ROUTING (right tool picked). Fail → held with reason. Runs on train + on demand. Dash-style AgentAsJudge. Default OFF."},
     "HYBRID_READONLY_ENFORCE": {"label": "Structural Read-Only Enforcement", "role": "agent", "category": "Core", "status": "experimental", "note": "Enforce read-only at the CONNECTION/engine level (not just a prompt or SQL-string check) so a prompt-injection can't DROP/DELETE/ALTER source data. Writes allowed only on the agent's own staging schema. Off = today's string-based guard. Default OFF."},
     "HYBRID_ASSET_MATERIALIZE": {"label": "Materialize Hot Metrics (reusable assets)", "role": "agent", "category": "Advanced", "status": "experimental", "note": "When a Shared-Memory query template is reused enough (verified_count >= threshold), offer to MATERIALIZE it as a persistent computed asset (a view/table) so the hot metric is computed once and served instantly instead of re-running a heavy query every time. Builds on Engineer Assets. Default OFF."},
@@ -604,6 +608,34 @@ class HybridFlags:
         # viewer's own scopes; private tier never crosses users. Off = nothing
         # captured or injected (byte-identical). Default OFF.
         return _bool("HYBRID_SHARED_MEMORY", False)
+
+    @property
+    def USAGE_TRUST(self) -> bool:
+        # P2 — rank table retrieval by REAL usage trust (query-frequency +
+        # dashboard-backed > one-off exploratory), OpenAI-data-agent style.
+        # Off = today's semantic-only relevance. Default OFF.
+        return _bool("HYBRID_USAGE_TRUST", False)
+
+    @property
+    def TABLE_CARD(self) -> bool:
+        # P3 — merge metadata + annotation + code-enrich + freshness + owner/PII
+        # into ONE embedded table card, and OVERLAY shared-memory corrections
+        # onto it (corrected baseline). Off = piecemeal context. Default OFF.
+        return _bool("HYBRID_TABLE_CARD", False)
+
+    @property
+    def INSTITUTIONAL_KB(self) -> bool:
+        # P4 — retrieve access-controlled institutional docs (metric defs,
+        # incidents, launches) INTO planner grounding. Off = docs not fed to
+        # data answers. Default OFF.
+        return _bool("HYBRID_INSTITUTIONAL_KB", False)
+
+    @property
+    def EVAL_CANARY(self) -> bool:
+        # P5 — per-table eval pass-rate health badge + drift alert on
+        # regression-vs-last-green (canary-in-prod). Off = nightly evals only,
+        # no surfaced health. Default OFF.
+        return _bool("HYBRID_EVAL_CANARY", False)
 
     @property
     def SAFETY_EVALS(self) -> bool:
@@ -1258,6 +1290,10 @@ class HybridFlags:
             "CODE_BANK": self.CODE_BANK,
             "MEMORY_LOOP": self.MEMORY_LOOP,
             "SHARED_MEMORY": self.SHARED_MEMORY,
+            "USAGE_TRUST": self.USAGE_TRUST,
+            "TABLE_CARD": self.TABLE_CARD,
+            "INSTITUTIONAL_KB": self.INSTITUTIONAL_KB,
+            "EVAL_CANARY": self.EVAL_CANARY,
             "SAFETY_EVALS": self.SAFETY_EVALS,
             "READONLY_ENFORCE": self.READONLY_ENFORCE,
             "ASSET_MATERIALIZE": self.ASSET_MATERIALIZE,
