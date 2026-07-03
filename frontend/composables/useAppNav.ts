@@ -75,6 +75,7 @@ export function useAppNav() {
     { name: 'integrations', label: 'settings.integrations.title', permission: 'manage_settings', icon: 'heroicons-squares-2x2' },
     { name: 'connectors', label: 'Connectors', permission: 'manage_connections', icon: 'heroicons-link' },
     { name: 'folder-sync', label: 'Folder Sync', permission: 'manage_settings', icon: 'heroicons-folder-arrow-down' },
+    { name: 'kb-sources', label: 'Knowledge Sources', permission: 'manage_settings', icon: 'heroicons-book-open' },
     { name: 'smtp', label: 'settings.smtpTab', permission: 'manage_settings', icon: 'heroicons-envelope' },
     { name: 'audit', label: 'settings.auditLogs', permission: 'view_audit_logs', icon: 'heroicons-clipboard-document-list' },
     { name: 'identity-provider', label: 'settings.identityProviderTab', permission: 'manage_identity_providers', icon: 'heroicons-finger-print' },
