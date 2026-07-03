@@ -1583,18 +1583,6 @@
 				<p v-if="dashGenError" class="text-[12px] text-[#C0362C] max-w-xs">{{ dashGenError }}</p>
 			</div>
 
-			<!-- Smart Dashboard build sheet (HYBRID_SMART_DASHBOARD). Teleported so it
-			     survives Outputs-panel re-renders during the build. -->
-			<Teleport to="body">
-				<DashboardSmartBuildSheet
-					v-if="report?.id"
-					:report-id="String(report.id)"
-					:open="smartSheetOpen"
-					@close="smartSheetOpen = false"
-					@skip="smartSheetOpen = false; generateDashboard()"
-					@built="onSmartBuilt"
-				/>
-			</Teleport>
 
 			<!-- Artifact View / Dash tab (handles all states: loading, empty, has artifacts).
 			     mode-filter="page" → shows dashboards only; the slides deck lives in the Slides tab. -->
@@ -1657,6 +1645,18 @@
 			@close="smartSlidesOpen = false"
 			@skip="smartSlidesOpen = false; setPanelView('slides', true)"
 			@built="smartSlidesOpen = false; checkHasArtifacts()"
+		/>
+	</Teleport>
+
+	<!-- Smart Dashboard Build Sheet (HYBRID_SMART_DASHBOARD — flag OFF = never mounts) -->
+	<Teleport to="body">
+		<DashboardSmartBuildSheet
+			v-if="report?.id"
+			:report-id="String(report.id)"
+			:open="smartSheetOpen"
+			@close="smartSheetOpen = false"
+			@skip="smartSheetOpen = false; generateDashboard()"
+			@built="onSmartBuilt"
 		/>
 	</Teleport>
 

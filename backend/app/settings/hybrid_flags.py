@@ -455,9 +455,16 @@ class HybridFlags:
         # the Smart Upload sinks and HOLDS the uncertain/answer-changing ones for
         # post-train Review. Reuses the Smart Upload classifier + apply. OFF.
         return _bool("HYBRID_TRAIN_ROUTING", False)
+
+    @property
     def SMART_SLIDES(self) -> bool:
         # Smart Slide Deck Build (Outputs → "Generate slide deck"). Auto-prefills
         # the prompt from the chat turn, auto-resolves the agent's OWN bound data
+        # sources (no picker). Flag OFF → the existing one-click builder is
+        # unchanged. Default OFF.
+        return _bool("HYBRID_SMART_SLIDES", False)
+
+    @property
     def SMART_DASHBOARD(self) -> bool:
         # Smart Dashboard Build (Outputs → "Generate dashboard"). Auto-prefills the
         # prompt from the chat turn, auto-resolves the agent's OWN bound data
@@ -466,7 +473,6 @@ class HybridFlags:
         # Reuses report_slides._generate_artifact (build), the ambiguity gate
         # (clarify), and sense-making (Decision card). Flag OFF → the existing
         # one-click builder is unchanged. Default OFF.
-        return _bool("HYBRID_SMART_SLIDES", False)
         return _bool("HYBRID_SMART_DASHBOARD", False)
 
     # --- Slice 1: foundation -------------------------------------------------

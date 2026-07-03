@@ -9,6 +9,11 @@ Bullet rules (this is the user-facing "What's new" feed):
     Hidden from the popover; shown collapsed on the full /changelog page only.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.82.0 — Smart Slides + Smart Dashboard builders  (2026-07-03)
+- The Outputs "Slides" and "Dashboard" tabs can become smart builders: describe what you want and the agent builds a real deck / dashboard from your existing charts (auto-prefilled from the chat, no data-source picker; asks one clarifying question only if it has nothing to go on). Both off by default — turn them on in Settings → Features.
+  - Merged parked branches `feature/smart-slides` (`HYBRID_SMART_SLIDES`, `routes/smart_slides.py` + `SmartSlidesSheet.vue`) and `feature/smart-dashboard` (`HYBRID_SMART_DASHBOARD`, 5 phases: auto-context backend, build endpoint with steer/depth/size, clarify gate reusing the ambiguity gate, FE build sheet `SmartBuildSheet.vue` + Outputs wiring). Both reuse `report_slides._generate_artifact`; flags 3-place, default OFF.
+  - Careful per-hunk merge (both rewrite the same Outputs button grid): kept drop-report-tile's removed Report tile, wired Slides→`onSlidesCta` / Dashboard→`onDashboardCta`, merged the flag-load block, kept the steer-prompt superset (handles both slides + dashboard). Fixed a Vue `v-else-if` chain break (relocated the Smart Dashboard `<Teleport>` out of the artifact-panel chain).
+
 ## v1.81.0 — Smart Excel build + tidier Outputs  (2026-07-03)
 - The Outputs "Excel" tab can become a smart builder: type what you want ("pivot revenue by region × month") and it reshapes the existing result in place — no re-running queries. Off by default. Also removed a fake "Report" tile from the Outputs quick-launch grid.
   - Merged parked branches `feature/smart-excel` (`HYBRID_SMART_WORKBOOK`, `routes/smart_workbook.py` + `SmartWorkbookSheet.vue`, LLM intent→transform spec applied in pure Python over existing grids; flag default OFF) and `feature/drop-report-tile` (Outputs grid). Flag 3-place. `feature/smart-slides` + `feature/smart-dashboard` deferred — they rewrite the same Outputs button grid (semantic conflicts, need a deliberate merge).

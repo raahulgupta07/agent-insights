@@ -2295,3 +2295,31 @@ cherry-pick, zero conflicts. Gap: NO flag → endpoint was always-on.
   mount-time gate would ignore the Settings→Features DB override. Runtime gate honors the toggle.
 - Verified: cherry-pick clean, py_compile OK, health 200, `flags.MOA=False` default, MOA in snapshot,
   route mounted. Hot-deployed; bake + user UI test pending. Rollback image `pre-moa`.
+
+---
+
+## 2026-07-03 — Smart Slides + Smart Dashboard merged (v1.82.0)
+Careful per-hunk merge of the last two smart-cluster branches into
+`feature/table-relevance-overview` (cherry-pick, NOT blind keep-both — both rewrite the same Outputs
+button grid + artifact panel).
+
+- `feature/smart-slides` (`1b7d7d7c` → `b1a6f021`): `HYBRID_SMART_SLIDES`, `routes/smart_slides.py` +
+  `components/dashboard/SmartSlidesSheet.vue`. Outputs "Slides" → smart deck builder.
+- `feature/smart-dashboard` (5 phases `2e8af653`…`9295625d` → `1a131be7`…`683ca144`):
+  `HYBRID_SMART_DASHBOARD`, `routes/smart_dashboard.py` + `components/dashboard/SmartBuildSheet.vue`.
+  P1 auto-context, P2 build endpoint (steer/depth/size fold into prompt), P3 clarify gate (reuse
+  ambiguity gate), P4 FE sheet + Outputs wiring (`onDashboardCta`/`smartSheetOpen`).
+- Conflict resolutions (all deliberate): button grid — kept drop-report-tile's removed Report tile,
+  Slides→`onSlidesCta`, Dashboard→`onDashboardCta`; flag-load block merged (workbook+slides+dashboard);
+  `report_slides.py` steer-prompt block — kept the slides+dashboard SUPERSET (per-mode labels/sizes),
+  dropped the dashboard-only version; Teleport sheets — kept all three (workbook/slides/dashboard).
+- LANDMINE (build blocker, fixed): the Smart Dashboard `<Teleport>` landed BETWEEN the dashboard-CTA
+  `v-else-if` and the `ArtifactFrame` `v-else-if` in the artifact panel → Vue "v-else-if has no
+  adjacent v-if" (a real node severs the chain). FIX = relocate the `<Teleport>` to the end of
+  `<template>` with the other sheet teleports. RULE: never place a `<Teleport>`/element inside a
+  `v-if/v-else-if` sibling chain.
+- LANDMINE (fixed): keep-both perl on the additive `hybrid_flags.py` property region interleaved the
+  `SMART_SLIDES`/`SMART_DASHBOARD` `@property` defs (missing decorators + bodies swapped) → reconstructed
+  both by hand. Verify a merged `hybrid_flags.py` with `py_compile` + `flags.<X>` access, not just grep.
+- Verified: FE build exits 0, 660 routes, all 3 flags 3-place + OFF default + in snapshot, health 200.
+  Flags flipped ON org 7d372305 for live test. Baked + committed. Rollback tag `pre-smart`.
