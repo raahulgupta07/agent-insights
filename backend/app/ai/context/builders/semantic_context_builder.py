@@ -192,9 +192,36 @@ class SemanticContextBuilder:
                         current_user_id=None,
                         data_source_ids=[str(d) for d in self.data_source_ids],
                     )
+                    # HYBRID_OFFLINE_CONTEXT (Part B read-side): prefer the nightly
+                    # pre-built per-table context_doc (the fuller card, built from the
+                    # real DataSourceTable) over rebuilding live. Map table name ->
+                    # stored text. OFF or no doc -> live build_table_card below.
+                    _prebuilt: dict = {}
+                    if _tc_flags.OFFLINE_CONTEXT:
+                        try:
+                            from app.models.data_source import DataSourceTable as _DST
+                            _dst_rows = list((await self.db.execute(
+                                select(_DST).where(_DST.datasource_id.in_([str(d) for d in self.data_source_ids]))
+                            )).scalars().all())
+                            for _dst in _dst_rows:
+                                _m = _dst.metadata_json if isinstance(_dst.metadata_json, dict) else {}
+                                _cd = _m.get("context_doc") if isinstance(_m.get("context_doc"), dict) else {}
+                                _ctext = str(_cd.get("text") or "").strip()
+                                if _ctext:
+                                    _prebuilt[str(_dst.name)] = _ctext
+                        except Exception:
+                            _prebuilt = {}
                     for t in tables:
                         _ds = _ds_by_id.get(str(t.data_source_id))
                         if _ds is None:
+                            continue
+                        _pre = _prebuilt.get(str(t.table_name))
+                        if _pre:
+                            # serve pre-built card, still overlay live corrections
+                            _txt = render_card(overlay_memory({"table": t.table_name, "_prebuilt_text": _pre}, _recall))
+                            if not _txt:
+                                _txt = _pre
+                            extra_cards.append(_txt)
                             continue
                         _card = await build_table_card(
                             self.db,

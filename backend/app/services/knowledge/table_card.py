@@ -305,6 +305,19 @@ def render_card(card: dict) -> str:
         return ""
     try:
         t = card
+        # HYBRID_OFFLINE_CONTEXT: a pre-built card carries its already-rendered
+        # text — emit it as-is, then append any freshly-overlaid corrections.
+        if t.get("_prebuilt_text"):
+            body = str(t["_prebuilt_text"]).rstrip()
+            corr = t.get("corrections") or []
+            if corr:
+                extra = "\n".join(f"  correction: {c}" for c in corr if str(c).strip())
+                # insert before the closing tag if present, else append
+                if body.endswith("</table_card>"):
+                    body = body[: -len("</table_card>")].rstrip() + "\n" + extra + "\n</table_card>"
+                else:
+                    body = body + "\n" + extra
+            return body
         lines: list[str] = [f"<table_card name=\"{t['table']}\">"]
         if t.get("description"):
             lines.append(f"  desc: {t['description']}")

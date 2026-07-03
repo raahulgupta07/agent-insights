@@ -210,6 +210,8 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_CODE_ENRICH_PLUS": {"label": "Codex enrichment — deeper", "role": "agent", "category": "Learning", "status": "experimental", "note": "Extends code-enrich with primary keys, downstream usage patterns (which reports/dashboards consume a table), and 'use this alternate table instead' hints when a table is stale/low-trust. Off = grain/formulas/population only. Default OFF."},
     "HYBRID_GOLDEN_SQL": {"label": "Golden-SQL evals", "role": "review", "category": "Learning", "status": "experimental", "note": "Store the expected SQL alongside the expected rows for a golden, and grade on both the SQL (intent) and the result set (LLM-judged for acceptable variation) — matches OpenAI's eval pipeline. Off = result-set-only grading (today). Default OFF."},
     "HYBRID_NOTION_KB": {"label": "Notion / Slack knowledge sources", "role": "admin", "category": "Learning", "status": "experimental", "note": "Ingest Notion pages and Slack threads into the institutional knowledge base so metric definitions and incident/launch context from those tools can ground answers (feeds the Institutional Knowledge layer). Off = no Notion/Slack ingest. Default OFF."},
+    "HYBRID_LEAN_TOOLS": {"label": "Lean tool catalog", "role": "admin", "category": "Core", "status": "experimental", "note": "Trim the planner's tool set — hide overlapping/duplicate tools (per docs/TOOL_AUDIT.md: retire remember_this, collapse the schema-lookup trio, dedup live-vs-MCP) so the model picks the right tool more reliably (OpenAI 'less is more'). Off = full catalog. Default OFF."},
+    "HYBRID_DOC_ACL": {"label": "Per-document access control", "role": "admin", "category": "Core", "status": "experimental", "note": "Restrict institutional knowledge docs to an explicit viewer allow-list (beyond org + approved), so a sensitive doc grounds answers only for authorized users. Off = org-granularity (every approved doc visible org-wide). Default OFF."},
     "HYBRID_SAFETY_EVALS": {"label": "Safety & Reliability Evals", "role": "review", "category": "Learning", "status": "experimental", "note": "Beyond accuracy, run LLM-as-judge binary checks on answers/changes: SECURITY (no secret/credential/PII leak), GOVERNANCE (refuses destructive SQL/DDL), BOUNDARIES (agent stayed inside its own data scope — verifies the Shared-Memory isolation), ROUTING (right tool picked). Fail → held with reason. Runs on train + on demand. Dash-style AgentAsJudge. Default OFF."},
     "HYBRID_READONLY_ENFORCE": {"label": "Structural Read-Only Enforcement", "role": "agent", "category": "Core", "status": "experimental", "note": "Enforce read-only at the CONNECTION/engine level (not just a prompt or SQL-string check) so a prompt-injection can't DROP/DELETE/ALTER source data. Writes allowed only on the agent's own staging schema. Off = today's string-based guard. Default OFF."},
     "HYBRID_ASSET_MATERIALIZE": {"label": "Materialize Hot Metrics (reusable assets)", "role": "agent", "category": "Advanced", "status": "experimental", "note": "When a Shared-Memory query template is reused enough (verified_count >= threshold), offer to MATERIALIZE it as a persistent computed asset (a view/table) so the hot metric is computed once and served instantly instead of re-running a heavy query every time. Builds on Engineer Assets. Default OFF."},
@@ -672,6 +674,19 @@ class HybridFlags:
         # Part E — Notion / Slack as institutional-knowledge sources feeding
         # the P4 institutional layer. Default OFF.
         return _bool("HYBRID_NOTION_KB", False)
+
+    @property
+    def LEAN_TOOLS(self) -> bool:
+        # F1 — trim the planner's tool catalog (retire overlapping/duplicate
+        # tools per docs/TOOL_AUDIT.md) to reduce model confusion. Default OFF
+        # = full catalog unchanged.
+        return _bool("HYBRID_LEAN_TOOLS", False)
+
+    @property
+    def DOC_ACL(self) -> bool:
+        # F3 — per-document access control on institutional knowledge (viewer
+        # allow-list beyond org+approved). Default OFF = org-granularity (today).
+        return _bool("HYBRID_DOC_ACL", False)
 
     @property
     def SAFETY_EVALS(self) -> bool:
@@ -1335,6 +1350,8 @@ class HybridFlags:
             "CODE_ENRICH_PLUS": self.CODE_ENRICH_PLUS,
             "GOLDEN_SQL": self.GOLDEN_SQL,
             "NOTION_KB": self.NOTION_KB,
+            "LEAN_TOOLS": self.LEAN_TOOLS,
+            "DOC_ACL": self.DOC_ACL,
             "SAFETY_EVALS": self.SAFETY_EVALS,
             "READONLY_ENFORCE": self.READONLY_ENFORCE,
             "ASSET_MATERIALIZE": self.ASSET_MATERIALIZE,
