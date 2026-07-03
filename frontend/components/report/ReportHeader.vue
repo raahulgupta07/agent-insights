@@ -39,6 +39,53 @@
                         <Icon :name="runSound.enabled.value ? 'heroicons:speaker-wave' : 'heroicons:speaker-x-mark'" class="w-5 h-5" />
                     </button>
                 </UTooltip>
+                <!-- Save as workflow (HYBRID_WORKFLOWS_V2): turn this finished analysis into a reusable workflow -->
+                <div v-if="workflowsEnabled && report" class="relative">
+                    <UTooltip text="Save this analysis as a reusable workflow">
+                        <button
+                            @click="toggleSaveWorkflow"
+                            class="hidden md:flex p-1.5 rounded items-center transition-colors text-gray-500 hover:text-[#C2541E] hover:bg-[#F6EFEA]"
+                            aria-label="Save as workflow"
+                        >
+                            <Icon name="heroicons:bookmark-square" class="w-5 h-5" />
+                        </button>
+                    </UTooltip>
+                    <div
+                        v-if="showSaveWorkflow"
+                        class="absolute right-0 top-full mt-1 z-30 w-72 p-3 rounded-xl border border-[#E9E0D3] bg-[#FBFAF6] shadow-lg"
+                    >
+                        <p class="text-xs font-medium text-[#211B14] mb-1.5">Save as workflow</p>
+                        <input
+                            v-model="workflowName"
+                            type="text"
+                            placeholder="Workflow name"
+                            class="w-full text-sm px-2 py-1.5 rounded-lg border border-[#E9E0D3] bg-white outline-none focus:border-[#C2541E]"
+                            @keyup.enter="saveAsWorkflow"
+                        />
+                        <div class="flex items-center gap-1.5 mt-2">
+                            <button
+                                v-for="opt in [{v:'private',l:'Private'},{v:'org',l:'Organization'}]"
+                                :key="opt.v"
+                                @click="workflowScope = opt.v"
+                                class="flex-1 text-[11px] py-1 rounded-lg border transition-colors"
+                                :class="workflowScope === opt.v
+                                    ? 'border-[#C2541E] bg-[#F6EFEA] text-[#C2541E] font-medium'
+                                    : 'border-[#E9E0D3] text-gray-500 hover:bg-gray-50'"
+                            >{{ opt.l }}</button>
+                        </div>
+                        <div class="flex items-center gap-2 mt-2.5">
+                            <button
+                                @click="showSaveWorkflow = false"
+                                class="text-[11px] px-2 py-1 rounded-lg text-gray-500 hover:bg-gray-100"
+                            >Cancel</button>
+                            <button
+                                @click="saveAsWorkflow"
+                                :disabled="isSavingWorkflow || !workflowName.trim()"
+                                class="ms-auto text-[11px] px-3 py-1 rounded-lg bg-[#C2541E] text-white font-medium disabled:opacity-50 hover:bg-[#A8330F]"
+                            >{{ isSavingWorkflow ? 'Saving…' : 'Save' }}</button>
+                        </div>
+                    </div>
+                </div>
                 <ShareModal v-if="report" :report="report" share-type="conversation" title="Share Conversation" />
                 <UTooltip :text="isSplitScreen ? t('reportView.closeSidebar') : t('reportView.openSidebar')">
                     <button
@@ -109,6 +156,54 @@ const reportTitleInput = ref<HTMLInputElement | null>(null)
 const localTitle = ref('')
 const isSaving = ref(false)
 const toast = useToast()
+
+// HYBRID_WORKFLOWS_V2: "Save as workflow" — turn this finished analysis into a reusable workflow.
+const workflowsEnabled = ref(false)
+const showSaveWorkflow = ref(false)
+const workflowName = ref('')
+const workflowScope = ref('private')
+const isSavingWorkflow = ref(false)
+
+onMounted(async () => {
+    try {
+        const { data } = await useMyFetch<any[]>('/api/organization/hybrid-flags')
+        const rows = (data.value || []) as any[]
+        workflowsEnabled.value = !!rows.find(r => r?.env_name === 'HYBRID_WORKFLOWS_V2')?.effective
+    } catch { workflowsEnabled.value = false }
+})
+
+function toggleSaveWorkflow() {
+    showSaveWorkflow.value = !showSaveWorkflow.value
+    if (showSaveWorkflow.value) {
+        workflowName.value = (props.report?.title || '').trim() || 'Untitled workflow'
+    }
+}
+
+async function saveAsWorkflow() {
+    const name = workflowName.value.trim()
+    if (!name || isSavingWorkflow.value) return
+    isSavingWorkflow.value = true
+    try {
+        const res: any = await useMyFetch(`/workflows-v2/from-report/${report_id}`, {
+            method: 'POST',
+            body: { name, scope: workflowScope.value },
+        })
+        if (res?.error?.value) throw res.error.value
+        showSaveWorkflow.value = false
+        toast.add({
+            title: 'Saved as workflow',
+            description: "Use it from the composer's ‘Use a workflow’.",
+            color: 'green',
+        })
+    } catch (error: any) {
+        const status = error?.status || error?.statusCode || error?.response?.status
+        toast.add({
+            title: status === 400 ? 'No analysis steps to save yet' : 'Could not save workflow',
+            color: 'red',
+        })
+    }
+    isSavingWorkflow.value = false
+}
 
 // Watch for changes in report prop to update local title
 watch(() => props.report?.title, (newTitle) => {
