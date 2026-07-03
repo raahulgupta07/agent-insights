@@ -467,6 +467,26 @@
                                         <p class="text-gray-500 text-[11px] leading-snug mt-0.5">Picks the best model for each question — fast for lookups, strong for deep analysis.</p>
                                     </div>
                                 </div>
+                                <!-- HYBRID_MOA: a panel of models analyses, then an aggregator writes the answer -->
+                                <div
+                                    v-if="moaEnabled"
+                                    class="relative px-2.5 py-2 rounded-lg cursor-pointer flex items-start gap-2.5 transition-colors mb-1 border-b border-[#EFE7DA] pb-2.5"
+                                    :class="selectedModel === 'moa' ? 'bg-[#FBEFE4]/60' : 'hover:bg-[#faf8f3]'"
+                                    @click="() => { selectModel('moa'); close(); }"
+                                >
+                                    <span v-if="selectedModel === 'moa'" class="absolute start-0 top-2 bottom-2 w-0.5 rounded-full bg-[#C2541E]"></span>
+                                    <div class="mt-0.5">
+                                        <Icon name="heroicons-squares-2x2" class="w-4 h-4 text-[#C2541E]" />
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <div class="flex items-center gap-1.5">
+                                            <span class="font-semibold text-gray-900">Mixture-of-Agents</span>
+                                            <span class="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0 bg-[#FBEFE4] text-[#C2541E]">Ensemble</span>
+                                            <Icon v-if="selectedModel === 'moa'" name="heroicons-check" class="w-3.5 h-3.5 text-[#C2541E] ms-auto shrink-0" />
+                                        </div>
+                                        <p class="text-gray-500 text-[11px] leading-snug mt-0.5">Several models weigh in, then one writes the answer — slower, higher confidence on hard questions.</p>
+                                    </div>
+                                </div>
                                 <div
                                     v-for="m in models"
                                     :key="m.id"
@@ -1056,11 +1076,23 @@ async function loadAutoModelFlag() {
         autoModelEnabled.value = !!rows.find(r => r?.env_name === 'HYBRID_AUTO_MODEL')?.effective
     } catch { autoModelEnabled.value = false }
 }
+// HYBRID_MOA: when enabled, the picker shows a "Mixture-of-Agents" option that sends
+// the sentinel model_id "moa" → the backend runs the peer-consult panel then answers
+// with the aggregator model.
+const moaEnabled = ref<boolean>(false)
+async function loadMoaFlag() {
+    try {
+        const { data } = await useMyFetch<any[]>('/api/organization/hybrid-flags')
+        const rows = (data.value as any[]) || []
+        moaEnabled.value = !!rows.find(r => r?.env_name === 'HYBRID_MOA')?.effective
+    } catch { moaEnabled.value = false }
+}
 const selectedModelLabel = computed(() => {
     if (selectedModel.value === 'auto') {
         const picked = (props.autoPicked as any)?.model
         return picked ? `Auto · ${picked}` : 'Auto'
     }
+    if (selectedModel.value === 'moa') return 'Mixture-of-Agents'
     const model = models.value.find(m => m.id === selectedModel.value)
     return model?.name || t('prompt.selectModel')
 })
@@ -1084,6 +1116,9 @@ async function loadModels() {
                 } else if (props.initialModel === 'auto' && autoModelEnabled.value) {
                     // Persisted sentinel "auto" (not in the model list) → keep Auto.
                     selectedModel.value = 'auto'
+                } else if (props.initialModel === 'moa' && moaEnabled.value) {
+                    // Persisted sentinel "moa" → keep Mixture-of-Agents.
+                    selectedModel.value = 'moa'
                 } else if (autoModelEnabled.value) {
                     // Nothing persisted + HYBRID_AUTO_MODEL on → default to Auto · SMART.
                     selectedModel.value = 'auto'
@@ -1487,6 +1522,7 @@ onMounted(async () => {
     // Resolve the Auto-model flag FIRST so loadModels() can default to "Auto"
     // when no explicit model is persisted (fail-soft: flag load never throws).
     await loadAutoModelFlag()
+    await loadMoaFlag()
     await loadModels()
     await refreshContextEstimate(false)
     if (props.report_id) {

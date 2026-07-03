@@ -229,6 +229,28 @@ class CompletionService:
             except Exception:
                 return None, {"via": "fallback", "tier": "balanced"}
 
+    async def _resolve_moa_answering_model(self, db, organization):
+        """HYBRID_MOA: the aggregator model that WRITES the final answer when the user
+        picks "Mixture-of-Agents" (the peer-consult panel runs inside AgentV2). Resolve
+        the aggregator slug to the org's enabled LLMModel; fall back to the org default.
+        NEVER raises."""
+        try:
+            from sqlalchemy import select as _sel
+            from app.models.llm_model import LLMModel
+            from app.ai.mixture_of_agents import DEFAULT_AGGREGATOR
+            _r = await db.execute(
+                _sel(LLMModel)
+                .filter(LLMModel.organization_id == organization.id)
+                .filter(LLMModel.model_id == DEFAULT_AGGREGATOR)
+                .filter(LLMModel.is_enabled == True)
+            )
+            m = _r.scalar_one_or_none()
+            if m:
+                return m
+        except Exception:
+            logger.warning("moa: aggregator resolve failed", exc_info=True)
+        return await organization.get_default_llm_model(db)
+
     async def _serialize_completion(self, db: AsyncSession, completion: Completion, current_user: User = None, organization: Organization = None) -> CompletionSchema:
         """Serialize a completion model to a schema following get_completions format"""
         if completion.role == "user":
@@ -347,8 +369,9 @@ class CompletionService:
             else:
                 step = None
 
-            # "auto" sentinel: estimate uses the org default (no classifier — avoid per-keystroke cost).
-            if completion_data.prompt.model_id and completion_data.prompt.model_id != "auto":
+            # "auto"/"moa" sentinels: estimate uses the org default (no classifier / no
+            # peer panel — avoid per-keystroke cost).
+            if completion_data.prompt.model_id and completion_data.prompt.model_id not in ("auto", "moa"):
                 model = await self.llm_service.get_model_by_id(db, organization, current_user, completion_data.prompt.model_id)
             else:
                 model = await organization.get_default_llm_model(db)
@@ -568,7 +591,11 @@ class CompletionService:
                     (completion_data.prompt.content if completion_data.prompt else "") or "",
                     small_model, _min_tier,
                 )
-            elif _req_mid and _req_mid != "auto":
+            elif flags.MOA and _req_mid == "moa":
+                # Mixture-of-Agents: the aggregator model answers; the peer panel runs
+                # inside AgentV2 (which self-detects the "moa" sentinel on the head).
+                model = await self._resolve_moa_answering_model(db, organization)
+            elif _req_mid and _req_mid not in ("auto", "moa"):
                 model = await self.llm_service.get_model_by_id(db, organization, current_user, _req_mid)
             else:
                 model = None
@@ -2096,7 +2123,11 @@ class CompletionService:
                     None, _min_tier,
                 )
                 _log(f"auto_model→{(_auto_decision or {}).get('model')} ({(_auto_decision or {}).get('tier')})")
-            elif _req_mid and _req_mid != "auto":
+            elif flags.MOA and _req_mid == "moa":
+                # Mixture-of-Agents: aggregator answers; peer panel runs inside AgentV2.
+                model = await self._resolve_moa_answering_model(db, organization)
+                _log("moa→peer-consult + aggregator")
+            elif _req_mid and _req_mid not in ("auto", "moa"):
                 model = await self.llm_service.get_model_by_id(db, organization, current_user, _req_mid)
             else:
                 model = None

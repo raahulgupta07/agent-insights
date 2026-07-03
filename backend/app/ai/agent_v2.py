@@ -2609,6 +2609,31 @@ class AgentV2:
                     # Combine user images + observation images
                     all_images = user_images + observation_images
                     user_name, user_note = await self._resolve_user_profile()
+                    # HYBRID_MOA: if this turn picked "Mixture-of-Agents" (sentinel
+                    # model_id "moa" on the head completion), consult a panel of diverse
+                    # models ONCE and fold their analyses into the instructions as
+                    # advisory context; the resolved aggregator model then writes the
+                    # answer with full tool/data access. Cached on self so the panel
+                    # runs once per turn, not per planner loop. Fail-soft.
+                    try:
+                        from app.settings.hybrid_flags import flags as _moa_flags
+                        _moa_pmid = (getattr(self.head_completion, "prompt", None) or {}).get("model_id")
+                        if _moa_flags.MOA and _moa_pmid == "moa":
+                            if not hasattr(self, "_moa_peer_block"):
+                                from app.ai.mixture_of_agents import consult, build_peer_block
+                                _moa_q = (self.head_completion.prompt or {}).get("content") or ""
+                                try:
+                                    _moa_an = await consult(self.db, self.organization, _moa_q, usage_scope="moa_chat")
+                                    self._moa_peer_block = build_peer_block(_moa_an) or ""
+                                except Exception:
+                                    self._moa_peer_block = ""
+                            if self._moa_peer_block:
+                                _moa_ctx = ("PEER ANALYSES (advisory — how other models read this "
+                                            "question; weigh them, verify against the data, do not just "
+                                            "copy):\n" + self._moa_peer_block)
+                                instructions = (instructions + "\n\n" + _moa_ctx) if instructions else _moa_ctx
+                    except Exception:
+                        pass
                     instructions = await self._apply_context_compaction(instructions)
                     planner_input = PlannerInput(
                         organization_name=self.organization.name,
