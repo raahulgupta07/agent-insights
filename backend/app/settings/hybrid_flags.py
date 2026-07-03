@@ -205,6 +205,11 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_TABLE_CARD": {"label": "Unified Table Card (+memory overlay)", "role": "agent", "category": "Learning", "status": "experimental", "note": "Merge every context layer for a table — schema/usage metadata, human + AI annotations, code-enrich grain/formulas, freshness, owner, PII flags — into ONE card, then OVERLAY approved Shared-Memory corrections onto it so the agent always sees a corrected baseline (OpenAI data-agent core pattern). Off = piecemeal per-builder context. Default OFF."},
     "HYBRID_INSTITUTIONAL_KB": {"label": "Institutional Knowledge into answers", "role": "agent", "category": "Learning", "status": "experimental", "note": "Retrieve access-controlled institutional docs (metric definitions, incident notes, launch context from knowledge_doc / connected docs) and ground the planner with them so business-term questions resolve to the right metric. Scoped to org + approved docs only (KnowledgeDoc has no per-viewer ACL today — org-granularity access). Off = docs exist but never feed data answers. Default OFF."},
     "HYBRID_EVAL_CANARY": {"label": "Eval Canary Health + Drift Alert", "role": "review", "category": "Learning", "status": "experimental", "note": "Turn the nightly result-set goldens into continuous canaries: compute a per-table eval pass-rate health badge and alert on regression-vs-last-green so drift is caught before a user hits it. Off = nightly evals run but health isn't surfaced. Default OFF."},
+    "HYBRID_WORKFLOWS_V2": {"label": "Workflows (save & replay an analysis)", "role": "agent", "category": "Learning", "status": "experimental", "note": "Save a finished analysis as a reusable, parameterized workflow and replay it from the composer ('Use a workflow') — the same steps run consistently for every user. Encodes context + best-practice once (OpenAI data-agent workflows: weekly reports, table validations). Off = no save/replay. Default OFF."},
+    "HYBRID_OFFLINE_CONTEXT": {"label": "Daily offline context pipeline", "role": "admin", "category": "Learning", "status": "experimental", "note": "A nightly job merges every context layer (table usage, annotations, code-enrich, freshness, memory) into ONE normalized per-table document and embeds it once, so retrieval is faster and consistent instead of rebuilt per request. Off = request-time assembly (today). Default OFF."},
+    "HYBRID_CODE_ENRICH_PLUS": {"label": "Codex enrichment — deeper", "role": "agent", "category": "Learning", "status": "experimental", "note": "Extends code-enrich with primary keys, downstream usage patterns (which reports/dashboards consume a table), and 'use this alternate table instead' hints when a table is stale/low-trust. Off = grain/formulas/population only. Default OFF."},
+    "HYBRID_GOLDEN_SQL": {"label": "Golden-SQL evals", "role": "review", "category": "Learning", "status": "experimental", "note": "Store the expected SQL alongside the expected rows for a golden, and grade on both the SQL (intent) and the result set (LLM-judged for acceptable variation) — matches OpenAI's eval pipeline. Off = result-set-only grading (today). Default OFF."},
+    "HYBRID_NOTION_KB": {"label": "Notion / Slack knowledge sources", "role": "admin", "category": "Learning", "status": "experimental", "note": "Ingest Notion pages and Slack threads into the institutional knowledge base so metric definitions and incident/launch context from those tools can ground answers (feeds the Institutional Knowledge layer). Off = no Notion/Slack ingest. Default OFF."},
     "HYBRID_SAFETY_EVALS": {"label": "Safety & Reliability Evals", "role": "review", "category": "Learning", "status": "experimental", "note": "Beyond accuracy, run LLM-as-judge binary checks on answers/changes: SECURITY (no secret/credential/PII leak), GOVERNANCE (refuses destructive SQL/DDL), BOUNDARIES (agent stayed inside its own data scope — verifies the Shared-Memory isolation), ROUTING (right tool picked). Fail → held with reason. Runs on train + on demand. Dash-style AgentAsJudge. Default OFF."},
     "HYBRID_READONLY_ENFORCE": {"label": "Structural Read-Only Enforcement", "role": "agent", "category": "Core", "status": "experimental", "note": "Enforce read-only at the CONNECTION/engine level (not just a prompt or SQL-string check) so a prompt-injection can't DROP/DELETE/ALTER source data. Writes allowed only on the agent's own staging schema. Off = today's string-based guard. Default OFF."},
     "HYBRID_ASSET_MATERIALIZE": {"label": "Materialize Hot Metrics (reusable assets)", "role": "agent", "category": "Advanced", "status": "experimental", "note": "When a Shared-Memory query template is reused enough (verified_count >= threshold), offer to MATERIALIZE it as a persistent computed asset (a view/table) so the hot metric is computed once and served instantly instead of re-running a heavy query every time. Builds on Engineer Assets. Default OFF."},
@@ -636,6 +641,37 @@ class HybridFlags:
         # regression-vs-last-green (canary-in-prod). Off = nightly evals only,
         # no surfaced health. Default OFF.
         return _bool("HYBRID_EVAL_CANARY", False)
+
+    @property
+    def WORKFLOWS_V2(self) -> bool:
+        # Part A — save a finished analysis as a reusable, parameterized
+        # workflow; replay from the composer ("Use a workflow"). OpenAI
+        # data-agent workflows. Default OFF.
+        return _bool("HYBRID_WORKFLOWS_V2", False)
+
+    @property
+    def OFFLINE_CONTEXT(self) -> bool:
+        # Part B — nightly job merges all context layers into ONE normalized
+        # per-table doc + embeds once (vs request-time assembly). Default OFF.
+        return _bool("HYBRID_OFFLINE_CONTEXT", False)
+
+    @property
+    def CODE_ENRICH_PLUS(self) -> bool:
+        # Part C — deepen Codex enrichment: primary keys, downstream usage,
+        # alternate-table hints. Default OFF.
+        return _bool("HYBRID_CODE_ENRICH_PLUS", False)
+
+    @property
+    def GOLDEN_SQL(self) -> bool:
+        # Part D — store expected SQL alongside expected rows in evals; grade
+        # on SQL + result-set + LLM. Default OFF.
+        return _bool("HYBRID_GOLDEN_SQL", False)
+
+    @property
+    def NOTION_KB(self) -> bool:
+        # Part E — Notion / Slack as institutional-knowledge sources feeding
+        # the P4 institutional layer. Default OFF.
+        return _bool("HYBRID_NOTION_KB", False)
 
     @property
     def SAFETY_EVALS(self) -> bool:
@@ -1294,6 +1330,11 @@ class HybridFlags:
             "TABLE_CARD": self.TABLE_CARD,
             "INSTITUTIONAL_KB": self.INSTITUTIONAL_KB,
             "EVAL_CANARY": self.EVAL_CANARY,
+            "WORKFLOWS_V2": self.WORKFLOWS_V2,
+            "OFFLINE_CONTEXT": self.OFFLINE_CONTEXT,
+            "CODE_ENRICH_PLUS": self.CODE_ENRICH_PLUS,
+            "GOLDEN_SQL": self.GOLDEN_SQL,
+            "NOTION_KB": self.NOTION_KB,
             "SAFETY_EVALS": self.SAFETY_EVALS,
             "READONLY_ENFORCE": self.READONLY_ENFORCE,
             "ASSET_MATERIALIZE": self.ASSET_MATERIALIZE,
