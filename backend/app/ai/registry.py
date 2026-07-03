@@ -9,27 +9,6 @@ from app.ai.tools.metadata import ToolMetadata
 from app.ai.tools.base import Tool
 
 
-# F1 (HYBRID_LEAN_TOOLS) — audited overlapping/duplicate tools to hide from the
-# planner catalog when the flag is ON (docs/TOOL_AUDIT.md). Each is redundant
-# with a KEPT sibling; the kept one stays. OFF = nothing excluded.
-#   remember_this      -> remember/recall (the primary memory tool)
-#   describe_tables    -> inspect_data (kept, the canonical schema lookup)
-#   describe_entity    -> inspect_data
-#   read_artifact      -> read_query
-#   read_report        -> search_reports
-#   write_csv          -> create_data
-#   search_mcps        -> execute_mcp
-_LEAN_EXCLUDE: Set[str] = frozenset({
-    "remember_this",
-    "describe_tables",
-    "describe_entity",
-    "read_artifact",
-    "read_report",
-    "write_csv",
-    "search_mcps",
-})
-
-
 @dataclass
 class ToolCatalogFilter:
     """Enhanced filter for tool catalog queries."""
@@ -140,23 +119,10 @@ class ToolRegistry:
         )
         metadata_list = self.list_tools(filter_obj)
 
-        # F1 (HYBRID_LEAN_TOOLS): when on, drop the audited overlapping/duplicate
-        # tools from the catalog (docs/TOOL_AUDIT.md) so the planner sees a leaner
-        # set. OFF -> empty exclude -> catalog unchanged (byte-identical).
-        _lean_exclude: Set[str] = set()
-        try:
-            from app.settings.hybrid_flags import flags as _lean_flags
-            if _lean_flags.LEAN_TOOLS:
-                _lean_exclude = _LEAN_EXCLUDE
-        except Exception:
-            _lean_exclude = set()
-
         catalog = []
         for metadata in metadata_list:
             # Skip inactive tools from catalog
             if hasattr(metadata, "is_active") and metadata.is_active is False:
-                continue
-            if metadata.name in _lean_exclude:
                 continue
             catalog.append({
                 "name": metadata.name,
