@@ -138,6 +138,7 @@ export function useAppNav() {
         // 'Skills' (global /skills = HYBRID_SKILLS sandbox-exec) removed from nav —
         // known-unstable (livelocks the agent loop). Use studio Domain Packs instead.
         { key: 'memory', href: '/memory', activePath: '/memory', icon: 'heroicons-cpu-chip', label: 'Memory', section: 'CAPABILITIES' },
+        { key: 'shared-memory', href: '/memory/shared', activePath: '/memory/shared', icon: 'heroicons-sparkles', label: 'Shared Memory', section: 'CAPABILITIES' },
         { key: 'my-groups', href: '/settings/my-groups', activePath: '/settings/my-groups', icon: 'heroicons-user-group', label: 'My Groups', section: 'ACCESS' },
       ],
     },

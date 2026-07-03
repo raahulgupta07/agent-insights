@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PowerBI Data Agent — Full Flow (Have vs Build)</title>
+<style>
+  :root{
+    --bg:#0f0d0a; --panel:#1b1813; --ink:#f3ede1; --muted:#a89f8d;
+    --have:#3fb27f; --have-bg:rgba(63,178,127,.10); --have-bd:rgba(63,178,127,.45);
+    --build:#e0a63f; --build-bg:rgba(224,166,63,.10); --build-bd:rgba(224,166,63,.5);
+    --danger:#e0623f; --line:#3a352c; --card:#22201a;
+    --font:'Hanken Grotesk',system-ui,-apple-system,Segoe UI,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);line-height:1.5;padding:32px 20px 80px}
+  .wrap{max-width:1080px;margin:0 auto}
+  h1{font-size:26px;margin:0 0 4px}
+  h2{font-size:19px;margin:38px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+  .sub{color:var(--muted);font-size:14px;margin-bottom:8px}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;margin:16px 0 8px}
+  .lg{display:flex;align-items:center;gap:8px;font-size:13px}
+  .dot{width:12px;height:12px;border-radius:3px}
+  .dot.have{background:var(--have)} .dot.build{background:var(--build)} .dot.danger{background:var(--danger)}
+
+  .flow{display:flex;flex-direction:column;gap:0;margin:8px 0}
+  .step{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--line);border-radius:12px;padding:14px 16px;position:relative}
+  .step.have{border-left-color:var(--have);background:linear-gradient(90deg,var(--have-bg),var(--panel) 55%)}
+  .step.build{border-left-color:var(--build);background:linear-gradient(90deg,var(--build-bg),var(--panel) 55%)}
+  .step .tag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.5px;padding:2px 7px;border-radius:20px;text-transform:uppercase;margin-bottom:6px}
+  .tag.have{color:var(--have);border:1px solid var(--have-bd);background:var(--have-bg)}
+  .tag.build{color:var(--build);border:1px solid var(--build-bd);background:var(--build-bg)}
+  .step h3{margin:0 0 4px;font-size:15px}
+  .step p{margin:2px 0;font-size:13px;color:var(--muted)}
+  .step code{background:#000;color:#d8cfbd;padding:1px 6px;border-radius:5px;font-size:12px}
+  .arrow{text-align:center;color:var(--line);font-size:20px;line-height:1;margin:3px 0}
+
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:8px}
+  @media(max-width:760px){.cols{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .card.have{border-color:var(--have-bd)} .card.build{border-color:var(--build-bd)}
+  .card h4{margin:0 0 8px;font-size:14px;display:flex;align-items:center;gap:8px}
+  .card ul{margin:6px 0 0;padding-left:18px;font-size:13px;color:var(--muted)}
+  .card li{margin:4px 0}
+  .card li b{color:var(--ink);font-weight:600}
+
+  table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.4px}
+  td code{background:#000;color:#d8cfbd;padding:1px 5px;border-radius:4px;font-size:12px}
+  .pill{font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap}
+  .pill.have{color:var(--have);background:var(--have-bg);border:1px solid var(--have-bd)}
+  .pill.build{color:var(--build);background:var(--build-bg);border:1px solid var(--build-bd)}
+
+  .note{background:#000;border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:13px;color:#cfc6b4;margin-top:10px}
+  .note b{color:var(--build)}
+  .firewall{border:1.5px dashed var(--danger);border-radius:10px;padding:10px 14px;margin:8px 0;font-size:13px;color:#f0c9bd;background:rgba(224,98,63,.06)}
+  .mono{font-family:ui-monospace,Menlo,monospace}
+  .ascii{background:#000;border:1px solid var(--line);border-radius:10px;padding:16px;overflow-x:auto;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#cfc6b4;white-space:pre;line-height:1.45}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>PowerBI Data Agent — Full Flow</h1>
+  <div class="sub">Sign-in → clone → sync → learn → query → answer. What we <b style="color:var(--have)">HAVE</b> vs what we <b style="color:var(--build)">SHOULD BUILD</b> to make it self-learning &amp; leak-safe across users.</div>
+  <div class="legend">
+    <div class="lg"><span class="dot have"></span> HAVE — in codebase, proven</div>
+    <div class="lg"><span class="dot build"></span> BUILD — to add / improve</div>
+    <div class="lg"><span class="dot danger"></span> Leak firewall — security boundary</div>
+  </div>
+
+  <!-- ============ LIFECYCLE ============ -->
+  <h2>1 · Connection &amp; sync lifecycle (per user)</h2>
+
+  <div class="flow">
+    <div class="step have"><span class="tag have">have</span>
+      <h3>① User signs in with OWN Microsoft account</h3>
+      <p>Adaptive: email+pw → ROPC; MFA → device-code fallback. FOCI client <code>1950a258…</code>. Own <code>refresh_token</code> minted. Cross-tenant guest ok (ROPC vs foreign tenant).</p>
+    </div>
+    <div class="arrow">▼</div>
+    <div class="step have"><span class="tag have">have</span>
+      <h3>② Private clone DataSource created</h3>
+      <p><code>register_template_for_user</code> → clone <code>DS_U1</code>, <code>owner_user_id=U1</code>, <code>auth_policy=user_required</code>. Hook-guard: private clone NEVER spawns public agent (no org-leak).</p>
+    </div>
+    <div class="arrow">▼</div>
+    <div class="step have"><span class="tag have">have</span>
+      <h3>③ Sync-as-user → only tables MS lets U1 see</h3>
+      <p><code>sync_clone_bg</code>: discover via <code>/reports</code>+<code>/apps</code>+groups → <code>executeQueries</code> probe (Build=200 / View-only=401) → <code>INFO.VIEW.TABLES/COLUMNS</code>. Offline index <code>{table→datasetId,workspaceId}</code> cached on <code>ConnectionTable.metadata_json.powerbi</code>. <b style="color:var(--have)">DATA ISOLATION here — U1 catalog ≠ U2 catalog.</b></p>
+    </div>
+    <div class="arrow">▼</div>
+    <div class="step have"><span class="tag have">have</span>
+      <h3>④ Auto-learn (llm_sync) → primary overview instruction</h3>
+      <p>Per clone: description + starters + overview instruction, <code>status=published</code>, set <code>primary_instruction_id</code>. Live terminal log (<code>ConnectorSyncRun</code>).</p>
+      <p style="color:var(--build)">⚠ Learns THIS clone only — from scratch. No reuse of what other users already taught for the same model.</p>
+    </div>
+  </div>
+
+  <!-- ============ QUERY ============ -->
+  <h2>2 · Query lifecycle (per question)</h2>
+
+  <div class="flow">
+    <div class="step have"><span class="tag have">have</span>
+      <h3>⑤ User asks question</h3>
+      <p>Planner (<code>prompt_builder_v3</code>) → picks tables (relevance classifier) → builds context from <code>instruction</code> (scoped via <code>instruction_data_source_association</code>, <code>HYBRID_SCOPED_INSTRUCTIONS</code>).</p>
+    </div>
+    <div class="arrow">▼</div>
+    <div class="step have"><span class="tag have">have</span>
+      <h3>⑥ Generate + execute DAX</h3>
+      <p><code>create_data</code> tool → offline index resolves <code>datasetId</code> → ONE <code>executeQueries</code> DAX. 429 backoff, 401 auto-reauth, DAX result cache (TTL 300s). Humanized errors.</p>
+    </div>
+    <div class="arrow">▼</div>
+    <div class="step have"><span class="tag have">have</span>
+      <h3>⑦ Answer + private cache</h3>
+      <p>Rows → answer rendered. <code>answer_cache</code> keyed <code>org_id + data_source_id + question_hash</code>. <code>brain_graph_edge</code> per <code>data_source_id</code>. <b style="color:var(--have)">Private plane — per clone.</b></p>
+    </div>
+    <div class="arrow" style="color:var(--build)">▼ &nbsp;<span style="font-size:12px">— missing loop —</span></div>
+    <div class="step build"><span class="tag build">build</span>
+      <h3>⑧ CAPTURE learning (the self-improve loop)</h3>
+      <p>On verified success OR diagnosed error → extract schema-shaped learning → <b style="color:var(--build)">SANITIZE</b> → upsert to shared <code>model_knowledge</code> keyed by <code>dataset_id</code>. This is what we DON'T have. Borrowed from agno-agi/dash <code>dash_learnings</code> "never repeat".</p>
+    </div>
+  </div>
+
+  <!-- ============ HAVE / BUILD stores ============ -->
+  <h2>3 · Learning stores — have vs build</h2>
+  <table>
+    <tr><th>Layer (agno/dash)</th><th>Store</th><th>Keyed by</th><th>Status</th></tr>
+    <tr><td>1 Table usage</td><td><code>ConnectionTable</code> + relevance classifier</td><td>data_source_id</td><td><span class="pill have">HAVE</span></td></tr>
+    <tr><td>2 Human annotations</td><td><code>instruction</code> (DEFINITION)</td><td>data_source_id</td><td><span class="pill have">HAVE</span></td></tr>
+    <tr><td>3 Query patterns</td><td><code>answer_cache</code> (Q→A, not parametric)</td><td>org+ds+question_hash</td><td><span class="pill build">IMPROVE → templates</span></td></tr>
+    <tr><td>4 Institutional</td><td>MCP + glossary</td><td>data_source_id</td><td><span class="pill have">HAVE</span></td></tr>
+    <tr><td>5 <b>Learnings (error→fix)</b></td><td><b>none</b></td><td>—</td><td><span class="pill build">BUILD (mistake memory)</span></td></tr>
+    <tr><td>6 Runtime context</td><td>live DAX / offline index</td><td>connection</td><td><span class="pill have">HAVE</span></td></tr>
+    <tr><td>— shared across users —</td><td><b><code>model_knowledge</code></b></td><td><b>dataset_id</b></td><td><span class="pill build">BUILD (the key)</span></td></tr>
+  </table>
+  <div class="note"><b>The one insight:</b> every learning store today is keyed <code>data_source_id</code> = the private clone = per user. So learning never compounds across users who share a semantic model. Fix = a second store keyed by <code>dataset_id</code> (the PBI semantic-model GUID) — identical only for users with the same access, so sharing is safe by construction.</div>
+
+  <!-- ============ TWO PLANE ============ -->
+  <h2>4 · Two-plane learning (what to build)</h2>
+  <div class="cols">
+    <div class="card build">
+      <h4><span class="dot build"></span> SHARED plane — <span class="mono">model_knowledge</span></h4>
+      <p style="font-size:12.5px;color:var(--muted);margin:0 0 6px">Keyed <b class="mono">dataset_id</b> (NOT user). Org-level. Only schema-shaped logic.</p>
+      <ul>
+        <li><b>meaning</b> — table/col → business sense</li>
+        <li><b>join</b> — canonical relationship graph</li>
+        <li><b>dax_template</b> — parametric DAX, <code>{placeholder}</code> only</li>
+        <li><b>mistake</b> — <code>failed_dax → error → fixed_dax</code> (never-repeat)</li>
+        <li><code>verified_count++</code> when 2nd user confirms</li>
+      </ul>
+    </div>
+    <div class="card have">
+      <h4><span class="dot have"></span> PRIVATE plane — clone stores</h4>
+      <p style="font-size:12.5px;color:var(--muted);margin:0 0 6px">Keyed <b class="mono">data_source_id</b>. Per user. Never shared.</p>
+      <ul>
+        <li><b>answer_cache</b> — actual result rows</li>
+        <li><b>headline KPIs</b> — computed values</li>
+        <li><b>brain_graph_edge</b> — entity values</li>
+        <li>anything containing a literal data value</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="firewall">
+    <b style="color:var(--danger)">🔒 LEAK FIREWALL (on promote private → shared):</b> sanitizer strips every literal row value, WHERE-clause constant, entity name, ID, date, PII. Ambiguous → drop. Only table/column names + query <i>shape</i> + business-meaning text cross. A DAX <i>template</i> is safe; a cached <i>result</i> is not.
+  </div>
+
+  <!-- ============ ACCESS GATE ============ -->
+  <h2>5 · Access gate — how sharing stays isolated</h2>
+  <div class="ascii">  RETRIEVE for U (build context):
+
+     models_U   = { dataset_id  for each table in U's clone }        # from ConnectionTable.metadata_json.powerbi.datasetId
+     knowledge  = SELECT * FROM model_knowledge
+                  WHERE dataset_id IN models_U                        # &lt;-- intersection = the whole ACL
+     inject(knowledge)  alongside U's private clone overview
+
+  WRITE (capture, step ⑧):
+
+     learning   = extract(query, result)
+     safe       = sanitize(learning)            # leak firewall
+     UPSERT model_knowledge(dataset_id, kind, content=safe)
+            ON CONFLICT verified_count += 1</div>
+  <div class="note">Because retrieve filters <code>dataset_id IN (models this user's clone holds)</code>, a user physically cannot receive knowledge for a model absent from their own catalog. <b>Access-scoping falls out of the same GUID — no separate permission table.</b></div>
+
+  <!-- ============ WORKED EXAMPLE ============ -->
+  <h2>6 · Worked example — 4 users, "Project Management" shared</h2>
+  <div class="ascii">  ACCESS:
+     U1 → ProjectMgmt + Sales + Ops        (3 models)
+     U2 → ProjectMgmt                       (1 model)
+     U3 → 5 models  (incl ProjectMgmt)
+     U4 → 5 models  (no ProjectMgmt)
+
+  ProjectMgmt semantic model = dataset_id ad16d612-…   (SAME GUID for U1, U2, U3)
+
+  ── TODAY (have) ────────────────────────────────────────────
+     U1 learns "projects[project_status] rollup DAX"  → stays in DS_U1 only
+     U2 asks same → agent relearns from zero
+     U3 hits "cannot find table" → fixes it → nobody else benefits
+     ✗ no compounding   ✓ no leak
+
+  ── WITH model_knowledge (build) ────────────────────────────
+     U1 verified DAX ─sanitize→ model_knowledge[ad16d612, dax_template]
+     U3 "cannot find table" fix ─sanitize→ model_knowledge[ad16d612, mistake]
+        │
+        ▼  next question by ANY ProjectMgmt user:
+     U2 asks → retrieve WHERE dataset_id IN {ad16d612}
+             → inherits U1 template + U3 mistake-fix   ✓ instantly smart
+     U4 → dataset_id ad16d612 NOT in U4 catalog
+             → receives NOTHING about ProjectMgmt      ✓ isolated
+     Private rows (U1's 258 projects, U3's numbers) → never cross  🔒</div>
+
+  <!-- ============ BUILD PLAN ============ -->
+  <h2>7 · Build plan (minimal)</h2>
+  <table>
+    <tr><th>#</th><th>Change</th><th>Where</th></tr>
+    <tr><td>1</td><td><code>model_knowledge</code> table + migration</td><td>new <code>models/model_knowledge.py</code>, alembic head</td></tr>
+    <tr><td>2</td><td><code>sanitize()</code> leak firewall (regex + LLM validator, conservative)</td><td>new <code>services/knowledge/sanitize.py</code></td></tr>
+    <tr><td>3</td><td>CAPTURE hook (step ⑧) — after verified-golden / diagnosed error</td><td>reuse verified-golden pipeline + <code>create_data</code> error path</td></tr>
+    <tr><td>4</td><td>RETRIEVE gate — resolve clone dataset_ids → inject matching knowledge</td><td><code>instruction_context_builder.py</code></td></tr>
+    <tr><td>5</td><td>Confidence gate — promote only <code>verified_count ≥ 2</code> OR explicit golden</td><td>in capture upsert</td></tr>
+    <tr><td>6</td><td>Flag <code>HYBRID_MODEL_KNOWLEDGE</code> (3-place, default OFF)</td><td>flags + DB override org 7d372305</td></tr>
+  </table>
+  <div class="note">Everything else reused: <code>dataset_id</code> already stored in <code>ConnectionTable.metadata_json.powerbi</code>; verified-golden pipeline already extracts good queries; <code>instruction_context_builder</code> already injects context. Net new = <b>1 table + 1 sanitizer + 2 hooks + 1 flag.</b></div>
+
+</div>
+</body>
+</html>

@@ -89,6 +89,20 @@ async def _save_golden(db, *, organization, data_source_id, name, sql, expected)
         existing.is_golden = True
         existing.verified_count = (existing.verified_count or 0) + 1
 
+    # Shared Memory (HYBRID_SHARED_MEMORY): a verified golden is the cleanest
+    # "solved it" signal — capture it as a sanitized, model/schema-scoped
+    # template so agents sharing that scope reuse it. Flag-gated + fail-soft.
+    try:
+        from app.settings.hybrid_flags import flags as _flags
+        if _flags.SHARED_MEMORY:
+            from app.services.knowledge import capture as _cap
+            await _cap.capture_verified_query(
+                db, organization_id=str(organization.id),
+                data_source_id=str(data_source_id), sql=sql, name=name,
+            )
+    except Exception:
+        pass
+
 
 @router.post("/studios/{studio_id}/pipeline/build-goldens")
 async def build_goldens(

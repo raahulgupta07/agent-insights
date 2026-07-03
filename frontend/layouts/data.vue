@@ -1,74 +1,9 @@
 <template>
     <NuxtLayout name="default">
-        <div class="flex bg-[#FAFAF9] text-sm overflow-hidden h-full">
+        <div class="flex bg-[#F1ECE3] text-sm overflow-hidden h-full">
 
-            <!-- Loading skeleton (YouTube-style content-shaped shimmer) -->
-            <template v-if="isLoading">
-                <!-- rail skeleton -->
-                <aside class="cag-side shrink-0 self-stretch flex flex-col">
-                    <div class="cag-sk cag-sk-line" style="width:72px;height:12px;margin-bottom:18px"></div>
-                    <div class="flex items-center gap-2.5 pb-4 mb-3 border-b border-[#F1EFEC]">
-                        <div class="cag-sk" style="width:34px;height:34px;border-radius:9px"></div>
-                        <div class="flex-1 min-w-0">
-                            <div class="cag-sk cag-sk-line" style="width:80%;height:11px;margin-bottom:6px"></div>
-                            <div class="cag-sk cag-sk-line" style="width:48%;height:9px"></div>
-                        </div>
-                    </div>
-                    <template v-for="n in 9" :key="n">
-                        <div v-if="n === 4 || n === 7" class="cag-sk cag-sk-line" style="width:38%;height:9px;margin:14px 0 6px"></div>
-                        <div class="cag-sk cag-sk-line" :style="{ width: (n % 3 === 0 ? '48%' : '72%'), height: '13px', margin: '9px 4px' }"></div>
-                    </template>
-                </aside>
-                <!-- main skeleton -->
-                <div class="flex-1 min-w-0 m-2">
-                    <div class="bg-white border border-[#EAE8E4] rounded-xl overflow-hidden h-full">
-                        <div class="px-8 py-5 border-b border-[#F1EFEC] flex items-center justify-between">
-                            <div class="cag-sk cag-sk-line" style="width:min(46%,360px);height:14px"></div>
-                            <div class="flex gap-3">
-                                <div class="cag-sk" style="width:88px;height:30px;border-radius:8px"></div>
-                                <div class="cag-sk" style="width:112px;height:30px;border-radius:8px"></div>
-                            </div>
-                        </div>
-                        <div class="p-6 flex gap-5">
-                            <div class="flex-1 space-y-4">
-                                <div class="cag-sk" style="height:120px;border-radius:12px"></div>
-                                <div class="cag-sk" style="height:240px;border-radius:12px"></div>
-                            </div>
-                            <div class="w-[300px] shrink-0 space-y-4 hidden lg:block">
-                                <div class="cag-sk" style="height:160px;border-radius:12px"></div>
-                                <div class="cag-sk" style="height:120px;border-radius:12px"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </template>
-
-            <!-- Access errors -->
-            <div v-else-if="fetchError === 403" class="flex-1 m-2">
-                <div class="bg-white border border-[#EAE8E4] rounded-xl p-10 text-center">
-                    <Icon name="i-heroicons-lock-closed" class="w-10 h-10 text-[#A8A29E] mx-auto mb-3" />
-                    <h2 class="text-base font-medium text-[#1C1917]">Access Restricted</h2>
-                    <p class="mt-1.5 text-sm text-[#78716C] max-w-sm mx-auto">This agent is private. Contact the owner or an admin to request access.</p>
-                    <NuxtLink to="/agents" class="mt-4 inline-block text-sm text-[#C2541E] hover:underline">← Back to agents</NuxtLink>
-                </div>
-            </div>
-            <div v-else-if="fetchError === 404" class="flex-1 m-2">
-                <div class="bg-white border border-[#EAE8E4] rounded-xl p-10 text-center">
-                    <Icon name="i-heroicons-exclamation-circle" class="w-10 h-10 text-[#A8A29E] mx-auto mb-3" />
-                    <h2 class="text-base font-medium text-[#1C1917]">Agent Not Found</h2>
-                    <p class="mt-1.5 text-sm text-[#78716C] max-w-sm mx-auto">The agent you're looking for doesn't exist or has been removed.</p>
-                    <NuxtLink to="/agents" class="mt-4 inline-block text-sm text-[#C2541E] hover:underline">← Back to agents</NuxtLink>
-                </div>
-            </div>
-            <div v-else-if="fetchError" class="flex-1 m-2">
-                <div class="bg-white border border-[#EAE8E4] rounded-xl p-10 text-center text-sm text-[#78716C]">Failed to load this agent.</div>
-            </div>
-
-            <!-- RAIL + MAIN (mirrors /workspace AppRail .cag-rail-card + main card) -->
-            <template v-else>
-
-                <!-- LEFT RAIL / AGENT SUB-NAV -->
-                <aside class="cag-side shrink-0 self-stretch min-h-0 overflow-y-auto flex flex-col">
+                <!-- LEFT RAIL / AGENT SUB-NAV (mirrors /workspace AppRail .cag-rail-card) -->
+                <aside class="cag-side shrink-0 self-stretch min-h-0 overflow-y-auto flex flex-col m-2">
                     <!-- back link -->
                     <NuxtLink to="/agents" class="cag-back">
                         <UIcon name="i-heroicons-arrow-left" class="w-3.5 h-3.5" /> All agents
@@ -117,10 +52,62 @@
                     </nav>
                 </aside>
 
+
+            <!-- Loading skeleton (YouTube-style content-shaped shimmer) -->
+            <template v-if="isLoading">
+                <!-- main skeleton -->
+                <div class="flex-1 min-w-0 m-2">
+                    <div class="bg-[#FBFAF6] border border-[#E9E0D3] rounded-xl overflow-hidden h-full">
+                        <div class="px-8 py-5 border-b border-[#F1EFEC] flex items-center justify-between">
+                            <div class="cag-sk cag-sk-line" style="width:min(46%,360px);height:14px"></div>
+                            <div class="flex gap-3">
+                                <div class="cag-sk" style="width:88px;height:30px;border-radius:8px"></div>
+                                <div class="cag-sk" style="width:112px;height:30px;border-radius:8px"></div>
+                            </div>
+                        </div>
+                        <div class="p-6 flex gap-5">
+                            <div class="flex-1 space-y-4">
+                                <div class="cag-sk" style="height:120px;border-radius:12px"></div>
+                                <div class="cag-sk" style="height:240px;border-radius:12px"></div>
+                            </div>
+                            <div class="w-[300px] shrink-0 space-y-4 hidden lg:block">
+                                <div class="cag-sk" style="height:160px;border-radius:12px"></div>
+                                <div class="cag-sk" style="height:120px;border-radius:12px"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <!-- Access errors -->
+            <div v-else-if="fetchError === 403" class="flex-1 m-2">
+                <div class="bg-white border border-[#EAE8E4] rounded-xl p-10 text-center">
+                    <Icon name="i-heroicons-lock-closed" class="w-10 h-10 text-[#A8A29E] mx-auto mb-3" />
+                    <h2 class="text-base font-medium text-[#1C1917]">Access Restricted</h2>
+                    <p class="mt-1.5 text-sm text-[#78716C] max-w-sm mx-auto">This agent is private. Contact the owner or an admin to request access.</p>
+                    <NuxtLink to="/agents" class="mt-4 inline-block text-sm text-[#C2541E] hover:underline">← Back to agents</NuxtLink>
+                </div>
+            </div>
+            <div v-else-if="fetchError === 404" class="flex-1 m-2">
+                <div class="bg-white border border-[#EAE8E4] rounded-xl p-10 text-center">
+                    <Icon name="i-heroicons-exclamation-circle" class="w-10 h-10 text-[#A8A29E] mx-auto mb-3" />
+                    <h2 class="text-base font-medium text-[#1C1917]">Agent Not Found</h2>
+                    <p class="mt-1.5 text-sm text-[#78716C] max-w-sm mx-auto">The agent you're looking for doesn't exist or has been removed.</p>
+                    <NuxtLink to="/agents" class="mt-4 inline-block text-sm text-[#C2541E] hover:underline">← Back to agents</NuxtLink>
+                </div>
+            </div>
+            <div v-else-if="fetchError" class="flex-1 m-2">
+                <div class="bg-white border border-[#EAE8E4] rounded-xl p-10 text-center text-sm text-[#78716C]">Failed to load this agent.</div>
+            </div>
+
+            <!-- RAIL + MAIN (mirrors /workspace AppRail .cag-rail-card + main card) -->
+            <template v-else>
+
+
                 <!-- MAIN (page card) — own scroll container so the page scrolls
                      internally within the fixed shell (parent app clips body scroll) -->
                 <div class="flex-1 min-w-0 m-2 min-h-0 flex flex-col">
-                    <div class="flex flex-col min-h-0 flex-1 bg-white border border-[#EAE8E4] rounded-xl overflow-hidden" style="box-shadow: 0 1px 2px rgba(28,25,23,.04), 0 1px 3px rgba(28,25,23,.06)">
+                    <div class="flex flex-col min-h-0 flex-1 bg-[#FBFAF6] border border-[#E9E0D3] rounded-xl overflow-hidden" style="box-shadow: 0 1px 2px rgba(28,25,23,.04), 0 1px 3px rgba(28,25,23,.06)">
                         <!-- FROZEN header (identity / description / actions) — stays put while content scrolls -->
                         <div class="shrink-0 px-6 md:px-8 pt-6 pb-4 border-b border-[#F1EFEC]">
                         <div class="flex items-start justify-between gap-4">
@@ -258,6 +245,7 @@ const allTabs = computed(() => {
         { name: 'context', label: 'Instructions' },
         { name: 'queries', label: 'Queries' },
         { name: 'tools', label: 'Tools' },
+        { name: 'memory', label: 'Memory' },
         { name: 'activity', label: 'Activity' },
         { name: 'monitoring', label: 'Monitoring', gate: canViewMonitoring },
         { name: 'evals', label: 'Evals', gate: canManageEvals },
@@ -286,6 +274,7 @@ const TAB_ICONS: Record<string, string> = {
     context: 'i-heroicons-document-text',
     queries: 'i-heroicons-command-line',
     tools: 'i-heroicons-wrench-screwdriver',
+    memory: 'i-heroicons-sparkles',
     activity: 'i-heroicons-signal',
     monitoring: 'i-heroicons-chart-bar',
     evals: 'i-heroicons-check-badge',
@@ -348,7 +337,7 @@ const connectorMeta = computed(() => {
 // Group the flat tab list into rail sections (mirrors the Manage page layout).
 const TAB_GROUPS: { label: string; names: string[] }[] = [
     { label: 'Explore', names: ['', 'tables', 'queries'] },
-    { label: 'Configure', names: ['context', 'tools', 'settings'] },
+    { label: 'Configure', names: ['context', 'tools', 'memory', 'settings'] },
     { label: 'Observe', names: ['activity', 'monitoring', 'evals'] },
 ]
 const tabGroups = computed(() => {
@@ -525,6 +514,10 @@ async function fetchIntegration(silent = false) {
         const data = await $fetch(`/data_sources/${id.value}`, {
             baseURL: config.public.baseURL,
             method: 'GET',
+            // Never let this hang forever — without a timeout a stalled request
+            // leaves isLoading=true and the WHOLE page (rail + main) stuck on the
+            // skeleton. 15s → reject → error card instead of an endless spinner.
+            timeout: 15000,
             headers: {
                 Authorization: `${token.value}`,
                 'X-Organization-Id': organization.value?.id || '',
@@ -591,7 +584,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 /* Agent sub-nav — matches the redesign mockup (.side / .agenthead / .navgrp / .navitem). */
-.cag-side { width: 224px; background: #FFFFFF; border-right: 1px solid #EAE8E4; padding: 16px 12px; font-family: 'Hanken Grotesk', system-ui, sans-serif; }
+.cag-side { width: 240px; background: #FBFAF6; border: 1px solid #E9E0D3; border-radius: 16px; padding: 14px 12px; font-family: 'Hanken Grotesk', system-ui, sans-serif; }
 
 .cag-back { display: inline-flex; align-items: center; gap: 6px; color: #78716C; font-size: 13px; margin-bottom: 16px; text-decoration: none; }
 .cag-back:hover { color: #1C1917; }

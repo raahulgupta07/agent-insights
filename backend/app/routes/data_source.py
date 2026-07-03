@@ -102,6 +102,72 @@ async def get_data_sources(
 ):
     return await data_source_service.get_data_sources(db, current_user, organization, show_all=show_all)
 
+
+def _serialize_knowledge(r) -> dict:
+    """Shape an AgentKnowledge row for the Memory UI (never leaks raw content
+    beyond the already-sanitized content_json)."""
+    return {
+        "id": r.id,
+        "scope_kind": r.scope_kind,
+        "scope_key": r.scope_key,
+        "kind": r.kind,
+        "title": r.title,
+        "text": r.text,
+        "content": r.content_json,
+        "verified_count": r.verified_count,
+        "status": r.status,
+        "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+    }
+
+
+@router.get("/data_sources/{data_source_id}/memory")
+async def get_agent_memory(
+    data_source_id: str,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Shared Memory this agent reuses — the reusable, sanitized facts visible
+    to the current user under this agent's scopes. Empty unless HYBRID_SHARED_MEMORY."""
+    from app.settings.hybrid_flags import flags
+    if not flags.SHARED_MEMORY:
+        return {"enabled": False, "items": []}
+    from app.services.knowledge import retrieve as R
+    rows = await R.recall_items(
+        db, organization_id=str(organization.id),
+        current_user_id=str(current_user.id), data_source_ids=[str(data_source_id)],
+    )
+    return {"enabled": True, "items": [_serialize_knowledge(r) for r in rows]}
+
+
+@router.get("/memory/shared")
+async def get_shared_memory(
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Org-wide 'all agents' view: every reusable fact visible to the current
+    user across the data sources they can access, grouped by scope. Access-gated
+    (a user never sees a scope they don't hold). Empty unless HYBRID_SHARED_MEMORY."""
+    from app.settings.hybrid_flags import flags
+    if not flags.SHARED_MEMORY:
+        return {"enabled": False, "groups": []}
+    from app.services.knowledge import retrieve as R
+    sources = await data_source_service.get_data_sources(db, current_user, organization)
+    ds_ids = [str(getattr(s, "id", None) or (s.get("id") if isinstance(s, dict) else "")) for s in sources]
+    ds_ids = [x for x in ds_ids if x]
+    rows = await R.recall_items(
+        db, organization_id=str(organization.id),
+        current_user_id=str(current_user.id), data_source_ids=ds_ids,
+    )
+    groups: dict[tuple, dict] = {}
+    for r in rows:
+        key = (r.scope_kind, r.scope_key)
+        g = groups.setdefault(key, {"scope_kind": r.scope_kind, "scope_key": r.scope_key, "items": []})
+        g["items"].append(_serialize_knowledge(r))
+    return {"enabled": True, "groups": list(groups.values())}
+
+
 @router.get("/data_sources/active", response_model=list[DataSourceListItemSchema])
 async def get_active_data_sources(
     include_unconnected: bool = Query(False, description="Include user_required data sources the user hasn't connected yet (returned with user_status so the client can offer a Connect action)"),

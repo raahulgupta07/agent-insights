@@ -498,16 +498,47 @@ class InstructionContextBuilder:
 
         if build_items is not None:
             # Build-based loading - return items with version tracking
-            return InstructionsSection(items=build_items)
+            section = InstructionsSection(items=build_items)
+            await self._inject_shared_memory(section, effective_ds_ids)
+            return section
 
         # Fallback to legacy behavior (direct instruction query)
-        return await self._build_legacy(
+        section = await self._build_legacy(
             query=query,
             data_source_ids=effective_ds_ids,
             category=category,
             categories=categories,
             max_instructions=max_instructions,
         )
+        await self._inject_shared_memory(section, effective_ds_ids)
+        return section
+
+    async def _inject_shared_memory(self, section, data_source_ids) -> None:
+        """Append reusable Shared Memory (HYBRID_SHARED_MEMORY) as one synthetic
+        instruction so the agent reuses 'how it was done before'. Access-gated to
+        the viewer's own scopes. Flag-gated + fail-soft (never breaks context)."""
+        try:
+            from app.settings.hybrid_flags import flags as _flags
+            if not _flags.SHARED_MEMORY or not data_source_ids:
+                return
+            from app.services.knowledge import retrieve as _rec
+            block = await _rec.recall_block(
+                self.db,
+                organization_id=str(self.organization.id),
+                current_user_id=(str(self.current_user.id) if self.current_user else None),
+                data_source_ids=list(data_source_ids),
+            )
+            if not block:
+                return
+            section.items.append(InstructionItem(
+                id="shared-memory",
+                category="reuse",
+                title="Reusable knowledge",
+                source_type="shared_memory",
+                text=block,
+            ))
+        except Exception:
+            return
     
     async def _load_from_build(
         self,

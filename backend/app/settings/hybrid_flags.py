@@ -200,6 +200,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_MOA": {"label": "Mixture-of-Agents (peer-consult test)", "role": "admin", "category": "Experimental", "status": "experimental", "note": "Measurement-only endpoint POST /api/llm/moa/test: fires a panel of cheap diverse OpenRouter models in parallel, assembles a peer block, and optionally A/Bs a GLM aggregator with/without it. NOT wired into the agent/planner/reports. OpenRouter-only, fail-soft. When OFF the router is not mounted. Default OFF."},
     "HYBRID_CODE_BANK": {"label": "Code Bank (proven snippets)", "role": "agent", "category": "Learning", "status": "stable"},
     "HYBRID_AGENT_MEMORY": {"label": "Agent Memory", "role": "review", "category": "Learning", "status": "stable"},
+    "HYBRID_SHARED_MEMORY": {"label": "Shared Memory (cross-user reuse, no leak)", "role": "agent", "category": "Learning", "status": "experimental", "note": "Singularized, reusable agent knowledge. When an agent solves something (verified query, a fixed error, a how-to), it's SANITIZED (no data values) and stored ONCE per fact, keyed by SCOPE — a Power BI semantic model, a DB schema, a file, or (private) the user. Another agent/user who shares that SAME scope reuses it ('how it was done before') so the agent gets smarter over time; users who don't share the scope never see it. Personal-agent memory stays private. Off = byte-identical (nothing captured or injected). Default OFF."},
     "HYBRID_SKILL_AUTOGROW": {"label": "Skill Auto-grow", "role": "review", "category": "Learning", "status": "stable"},
     "HYBRID_EVAL_HARNESS": {"label": "Eval Harness (result goldens)", "role": "user", "category": "Learning", "status": "stable"},
     "HYBRID_BITEMPORAL": {"label": "Bi-temporal Facts", "role": "user", "category": "Learning", "status": "experimental", "note": "Changes how facts read (time-filtered)."},
@@ -588,6 +589,17 @@ class HybridFlags:
         # pages cross-session state. Personal scope = live; shared = pending.
         # Vectorless (PG-FTS + Jaccard). Default OFF.
         return _bool("HYBRID_AGENT_MEMORY", True)
+
+    @property
+    def SHARED_MEMORY(self) -> bool:
+        # Singularized cross-user learning store (agent_knowledge). Capture a
+        # SANITIZED, deduped fact per solved task (verified query / fixed error /
+        # how-to), scoped by a resolver (PBI model / DB schema / file / private
+        # user), and inject it back for agents sharing that scope so the agent
+        # reuses "how it was done before". Access = intersection with the
+        # viewer's own scopes; private tier never crosses users. Off = nothing
+        # captured or injected (byte-identical). Default OFF.
+        return _bool("HYBRID_SHARED_MEMORY", False)
 
     @property
     def ANSWER_CACHE(self) -> bool:
@@ -1217,6 +1229,7 @@ class HybridFlags:
             "GOVERNANCE": self.GOVERNANCE,
             "CODE_BANK": self.CODE_BANK,
             "MEMORY_LOOP": self.MEMORY_LOOP,
+            "SHARED_MEMORY": self.SHARED_MEMORY,
             "EVAL_HARNESS": self.EVAL_HARNESS,
             "EVAL_SCHEDULE_ENABLED": self.EVAL_SCHEDULE_ENABLED,
             "DOC_KNOWLEDGE": self.DOC_KNOWLEDGE,

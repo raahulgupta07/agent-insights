@@ -2353,3 +2353,47 @@ Post-cherry-pick fixes (all required — branch cut from an old base):
 
 Verified: 664 routes, 4 ingest-brain endpoints, `INGEST_BRAIN` False + in snapshot, single head, FE
 build clean, health 200. Baked. Rollback tag `pre-ingestbrain`.
+
+---
+
+## 2026-07-03 — v1.85.0 Shared Memory (singularized, leak-safe, reusable agent learning)
+
+**Goal:** agents get smarter over time and share learnings across users who have the SAME data,
+without leaking data. Applies to every agent kind (data / file / DB / personal).
+
+**Design — two-plane, one store.** New table `agent_knowledge` (mig `agentknow1` off `colprofile1`).
+Key insight: a learning is shareable only if scoped by something that is identical ONLY for users with
+the same access. `scope_resolver` maps: Power BI `datasetId` → `model`, DB → `schema` signature, upload
+→ `file` signature, personal → private `user` (never shared). Singularize on
+`(org, scope_kind, scope_key, kind, source_hash)`; re-learn bumps `verified_count`, promotes pending→
+active at ≥2 or explicit verified.
+
+**Leak firewall (`sanitize.py`).** Conservative — before a fact crosses to the shared tier, strip every
+data value: result rows, WHERE constants, ids, dates, emails, GUIDs, big/decimal numbers. Only table/
+column names, query STRUCTURE (`{value}` templates) and business-meaning prose travel. Private tier kept
+raw for its owner.
+
+**Access gate (`access.py`).** Retrieval filters to the viewer's own resolved scopes (`tuple_ IN`), plus
+`can_view` row check; `scope_kind='user'` only reaches its owner.
+
+**Capture (`capture.py`).** Hooked into `routes/pipeline._save_golden` (verified query → parameterized
+template, flag-gated + fail-soft). Also `capture_mistake` (error_class + fix_shape + templates, unverified
+→ needs a 2nd sighting) ready for the create_data error path.
+
+**Retrieve (`retrieve.py`).** `recall_block` injected as ONE synthetic `<instruction>` in
+`instruction_context_builder.build()` (both build + legacy paths), flag-gated. Groups Reuse patterns +
+Avoid (mistake) lines. `provenance()` for the chat chip.
+
+**UI.** Endpoints `GET /api/data_sources/{id}/memory` + `GET /api/memory/shared` (`routes/data_source.py`).
+Per-agent **Memory** tab (`pages/agents/[id]/memory.vue`, Configure group in `layouts/data.vue`); org-wide
+**Shared Memory** page (`pages/memory/shared.vue`) + nav item in `useAppNav.ts`.
+
+**Flag `HYBRID_SHARED_MEMORY`** (3-place, default OFF, DB-override org 7d372305). OFF = nothing captured or
+injected (byte-identical).
+
+Verified: 9/9 firewall/access unit tests; container DB tests (singularize dedup 1 row / count 1→2 / promote
+pending→active / different scope → separate row / private active-immediately); migration applied to live PG
+(table present); restart healthy; `GET /api/memory/shared` → `{enabled:true,groups:[]}`; **live isolation
+E2E** — seeded a fact under a real held datasetId + one under a not-held scope, demo user's `/memory/shared`
+returned ONLY the held one (bogus never leaked). Rollback: drop flag override + `alembic downgrade colprofile1`.
+LANDMINE: `HYBRID_AGENT_MEMORY` already exists (remember/recall) — this is the SEPARATE `HYBRID_SHARED_MEMORY`.
