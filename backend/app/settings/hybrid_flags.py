@@ -201,6 +201,10 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_CODE_BANK": {"label": "Code Bank (proven snippets)", "role": "agent", "category": "Learning", "status": "stable"},
     "HYBRID_AGENT_MEMORY": {"label": "Agent Memory", "role": "review", "category": "Learning", "status": "stable"},
     "HYBRID_SHARED_MEMORY": {"label": "Shared Memory (cross-user reuse, no leak)", "role": "agent", "category": "Learning", "status": "experimental", "note": "Singularized, reusable agent knowledge. When an agent solves something (verified query, a fixed error, a how-to), it's SANITIZED (no data values) and stored ONCE per fact, keyed by SCOPE — a Power BI semantic model, a DB schema, a file, or (private) the user. Another agent/user who shares that SAME scope reuses it ('how it was done before') so the agent gets smarter over time; users who don't share the scope never see it. Personal-agent memory stays private. Off = byte-identical (nothing captured or injected). Default OFF."},
+    "HYBRID_SAFETY_EVALS": {"label": "Safety & Reliability Evals", "role": "review", "category": "Learning", "status": "experimental", "note": "Beyond accuracy, run LLM-as-judge binary checks on answers/changes: SECURITY (no secret/credential/PII leak), GOVERNANCE (refuses destructive SQL/DDL), BOUNDARIES (agent stayed inside its own data scope — verifies the Shared-Memory isolation), ROUTING (right tool picked). Fail → held with reason. Runs on train + on demand. Dash-style AgentAsJudge. Default OFF."},
+    "HYBRID_READONLY_ENFORCE": {"label": "Structural Read-Only Enforcement", "role": "agent", "category": "Core", "status": "experimental", "note": "Enforce read-only at the CONNECTION/engine level (not just a prompt or SQL-string check) so a prompt-injection can't DROP/DELETE/ALTER source data. Writes allowed only on the agent's own staging schema. Off = today's string-based guard. Default OFF."},
+    "HYBRID_ASSET_MATERIALIZE": {"label": "Materialize Hot Metrics (reusable assets)", "role": "agent", "category": "Advanced", "status": "experimental", "note": "When a Shared-Memory query template is reused enough (verified_count >= threshold), offer to MATERIALIZE it as a persistent computed asset (a view/table) so the hot metric is computed once and served instantly instead of re-running a heavy query every time. Builds on Engineer Assets. Default OFF."},
+    "HYBRID_GOTCHA_MEMORY": {"label": "Data Gotchas → Global Memory", "role": "review", "category": "Learning", "status": "experimental", "note": "Route data-quality gotchas found at ingest/profile (wrong type, total/subtotal rows, near-duplicate categories) into the GLOBAL tier of Shared Memory so EVERY agent avoids the same trap (don't SUM total rows, cast this column first). Reuses column profiles + the global memory tier. Needs Shared Memory ON. Default OFF."},
     "HYBRID_SKILL_AUTOGROW": {"label": "Skill Auto-grow", "role": "review", "category": "Learning", "status": "stable"},
     "HYBRID_EVAL_HARNESS": {"label": "Eval Harness (result goldens)", "role": "user", "category": "Learning", "status": "stable"},
     "HYBRID_BITEMPORAL": {"label": "Bi-temporal Facts", "role": "user", "category": "Learning", "status": "experimental", "note": "Changes how facts read (time-filtered)."},
@@ -600,6 +604,30 @@ class HybridFlags:
         # viewer's own scopes; private tier never crosses users. Off = nothing
         # captured or injected (byte-identical). Default OFF.
         return _bool("HYBRID_SHARED_MEMORY", False)
+
+    @property
+    def SAFETY_EVALS(self) -> bool:
+        # LLM-as-judge binary safety/reliability evals (security/governance/
+        # boundaries/routing) beyond accuracy. Default OFF.
+        return _bool("HYBRID_SAFETY_EVALS", False)
+
+    @property
+    def READONLY_ENFORCE(self) -> bool:
+        # Connection/engine-level read-only enforcement (not prompt/string).
+        # Default OFF.
+        return _bool("HYBRID_READONLY_ENFORCE", False)
+
+    @property
+    def ASSET_MATERIALIZE(self) -> bool:
+        # Materialize hot Shared-Memory query templates into persistent assets.
+        # Default OFF.
+        return _bool("HYBRID_ASSET_MATERIALIZE", False)
+
+    @property
+    def GOTCHA_MEMORY(self) -> bool:
+        # Route ingest/profile data-quality gotchas into GLOBAL Shared Memory.
+        # Default OFF.
+        return _bool("HYBRID_GOTCHA_MEMORY", False)
 
     @property
     def ANSWER_CACHE(self) -> bool:
@@ -1230,6 +1258,10 @@ class HybridFlags:
             "CODE_BANK": self.CODE_BANK,
             "MEMORY_LOOP": self.MEMORY_LOOP,
             "SHARED_MEMORY": self.SHARED_MEMORY,
+            "SAFETY_EVALS": self.SAFETY_EVALS,
+            "READONLY_ENFORCE": self.READONLY_ENFORCE,
+            "ASSET_MATERIALIZE": self.ASSET_MATERIALIZE,
+            "GOTCHA_MEMORY": self.GOTCHA_MEMORY,
             "EVAL_HARNESS": self.EVAL_HARNESS,
             "EVAL_SCHEDULE_ENABLED": self.EVAL_SCHEDULE_ENABLED,
             "DOC_KNOWLEDGE": self.DOC_KNOWLEDGE,

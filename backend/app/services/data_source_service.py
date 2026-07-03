@@ -1921,6 +1921,7 @@ class DataSourceService:
 
             client = ClientClass(**allowed)
             await self._install_pbi_offline_index(db, client, conn)
+            self._apply_agent_readonly(client)
             self._attach_client_quota_metadata(client, data_source, conn, key)
             # Per-user identity on the client → the DAX result cache keys by user so
             # a Row-Level-Security dataset never serves one user's rows to another.
@@ -1937,6 +1938,29 @@ class DataSourceService:
             clients[data_source.name] = first_client
 
         return clients
+
+    def _apply_agent_readonly(self, client) -> None:
+        """Open the AGENT query path's connection in DB-level read-only mode when
+        flags.READONLY_ENFORCE is on (structural, not a prompt/string check).
+
+        External connectors are only ever READ through construct_clients — ingest
+        writes to the managed `staging` schema and the Engineer writes to the
+        managed `analytics` schema, both via their own engines, never via a
+        connector client. So flipping a connector to read-only can't break any
+        legitimate write path.
+
+        Only clients that opt in (expose a `read_only` attribute, e.g. Postgres)
+        are affected; others rely on the runtime statement guard in
+        code_execution. Flag OFF / unsupported client => no-op, never raises.
+        """
+        try:
+            from app.settings.hybrid_flags import flags as _hflags
+            if not getattr(_hflags, "READONLY_ENFORCE", False):
+                return
+            if hasattr(client, "read_only"):
+                client.read_only = True
+        except Exception:
+            pass
 
     async def _install_pbi_offline_index(self, db: AsyncSession, client, connection) -> None:
         """Give a Power BI client an OFFLINE table -> {datasetId, workspaceId} index

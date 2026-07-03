@@ -244,6 +244,23 @@ async def patch_memory(
     return {"ok": True, "status": row.status}
 
 
+@router.get("/memory/hot-assets")
+async def get_hot_assets(
+    threshold: int = Query(3, description="min verified_count to count as hot"),
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Hot Shared-Memory query templates that are candidates to MATERIALIZE into
+    a reusable asset (dash Engineer-style). Empty unless HYBRID_ASSET_MATERIALIZE."""
+    from app.settings.hybrid_flags import flags
+    if not flags.ASSET_MATERIALIZE:
+        return {"enabled": False, "candidates": []}
+    from app.services.knowledge import materialize as M
+    cands = await M.hot_asset_candidates(db, organization_id=str(organization.id), threshold=int(threshold))
+    return {"enabled": True, "candidates": cands}
+
+
 @router.get("/data_sources/active", response_model=list[DataSourceListItemSchema])
 async def get_active_data_sources(
     include_unconnected: bool = Query(False, description="Include user_required data sources the user hasn't connected yet (returned with user_status so the client can offer a Connect action)"),

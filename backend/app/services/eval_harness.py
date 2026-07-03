@@ -263,6 +263,28 @@ async def save_completion_as_golden(
         db.add(case)
         await db.commit()
         await db.refresh(case)
+
+        # Safety/reliability judges (flag-gated, fail-soft, log-only). Runs on the
+        # blessed answer so a thumbs-up'd golden also gets a SECURITY/GOVERNANCE/
+        # BOUNDARIES/ROUTING pass. NEVER blocks the golden save.
+        try:
+            from app.services.evals.safety_evals import maybe_run_safety
+
+            answer_text = ""
+            comp_json = getattr(completion, "completion", None)
+            if isinstance(comp_json, dict):
+                answer_text = str(comp_json.get("content") or "")
+            await maybe_run_safety(
+                db,
+                organization=organization,
+                completion_or_answer_text=answer_text,
+                question=question,
+                allowed_data_source_ids=ds_ids,
+                context="golden-save",
+            )
+        except Exception:
+            pass
+
         return str(case.id)
     except Exception as e:
         logger.warning("save_completion_as_golden failed: %s", e)

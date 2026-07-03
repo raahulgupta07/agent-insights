@@ -19,6 +19,12 @@ class PostgresqlClient(DataSourceClient):
         self.password = password
         # Optional schema or comma-separated list of schemas
         self.schema = schema
+        # When True, connections open with default_transaction_read_only=on so the
+        # DB itself rejects any INSERT/UPDATE/DELETE/DDL — a structural guarantee
+        # for the AGENT query path that a prompt-injection can't defeat. Set post-
+        # construction by DataSourceService (flags.READONLY_ENFORCE). Default False
+        # keeps every other path (test/schema introspection) byte-identical.
+        self.read_only = False
         self._schemas = []
         if isinstance(self.schema, str) and self.schema.strip():
             parts = [s.strip() for s in self.schema.split(",") if s.strip()]
@@ -45,7 +51,16 @@ class PostgresqlClient(DataSourceClient):
         engine = None
         conn = None
         try:
-            engine = sqlalchemy.create_engine(self.pg_uri)
+            # Structural read-only: a libpq `options` startup param sets the session
+            # default so EVERY statement runs in a read-only transaction. Empty
+            # connect_args == no kwarg, so create_engine stays byte-identical when
+            # read_only is off.
+            connect_args = (
+                {"options": "-c default_transaction_read_only=on"}
+                if getattr(self, "read_only", False)
+                else {}
+            )
+            engine = sqlalchemy.create_engine(self.pg_uri, connect_args=connect_args)
             conn = engine.connect()
             # Set search_path if schemas are provided
             if self._schemas:

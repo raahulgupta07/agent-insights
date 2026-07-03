@@ -136,6 +136,18 @@ class UnsafeSQLError(CodeSecurityError):
     pass
 
 
+class ReadOnlyViolationError(UnsafeSQLError):
+    """Raised when structural read-only enforcement (flags.READONLY_ENFORCE) rejects
+    a write/DDL statement on the AGENT query path at runtime.
+
+    Distinct from UnsafeSQLError's AST-time scan: this fires on the ACTUAL string
+    passed to client.execute_query(), so a query assembled dynamically (concat,
+    a variable, an f-string with interpolated parts) can't slip a DROP/DELETE past
+    the compile-time scanner. Defense-in-depth beside the connection-level read-only
+    transaction (Postgres default_transaction_read_only)."""
+    pass
+
+
 class QueryTimeoutError(AppError):
     """Raised when a wrapped client.execute_query exceeds its wall-clock budget.
 
@@ -429,6 +441,36 @@ def validate_sql_query(query: str) -> None:
         )
 
 
+def _enforce_readonly_query(query: Any) -> None:
+    """Structural read-only guard for the AGENT query path (flags.READONLY_ENFORCE).
+
+    Runs on the ACTUAL runtime string (not a compile-time literal), so a
+    dynamically-built write can't slip past the AST scanner. Reuses the precise
+    _FORBIDDEN_SQL_IN_STRING_REGEX — it requires the write keyword next to its
+    syntactic partner (TABLE/INTO/SET/...), so a column literally named "call" or
+    "update_date" in a plain SELECT is NOT flagged (no regression of the old
+    blocked-word landmine). Fail-soft: OFF or non-str => no-op.
+
+    Raises:
+        ReadOnlyViolationError: on a write/DDL statement while the flag is ON.
+    """
+    if not isinstance(query, str):
+        return
+    try:
+        if not flags.READONLY_ENFORCE:
+            return
+    except Exception:
+        return
+    m = _FORBIDDEN_SQL_IN_STRING_REGEX.search(query)
+    if m:
+        snippet = query.strip()[:120].replace("\n", " ")
+        raise ReadOnlyViolationError(
+            f"Read-only enforcement blocked a write/DDL statement "
+            f"('{m.group().strip()}'). The agent query path may only run "
+            f"read-only SELECT/WITH queries. Offending SQL: \"{snippet}...\""
+        )
+
+
 # =============================================================================
 # Query Capturing Wrapper (captures queries passed to execute_query)
 # =============================================================================
@@ -466,6 +508,12 @@ class QueryCapturingClientWrapper:
 
     def execute_query(self, query: str, *args, **kwargs):
         """Intercept execute_query calls to capture the query string and wall-clock duration."""
+        # Structural read-only enforcement (flags.READONLY_ENFORCE, default OFF).
+        # This is the runtime chokepoint every generated SQL passes through, so it
+        # catches write/DDL even when the string was assembled dynamically (a var,
+        # concat, or f-string with interpolated parts) — the AST-time scanner only
+        # sees literal args and would miss those. OFF => byte-identical (no check).
+        _enforce_readonly_query(query)
         if isinstance(query, str):
             self._captured_queries.append(query)
         idx = len(self._captured_timings)

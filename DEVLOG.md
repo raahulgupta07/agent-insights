@@ -2431,3 +2431,44 @@ Verified live: `/api/memory/shared` shows `tier=global org:7d372305` first + dat
 seeded "exclude total rows" visible to any agent; `DELETE /api/memory/{id}` → soft_deleted=t. Migration head
 unchanged (`agentknow1`, no new columns — org/tier reuse existing scope_kind/scope_key). Flag OFF = byte-identical.
 NOT git-pushed; durable image bake pending (currently hot-cp + fe-sync).
+
+---
+
+## 2026-07-03 — v1.87.0 Dash-inspired hardening (5 features, 4 parallel subagents + inline)
+
+Deep-researched agno-agi/dash; adopted 5 mechanisms we lacked. 4 new flags (3-place, default OFF),
+ON via DB override org 7d372305. All flag-gated + fail-soft; OFF = byte-identical.
+
+**D1 Safety/reliability evals** (subagent F1, flag HYBRID_SAFETY_EVALS): NEW `services/evals/safety_evals.py`
+— 4 LLM-as-judge binary checks (SECURITY/GOVERNANCE/BOUNDARIES/ROUTING) via asyncio.gather, reusing the
+sense_maker/session_summary LLM wrapper. Deterministic FAIL-CLOSED pre-LLM on clear secrets
+(`_has_clear_secret`) + destructive SQL without WHERE (`_has_destructive_sql`); judge infra error →
+INCONCLUSIVE pass (never block on infra). `maybe_run_safety` wired into `eval_harness.save_completion_as_golden`
+(log-only v1, no migration). BOUNDARIES judge verifies the Shared-Memory isolation.
+
+**D2 Structural read-only** (subagent F2, flag HYBRID_READONLY_ENFORCE): AUDIT found the guard was
+string-level only. Hardened: `data_sources/clients/postgresql_client.py` opens the AGENT connection with
+`options=-c default_transaction_read_only=on` (DB rejects INSERT/UPDATE/DELETE/DDL structurally);
+`data_source_service` constructs the read-only client on the agent query path; `ai/code_execution/code_execution.py`
+adds a typed structural guard (`ReadOnlyViolation`). PBI/Fabric already read-only (DAX EVALUATE). Engineer/ingest
+keeps its writable connection. OFF = today's string guard.
+
+**D3 Materialize hot metrics** (inline, flag HYBRID_ASSET_MATERIALIZE): NEW `services/knowledge/materialize.py`
+`hot_asset_candidates` (query_template verified_count ≥ threshold; `materializable=True` only for relational
+SQL, DAX served from cache) + `GET /api/memory/hot-assets`. Detection/surfacing only — no unattended DDL.
+
+**D4 Gotchas → Global memory** (subagent F4, flag HYBRID_GOTCHA_MEMORY): NEW `services/knowledge_gotchas.py`
+`gotchas_from_quality_summary` + `route_gotchas_to_global` → `capture_global` (import-only). Wired
+`ingest/post_ingest.py:557` after the T6 quality-scan commit. Maps mixed_type/type_coercion→mistake,
+near-dup/near-constant/all_null→meaning; structure only (no % / data values travel). NOTE: no total/subtotal-row
+detector actually exists in ingest — F4 correctly did not fabricate one.
+
+**D5 remember_this tool** (subagent F5, reuses HYBRID_SHARED_MEMORY): NEW `ai/tools/implementations/remember_this.py`
+(+ schema) — agent-callable save (dash `save_validated_query`). scope='data'+sql → `capture_verified_query`;
+'data' no-sql → `capture` with resolved scopes; no-source → private fallback; 'private' → private_scope. Auto-registers
+(45 tools total), fail-soft.
+
+Verify: all imports OK in container (`import main` + each module + tool registry), 4 flags read True after DB
+override + restart, `GET /api/memory/hot-assets` → `{enabled:true,candidates:[]}`, health 200. Backend-only
+(no FE, no migration). NOT git-pushed; durable image bake pending (hot-cp EPHEMERAL). Landmine: baked image
+predates these flags — a rebake makes them live in-image (DB override + restart works for now on host container).

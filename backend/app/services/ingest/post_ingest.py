@@ -548,6 +548,29 @@ async def run_data_quality_scan(db, *, organization, data_source, file) -> List[
                 structured_data={"tables": [s["table"] for s in summary]},
             )
         await db.commit()
+
+        # Route the SAFE-to-share gotchas (typing traps, near-dup categories,
+        # single-value/empty columns) into GLOBAL Shared Memory so EVERY agent
+        # org-wide avoids the same trap. Flag-gated + fail-soft; OFF = no-op.
+        try:
+            from app.services.knowledge_gotchas import (
+                gotchas_from_quality_summary,
+                route_gotchas_to_global,
+            )
+
+            gotchas = gotchas_from_quality_summary(summary)
+            if gotchas:
+                n = await route_gotchas_to_global(
+                    db, organization_id=str(organization.id), gotchas=gotchas
+                )
+                if n:
+                    await db.commit()
+        except Exception:  # noqa: BLE001 — never block ingest on memory routing
+            logger.warning("post_ingest: gotcha routing failed", exc_info=True)
+            try:
+                await db.rollback()
+            except Exception:  # noqa: BLE001
+                pass
     except Exception:  # noqa: BLE001
         logger.warning("post_ingest.run_data_quality_scan failed", exc_info=True)
         try:
