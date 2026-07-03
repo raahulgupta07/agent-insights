@@ -37,11 +37,15 @@ logger = logging.getLogger(__name__)
 # --- Config B (chosen panel) ------------------------------------------------
 # Diverse labs + one US lens. Cheap, fast, good reasoning. Analysis-only here.
 DEFAULT_PANEL: List[str] = [
-    "deepseek/deepseek-v4-pro",      # DeepSeek  (CN) — best value reasoning
-    "minimax/minimax-m3",            # MiniMax   (CN) — fast agentic
-    "qwen/qwen3.7-plus",             # Alibaba   (CN) — strong reasoning
-    "google/gemini-3.1-flash-lite",  # Google    (US) — different-lab lens
+    "google/gemini-2.5-flash-lite",  # Google    — fast, different-lab lens
+    "anthropic/claude-haiku-4.5",    # Anthropic — fast, strong instruction-follow
+    "openai/gpt-5.4-mini",           # OpenAI     — fast, different-lab lens
 ]
+# NOTE: fast, diverse (Google / Anthropic / OpenAI), currently-available OpenRouter
+# slugs — proven 3/3 live. The old parked branch listed aspirational slugs
+# (deepseek-v4-pro / minimax-m3 / qwen3.7-plus) that are slow reasoning models or
+# absent → they timed out. A caller can still add slower/other models per request via
+# `body.models`.
 # The writer + tool-caller. Holds all peer analyses (1M ctx), near-frontier.
 DEFAULT_AGGREGATOR: str = "z-ai/glm-5.2"
 
@@ -73,7 +77,7 @@ _MAX_CONSULT_WORDS_HINT = 180
 
 # A slow/cold consult model must never stall the panel — gather waits for the
 # slowest. Cap each consult; a model over budget is dropped (ok=False, timeout).
-_CONSULT_TIMEOUT_S = 20.0
+_CONSULT_TIMEOUT_S = 35.0
 
 # Aggregator framing — the ONE model that writes the answer, informed by peers.
 _AGG_SYS = (
@@ -155,6 +159,36 @@ async def _consult_one(slug: str, prompt: str, provider: Any, organization: Any,
                 "analysis": "", "ms": ms, "error": str(exc)[:200]}
 
 
+async def _resolve_openrouter_provider(db, organization):
+    """The org's enabled OpenRouter provider. It is seeded as a `custom` provider
+    with an openrouter.ai base_url (see CLAUDE.md — LLM = OpenRouter ONLY), or a
+    native `openrouter` type. Falls back to the first enabled provider. Returns the
+    LLMProvider or None. (Replaces a non-existent `LLMService._find_openrouter_provider`
+    the parked branch referenced — that method never existed on this codebase.)"""
+    from sqlalchemy import select as _select
+    from app.models.llm_provider import LLMProvider
+    rows = (await db.execute(
+        _select(LLMProvider)
+        .where(LLMProvider.organization_id == organization.id)
+        .where(LLMProvider.deleted_at.is_(None))
+        .where(LLMProvider.is_enabled.is_(True))
+    )).unique().scalars().all()  # unique(): LLMProvider eager-loads collections
+    if not rows:
+        return None
+
+    def _is_openrouter(p) -> bool:
+        if (getattr(p, "provider_type", "") or "").lower() == "openrouter":
+            return True
+        cfg = getattr(p, "additional_config", None) or {}
+        base = str((cfg.get("base_url") if isinstance(cfg, dict) else "") or "")
+        return "openrouter" in base.lower()
+
+    for p in rows:
+        if _is_openrouter(p):
+            return p
+    return rows[0]
+
+
 async def consult(db, organization, question: str, *, context: str = "",
                   models: Optional[List[str]] = None,
                   usage_scope: str = "mixture_of_agents") -> List[Dict[str, Any]]:
@@ -163,9 +197,7 @@ async def consult(db, organization, question: str, *, context: str = "",
     NEVER raises. Returns [] if the org has no OpenRouter provider.
     """
     try:
-        from app.services.llm_service import LLMService
-
-        provider = await LLMService()._find_openrouter_provider(db, organization)
+        provider = await _resolve_openrouter_provider(db, organization)
         if provider is None:
             logger.warning("MoA: no OpenRouter provider for org %s; skipping consult",
                            getattr(organization, "id", "?"))
@@ -202,11 +234,10 @@ async def aggregate(db, organization, question: str, *, peer_block: str = "",
     """
     started = time.monotonic()
     try:
-        from app.services.llm_service import LLMService
         from app.ai.llm.llm import LLM
         from app.dependencies import async_session_maker
 
-        provider = await LLMService()._find_openrouter_provider(db, organization)
+        provider = await _resolve_openrouter_provider(db, organization)
         if provider is None:
             return {"text": "", "ms": 0, "ok": False, "error": "no OpenRouter provider"}
 
