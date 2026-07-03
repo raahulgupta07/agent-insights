@@ -55,7 +55,8 @@
 
         <div v-if="error" class="wf-error">{{ error }}</div>
         <div v-if="result && result.ok" class="wf-result">
-          Ran {{ result.steps_run }} step{{ result.steps_run === 1 ? '' : 's' }}.
+          <template v-if="result.background">Running in the background…</template>
+          <template v-else>Ran {{ result.steps_run }} step{{ result.steps_run === 1 ? '' : 's' }}.</template>
           <a v-if="result.report_id" class="wf-link" :href="`/reports/${result.report_id}`">
             Open result →
           </a>

@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>CityAgent — Data-Agent Features: UI map + integration</title>
+<style>
+  :root{
+    --bg:#F1ECE3; --card:#FBFAF6; --ink:#211B14; --muted:#7c7365;
+    --accent:#C2541E; --accent2:#A8330F; --line:#E4DBCC;
+    --global:#2563eb; --agent:#0f766e; --user:#7c3aed; --internal:#9a6a00; --settings:#6b7280;
+    --ok:#15803d;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.5 'Hanken Grotesk',ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;}
+  code,.mono{font-family:'SFMono-Regular',ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 22px 80px}
+  h1{font-size:30px;font-weight:600;margin:0 0 4px;letter-spacing:-.01em}
+  h2{font-size:19px;margin:34px 0 12px;padding-bottom:6px;border-bottom:2px solid var(--line)}
+  h3{font-size:15px;margin:16px 0 8px;color:var(--accent2)}
+  .sub{color:var(--muted);margin:0 0 10px}
+  .legend{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}
+  .pill{font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;color:#fff;white-space:nowrap}
+  .g{background:var(--global)}.a{background:var(--agent)}.u{background:var(--user)}
+  .i{background:var(--internal)}.s{background:var(--settings)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:820px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:0;overflow:hidden;
+    box-shadow:0 1px 0 rgba(0,0,0,.02)}
+  .card .hd{padding:10px 14px;border-bottom:1px solid var(--line);font-weight:600;font-size:13px;
+    display:flex;align-items:center;justify-content:space-between;background:#fff}
+  .card .bd{padding:14px}
+  .screen{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;position:relative}
+  .browserbar{display:flex;gap:6px;align-items:center;margin:-2px -2px 10px;padding:6px 8px;
+    background:#efe9df;border-radius:8px}
+  .dot{width:9px;height:9px;border-radius:50%}
+  .r{background:#e57}.y{background:#eb4}.gr{background:#5b7}
+  .url{font-size:11px;color:var(--muted);margin-left:6px}
+  .topnav{display:flex;gap:14px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--line);
+    padding-bottom:8px;margin-bottom:10px}
+  .topnav b{color:var(--ink)}
+  .composer{border:1.5px solid var(--line);border-radius:14px;padding:10px;background:#fff}
+  .composer .ask{color:#9b9284;font-size:14px;padding:6px 4px}
+  .toolbar{display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap}
+  .chip{font-size:11px;border:1px solid var(--line);border-radius:999px;padding:4px 9px;
+    display:inline-flex;gap:5px;align-items:center;background:#fff;color:#5b5347}
+  .chip.hot{border-color:var(--accent);color:var(--accent);font-weight:600;background:#FBEFE4}
+  .send{margin-left:auto;width:26px;height:26px;border-radius:50%;background:#211B14;color:#fff;
+    display:inline-flex;align-items:center;justify-content:center;font-size:13px}
+  .callout{position:relative;border-left:3px solid var(--accent);background:#FBEFE4;border-radius:0 8px 8px 0;
+    padding:8px 10px;margin:10px 0;font-size:12.5px}
+  .callout b{color:var(--accent2)}
+  .row{display:flex;gap:8px;align-items:flex-start;margin:7px 0}
+  .num{flex:0 0 auto;width:18px;height:18px;border-radius:50%;background:var(--accent);color:#fff;
+    font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:1px}
+  .tag{font-size:10px;font-weight:700;padding:2px 6px;border-radius:5px;color:#fff}
+  .miss{background:#b91c1c}.new{background:var(--ok)}.part{background:#b7791f}
+  table{width:100%;border-collapse:collapse;background:var(--card);border-radius:12px;overflow:hidden;
+    border:1px solid var(--line);font-size:13px}
+  th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  tr:last-child td{border-bottom:none}
+  .flow{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
+  .lane{border:1px dashed var(--line);border-radius:12px;padding:10px 12px;margin:10px 0;background:#fff}
+  .lane h4{margin:0 0 6px;font-size:13px;display:flex;align-items:center;gap:8px}
+  .box{display:inline-block;border:1px solid var(--line);border-radius:8px;padding:5px 9px;margin:3px;
+    background:#FBFAF6;font-size:12px}
+  .box.acc{border-color:var(--accent);background:#FBEFE4;color:var(--accent2);font-weight:600}
+  .arrow{color:var(--muted);margin:0 3px}
+  .small{font-size:11.5px;color:var(--muted)}
+  .khr{border:none;border-top:1px solid var(--line);margin:18px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Data-Agent features — where they live in the UI + how they wire to the agent</h1>
+  <p class="sub">CityAgent Analytics v1.88–1.89 · P2–P6 + Parts A–E · all flag-gated (Settings → Features), ON for the demo org. This is a design map, not a screenshot.</p>
+
+  <div class="legend">
+    <span class="pill g">GLOBAL / org-wide</span>
+    <span class="pill a">PER-AGENT (data source)</span>
+    <span class="pill u">PER-USER (private)</span>
+    <span class="pill i">AGENT-INTERNAL (invisible, feeds the model)</span>
+    <span class="pill s">SETTINGS toggle</span>
+  </div>
+
+  <!-- ============ SECTION 1: UI SURFACES ============ -->
+  <h2>1 · Where each feature shows in the UI</h2>
+
+  <div class="grid">
+
+    <!-- Composer -->
+    <div class="card">
+      <div class="hd"><span>① Chat composer — the ask box</span><span class="tag part">A: partial</span></div>
+      <div class="bd">
+        <div class="screen">
+          <div class="composer">
+            <div class="ask">Ask a data question…</div>
+            <div class="toolbar">
+              <span class="chip">▦ Data source</span>
+              <span class="chip hot">⧉ Use a workflow</span>
+              <span class="chip">⚙ Mode</span>
+              <span class="chip">⚡ Auto model</span>
+              <span class="send">↑</span>
+            </div>
+          </div>
+        </div>
+        <div class="callout"><b>Part A · Workflows</b> — the <b>“Use a workflow”</b> chip opens a picker of saved analyses; pick one, fill params (date/segment), it replays the same steps. <span class="small">Built + baked.</span></div>
+        <div class="callout" style="border-color:#b91c1c;background:#fdeaea"><b>MISSING</b> — the <b>“Save as workflow”</b> button (turns a finished report INTO a workflow) is not on the report header yet. Endpoint <code>/api/workflows-v2/from-report/{id}</code> is live.</div>
+      </div>
+    </div>
+
+    <!-- Left nav / Eval Health -->
+    <div class="card">
+      <div class="hd"><span>② Left nav → Eval Health page</span><span class="tag new">P5: full UI</span></div>
+      <div class="bd">
+        <div class="screen">
+          <div class="topnav"><span>Workspace</span><span>Build</span><span><b>Observe ▾</b></span><span>Settings</span></div>
+          <div class="small" style="margin-bottom:6px">OBSERVE rail</div>
+          <div class="box">Monitoring</div><div class="box">Evals</div><div class="box acc">♥ Eval Health</div>
+          <hr class="khr"/>
+          <div class="small">/eval-health</div>
+          <div style="margin-top:6px">
+            <div class="box">orders_fact · <b style="color:var(--ok)">98%</b> ▲</div>
+            <div class="box">revenue_daily · <b style="color:#b91c1c">61%</b> ▼ drift!</div>
+          </div>
+        </div>
+        <div class="callout"><b>P5 · Eval Canary</b> — per-table eval pass-rate + a <b>drift alert</b> when a golden regresses vs last-green. <span class="pill g" style="font-size:10px">GLOBAL</span></div>
+      </div>
+    </div>
+
+    <!-- Settings Features -->
+    <div class="card">
+      <div class="hd"><span>③ Settings → Features (all 10 toggles)</span><span class="tag new">every flag</span></div>
+      <div class="bd">
+        <div class="screen">
+          <div class="small" style="margin-bottom:6px">Settings › Features › Learning</div>
+          <div class="box s">Usage-Trust Ranking ⬤ on</div>
+          <div class="box s">Unified Table Card ⬤ on</div>
+          <div class="box s">Institutional Knowledge ⬤ on</div>
+          <div class="box s">Eval Canary Health ⬤ on</div>
+          <div class="box s">Workflows ⬤ on</div>
+          <div class="box s">Daily Offline Context ⬤ on</div>
+          <div class="box s">Codex Enrichment — deeper ⬤ on</div>
+          <div class="box s">Golden-SQL evals ⬤ on</div>
+          <div class="box s">Notion / Slack sources ⬤ on</div>
+        </div>
+        <div class="callout"><b>Every feature</b> is switchable here (label + description + role/category). This is the one place all 10 are visible. <span class="pill s" style="font-size:10px">SETTINGS</span></div>
+      </div>
+    </div>
+
+    <!-- Per-agent Memory + Shared Memory -->
+    <div class="card">
+      <div class="hd"><span>④ Agent detail → Memory · Shared Memory page</span><span class="tag new">v1.85</span></div>
+      <div class="bd">
+        <div class="screen">
+          <div class="small">/agents/{id} · Configure rail</div>
+          <div class="box">Overview</div><div class="box acc">Memory</div><div class="box">Tables</div>
+          <hr class="khr"/>
+          <div class="small">Global · By-data · Personal tiers</div>
+          <div class="box g">exclude total rows (global)</div>
+          <div class="box a">revenue = net of returns (this model)</div>
+          <div class="box u">my default = last 30d (private)</div>
+        </div>
+        <div class="callout"><b>Shared Memory</b> (v1.85–1.87) — the learning store. <b>P3 Table Card</b> OVERLAYS these corrections onto each table it feeds the agent. <span class="pill g" style="font-size:10px">GLOBAL</span> <span class="pill a" style="font-size:10px">AGENT</span> <span class="pill u" style="font-size:10px">USER</span></div>
+      </div>
+    </div>
+
+    <!-- Knowledge page -->
+    <div class="card">
+      <div class="hd"><span>⑤ Knowledge page (docs feed answers)</span><span class="tag part">P4 · E use it</span></div>
+      <div class="bd">
+        <div class="screen">
+          <div class="small">/knowledge · tabs</div>
+          <div class="box">Semantic</div><div class="box">Metrics</div><div class="box">Queries</div><div class="box acc">Review</div>
+          <hr class="khr"/>
+          <div class="box a">“Activation rate = …” <span class="small">(approved)</span></div>
+          <div class="box" style="border-style:dashed">Notion page — <b>pending approval</b></div>
+        </div>
+        <div class="callout"><b>P4 Institutional-KB</b> reads <i>approved</i> docs here to ground answers. <b>Part E</b> ingests <b>Notion/Slack</b> INTO this list (lands pending → approve in Review). <span class="pill g" style="font-size:10px">GLOBAL (org+approved)</span></div>
+        <div class="callout" style="border-color:#b91c1c;background:#fdeaea"><b>MISSING</b> — no <b>“Sync Notion/Slack”</b> button/page. Sync endpoints <code>/api/kb-sources/*</code> exist but nothing triggers them from UI.</div>
+      </div>
+    </div>
+
+    <!-- Invisible / agent-internal -->
+    <div class="card">
+      <div class="hd"><span>⑥ No screen — they make the agent smarter</span><span class="tag miss">invisible</span></div>
+      <div class="bd">
+        <p class="small" style="margin-top:0">These have <b>no feature page</b> on purpose — they change what the model receives, not what you click:</p>
+        <div class="row"><span class="num">P2</span><div><b>Usage-Trust ranking</b> — reorders which tables the agent considers. <span class="pill i" style="font-size:10px">INTERNAL</span></div></div>
+        <div class="row"><span class="num">P3</span><div><b>Table Card</b> — one merged card per table injected into the planner. <span class="pill i" style="font-size:10px">INTERNAL</span></div></div>
+        <div class="row"><span class="num">C</span><div><b>Codex+</b> — adds primary-key / “used by” / “prefer instead” lines into that card. <span class="pill i" style="font-size:10px">INTERNAL</span></div></div>
+        <div class="row"><span class="num">B</span><div><b>Offline pipeline</b> — nightly cron pre-builds those cards. <span class="pill s" style="font-size:10px">cron</span></div></div>
+        <div class="row"><span class="num">D</span><div><b>Golden-SQL</b> — extra grading axis inside existing eval goldens. <span class="pill g" style="font-size:10px">GLOBAL</span></div></div>
+        <div class="row"><span class="num">P6</span><div><b>Tool audit</b> — a doc, not a screen. <code>docs/TOOL_AUDIT.md</code></div></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============ SECTION 2: INTEGRATION FLOW ============ -->
+  <h2>2 · How they wire into the agent (and at which scope)</h2>
+  <p class="sub">One question flows through the agent loop. Each feature plugs into a specific stage. Scope = who a given fact reaches.</p>
+
+  <div class="flow">
+    <div class="lane">
+      <h4>① Question comes in <span class="small">(composer, ⑦ optionally via a Workflow replay)</span></h4>
+      <span class="box acc">Part A · Workflow replay</span><span class="arrow">→</span>
+      <span class="box">substitutes params</span><span class="arrow">→</span>
+      <span class="box">re-runs saved steps headless</span>
+      <div class="small">Scope: a workflow is <span class="pill a" style="font-size:10px">AGENT/org</span> (scope=org) or <span class="pill u" style="font-size:10px">private</span>.</div>
+    </div>
+
+    <div class="lane">
+      <h4>② Pick the right tables</h4>
+      <span class="box">semantic relevance</span><span class="arrow">+</span>
+      <span class="box acc">P2 usage-trust blend</span><span class="arrow">→</span>
+      <span class="box">ranked tables</span>
+      <div class="small">Trust = verified queries + dashboards + goldens for THIS data source. Scope <span class="pill a" style="font-size:10px">AGENT</span>.</div>
+    </div>
+
+    <div class="lane">
+      <h4>③ Build context for each table (the heart)</h4>
+      <span class="box acc">P3 Table Card</span> =
+      <span class="box">schema+values</span><span class="arrow">·</span>
+      <span class="box">C: PK / used-by / alt-table</span><span class="arrow">·</span>
+      <span class="box">freshness/owner/PII</span><span class="arrow">·</span>
+      <span class="box acc">+ Shared-Memory overlay</span>
+      <div class="small">Overlay pulls corrections at 3 scopes: <span class="pill g" style="font-size:10px">GLOBAL</span> (all agents) · <span class="pill a" style="font-size:10px">BY-DATA</span> (same model/schema) · <span class="pill u" style="font-size:10px">PRIVATE</span> (you). <b>B</b> pre-builds this card nightly.</div>
+    </div>
+
+    <div class="lane">
+      <h4>④ Ground with company knowledge</h4>
+      <span class="box acc">P4 Institutional-KB</span><span class="arrow">→</span>
+      <span class="box">approved docs (incl. E: Notion/Slack)</span><span class="arrow">→</span>
+      <span class="box">metric defs into planner</span>
+      <div class="small">Scope <span class="pill g" style="font-size:10px">GLOBAL org + approved only</span> (no per-viewer ACL yet).</div>
+    </div>
+
+    <div class="lane">
+      <h4>⑤ Model answers → SQL runs (read-only) → result</h4>
+      <span class="box">planner + tools</span><span class="arrow">→</span>
+      <span class="box">create_data (read-only guard)</span><span class="arrow">→</span>
+      <span class="box">answer + dashboard</span>
+    </div>
+
+    <div class="lane">
+      <h4>⑥ Learn + guard (closes the loop)</h4>
+      <span class="box">👍 → Shared Memory capture</span><span class="arrow">·</span>
+      <span class="box acc">D: golden-SQL + rows saved</span><span class="arrow">·</span>
+      <span class="box acc">P5: canary health/drift</span>
+      <div class="small">Captured learning re-enters ③ next time. Scope of a new learning is decided by the sanitizer (data stripped) + resolver.</div>
+    </div>
+  </div>
+
+  <!-- ============ SECTION 3: SCOPE MODEL ============ -->
+  <h2>3 · Global vs per-agent vs per-user — who sees what</h2>
+  <div class="grid">
+    <div class="card"><div class="hd">🌐 GLOBAL <span class="pill g" style="font-size:10px">org</span></div><div class="bd">
+      <p class="small" style="margin-top:0">Every agent in the org reads it.</p>
+      <div class="box g">Shared-Memory global tier (e.g. “exclude total rows”)</div>
+      <div class="box g">P4 institutional docs (approved)</div>
+      <div class="box g">P5 eval health, D golden-SQL results</div>
+    </div></div>
+    <div class="card"><div class="hd">🧩 PER-AGENT <span class="pill a" style="font-size:10px">data source</span></div><div class="bd">
+      <p class="small" style="margin-top:0">Only agents on the same data (same PBI model / DB schema / file).</p>
+      <div class="box a">P2 usage-trust scores</div>
+      <div class="box a">P3 table cards + C enrichment</div>
+      <div class="box a">By-data Shared-Memory tier</div>
+      <div class="box a">Workflows with scope=org</div>
+    </div></div>
+    <div class="card"><div class="hd">🔒 PER-USER <span class="pill u" style="font-size:10px">private</span></div><div class="bd">
+      <p class="small" style="margin-top:0">Never crosses to another user.</p>
+      <div class="box u">Private Shared-Memory tier</div>
+      <div class="box u">Private workflows (scope=private)</div>
+      <div class="box u">Per-user connector clones (existing)</div>
+    </div></div>
+  </div>
+
+  <!-- ============ SECTION 4: TABLE ============ -->
+  <h2>4 · One-look table</h2>
+  <table>
+    <tr><th>Feature</th><th>UI location</th><th>Agent integration</th><th>Scope</th><th>UI status</th></tr>
+    <tr><td><b>A</b> Workflows</td><td>Composer “Use a workflow” chip + picker</td><td>Replays saved steps (①)</td><td>org / private</td><td><span class="tag part">chip ✓ · Save btn ✗</span></td></tr>
+    <tr><td><b>P5</b> Eval Canary</td><td>Left nav → /eval-health page</td><td>Reads eval runs, flags drift (⑥)</td><td>global</td><td><span class="tag new">full</span></td></tr>
+    <tr><td><b>P3</b> Table Card</td><td>—(feeds planner) + Memory tab shows overlay source</td><td>Per-table context (③)</td><td>agent + all tiers</td><td><span class="tag miss">internal</span></td></tr>
+    <tr><td><b>P2</b> Usage-trust</td><td>—</td><td>Table ranking (②)</td><td>agent</td><td><span class="tag miss">internal</span></td></tr>
+    <tr><td><b>C</b> Codex+</td><td>—(inside table card)</td><td>PK/used-by/alt into card (③)</td><td>agent</td><td><span class="tag miss">internal</span></td></tr>
+    <tr><td><b>B</b> Offline ctx</td><td>Settings toggle only</td><td>Nightly pre-build of ③</td><td>agent</td><td><span class="tag miss">cron</span></td></tr>
+    <tr><td><b>P4</b> Institutional</td><td>Knowledge page (docs source)</td><td>Grounds planner (④)</td><td>global org+approved</td><td><span class="tag miss">uses Knowledge</span></td></tr>
+    <tr><td><b>E</b> Notion/Slack</td><td>Knowledge Review (result) — <b>no sync button</b></td><td>Feeds P4 (④)</td><td>global org+approved</td><td><span class="tag miss">no trigger UI</span></td></tr>
+    <tr><td><b>D</b> Golden-SQL</td><td>—(inside eval goldens)</td><td>Extra grade axis (⑥)</td><td>global</td><td><span class="tag miss">internal</span></td></tr>
+    <tr><td><b>P6</b> Tool audit</td><td>docs/TOOL_AUDIT.md</td><td>Recommendation only</td><td>—</td><td><span class="tag miss">doc</span></td></tr>
+  </table>
+
+  <h2>5 · The two UI gaps worth building</h2>
+  <div class="row"><span class="num">1</span><div><b>Report header “Save as workflow” button</b> — completes Part A (backend live). Turns any finished analysis into a reusable workflow.</div></div>
+  <div class="row"><span class="num">2</span><div><b>Settings page “Notion / Slack sources”</b> — token + “Sync now” + last-synced status → calls the existing <code>/api/kb-sources/*</code> endpoints. Without it, Part E can only run from an API call.</div></div>
+
+  <p class="small" style="margin-top:26px">Design mockup · CityAgent Analytics · docs/UI_MAP_DATAAGENT.html</p>
+</div>
+</body>
+</html>

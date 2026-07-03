@@ -133,7 +133,75 @@ async def retrieve_institutional(
                 "rank": float(r.get("rank") or 0.0),
             }
         )
+
+    out = await _apply_doc_acl(db, out, user=user, organization_id=org_id)
     return out[:k]
+
+
+async def _apply_doc_acl(
+    db: Any,
+    items: List[dict],
+    *,
+    user: Any,
+    organization_id: str,
+) -> List[dict]:
+    """Drop docs whose per-doc allow-list excludes the viewer (HYBRID_DOC_ACL).
+
+    Optional narrowing ON TOP of the org+approved floor. A doc with a non-empty
+    ``allowed_user_ids`` list is visible ONLY to viewers whose id is in it; a
+    NULL/empty list stays visible to everyone in the org (today's behavior).
+
+    Flag OFF → returns ``items`` unchanged (byte-identical, no DB hit). ANY error
+    → returns ``items`` unchanged: failing to narrow falls back to the org+approved
+    floor, which never widens it. NEVER raises.
+    """
+    if not items:
+        return items
+
+    # Flag gate FIRST — OFF is a true no-op, no extra DB hit.
+    try:
+        from app.settings.hybrid_flags import flags
+        if not flags.DOC_ACL:
+            return items
+    except Exception:
+        return items
+
+    try:
+        viewer_id = str(getattr(user, "id", None) or "").strip() if user is not None else ""
+
+        doc_ids = [it.get("doc_id") for it in items if it.get("doc_id")]
+        if not doc_ids:
+            return items
+
+        from sqlalchemy import select
+        from app.models.knowledge_doc import KnowledgeDoc
+
+        rows = (
+            await db.execute(
+                select(KnowledgeDoc.id, KnowledgeDoc.allowed_user_ids).where(
+                    KnowledgeDoc.organization_id == organization_id,
+                    KnowledgeDoc.id.in_(set(doc_ids)),
+                )
+            )
+        ).all()
+        acl_by_doc = {r[0]: r[1] for r in rows}
+
+        kept: List[dict] = []
+        for it in items:
+            allow = acl_by_doc.get(it.get("doc_id"))
+            # NULL / empty / non-list allow-list = visible to all (unchanged).
+            if not allow or not isinstance(allow, (list, tuple)):
+                kept.append(it)
+                continue
+            allowed = {str(x).strip() for x in allow if str(x).strip()}
+            if not allowed or (viewer_id and viewer_id in allowed):
+                kept.append(it)
+            # else: restricted doc, viewer not on the list → drop.
+        return kept
+    except Exception as e:
+        # Failing to narrow falls back to the org+approved floor (never widens it).
+        logger.debug("institutional: doc-ACL filter degraded (kept floor): %s", e)
+        return items
 
 
 def institutional_block(items: Optional[List[dict]]) -> str:

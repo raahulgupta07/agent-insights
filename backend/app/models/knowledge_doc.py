@@ -48,6 +48,13 @@ class KnowledgeDoc(BaseSchema):
     status = Column(String(20), nullable=False, default='pending', index=True)
     structured_data = Column(JSON, nullable=True)
 
+    # OPTIONAL per-document ACL (Phase4-F3, flag HYBRID_DOC_ACL). A JSON list of
+    # user-id strings allowed to see this doc in institutional grounding. NULL /
+    # empty list = visible to everyone in the org (today's org+approved behavior,
+    # unchanged). A non-empty list restricts the doc to those viewers only. The
+    # org+approved floor is never widened by this column.
+    allowed_user_ids = Column(JSON, nullable=True)
+
     organization = relationship("Organization")
     data_source = relationship("DataSource")
     chunks = relationship(

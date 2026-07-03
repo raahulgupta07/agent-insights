@@ -9,6 +9,27 @@ from app.ai.tools.metadata import ToolMetadata
 from app.ai.tools.base import Tool
 
 
+# F1 (HYBRID_LEAN_TOOLS) — audited overlapping/duplicate tools to hide from the
+# planner catalog when the flag is ON (docs/TOOL_AUDIT.md). Each is redundant
+# with a KEPT sibling; the kept one stays. OFF = nothing excluded.
+#   remember_this      -> remember/recall (the primary memory tool)
+#   describe_tables    -> inspect_data (kept, the canonical schema lookup)
+#   describe_entity    -> inspect_data
+#   read_artifact      -> read_query
+#   read_report        -> search_reports
+#   write_csv          -> create_data
+#   search_mcps        -> execute_mcp
+_LEAN_EXCLUDE: Set[str] = frozenset({
+    "remember_this",
+    "describe_tables",
+    "describe_entity",
+    "read_artifact",
+    "read_report",
+    "write_csv",
+    "search_mcps",
+})
+
+
 @dataclass
 class ToolCatalogFilter:
     """Enhanced filter for tool catalog queries."""
@@ -119,10 +140,23 @@ class ToolRegistry:
         )
         metadata_list = self.list_tools(filter_obj)
 
+        # F1 (HYBRID_LEAN_TOOLS): when on, drop the audited overlapping/duplicate
+        # tools from the catalog (docs/TOOL_AUDIT.md) so the planner sees a leaner
+        # set. OFF -> empty exclude -> catalog unchanged (byte-identical).
+        _lean_exclude: Set[str] = set()
+        try:
+            from app.settings.hybrid_flags import flags as _lean_flags
+            if _lean_flags.LEAN_TOOLS:
+                _lean_exclude = _LEAN_EXCLUDE
+        except Exception:
+            _lean_exclude = set()
+
         catalog = []
         for metadata in metadata_list:
             # Skip inactive tools from catalog
             if hasattr(metadata, "is_active") and metadata.is_active is False:
+                continue
+            if metadata.name in _lean_exclude:
                 continue
             catalog.append({
                 "name": metadata.name,
@@ -147,21 +181,38 @@ class ToolRegistry:
         SKILL_TOOLS = {"load_skill", "run_skill_file", "read_skill_file"}
         SUBAGENT_TOOLS = {"delegate_subtask"}
         FORECAST_TOOLS = {"forecast_df"}
+        # Lean tool catalog (HYBRID_LEAN_TOOLS): when ON, hide the audited
+        # overlap/duplicate tools (docs/TOOL_AUDIT.md) so the planner isn't split
+        # across near-identical tools ("less is more"). These are all default-chat
+        # tools whose kept twin already covers the intent (O1/O2/O4/O5/O6 + the
+        # discovery-in-execute fold). OFF (default) => full catalog, byte-identical.
+        LEAN_RETIRE_TOOLS = {
+            "remember_this",    # O1 — duplicate of remember/recall
+            "describe_tables",  # O2 — fold into inspect_data
+            "describe_entity",  # O2 — fold into inspect_data
+            "read_artifact",    # O4 — fold into read_query
+            "read_report",      # O5 — fold into search_reports
+            "write_csv",        # O6 — fold into create_data
+            "search_mcps",      # discovery folded into execute_mcp
+        }
         try:
             from app.settings.hybrid_flags import flags
             skills_on = bool(flags.SKILLS)
             subagents_on = bool(flags.SUBAGENTS)
             forecast_on = bool(flags.FORECAST)
+            lean_on = bool(flags.LEAN_TOOLS)
         except Exception:
             # Fail-open: if flags can't be read, leave the catalog unchanged.
             skills_on = True
             subagents_on = True
             forecast_on = True
+            lean_on = False
         catalog = [
             t for t in catalog
             if not (t["name"] in SKILL_TOOLS and not skills_on)
             and not (t["name"] in SUBAGENT_TOOLS and not subagents_on)
             and not (t["name"] in FORECAST_TOOLS and not forecast_on)
+            and not (t["name"] in LEAN_RETIRE_TOOLS and lean_on)
         ]
 
         return catalog
