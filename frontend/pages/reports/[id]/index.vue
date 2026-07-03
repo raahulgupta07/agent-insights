@@ -472,6 +472,19 @@
 											class="mt-3"
 										/>
 
+										<!-- Shared Memory chip (HYBRID_SHARED_MEMORY) — shows when this answer
+										     reused knowledge learned from how similar tasks were solved before on
+										     the same data scope. shared_memory is a TOP-LEVEL field on the system
+										     completion; empty/absent when the flag is off. Fail-soft (v-if guarded). -->
+										<div
+											v-if="m.role === 'system' && m.status !== 'in_progress' && (m as any).shared_memory && (m as any).shared_memory.length"
+											class="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[#F1ECE3] px-2.5 py-1 text-[11.5px] text-[#7A7066]"
+											:title="sharedMemoryTitle((m as any).shared_memory)"
+										>
+											<span aria-hidden="true">✨</span>
+											<span>used shared memory · {{ sharedMemoryScope((m as any).shared_memory) }} ({{ sharedMemoryCount((m as any).shared_memory) }})</span>
+										</div>
+
 										<!-- Knowledge group: harness-phase blocks rendered as a single collapsible card -->
 										<KnowledgeGroup
 											v-if="(m as any)._harness_running || (m.completion_blocks || []).some(b => (b as any).phase === 'knowledge_harness')"
@@ -3269,6 +3282,25 @@ async function onRefreshSessionSummary() {
 	}
 }
 
+// Shared Memory chip helpers (HYBRID_SHARED_MEMORY). `shared_memory` is a compact
+// provenance list [{scope_kind, scope_key, count}] on the system completion. All
+// fail-soft — an empty/malformed list just yields a blank chip label (v-if guards render).
+function sharedMemoryScope(prov: any[]): string {
+	const first = (prov || [])[0] || {}
+	const key = String(first.scope_key || first.scope_kind || 'shared')
+	// scope_key can be a long identifier (model id / schema / file) — show a short tail.
+	const short = key.length > 22 ? '…' + key.slice(-20) : key
+	return (prov || []).length > 1 ? `${short} +${prov.length - 1}` : short
+}
+function sharedMemoryCount(prov: any[]): number {
+	return (prov || []).reduce((n, p) => n + (Number(p && p.count) || 0), 0)
+}
+function sharedMemoryTitle(prov: any[]): string {
+	return (prov || [])
+		.map(p => `${p.scope_kind || 'scope'}: ${p.scope_key || ''} (${p.count || 0})`)
+		.join('\n')
+}
+
 // DECISION FORMING — the backend emits SSE `sense_making.pending` right before it
 // runs sense-making (post-answer), and clears at completion.finished/error. Drives
 // the dock strip "forming the decision" state + the Outputs DECISION skeleton.
@@ -4520,6 +4552,7 @@ async function loadCompletions({ skipEstimate = false } = {}) {
 				// DECISION card + auto-model chip can never render.
 				sense_making: (c as any).sense_making || null,
 				auto_model: (c as any).auto_model || null,
+				shared_memory: (c as any).shared_memory || null,
 				served_by: c.served_by || null,
 				completion_blocks: blocks,
 				created_at: c.created_at,
@@ -4620,6 +4653,7 @@ async function loadPreviousCompletions() {
                 completion: c.completion,
                 sense_making: (c as any).sense_making || null,
                 auto_model: (c as any).auto_model || null,
+                shared_memory: (c as any).shared_memory || null,
                 served_by: c.served_by || null,
                 completion_blocks: blocks,
                 created_at: c.created_at,

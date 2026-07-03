@@ -974,6 +974,42 @@ class CompletionService:
                         except Exception:
                             logging.warning("auto_model badge (non-stream) skipped", exc_info=True)
 
+                    # ── Shared Memory provenance (HYBRID_SHARED_MEMORY, default OFF) ──
+                    # Record WHICH reusable Shared-Memory scopes fed this agent so the
+                    # FE can show a "used shared memory" chip. Recomputed (not threaded
+                    # from the injected rows) via the same recall_items the instruction
+                    # builder used, for the report's data sources. Fully fail-soft: any
+                    # error leaves the answer untouched (OFF => byte-identical).
+                    try:
+                        from app.settings.hybrid_flags import flags as _smflags
+                        if _smflags.SHARED_MEMORY:
+                            _sm_ds_ids = [str(d.id) for d in (report.data_sources or [])]
+                            if _sm_ds_ids:
+                                from app.services.knowledge import retrieve as _sm_rec
+                                _sm_rows = await _sm_rec.recall_items(
+                                    db,
+                                    organization_id=str(organization.id),
+                                    current_user_id=str(current_user.id) if current_user else None,
+                                    data_source_ids=_sm_ds_ids,
+                                )
+                                _sm_prov = _sm_rec.provenance(_sm_rows)
+                                if _sm_prov:
+                                    _sm_comps = await self._get_response_completions(
+                                        db, head_completion, current_user, organization)
+                                    _sm_ans = None
+                                    for _c in reversed(_sm_comps):
+                                        if getattr(_c, "role", None) == "system" and isinstance(_c.completion, dict) \
+                                                and (_c.completion.get("content") or "").strip():
+                                            _sm_ans = _c
+                                            break
+                                    if _sm_ans is not None:
+                                        from sqlalchemy.orm.attributes import flag_modified
+                                        _sm_ans.completion = {**(_sm_ans.completion or {}), "shared_memory": _sm_prov}
+                                        flag_modified(_sm_ans, "completion")
+                                        await db.commit()
+                    except Exception:
+                        logging.warning("shared_memory provenance (non-stream) skipped", exc_info=True)
+
                     # ── Auto-artifact (HYBRID_AUTO_ARTIFACT, default OFF) ──
                     # Run fully done (answer + sense_making committed) → if this
                     # turn produced a dataset but no artifact, schedule a
@@ -1519,6 +1555,7 @@ class CompletionService:
                 completion_blocks=c_blocks,
                 sense_making=(c.completion.get("sense_making") if isinstance(getattr(c, "completion", None), dict) else None),
                 auto_model=(c.completion.get("auto_model") if isinstance(getattr(c, "completion", None), dict) else None),
+                shared_memory=(c.completion.get("shared_memory") if isinstance(getattr(c, "completion", None), dict) else None),
                 created_widgets=[],
                 created_steps=[],
                 files=c_files,
@@ -1889,6 +1926,7 @@ class CompletionService:
                 completion_blocks=c_blocks,
                 sense_making=(c.completion.get("sense_making") if isinstance(getattr(c, "completion", None), dict) else None),
                 auto_model=(c.completion.get("auto_model") if isinstance(getattr(c, "completion", None), dict) else None),
+                shared_memory=(c.completion.get("shared_memory") if isinstance(getattr(c, "completion", None), dict) else None),
                 created_widgets=[],
                 created_steps=[],
                 files=c_files,
@@ -2492,6 +2530,37 @@ class CompletionService:
                                         await db.commit()
                                 except Exception:
                                     logger.warning("auto_model badge (stream) skipped", exc_info=True)
+
+                            # ── Shared Memory provenance (HYBRID_SHARED_MEMORY, streaming) ──
+                            # Recompute which reusable scopes fed this agent (same
+                            # recall_items the instruction builder used) → persist onto
+                            # the answer completion for the FE chip. Fail-soft, OFF =>
+                            # byte-identical.
+                            try:
+                                from app.settings.hybrid_flags import flags as _smflags
+                                if _smflags.SHARED_MEMORY:
+                                    _sm_ds_ids = [str(d.id) for d in (report.data_sources or [])]
+                                    if _sm_ds_ids:
+                                        from app.services.knowledge import retrieve as _sm_rec
+                                        _sm_rows = await _sm_rec.recall_items(
+                                            db,
+                                            organization_id=str(organization.id),
+                                            current_user_id=str(current_user.id) if current_user else None,
+                                            data_source_ids=_sm_ds_ids,
+                                        )
+                                        _sm_prov = _sm_rec.provenance(_sm_rows)
+                                        if _sm_prov:
+                                            _sm_sysid = str(system_completion_obj.id)
+                                            _sm_ans = (await db.execute(
+                                                select(Completion).where(Completion.id == _sm_sysid)
+                                            )).scalars().first()
+                                            if _sm_ans is not None and isinstance(_sm_ans.completion, dict):
+                                                from sqlalchemy.orm.attributes import flag_modified
+                                                _sm_ans.completion = {**(_sm_ans.completion or {}), "shared_memory": _sm_prov}
+                                                flag_modified(_sm_ans, "completion")
+                                                await db.commit()
+                            except Exception:
+                                logger.warning("shared_memory provenance (stream) skipped", exc_info=True)
 
                             # ── Auto-artifact (HYBRID_AUTO_ARTIFACT, default OFF) ──
                             # Agent run + sense_making done → if this turn produced

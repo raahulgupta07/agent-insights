@@ -2397,3 +2397,37 @@ pending→active / different scope → separate row / private active-immediately
 E2E** — seeded a fact under a real held datasetId + one under a not-held scope, demo user's `/memory/shared`
 returned ONLY the held one (bogus never leaked). Rollback: drop flag override + `alembic downgrade colprofile1`.
 LANDMINE: `HYBRID_AGENT_MEMORY` already exists (remember/recall) — this is the SEPARATE `HYBRID_SHARED_MEMORY`.
+
+---
+
+## 2026-07-03 — v1.86.0 Shared Memory: global tier + mistake learning + tiered views + curate + chip
+
+Follow-on to v1.85.0. Built P6→P11 fast (2 parallel subagents + inline). Same flag HYBRID_SHARED_MEMORY.
+
+**P6 Tier-3 GLOBAL** (`scope_kind='org'`): `scope_resolver.org_scope`; `capture.capture_global`;
+`access.visible_scope_pairs`/`can_view` gained `organization_id` and always include `('org',org_id)`;
+`retrieve.recall_items` threads org id. Every agent reads global regardless of data. Private stays
+owner-only; data stays intersection-gated. Logic tested: global visible to unrelated-scope agent,
+private isolated, model gated.
+
+**P7 Mistake learning** (subagent): `capture_mistake` wired into LIVE `ai/tools/implementations/create_data.py`
+(~L1480–1523) on the error→recover path (`code_errors` present + later success), flag-gated + fail-soft.
+
+**P8 Tiered views**: `routes/data_source.py._tier_of` tags each `/api/memory/shared` group `tier`
+(global/data/personal, ordered global→data→personal); `_serialize_knowledge` carries `tier`. FE
+`pages/memory/shared.vue` → 3 labeled sections (computed `tiers`); per-agent `memory.vue` tier labels + org case.
+
+**P9 Provenance chip** (subagent): `schemas/completion_v2_schema.py` `shared_memory: Optional[List[Dict]]`;
+`services/completion_service.py` fills it from `retrieve.provenance(recall_items(...))` (stream + non-stream,
+flag-gated fail-soft); FE chip in `pages/reports/[id]/index.vue` (system message, v-if guarded,
+"used shared memory · <scope> (N)").
+
+**P10 Admin curate**: `DELETE /api/memory/{id}` (soft-delete) + `PATCH /api/memory/{id}` (status pending/active),
+gated `_can_curate` = creator OR org admin (`resolve_permissions` FULL_ADMIN/manage_connections). FE row ✕
+Remove on Memory tab.
+
+**P11 Ship**: restart + fe-sync (EPHEMERAL). VERSION_HYBRID 1.86.0. All backend compiled in container.
+Verified live: `/api/memory/shared` shows `tier=global org:7d372305` first + data groups; `capture_global`
+seeded "exclude total rows" visible to any agent; `DELETE /api/memory/{id}` → soft_deleted=t. Migration head
+unchanged (`agentknow1`, no new columns — org/tier reuse existing scope_kind/scope_key). Flag OFF = byte-identical.
+NOT git-pushed; durable image bake pending (currently hot-cp + fe-sync).

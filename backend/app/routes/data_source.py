@@ -103,11 +103,21 @@ async def get_data_sources(
     return await data_source_service.get_data_sources(db, current_user, organization, show_all=show_all)
 
 
+def _tier_of(scope_kind: str) -> str:
+    """Map a scope_kind to a user-facing memory TIER."""
+    if scope_kind == "org":
+        return "global"     # all agents
+    if scope_kind == "user":
+        return "personal"   # private
+    return "data"           # model / schema / file — shared by data
+
+
 def _serialize_knowledge(r) -> dict:
     """Shape an AgentKnowledge row for the Memory UI (never leaks raw content
     beyond the already-sanitized content_json)."""
     return {
         "id": r.id,
+        "tier": _tier_of(r.scope_kind),
         "scope_kind": r.scope_kind,
         "scope_key": r.scope_key,
         "kind": r.kind,
@@ -163,9 +173,75 @@ async def get_shared_memory(
     groups: dict[tuple, dict] = {}
     for r in rows:
         key = (r.scope_kind, r.scope_key)
-        g = groups.setdefault(key, {"scope_kind": r.scope_kind, "scope_key": r.scope_key, "items": []})
+        g = groups.setdefault(key, {"tier": _tier_of(r.scope_kind), "scope_kind": r.scope_kind, "scope_key": r.scope_key, "items": []})
         g["items"].append(_serialize_knowledge(r))
-    return {"enabled": True, "groups": list(groups.values())}
+    # order: global first, then data, then personal
+    order = {"global": 0, "data": 1, "personal": 2}
+    grouped = sorted(groups.values(), key=lambda g: order.get(g["tier"], 1))
+    return {"enabled": True, "groups": grouped}
+
+
+async def _load_knowledge_row(db, kid: str, org_id: str):
+    from sqlalchemy import select as _sel
+    from app.models.agent_knowledge import AgentKnowledge
+    return (await db.execute(_sel(AgentKnowledge).where(
+        AgentKnowledge.id == str(kid),
+        AgentKnowledge.organization_id == str(org_id),
+        AgentKnowledge.deleted_at.is_(None),
+    ))).scalar_one_or_none()
+
+
+async def _can_curate(db, row, current_user, organization) -> bool:
+    """Org admin (full_admin / manage_connections) OR the fact's own creator."""
+    if row.created_by_user_id and str(row.created_by_user_id) == str(current_user.id):
+        return True
+    try:
+        from app.core.permission_resolver import resolve_permissions, FULL_ADMIN
+        r = await resolve_permissions(db, str(current_user.id), str(organization.id))
+        return FULL_ADMIN in r.org_permissions or r.has_org_permission("manage_connections")
+    except Exception:
+        return False
+
+
+@router.delete("/memory/{knowledge_id}")
+async def delete_memory(
+    knowledge_id: str,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Soft-delete a learned fact (admin or its creator). Removes it from
+    injection immediately."""
+    from datetime import datetime
+    row = await _load_knowledge_row(db, knowledge_id, str(organization.id))
+    if row is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if not await _can_curate(db, row, current_user, organization):
+        raise HTTPException(status_code=403, detail="not allowed")
+    row.deleted_at = datetime.utcnow()
+    await db.commit()
+    return {"ok": True}
+
+
+@router.patch("/memory/{knowledge_id}")
+async def patch_memory(
+    knowledge_id: str,
+    payload: dict = Body(default={}),
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Demote/re-activate a fact (admin or creator). Body: {status:'pending'|'active'}."""
+    row = await _load_knowledge_row(db, knowledge_id, str(organization.id))
+    if row is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if not await _can_curate(db, row, current_user, organization):
+        raise HTTPException(status_code=403, detail="not allowed")
+    st = str((payload or {}).get("status") or "").strip()
+    if st in ("pending", "active"):
+        row.status = st
+        await db.commit()
+    return {"ok": True, "status": row.status}
 
 
 @router.get("/data_sources/active", response_model=list[DataSourceListItemSchema])

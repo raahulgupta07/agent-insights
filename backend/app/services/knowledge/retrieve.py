@@ -49,7 +49,9 @@ async def recall_items(
     """Visible, active AgentKnowledge rows for this agent+viewer, ranked."""
     try:
         scopes = await _viewer_scopes(db, data_source_ids)
-        pairs = A.visible_scope_pairs(current_user_id, scopes)
+        # includes the GLOBAL tier ('org', organization_id) so every agent
+        # reuses org-wide knowledge even with no matching data scope.
+        pairs = A.visible_scope_pairs(current_user_id, scopes, str(organization_id))
         if not pairs:
             return []
         rows = (
@@ -63,7 +65,7 @@ async def recall_items(
             )
         ).scalars().all()
         # belt-and-suspenders + rank: verified_count desc, updated_at desc
-        rows = [r for r in rows if A.can_view(r, current_user_id, scopes)]
+        rows = [r for r in rows if A.can_view(r, current_user_id, scopes, str(organization_id))]
         rows.sort(key=lambda r: ((r.verified_count or 1), r.updated_at or 0), reverse=True)
         return rows[:MAX_ITEMS]
     except Exception as e:  # pragma: no cover

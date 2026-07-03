@@ -95,6 +95,11 @@ def private_scope(user_id: str) -> dict:
     return {"scope_kind": "user", "scope_key": str(user_id)}
 
 
+def org_scope(organization_id: str) -> dict:
+    """The GLOBAL tier — every agent in the org reads this, regardless of data."""
+    return {"scope_kind": "org", "scope_key": str(organization_id)}
+
+
 def is_private(scope: dict) -> bool:
     return (scope or {}).get("scope_kind") == "user"
 

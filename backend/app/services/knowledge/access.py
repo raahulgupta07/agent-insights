@@ -22,10 +22,13 @@ def _pair(scope: dict) -> tuple[str, str]:
 def visible_scope_pairs(
     viewer_user_id: str | None,
     viewer_scopes: Iterable[dict],
+    organization_id: str | None = None,
 ) -> list[tuple[str, str]]:
     """The exact (scope_kind, scope_key) pairs a viewer may read.
 
-    = the viewer agent's own SHARED scopes + the viewer's OWN private scope.
+    = the viewer agent's own SHARED scopes (tier 1, model/schema/file)
+      + the viewer's OWN private scope (tier 2, user)
+      + the org-wide GLOBAL scope (tier 3, org) — every agent reads this.
     Feed this straight into a tuple-IN filter.
     """
     pairs: set[tuple[str, str]] = set()
@@ -35,10 +38,17 @@ def visible_scope_pairs(
             pairs.add(k)
     if viewer_user_id:
         pairs.add(("user", str(viewer_user_id)))
+    if organization_id:
+        pairs.add(("org", str(organization_id)))  # GLOBAL tier — all agents
     return sorted(pairs)
 
 
-def can_view(row: Any, viewer_user_id: str | None, viewer_scopes: Iterable[dict]) -> bool:
+def can_view(
+    row: Any,
+    viewer_user_id: str | None,
+    viewer_scopes: Iterable[dict],
+    organization_id: str | None = None,
+) -> bool:
     """True iff `row` (an AgentKnowledge-like obj/dict) is visible to the viewer."""
     rk = str(getattr(row, "scope_kind", None) or (row.get("scope_kind") if isinstance(row, dict) else "") or "")
     rkey = str(getattr(row, "scope_key", None) or (row.get("scope_key") if isinstance(row, dict) else "") or "")
@@ -47,7 +57,15 @@ def can_view(row: Any, viewer_user_id: str | None, viewer_scopes: Iterable[dict]
         # private tier: only its own owner
         return bool(viewer_user_id) and rkey == str(viewer_user_id)
 
-    allowed = {p for p in visible_scope_pairs(viewer_user_id, viewer_scopes) if p[0] != "user"}
+    if rk == "org":
+        # global tier: every agent in the org (the DB query is already
+        # org-filtered; accept when it matches or when no org context given)
+        return (not organization_id) or rkey == str(organization_id)
+
+    allowed = {
+        p for p in visible_scope_pairs(viewer_user_id, viewer_scopes, organization_id)
+        if p[0] not in ("user", "org")
+    }
     return (rk, rkey) in allowed
 
 

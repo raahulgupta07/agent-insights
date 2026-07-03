@@ -1477,6 +1477,65 @@ Do not use generic placeholders like "value" unless that is the actual column na
             },
         )
 
+        # Shared Memory (flag HYBRID_SHARED_MEMORY): a query that ERRORED on an
+        # earlier attempt but SUCCEEDED on a retry within this same tool run is a
+        # recovered mistake worth remembering (error -> fix, "never repeat"),
+        # scoped to the source's model/schema. Only the structure travels
+        # (error class + parameterized failed/fixed templates), captured on a
+        # FRESH isolated session so it can never touch the query path's
+        # transaction. Fully fail-soft; flag OFF => byte-identical no-op.
+        try:
+            from app.settings.hybrid_flags import flags as _sm_flags
+            if _sm_flags.SHARED_MEMORY and code_errors:
+                _sm_ds_id = next((d for d in _ds_ids if d), None)
+                _sm_org = runtime_ctx.get("organization")
+                _sm_org_id = str(getattr(_sm_org, "id", "") or "")
+                if _sm_ds_id and _sm_org_id:
+                    from app.services.knowledge.capture import capture_mistake
+                    # error_class = first non-frame line of the last failed attempt.
+                    _sm_err = ""
+                    try:
+                        _sm_err = str(code_errors[-1][1] or "")
+                    except Exception:
+                        _sm_err = ""
+                    _sm_lines = [
+                        ln for ln in _sm_err.splitlines()
+                        if ln.strip() and not ln.lstrip().startswith('File "')
+                    ]
+                    _sm_error_class = (_sm_lines[0] if _sm_lines else _sm_err)[:200]
+                    # Best-effort failed vs fixed SQL from the query timings.
+                    _sm_failed_sql = None
+                    _sm_fixed_sql = None
+                    try:
+                        _sm_f = [t for t in (query_timings or []) if t.get("error") and t.get("sql")]
+                        _sm_failed_sql = _sm_f[-1]["sql"] if _sm_f else None
+                        _sm_ok = [t for t in (query_timings or []) if not t.get("error") and t.get("sql")]
+                        _sm_fixed_sql = _sm_ok[-1]["sql"] if _sm_ok else None
+                    except Exception:
+                        _sm_failed_sql = _sm_fixed_sql = None
+                    _sm_fix_shape = (
+                        f"Query errored then succeeded on retry "
+                        f"({len(code_errors)} failed attempt(s) before success)"
+                    )
+                    _sm_user = runtime_ctx.get("user")
+                    _sm_user_id = str(getattr(_sm_user, "id", "") or "") or None
+                    async with async_session_maker() as _sm_db:
+                        await capture_mistake(
+                            _sm_db,
+                            organization_id=_sm_org_id,
+                            data_source_id=str(_sm_ds_id),
+                            error_class=_sm_error_class,
+                            fix_shape=_sm_fix_shape,
+                            failed_template=_sm_failed_sql,
+                            fixed_template=_sm_fixed_sql,
+                            user_id=_sm_user_id,
+                        )
+                        await _sm_db.commit()
+        except Exception:
+            # Shared Memory is best-effort background learning — never let it
+            # affect the query result path.
+            pass
+
         # Success path: format data and privacy-aware preview
         yield ToolProgressEvent(type="tool.progress", payload={"stage": "formatting_widget"})
         formatted = streamer.format_df_for_widget(exec_df)

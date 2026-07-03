@@ -188,6 +188,11 @@ class CompletionV2Schema(BaseModel):
     # picked for this answer + why. Top-level for the same reason as sense_making.
     auto_model: Optional[Dict[str, Any]] = None
 
+    # Shared Memory provenance (HYBRID_SHARED_MEMORY): compact list of the reusable
+    # knowledge scopes that fed this agent ([{scope_kind, scope_key, count}]), for a
+    # "used shared memory" chip. None/empty when the flag is off or nothing was reused.
+    shared_memory: Optional[List[Dict[str, Any]]] = None
+
     class Config:
         from_attributes = True
 

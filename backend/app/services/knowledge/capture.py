@@ -228,6 +228,28 @@ async def capture_verified_query(
     )
 
 
+async def capture_global(
+    db,
+    *,
+    organization_id: str,
+    kind: str,
+    title: str | None,
+    content: Any,
+    text: str | None = None,
+    user_id: str | None = None,
+    verified: bool = True,
+) -> int:
+    """Write a GLOBAL (tier-3) fact — read by EVERY agent in the org, regardless
+    of data. For house rules / universal conventions / org-wide mistakes.
+    Sanitized like any shared fact (org tier is not private)."""
+    from app.services.knowledge.scope_resolver import org_scope
+    return await capture(
+        db, organization_id=organization_id, scopes=[org_scope(organization_id)],
+        kind=kind, title=title, content=content, text=text,
+        user_id=user_id, data_source_id=None, verified=verified,
+    )
+
+
 async def capture_mistake(
     db,
     *,

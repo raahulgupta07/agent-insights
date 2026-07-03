@@ -47,6 +47,7 @@
                                     <span class="text-[10.5px] px-2 py-0.5 rounded-full bg-[#F0FDF4] text-[#3F9B6B] border border-[#BBF7D0]"
                                           :title="`confirmed ${it.verified_count}×`">✓ {{ it.verified_count }}</span>
                                     <span class="text-[10.5px] px-2 py-0.5 rounded-full bg-[#F5F3F0] text-[#78716C] border border-[#EAE8E4]">{{ scopeLabel(it) }}</span>
+                                    <button class="text-[11px] text-[#A8A29E] hover:text-[#DC2626] px-1" title="Remove (admin/creator)" @click="removeItem(it)">✕</button>
                                 </div>
                             </div>
                         </li>
@@ -82,6 +83,7 @@ const KIND_LABELS: Record<string, string> = {
 function kindLabel(k: string) { return KIND_LABELS[k] || k }
 
 function scopeLabel(it: any) {
+    if (it.scope_kind === 'org') return 'global · all agents'
     if (it.scope_kind === 'model') return 'shared · model'
     if (it.scope_kind === 'schema') return 'shared · schema'
     if (it.scope_kind === 'file') return 'shared · file'
@@ -105,6 +107,13 @@ const grouped = computed(() => {
     const order = ['query_template', 'meaning', 'join', 'howto', 'mistake']
     return Object.values(by).sort((a: any, b: any) => order.indexOf(a.kind) - order.indexOf(b.kind))
 })
+
+async function removeItem(it: any) {
+    try {
+        await useMyFetch(`/memory/${it.id}`, { method: 'DELETE' })
+        items.value = items.value.filter(x => x.id !== it.id)
+    } catch (_) { /* 403/err: leave as-is */ }
+}
 
 async function load() {
     try {
