@@ -110,6 +110,8 @@ from app.routes import (
     agent_yaml,
     eval_yaml,
     eval_canary,
+    workflows_v2,
+    kb_sources,
     data_source_tools,
     knowledge,
     intelligence,
@@ -307,6 +309,8 @@ app.include_router(studio_artifacts.router, prefix="/api")
 app.include_router(auto_queries.router, prefix="/api")
 app.include_router(auto_evals.router, prefix="/api")
 app.include_router(eval_canary.router, prefix="/api")  # P5: eval canary health + drift (gated HYBRID_EVAL_CANARY)
+app.include_router(workflows_v2.router, prefix="/api")  # Part A: Workflows save/replay (gated HYBRID_WORKFLOWS_V2)
+app.include_router(kb_sources.router, prefix="/api")  # Part E: Notion/Slack KB ingest (gated HYBRID_NOTION_KB)
 app.include_router(studio_train.router, prefix="/api")
 app.include_router(value_joins.router, prefix="/api")
 app.include_router(followups.router)
@@ -667,6 +671,14 @@ async def startup_event():
             register_connector_sync_jobs(scheduler)
         except Exception as e:
             logger.error(f"Failed to schedule connector auto-sync job: {e}")
+
+    # Part B: nightly offline context pipeline (flag OFFLINE_CONTEXT + leader-gated).
+    if is_scheduler_leader:
+        try:
+            from app.core.scheduler import register_offline_context_jobs
+            register_offline_context_jobs(scheduler)
+        except Exception as e:
+            logger.error(f"Failed to schedule offline-context job: {e}")
 
     # Register LDAP group sync job if configured AND licensed (sync is enterprise-only)
     if is_scheduler_leader and settings.dash_config.ldap.enabled and has_feature("ldap"):

@@ -219,6 +219,10 @@ async def _build_table_card(db, *, organization_id, data_source, table) -> dict:
             if isinstance(f, dict) and f.get("col")
         ],
         "population": str(pipeline.get("population") or "").strip(),
+        # HYBRID_CODE_ENRICH_PLUS (Part C): deeper Codex-derived facts (empty when OFF).
+        "primary_keys": [str(c) for c in (pipeline.get("primary_keys") or []) if str(c).strip()],
+        "downstream_usage": [str(u) for u in (pipeline.get("downstream_usage") or []) if str(u).strip()],
+        "alternate_tables": [a for a in (pipeline.get("alternate_tables") or []) if isinstance(a, dict) and a.get("table")],
         "data_quality": dq,
         "columns": columns,
         "owner": (_attr(sem_table, "owner") or "").strip(),
@@ -308,6 +312,12 @@ def render_card(card: dict) -> str:
             lines.append(f"  grain: {t['grain']}")
         if t.get("population"):
             lines.append(f"  population: {t['population']}")
+        if t.get("primary_keys"):
+            lines.append("  primary key: " + ", ".join(t["primary_keys"]))
+        if t.get("downstream_usage"):
+            lines.append("  used by: " + "; ".join(t["downstream_usage"]))
+        for a in t.get("alternate_tables") or []:
+            lines.append(f"  prefer instead: {a['table']} — {a.get('reason','higher-trust sibling')}")
         if t.get("use_cases"):
             lines.append("  use cases: " + ", ".join(t["use_cases"]))
 

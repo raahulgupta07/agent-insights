@@ -9,6 +9,16 @@ Bullet rules (this is the user-facing "What's new" feed):
     Hidden from the popover; shown collapsed on the full /changelog page only.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.89.0 — Data-agent parity: Workflows · offline context · deeper enrichment · golden-SQL · Notion/Slack  (2026-07-03)
+- Five more upgrades toward OpenAI-data-agent parity, all off by default (Settings → Features):
+  - **Workflows** — save a finished analysis as a reusable workflow, then replay it from the composer's **"Use a workflow"** chip with your own dates/segments; the same steps run consistently for everyone. Flag HYBRID_WORKFLOWS_V2.
+  - **Daily context pipeline** — a nightly job pre-builds one merged, embedded knowledge document per table so answers are grounded faster and more consistently. Flag HYBRID_OFFLINE_CONTEXT.
+  - **Deeper table knowledge** — the agent now also learns each table's primary keys, which reports/dashboards use it, and which trusted table to use instead when one is stale. Flag HYBRID_CODE_ENRICH_PLUS.
+  - **Golden-SQL checks** — saved tests now keep the expected SQL alongside the expected numbers and grade on both. Flag HYBRID_GOLDEN_SQL.
+  - **Notion / Slack knowledge** — pull metric definitions and incident/launch notes from Notion pages and Slack threads into the knowledge base to ground answers (after approval). Flag HYBRID_NOTION_KB.
+  - Built by 5 parallel sub-agents; all default OFF (byte-identical when off), migration wf2save1 (workflows table). Durably baked.
+    - Backend NEW: models/analysis_workflow.py + mig wf2save1, services/workflows/{capture,replay}.py, routes/workflows_v2.py, services/context_offline/pipeline.py, ai/knowledge/enrich_signals.py, services/evals/golden_sql.py, services/knowledge/{notion,slack}_ingest.py, routes/kb_sources.py. Wiring: main.py (workflows_v2 + kb_sources routers), core/scheduler.py register_offline_context_jobs + main.py lifespan, table_card.py (3 new fields render), test_expectations.py ResultSetRule.golden_sql + eval_harness attach_golden_sql, PromptBoxV2.vue "Use a workflow" chip + WorkflowPicker.vue. Deferred: golden-SQL live grade call (capture done, grade_sql ready), offline-context read-side prefer (docs build; live P3 card serves same text). Proven: import main 677 routes, migration applied wf2save1, offline pipeline built 28 table docs live org 7d372305.
+
 ## v1.88.0 — OpenAI-data-agent gap-closers: usage-trust · table cards · institutional knowledge · eval health  (2026-07-03)
 - Five improvements inspired by OpenAI's in-house data agent, all off by default (Settings → Features):
   - **Smarter table picking** — the agent now favours tables that are actually trusted and used (backed by saved/verified queries and dashboards) over one-off tables, so it lands on the right table more often. Flag HYBRID_USAGE_TRUST.

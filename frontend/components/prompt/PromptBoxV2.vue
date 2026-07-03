@@ -286,6 +286,24 @@
                     <!-- Data source selector -->
                     <DataSourceSelector v-model:selectedDataSources="selectedDataSources" v-model:selectedStudioId="selectedStudioId" :reportId="report_id" />
 
+                    <!-- Use a workflow (HYBRID_WORKFLOWS_V2) -->
+                    <button
+                        v-if="workflowsEnabled"
+                        type="button"
+                        class="rounded-md px-2 py-1 text-xs flex items-center text-gray-500 hover:text-gray-900 hover:bg-gray-50"
+                        @click="showWorkflows = true"
+                    >
+                        <Icon name="heroicons-squares-2x2" class="w-4 h-4" />
+                        <span v-if="!isCompactPrompt" class="ms-1">Use a workflow</span>
+                    </button>
+                    <Teleport to="body">
+                        <div v-if="showWorkflows" class="fixed inset-0 z-[120] bg-black/30 flex items-center justify-center p-4" @click.self="showWorkflows = false">
+                            <div class="bg-[#FBFAF6] rounded-2xl shadow-xl w-full max-w-lg max-h-[80vh] overflow-y-auto p-4">
+                                <WorkflowsWorkflowPicker @ran="onWorkflowRan" @close="showWorkflows = false" />
+                            </div>
+                        </div>
+                    </Teleport>
+
                     <!-- Mode selector -->
                     <UPopover :key="'mode-' + (props.popoverOffset || 0)" :popper="popperLegacy">
                         <UTooltip :text="isCompactPrompt ? modeLabel : ''" :popper="{ strategy: 'fixed', placement: 'bottom-start' }">
@@ -1087,6 +1105,20 @@ async function loadMoaFlag() {
         moaEnabled.value = !!rows.find(r => r?.env_name === 'HYBRID_MOA')?.effective
     } catch { moaEnabled.value = false }
 }
+// HYBRID_WORKFLOWS_V2: "Use a workflow" composer chip → save/replay a reusable analysis.
+const workflowsEnabled = ref<boolean>(false)
+const showWorkflows = ref<boolean>(false)
+async function loadWorkflowsFlag() {
+    try {
+        const { data } = await useMyFetch<any[]>('/api/organization/hybrid-flags')
+        const rows = (data.value as any[]) || []
+        workflowsEnabled.value = !!rows.find(r => r?.env_name === 'HYBRID_WORKFLOWS_V2')?.effective
+    } catch { workflowsEnabled.value = false }
+}
+function onWorkflowRan(r: any) {
+    showWorkflows.value = false
+    if (r?.report_id) navigateTo('/reports/' + r.report_id)
+}
 const selectedModelLabel = computed(() => {
     if (selectedModel.value === 'auto') {
         const picked = (props.autoPicked as any)?.model
@@ -1523,6 +1555,7 @@ onMounted(async () => {
     // when no explicit model is persisted (fail-soft: flag load never throws).
     await loadAutoModelFlag()
     await loadMoaFlag()
+    await loadWorkflowsFlag()
     await loadModels()
     await refreshContextEstimate(false)
     if (props.report_id) {

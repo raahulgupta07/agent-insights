@@ -232,6 +232,7 @@ async def _enrich_table(
 
     # --- Try to get source SQL from the connector ---
     source_sql: Optional[str] = None
+    client: Any = None
     try:
         client = data_source.get_client()
         source_sql = await _get_source_sql(client, table_name)
@@ -246,6 +247,9 @@ async def _enrich_table(
             _write_pipeline_logic(tbl_row, meta, grain=grain, formulas=[],
                                   population="All rows included",
                                   source_sql_snippet="")
+            await _augment_plus(db, data_source=data_source, tbl_row=tbl_row,
+                                meta=meta, source_sql=None, client=client,
+                                table_name=table_name)
             return True
         # No DDL and no profile → skip
         logger.debug("code_enrich: no DDL and no profile_v2 for %s — skip", table_name)
@@ -290,6 +294,9 @@ async def _enrich_table(
         population=population,
         source_sql_snippet=_safe_snippet(source_sql, 400),
     )
+    await _augment_plus(db, data_source=data_source, tbl_row=tbl_row,
+                        meta=meta, source_sql=source_sql, client=client,
+                        table_name=table_name)
     return True
 
 
@@ -317,6 +324,60 @@ def _write_pipeline_logic(
         flag_modified(tbl_row, "metadata_json")
     except Exception:
         pass  # flag_modified is best-effort when outside a session
+
+
+async def _augment_plus(
+    db: AsyncSession,
+    *,
+    data_source: Any,
+    tbl_row: Any,
+    meta: Dict[str, Any],
+    source_sql: Optional[str],
+    client: Any,
+    table_name: str,
+) -> None:
+    """CODE_ENRICH_PLUS: add primary_keys / downstream_usage / alternate_tables.
+
+    Additive — merges three new keys into the ALREADY-written pipeline_logic
+    dict. Gated by ``flags.CODE_ENRICH_PLUS`` so OFF = today's enrich unchanged
+    byte-identical. Every field is fail-soft (skipped on error); never raises.
+    """
+    if not flags.CODE_ENRICH_PLUS:
+        return
+    try:
+        from app.ai.knowledge import enrich_signals as sig
+        from sqlalchemy.orm.attributes import flag_modified
+
+        org_id = str(getattr(data_source, "organization_id", "") or "")
+        ds_id = str(getattr(data_source, "id", "") or "") or None
+
+        pks = await sig.derive_primary_keys(
+            tbl_row=tbl_row, meta=meta, source_sql=source_sql,
+            client=client, table_name=table_name,
+        )
+        downstream = await sig.derive_downstream_usage(
+            db, organization_id=org_id, data_source_id=ds_id,
+            table_name=table_name,
+        )
+        alternates = await sig.derive_alternate_tables(
+            db, organization_id=org_id, data_source_id=ds_id,
+            table_name=table_name,
+        )
+
+        cur = tbl_row.metadata_json if isinstance(tbl_row.metadata_json, dict) else {}
+        cur = dict(cur)
+        pl = dict(cur.get("pipeline_logic") or {})
+        pl["primary_keys"] = pks
+        pl["downstream_usage"] = downstream
+        pl["alternate_tables"] = alternates
+        cur["pipeline_logic"] = pl
+        tbl_row.metadata_json = cur
+        try:
+            flag_modified(tbl_row, "metadata_json")
+        except Exception:
+            pass
+    except Exception as e:
+        logger.debug("code_enrich._augment_plus(%s): %s", table_name, e)
 
 
 async def enrich_source(

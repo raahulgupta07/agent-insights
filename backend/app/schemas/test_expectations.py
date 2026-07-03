@@ -174,6 +174,9 @@ class ResultSetRule(BaseModel):
     type: Literal["result_set"] = "result_set"
     golden_data: List[Dict[str, Any]] = Field(default_factory=list)
     golden_columns: List[str] = Field(default_factory=list)
+    # HYBRID_GOLDEN_SQL (Part D): expected SQL kept alongside expected rows so the
+    # grader can score intent (SQL) as well as the result set. None = not captured.
+    golden_sql: Optional[str] = None
     tolerance: float = 0.0
     order_insensitive: bool = True
     key_columns: Optional[List[str]] = None

@@ -96,6 +96,37 @@ def register_eval_jobs(scheduler) -> bool:
         return False
 
 
+def register_offline_context_jobs(scheduler) -> bool:
+    """Part B: register the nightly offline-context pipeline (flag + leader gated).
+
+    Mirrors ``register_eval_jobs``. ``run_scheduled_offline_context`` is
+    self-contained (own session, re-checks ``flags.OFFLINE_CONTEXT``). Runs at
+    02:30 — before the 03:00 evals + 03:30 join-mine so downstream jobs see the
+    freshly-built per-table context docs. Never raises.
+    """
+    try:
+        from app.settings.hybrid_flags import flags
+        if not flags.OFFLINE_CONTEXT:
+            logger.info("Part B offline context: OFFLINE_CONTEXT off — not registered")
+            return False
+        from app.services.context_offline.pipeline import run_scheduled_offline_context
+        scheduler.add_job(
+            run_scheduled_offline_context,
+            trigger="cron",
+            id="offline_context_nightly",
+            hour=2,
+            minute=30,
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
+        logger.info("Scheduled job: offline_context_nightly @ 02:30 daily")
+        return True
+    except Exception as e:  # never let registration crash scheduler startup
+        logger.error(f"Failed to schedule offline_context_nightly job: {e}")
+        return False
+
+
 def register_join_mine_jobs(scheduler) -> bool:
     """Phase 6: register the nightly join-mining job (flag + leader gated).
 

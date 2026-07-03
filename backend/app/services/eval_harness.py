@@ -215,6 +215,13 @@ async def save_completion_as_golden(
         rule = await make_result_set_rule_from_snapshot(snapshot or {})
         if rule is None:
             return None
+        # HYBRID_GOLDEN_SQL (Part D): also capture the expected SQL into the rule
+        # (rides inside expectations_json, no migration). No-op when flag OFF.
+        try:
+            from app.services.evals.golden_sql import attach_golden_sql
+            rule = attach_golden_sql(rule, snapshot or {})
+        except Exception:
+            pass
 
         # 2. Resolve the question text (sibling user row).
         question = await _resolve_question_text(db, completion)
