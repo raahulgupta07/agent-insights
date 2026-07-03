@@ -85,6 +85,25 @@
                 <!-- CENTER column (main knowledge) -->
                 <div class="flex-1 min-w-0 w-full flex flex-col gap-4">
 
+                    <!-- 0 · At a glance — headline KPIs from the model's own measures,
+                         pre-computed per-user (Hot Start) so real numbers show before
+                         the user types. Hidden entirely when there are none. -->
+                    <div v-if="headline.status === 'warming' || headlineItems.length"
+                         class="order-0 flex flex-wrap gap-3">
+                        <template v-if="headline.status === 'warming' && !headlineItems.length">
+                            <div v-for="i in 4" :key="'hlsk'+i"
+                                 class="flex-1 min-w-[130px] h-[68px] rounded-xl bg-[#F4F1EC] animate-pulse"></div>
+                        </template>
+                        <button v-for="(kpi, ki) in headlineItems" :key="'hl'+ki"
+                             type="button"
+                             @click="launchReport('Show me ' + kpi.label)"
+                             :title="'Open a report about ' + kpi.label"
+                             class="flex-1 min-w-[130px] text-left bg-white border border-[#EAE8E4] rounded-xl px-4 py-3 shadow-[0_1px_2px_rgba(28,25,23,.04)] hover:border-[#D9CFC2] hover:shadow-[0_2px_6px_rgba(28,25,23,.08)] transition-all cursor-pointer">
+                            <div class="text-[20px] font-semibold text-[#1C1917] leading-tight tabular-nums">{{ kpi.value }}</div>
+                            <div class="text-[11.5px] text-[#6b6b6b] mt-1 truncate">{{ kpi.label }}</div>
+                        </button>
+                    </div>
+
                     <!-- 1 · What this agent knows (existing primary-instruction block) -->
                     <div class="order-1 bg-white border border-[#EAE8E4] rounded-xl shadow-[0_1px_2px_rgba(28,25,23,.04),0_1px_3px_rgba(28,25,23,.06)]">
                         <div class="px-4 py-3 border-b border-[#F1EFEC] text-[13.5px] font-semibold text-[#1C1917] flex items-center gap-2">
@@ -489,10 +508,31 @@ const syncActive = computed(
 )
 function onSyncPhase(p: string) {
     syncPhase.value = p || ''
-    // A finished sync changed the kept-table set → refresh the overview once so the
-    // strip + cards reflect the real result instead of the pre-sync snapshot.
-    if (p === 'done') { try { fetchOverview() } catch (_e) {} }
+    // A finished sync changed the kept-table set → refresh the overview + headline
+    // once so the strip + cards reflect the real result instead of the pre-sync snapshot.
+    if (p === 'done') { try { fetchOverview() } catch (_e) {} try { fetchHeadline() } catch (_e) {} }
 }
+
+// Hot Start — headline KPIs (the model's own measures), pre-computed per-user.
+const headline = ref<{ status: string; items: { label: string; value: string }[] }>({ status: '', items: [] })
+const headlineItems = computed(() => headline.value.items || [])
+let _headlinePolls = 0
+async function fetchHeadline() {
+    try {
+        const id = route.params.id as string
+        const { data } = await useMyFetch<any>(`/data_sources/${id}/headline`, { method: 'GET' })
+        const r = (data.value as any) || { status: 'error', items: [] }
+        headline.value = { status: r.status || 'error', items: Array.isArray(r.items) ? r.items : [] }
+        // still warming + nothing yet → poll a few times (measures compute in the background)
+        if (headline.value.status !== 'ready' && !headline.value.items.length && _headlinePolls < 6) {
+            _headlinePolls++
+            setTimeout(fetchHeadline, 4000)
+        }
+    } catch (_e) {
+        headline.value = { status: 'error', items: [] }
+    }
+}
+
 const TABLE_CAP = 8
 const visibleTables = computed(() => overview.value.tables.slice(0, TABLE_CAP))
 
@@ -612,8 +652,8 @@ async function launchReport(text: string) {
     }
 }
 
-onMounted(fetchOverview)
-watch(() => route.params.id, () => fetchOverview())
+onMounted(() => { fetchOverview(); fetchHeadline() })
+watch(() => route.params.id, () => { _headlinePolls = 0; fetchOverview(); fetchHeadline() })
 const editStarters = ref<{ title: string; prompt: string }[]>([])
 const savingStarters = ref(false)
 

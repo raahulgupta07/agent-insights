@@ -563,6 +563,15 @@ async def get_data_source_overview(
     conn_count = len(data_source.connections or [])
     empty["stats"]["connections"] = conn_count
 
+    # HOT START: fire a background pre-warm of this user's Power BI model so their
+    # first real query is a cache hit instead of a cold 40-84s query. Fire-and-forget,
+    # flag-gated inside, throttled per (data_source, user), never blocks this response.
+    try:
+        from app.services.connector_warm import schedule_warm
+        schedule_warm(str(data_source_id), str(organization.id), _uid)
+    except Exception:
+        pass
+
     # --- Load ALL tables (same path /full_schema legacy uses) ---------------
     try:
         all_tables = await data_source_service.get_data_source_schema(
@@ -696,6 +705,24 @@ async def get_data_source_overview(
     _log.info("overview: built ds=%s in %.0fms tables=%d (cached %.0fs)",
               data_source_id, (_time.monotonic() - _t0) * 1000.0, len(active), _OVERVIEW_TTL)
     return payload
+
+
+@router.get("/data_sources/{data_source_id}/headline")
+@requires_resource_permission('data_source', 'view_schema')
+async def get_data_source_headline(
+    data_source_id: str,
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+    current_user: User = Depends(current_user),
+):
+    """HOT START: the user's headline KPIs (the model's own measures), computed on
+    THEIR client and cached per (data_source, user). Returns {status, items:[{label,
+    value}]}. Fail-soft — returns an empty list rather than 500 on any issue."""
+    try:
+        from app.services.connector_warm import compute_headline
+        return await compute_headline(str(data_source_id), str(organization.id), str(current_user.id))
+    except Exception:
+        return {"status": "error", "items": []}
 
 
 @router.put("/data_sources/{data_source_id}/update_schema", response_model=DataSourceSchema)

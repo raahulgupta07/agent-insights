@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CityAgent — Power BI Connector Flow</title>
+<style>
+  :root{
+    --bg:#f6f4f0; --card:#fff; --ink:#1c1917; --muted:#6b6b6b; --line:#e6e1d8;
+    --orange:#c2541e; --green:#15803d; --greenbg:#e7f5ec; --amber:#c2841e; --amberbg:#fbf3e4;
+    --red:#c53030; --redbg:#fcebea; --blue:#2b6cb0; --bluebg:#e8f0f8; --purple:#6b46c1; --purplebg:#efe9fb;
+    --code:#f1efec;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  header{padding:28px 24px 10px;text-align:center}
+  header h1{margin:0;font-size:24px}
+  header h1 span{color:var(--orange)}
+  header p{margin:6px 0 0;color:var(--muted)}
+  .legend{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin:14px 0 4px;font-size:12px}
+  .legend b{display:inline-flex;align-items:center;gap:6px;font-weight:600}
+  .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+  .wrap{max-width:1120px;margin:0 auto;padding:16px 20px 60px}
+  .lane-title{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--orange);margin:34px 0 12px;border-bottom:2px solid var(--line);padding-bottom:6px}
+  .step{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin:0 auto;box-shadow:0 1px 2px rgba(28,25,23,.05);position:relative}
+  .step .n{position:absolute;left:-13px;top:14px;width:26px;height:26px;border-radius:50%;background:var(--orange);color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+  .step h3{margin:0 0 4px;font-size:15px}
+  .step .tag{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:20px;vertical-align:middle;margin-left:8px}
+  .t-green{background:var(--greenbg);color:var(--green)} .t-amber{background:var(--amberbg);color:var(--amber)}
+  .t-blue{background:var(--bluebg);color:var(--blue)} .t-purple{background:var(--purplebg);color:var(--purple)} .t-red{background:var(--redbg);color:var(--red)}
+  .step p{margin:6px 0 0;color:#33302c}
+  .step .meta{margin-top:8px;font-size:12px;color:var(--muted)}
+  .step code{background:var(--code);padding:1px 6px;border-radius:5px;font:12px ui-monospace,Menlo,monospace}
+  .arrow{width:2px;height:24px;background:var(--line);margin:0 auto;position:relative}
+  .arrow:after{content:"▼";position:absolute;left:-5px;bottom:-4px;color:var(--line);font-size:12px}
+  .branch{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:6px auto}
+  @media(max-width:760px){.branch{grid-template-columns:1fr}}
+  .mini{border-radius:12px;padding:11px 13px;border:1px solid var(--line)}
+  .mini b{display:block;margin-bottom:3px}
+  .ok{background:var(--greenbg);border-color:#cde9d6} .warnb{background:var(--amberbg);border-color:#f0e2c4} .stop{background:var(--redbg);border-color:#f5d0cd}
+  .note{max-width:1120px;margin:14px auto 0;background:#fff;border:1px dashed var(--line);border-radius:12px;padding:12px 16px;color:#444;font-size:13px}
+  .kpis{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .kpi{background:#fff;border:1px solid var(--line);border-radius:10px;padding:6px 10px;font-size:12px}
+  .kpi b{font-size:16px;display:block}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.two{grid-template-columns:1fr}}
+  footer{max-width:1120px;margin:30px auto 0;color:var(--muted);font-size:12px;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <h1>City Agent <span>Insights</span> — Power BI Connector Flow</h1>
+  <p>Per-user sign-in → discover → gate → ground → answer. Every step is per-user (own account, own data, own cache).</p>
+  <div class="legend">
+    <b><span class="dot" style="background:var(--green)"></span>success / keep</b>
+    <b><span class="dot" style="background:var(--amber)"></span>view-only / warn</b>
+    <b><span class="dot" style="background:var(--red)"></span>blocked / error</b>
+    <b><span class="dot" style="background:var(--blue)"></span>Microsoft API</b>
+    <b><span class="dot" style="background:var(--purple)"></span>AI / grounding</b>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- ================= LANE A : CONNECT + ONBOARD ================= -->
+  <div class="lane-title">Lane A — Connect &amp; Onboard (once per user, per account)</div>
+
+  <div class="step"><span class="n">1</span>
+    <h3>Sign in <span class="tag t-blue">Microsoft</span></h3>
+    <p>User enters their <b>own email + password</b> (ROPC). No admin / service account. MFA → falls back to device-code sign-in.</p>
+    <div class="meta">Token scope: <code>Dataset.Read.All</code> · identity captured as <code>ms_account_email</code>. Agent is named after this account.</div>
+  </div>
+  <div class="arrow"></div>
+
+  <div class="step"><span class="n">2</span>
+    <h3>Discover — scan ALL reachable workspaces via their reports <span class="tag t-blue">Microsoft</span></h3>
+    <p>Enumerate the user's <b>reports</b> everywhere they have access, then follow each report back to its dataset (semantic model).</p>
+    <div class="branch">
+      <div class="mini"><b>My Workspace</b><code>/reports</code></div>
+      <div class="mini"><b>Every App</b><code>/apps → /apps/{id}/reports</code></div>
+      <div class="mini"><b>Every Workspace</b><code>/groups → /groups/{id}/reports</code></div>
+    </div>
+    <div class="meta">Report-driven (a shared user's raw <code>/datasets</code> list is often empty). Each report carries <code>datasetId</code> + <code>workspaceId</code> → datasets deduped.</div>
+  </div>
+  <div class="arrow"></div>
+
+  <div class="step"><span class="n">3</span>
+    <h3>Gate each dataset — can this user QUERY it? <span class="tag t-blue">Microsoft</span></h3>
+    <p>Probe every discovered dataset (<code>_probe_queryable</code>):</p>
+    <div class="branch">
+      <div class="mini ok"><b>✔ Queryable</b>Read + dataset access → keep &amp; enumerate</div>
+      <div class="mini warnb"><b>◐ View-only</b>report access, no dataset access → "needs Build permission", surfaced but not queried</div>
+      <div class="mini stop"><b>✕ No access</b>hidden</div>
+    </div>
+    <div class="meta">This is the <b>read-vs-query</b> gate. Report-view alone ≠ permission to query the data.</div>
+  </div>
+  <div class="arrow"></div>
+
+  <div class="step"><span class="n">4</span>
+    <h3>Enumerate tables, columns, types <span class="tag t-blue">Microsoft</span></h3>
+    <p>For each queryable dataset, read the real schema via <code>INFO.VIEW.TABLES()</code> + <code>INFO.VIEW.COLUMNS()</code> — actual names + data types (no guessing).</p>
+  </div>
+  <div class="arrow"></div>
+
+  <div class="step"><span class="n">5</span>
+    <h3>Persist &amp; seed the agent</h3>
+    <p>Store an <b>offline index</b> (<code>table name → datasetId / workspaceId</code>) + seed the agent's table rows. Later queries resolve the dataset offline — no live re-scan.</p>
+  </div>
+  <div class="arrow"></div>
+
+  <div class="step"><span class="n">6</span>
+    <h3>Relevance classify — keep business, hide noise <span class="tag t-green">v1.78.7</span></h3>
+    <p>Classifier is <b>authoritative</b>: <b>activates</b> business tables (facts, dimensions) and <b>deactivates</b> noise (usage-telemetry, staging copies, measure-holders).</p>
+    <div class="meta">Proven: 10 business tables kept, 15 telemetry/staging hidden. (Fixes the "new agent = 0 tables" skeleton.)</div>
+  </div>
+  <div class="arrow"></div>
+
+  <div class="step"><span class="n">7</span>
+    <h3>Learn from data — sample real values <span class="tag t-purple">v1.76</span></h3>
+    <p>Sample a few real rows per active table (PII-safe) → example column values feed the onboarding AI, so it describes your <i>actual</i> domain, not a guess from the connector name.</p>
+  </div>
+  <div class="arrow"></div>
+
+  <div class="step"><span class="n">8</span>
+    <h3>Fetch measures + relationships <span class="tag t-purple">v1.78</span></h3>
+    <p><code>INFO.VIEW.MEASURES()</code> → the model's pre-built KPIs · <code>INFO.VIEW.RELATIONSHIPS()</code> → the join graph. Both stored for grounding.</p>
+    <div class="meta">Example (Project Tracking): 17 measures + <code>subjects[project_id] → projects[id]</code> relationship.</div>
+  </div>
+  <div class="arrow"></div>
+
+  <div class="step"><span class="n">9</span>
+    <h3>AI onboarding <span class="tag t-purple">AI</span></h3>
+    <p>Generate the agent's description + conversation starters + primary instruction — grounded in the real tables, sampled values, measures &amp; relationships.</p>
+  </div>
+  <div class="arrow"></div>
+
+  <div class="step"><span class="n">10</span>
+    <h3>Hot Start — make the data "hot" on open <span class="tag t-green">v1.79</span></h3>
+    <p>On agent open, in the background: <b>warm the engine</b> (fire a cheap query per dataset so Microsoft loads the model into memory) + <b>pre-compute headline KPIs</b> from the model's measures (cached per-user).</p>
+    <div class="kpis">
+      <div class="kpi"><b>258</b>Total Projects</div>
+      <div class="kpi"><b>26</b>On Risk Projects</div>
+      <div class="kpi"><b>82%</b>Avg Progress</div>
+      <div class="kpi"><b>7,299</b>Total Tasks</div>
+    </div>
+    <div class="meta">Result: the Overview shows real numbers <b>before the user types</b>; the first question hits a warm engine.</div>
+  </div>
+
+  <!-- ================= LANE B : QUERY ================= -->
+  <div class="lane-title">Lane B — Ask a question (every query)</div>
+
+  <div class="step"><span class="n">Q1</span>
+    <h3>User asks in natural language</h3>
+    <p>e.g. "how many projects are on risk?" · Planner routes it (≥ balanced model for Power BI; answers simple asks directly, no double-clarify).</p>
+  </div>
+  <div class="arrow"></div>
+
+  <div class="step"><span class="n">Q2</span>
+    <h3>Build the user's client (per-user) <span class="tag t-green">isolated</span></h3>
+    <p>Constructs a client with the user's own credentials + the offline index + measures/relationships. Sets <code>_bow_user_id</code> so the result cache is keyed per-user (RLS-safe).</p>
+  </div>
+  <div class="arrow"></div>
+
+  <div class="step"><span class="n">Q3</span>
+    <h3>AI writes the query <span class="tag t-purple">AI</span></h3>
+    <p>Generates a Python function that runs DAX. Grounded rules: <b>use bare table names</b>, <b>prefer measures</b>, <b>join related tables in ONE DAX query</b> (never a pandas merge → no cartesian).</p>
+  </div>
+  <div class="arrow"></div>
+
+  <div class="step"><span class="n">Q4</span>
+    <h3>Execute — with safety nets <span class="tag t-blue">Microsoft</span></h3>
+    <p>Before running: strip any <code>Dataset/Table</code> qualifier → bare name. Check the per-user cache.</p>
+    <div class="branch">
+      <div class="mini ok"><b>Cache hit</b>&lt; 1ms (warm / repeat)</div>
+      <div class="mini"><b>Cache miss</b>→ <code>POST /executeQueries</code> · MS engine 40–84s cold, fast when warm</div>
+      <div class="mini warnb"><b>200 + error</b>row/table-limit caught here too</div>
+    </div>
+  </div>
+  <div class="arrow"></div>
+
+  <div class="branch" style="grid-template-columns:1fr 1fr">
+    <div class="step" style="margin:0"><span class="n">✔</span>
+      <h3>Success <span class="tag t-green">answer</span></h3>
+      <p>DataFrame → answer + optional chart. Cached per-user for repeats.</p>
+    </div>
+    <div class="step" style="margin:0"><span class="n">!</span>
+      <h3>Failure → clean message <span class="tag t-red">no raw errors</span></h3>
+      <p>Every error is classified &amp; translated (raw JSON logged server-side only):</p>
+      <div class="meta">
+        <b>no_access / auth</b> → "You can view this report but can't query its data — ask for access." <b>(stops, no retry)</b><br>
+        <b>not_found</b> → "couldn't find that table…"<br>
+        <b>invalid_dax</b> → self-correct &amp; retry (measures + relationships in hand)<br>
+        <b>too_much_data</b> → "I'll summarise it"<br>
+        <b>throttled (429)</b> → auto-retry, silent
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>Per-user isolation everywhere:</b> own account · own token · only the datasets their account can query · overview, headline &amp; DAX-result caches all keyed by <code>(data_source, user_id)</code> → a Row-Level-Security dataset never serves one user's rows to another.
+  </div>
+
+  <div class="two" style="margin-top:16px">
+    <div class="note" style="margin:0">
+      <b>Hard limits (Microsoft-side, cannot fix):</b><br>
+      • 40–84s cold query (engine load) · warm = fast<br>
+      • 1 result table per query · 100k rows / 1M values / 15MB · 120 queries/min<br>
+      • <b>Build/dataset access required</b> — view-only can't be queried
+    </div>
+    <div class="note" style="margin:0">
+      <b>Open items:</b><br>
+      • Never-synced agent shows a skeleton (should prompt "Sync now")<br>
+      • Reconnecting can spawn duplicate empty agents<br>
+      • Optional: exhaustive per-workspace dataset scan (catch datasets with no visible report)
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  City Agent Insights · Power BI connector · flow as of v1.79.1 (2026-07-03). Per-user, RLS-safe, fail-soft throughout.
+</footer>
+</body>
+</html>

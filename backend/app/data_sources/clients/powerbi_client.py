@@ -275,7 +275,7 @@ class PowerBIClient(DataSourceClient):
                     d = {str(k).split("[")[-1].rstrip("]"): v for k, v in r.items()}
                     nm = d.get("Name") or d.get("Measure")
                     if nm:
-                        meas.append({"name": str(nm), "table": str(d.get("Table") or "")})
+                        meas.append({"name": str(nm), "table": str(d.get("Table") or ""), "datasetId": ds_id})
             except Exception:  # noqa: BLE001
                 pass
         return {"relationships": rels, "measures": meas}
@@ -1213,7 +1213,11 @@ class PowerBIClient(DataSourceClient):
         if _robust:
             try:
                 import hashlib as _hl
-                _sig = f"{self.tenant_id or ''}|{workspace_id or ''}|{dataset_id}|{max_rows}|{query}"
+                # Include the user id so a Row-Level-Security dataset (different users
+                # see different rows of the SAME dataset) can never serve one user's
+                # cached result to another. Empty for system/service contexts.
+                _uid = getattr(self, "_bow_user_id", "") or ""
+                _sig = f"{_uid}|{self.tenant_id or ''}|{workspace_id or ''}|{dataset_id}|{max_rows}|{query}"
                 _key = _hl.sha256(_sig.encode("utf-8")).hexdigest()
                 _cached = self._dax_cache_get(_key)
                 if _cached is not None:

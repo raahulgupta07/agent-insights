@@ -2004,7 +2004,7 @@ LANDMINE: "no data source = global" was the leak; a fresh multi-agent org must r
 Built via 2 subagents (disjoint files) + my integration. Flag HYBRID_CONNECTOR_JOURNEY_V2 (default OFF, ON org
 7d372305). Rollback img `cityagent-analytics:pre-journey-v2`.
 PROBLEM: per-user PBI users whose access is via SHARED REPORTS / APPS synced 0 tables — our discovery lists
-`/datasets` (empty for shared content). Live proof: winhtutthein@cityholdings has 16 reports but /datasets=0.
+`/datasets` (empty for shared content). Live proof: <pbi-test-user> has 16 reports but /datasets=0.
 FIX (all in powerbi_user_client.py unless noted):
 - **Report/app discovery** `discover_via_reports()` (cached `_report_discovery_cache`) — enumerate reports across
   My Workspace + `/apps/{id}/reports` + `/groups/{id}/reports` (`_collect_reports`), dedupe by datasetId, probe
@@ -2023,7 +2023,7 @@ FIX (all in powerbi_user_client.py unless noted):
   ms_account_email in the connect result.
 - **Honest empty-state** (per_user_connector.sync_clone_bg): when flag ON AND tables_total==0, SKIP llm_sync (it
   hallucinates a fake `@SignIns` schema on 0 tables) + log "no queryable Power BI datasets for this account".
-VERIFIED LIVE (winhtutthein clone 5dae9d47, flag ON): discover → queryable=13 (Campaign_Analysis: CR_Aggre,
+VERIFIED LIVE (<pbi-test-user> clone 5dae9d47, flag ON): discover → queryable=13 (Campaign_Analysis: CR_Aggre,
 Campaign_Measures, cohort tables…), view_only=9 ("no build permission"); sync wrote **0→13** DataSourceTable rows;
 llm_sync ran on REAL tables (no hallucination). demo (18 tables) unaffected (>0 → honest-state no-op; get_schemas
 merge additive). LANDMINES: (1) INFO.TABLES=400/401, use INFO.VIEW.TABLES/COLUMNS; (2) probe MUST try My-Workspace
@@ -2185,3 +2185,57 @@ business-useful active tables, before 4c diff / llm_sync). Flag 3-place in `hybr
    scheduled syncs, but a CODE change to the generators won't re-apply on an existing agent until a
    schema change or `primary_instruction_id` is cleared. NEW connectors (first_run) always learn, so
    they get grounding + sampling from the first sync — the hallucination can't occur on new agents.
+
+---
+
+## 2026-07-03 — Hot Start (pre-warm + at-a-glance KPIs) + relevance classifier fix (v1.78.7 → v1.79.1)
+Per-user Power BI "Hot Start": on agent-open, pre-warm the semantic model and surface real headline
+numbers before the user types. Plus the v1.78.7 classifier fix that stopped new agents landing with 0
+tables. All flag-gated (`HYBRID_HOT_START`, default OFF), per-user, RLS-safe, fail-soft.
+
+**v1.78.7 — relevance classifier authoritative (0-table bug).** `services/per_user_connector.py`
+`sync_clone_bg` relevance step was **deactivate-only** (`if not useful and is_active: deactivate`). If
+the seed left a business table inactive, a useful table stayed off → agents ended with 0 active tables →
+endless loading skeleton. Fix = authoritative `t.is_active = bool(c["useful"])` for non-manual rows
+(activate useful + deactivate noise), with `n_on`/`n_off` log ("N business tables kept, M noise
+deactivated"). Also calls `invalidate_overview_cache` + `invalidate_headline` on done. Proven:
+deactivate-all → re-sync → 10 business tables (5 EDA_Toey + 5 Open Project Tracking) re-activated,
+telemetry/staging/#Measure off.
+
+**v1.79.0 — Hot Start backend.** New `services/connector_warm.py`:
+- `warm_agent(ds, org, user)` — flag `HYBRID_HOT_START`, throttled per `(data_source, user)` (`_WARMED`
+  240s TTL < the 300s DAX cache so a re-open in the hot window is a no-op; stamped BEFORE work so a
+  concurrent open can't double-fire), PBI-only, opens its own `async_session_maker` session +
+  `load_overrides_from_db`, builds the user's own clients (`DataSourceService.construct_clients`), fires
+  `EVALUATE ROW("_w", 1)` per distinct dataset in `client._table_index` (`_warm_client`), 429 aborts the
+  pass (respect the 120-query/min cap), `_PER_QUERY_TIMEOUT=20s`, `_MAX_DATASETS=12`. Never raises.
+- `schedule_warm(...)` = fire-and-forget `asyncio.create_task` (never blocks a request handler).
+- `compute_headline(ds, org, user, force=False)` → `{status, items:[{label,value}]}`: runs the model's own
+  measures (from `client._model_meta['measures']`, tagged `datasetId`) whose name matches `_HEADLINE_NAME`
+  (count/total/number/amount/revenue/sales/progress/rate/ratio/avg/percent/%/score/active/members),
+  skips `usage metrics` datasets, `EVALUATE ROW("v", [Measure])` per, `_fmt_value` (% when name implies
+  and |v|≤1 → `v*100%`, integers with thousands, else 1dp), cap `_MAX_HEADLINE=6`, cached per
+  `(ds, user)` `_HEADLINE_TTL=300`, 429-abort, fail-soft. `invalidate_headline(ds)` drops all users'
+  cached headlines for a source (called on sync).
+- `settings/hybrid_flags.py`: `HOT_START` property (`_bool("HYBRID_HOT_START", False)`) + `UPGRADE_FLAGS`
+  label ("Hot Start (pre-warm + headline)") + `snapshot()` entry.
+- `routes/data_source.py`: `schedule_warm(...)` fired from the Overview handler (opening an agent warms
+  it, non-blocking); new owner-gated `GET /data_sources/{id}/headline` → `compute_headline`. Keeps the
+  v1.78.1 `_OVERVIEW_CACHE`.
+- `services/data_source_service.py`: `construct_clients` stamps `client._bow_user_id` so the DAX cache key
+  and the warm are per-user; `_install_pbi_offline_index` also `fetch_model_metadata` + `set_model_meta`
+  so headline measures are known without a live discovery.
+- Proven live: `warm_agent` warmed 6 datasets in 7s; `compute_headline` returned 6 KPIs in 8.4s (cached
+  per-user); per-user cache-key isolation verified (userA ≠ userB).
+
+**v1.79.1 — Hot Start front end.** `pages/agents/[id]/index.vue`: "At a glance" KPI strip driven by a
+`headline` ref + `fetchHeadline()` (polls while `status==='off'`/empty until ready, then stops); cards
+clickable → `launchReport('Show me ' + kpi.label)`. Nothing shows until the user's own client returns
+values (RLS-safe). `AgentSyncLog.vue` emits its live `phase`; parent `onSyncPhase` refetches on done. FE
+rebuilt (`nuxt generate`) + deployed.
+
+LANDMINE: `warm_agent`/`compute_headline` run OFFLINE-style in their own session → MUST
+`load_overrides_from_db` first or `HYBRID_HOT_START` reads False and both no-op. LANDMINE: measures must
+carry `datasetId` (added in `fetch_model_metadata`) or `compute_headline` can't route the
+`EVALUATE ROW("v",[M])` to the right dataset. Rollback: image `pre-pbi-semantic` era + git tag before this
+commit. Flag `HYBRID_HOT_START` ON org 7d372305.

@@ -192,6 +192,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_AUTO_TABLE_RELEVANCE": {"label": "Auto Table Relevance", "role": "agent", "category": "Advanced", "status": "beta", "note": "At connector sync, auto-classify tables (fact/dim/measure/staging/telemetry) and deactivate noise (Power BI usage-metrics, Stg_ staging, empty/measure holders) so the agent carries only business-useful tables. Manual override in Tables tab wins. Default OFF."},
     "HYBRID_CONNECTOR_AUTO_SYNC": {"label": "Connector Auto-Sync (scheduled)", "role": "agent", "category": "Advanced", "status": "beta", "note": "Scheduler sweeps connector clones with per-agent auto-sync enabled and re-runs the sync pipeline on the configured interval. Re-training is diff-gated (no LLM cost when the schema is unchanged). Default OFF."},
     "HYBRID_LEARN_FROM_DATA": {"label": "Learn From Data (sample rows)", "role": "agent", "category": "Advanced", "status": "beta", "note": "At connector learn time, sample a few real rows per table and feed example column values into the onboarding LLM so the generated description/starters/instruction are grounded in actual data, not just table names. Kills domain hallucination on FK-less sources (Power BI). PII columns never sampled. Default OFF."},
+    "HYBRID_HOT_START": {"label": "Hot Start (pre-warm + headline)", "role": "agent", "category": "Advanced", "status": "beta", "note": "On agent open, pre-warm the user's Power BI model and pre-compute its headline measures into the per-user query cache, so the first question is instant (cache hit) instead of a cold 40-84s query, and the Overview can show real numbers before the user types. Per-user, PBI-only, background, throttled, fail-soft. Default OFF. See services.connector_warm."},
     "HYBRID_CODE_BANK": {"label": "Code Bank (proven snippets)", "role": "agent", "category": "Learning", "status": "stable"},
     "HYBRID_AGENT_MEMORY": {"label": "Agent Memory", "role": "review", "category": "Learning", "status": "stable"},
     "HYBRID_SKILL_AUTOGROW": {"label": "Skill Auto-grow", "role": "review", "category": "Learning", "status": "stable"},
@@ -982,6 +983,16 @@ class HybridFlags:
         return _bool("HYBRID_LEARN_FROM_DATA", False)
 
     @property
+    def HOT_START(self) -> bool:
+        # On agent open, pre-warm the user's Power BI model (fire cheap queries so
+        # Microsoft's engine loads the model into memory) and pre-compute the model's
+        # headline measures into the per-user DAX cache, so the first real question is
+        # a cache hit (<1s) instead of a cold 40-84s query — and the Overview can show
+        # real headline numbers before the user types anything. Per-user, PBI-only,
+        # background, throttled, fail-soft. Default OFF. See services.connector_warm.
+        return _bool("HYBRID_HOT_START", False)
+
+    @property
     def QUERY_LEARNING(self) -> bool:
         # Task 8: live query-learning. When a create_data step SUCCEEDS, persist its
         # working SQL/approach to the query library tagged with the question (review-
@@ -1162,6 +1173,7 @@ class HybridFlags:
             "AUTO_TABLE_RELEVANCE": self.AUTO_TABLE_RELEVANCE,
             "CONNECTOR_AUTO_SYNC": self.CONNECTOR_AUTO_SYNC,
             "LEARN_FROM_DATA": self.LEARN_FROM_DATA,
+            "HOT_START": self.HOT_START,
             "QUERY_LEARNING": self.QUERY_LEARNING,
             "MERGE_SAME_SCHEMA": self.MERGE_SAME_SCHEMA,
             "SMART_HEADER": self.SMART_HEADER,

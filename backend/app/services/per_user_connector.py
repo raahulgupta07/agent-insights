@@ -776,6 +776,7 @@ async def sync_clone_bg(clone_id: str, org_id: str, user_id: str,
                         )
                     ).scalars().all()
                     n_off = 0
+                    n_on = 0
                     for t in dst_rows:
                         c = classify_table(t.name, t.columns)
                         meta = dict(t.metadata_json or {})
@@ -788,16 +789,25 @@ async def sync_clone_bg(clone_id: str, org_id: str, user_id: str,
                             continue
                         meta["classification"] = c
                         t.metadata_json = meta
-                        if not c["useful"] and t.is_active:
-                            t.is_active = False
-                            n_off += 1
+                        # Classifier is AUTHORITATIVE: activate useful tables AND
+                        # deactivate noise. (Previously it only deactivated — so if the
+                        # seed left a table inactive, a useful table stayed off and the
+                        # agent ended up with 0 active tables.) Manual override handled
+                        # above (manual_active rows never touched here).
+                        want_active = bool(c["useful"])
+                        if bool(t.is_active) != want_active:
+                            t.is_active = want_active
+                            if want_active:
+                                n_on += 1
+                            else:
+                                n_off += 1
                         db.add(t)
                     await db.commit()
-                    if n_off:
+                    if n_off or n_on:
                         await connector_sync.log_step(
                             db, clone_id, level="ok", phase="syncing",
-                            msg=f"relevance: deactivated {n_off} noise tables "
-                                f"(telemetry/staging/meta)",
+                            msg=f"relevance: {n_on} business tables kept, "
+                                f"{n_off} noise deactivated (telemetry/staging/meta)",
                         )
                 except Exception as re:
                     logger.warning(
@@ -993,10 +1003,16 @@ async def sync_clone_bg(clone_id: str, org_id: str, user_id: str,
             await connector_sync.log_step(
                 db, clone_id, level="ok", phase="done", msg="agent ready"
             )
-            # Bust the cached agent Overview so the next open reflects the fresh sync.
+            # Bust the cached agent Overview + headline so the next open reflects
+            # the fresh sync (new tables / measures).
             try:
                 from app.routes.data_source import invalidate_overview_cache
                 invalidate_overview_cache(str(clone_id))
+            except Exception:
+                pass
+            try:
+                from app.services.connector_warm import invalidate_headline
+                invalidate_headline(str(clone_id))
             except Exception:
                 pass
     except Exception as e:

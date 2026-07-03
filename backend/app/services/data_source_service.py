@@ -1861,6 +1861,12 @@ class DataSourceService:
             client = ClientClass(**allowed)
             await self._install_pbi_offline_index(db, client, conn)
             self._attach_client_quota_metadata(client, data_source, conn, key)
+            # Per-user identity on the client → the DAX result cache keys by user so
+            # a Row-Level-Security dataset never serves one user's rows to another.
+            try:
+                setattr(client, "_bow_user_id", str(current_user.id) if current_user is not None else "")
+            except Exception:
+                pass
             clients[key] = client
 
         # Backward compatibility: add legacy key aliases for single-connection domains
