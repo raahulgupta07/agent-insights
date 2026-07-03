@@ -35,14 +35,17 @@ def _off_payload() -> dict:
 async def sync_notion_source(
     token: str = Body(..., embed=True),
     page_ids: Optional[List[str]] = Body(default=None, embed=True),
+    auto_approve: bool = Body(default=False, embed=True),
     current_user: User = Depends(current_user),
     db: AsyncSession = Depends(get_async_db),
     organization: Organization = Depends(get_current_organization),
 ):
     """Pull Notion pages into the org's institutional KnowledgeDocs (pending).
 
-    Body: ``{"token": "<notion integration token>", "page_ids": ["…"]?}``. With no
-    ``page_ids`` the integration's accessible pages are discovered. Flag OFF →
+    Body: ``{"token": "<notion integration token>", "page_ids": ["…"]?,
+    "auto_approve": bool?}``. With no ``page_ids`` the integration's accessible pages
+    are discovered. ``auto_approve=true`` flips each synced doc live immediately
+    (skips Review); default ``false`` lands them ``pending``. Flag OFF →
     ``{"enabled": False}``. Fail-soft — always returns a summary, never 500s on a
     bad token / unreachable Notion.
     """
@@ -57,6 +60,7 @@ async def sync_notion_source(
         organization_id=str(organization.id),
         token=token or "",
         page_ids=page_ids,
+        auto_approve=auto_approve,
     )
 
 
@@ -64,14 +68,17 @@ async def sync_notion_source(
 async def sync_slack_source(
     token: str = Body(..., embed=True),
     channel_ids: Optional[List[str]] = Body(default=None, embed=True),
+    auto_approve: bool = Body(default=False, embed=True),
     current_user: User = Depends(current_user),
     db: AsyncSession = Depends(get_async_db),
     organization: Organization = Depends(get_current_organization),
 ):
     """Pull Slack channel threads into the org's institutional KnowledgeDocs (pending).
 
-    Body: ``{"token": "<slack bot token>", "channel_ids": ["C…"]?}``. With no
-    ``channel_ids`` the workspace's accessible channels are discovered. Flag OFF →
+    Body: ``{"token": "<slack bot token>", "channel_ids": ["C…"]?,
+    "auto_approve": bool?}``. With no ``channel_ids`` the workspace's accessible
+    channels are discovered. ``auto_approve=true`` flips each synced doc live
+    immediately (skips Review); default ``false`` lands them ``pending``. Flag OFF →
     ``{"enabled": False}``. Fail-soft — always returns a summary.
     """
     from app.settings.hybrid_flags import flags
@@ -85,4 +92,5 @@ async def sync_slack_source(
         organization_id=str(organization.id),
         token=token or "",
         channel_ids=channel_ids,
+        auto_approve=auto_approve,
     )

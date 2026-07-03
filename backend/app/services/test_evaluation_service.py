@@ -871,15 +871,48 @@ class TestEvaluationService:
                     rule.key_columns,
                     golden_columns=list(rule.golden_columns or []),
                 )
+
+                # Golden-SQL intent axis (Phase2-D). A SEPARATE, non-failing
+                # signal: LLM-judge whether the generated SQL matches the expected
+                # SQL in INTENT. Flag-gated (flags.GOLDEN_SQL) + fully fail-soft ->
+                # OFF or no golden_sql means NO LLM call and a byte-identical result.
+                # Folded into the row-compare `actual` dict below so it does NOT add
+                # a rule_results row (no index shift) and NEVER affects `ok`/pass-fail.
+                _sql_intent = None
+                try:
+                    from app.settings.hybrid_flags import flags as _flags
+                    golden_sql = getattr(rule, "golden_sql", None)
+                    if _flags.GOLDEN_SQL and golden_sql and organization is not None:
+                        from app.services.evals.golden_sql import grade_sql
+                        generated_sql = cd.get("code") or ""
+                        _model = None
+                        try:
+                            _model = await organization.get_default_llm_model(db)
+                        except Exception:
+                            _model = None
+                        if _model is not None and generated_sql:
+                            _sql_intent = await grade_sql(
+                                db,
+                                organization_id=getattr(organization, "id", None),
+                                model=_model,
+                                generated_sql=generated_sql,
+                                golden_sql=golden_sql,
+                            )
+                except Exception:
+                    _sql_intent = None
+
+                _actual = {
+                    "produced_rows": len(produced_rows),
+                    "golden_rows": len(golden_rows),
+                    "produced_columns": produced_columns,
+                    "reason": reason,
+                }
+                if _sql_intent is not None:
+                    _actual["sql_intent"] = _sql_intent
                 push(
                     ok,
                     None if ok else reason,
-                    actual={
-                        "produced_rows": len(produced_rows),
-                        "golden_rows": len(golden_rows),
-                        "produced_columns": produced_columns,
-                        "reason": reason,
-                    },
+                    actual=_actual,
                     evidence=None,
                 )
                 continue

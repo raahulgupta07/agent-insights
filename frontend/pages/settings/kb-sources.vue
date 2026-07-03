@@ -39,6 +39,11 @@
                     <UInput v-model="notion.ids" placeholder="page-id-1, page-id-2" :ui="inputUi" />
                 </div>
 
+                <label class="flex items-center gap-2 text-sm text-[#6b6b6b] cursor-pointer select-none">
+                    <input type="checkbox" v-model="notion.autoApprove" class="rounded border-[#E9E0D3] text-[#C2541E] focus:ring-0" />
+                    Approve immediately (skip Review)
+                </label>
+
                 <div class="flex items-center gap-3">
                     <UButton
                         class="rounded-xl px-4 py-2.5 bg-[#C2541E] hover:bg-[#A8330F] text-white border-0 transition-colors cursor-pointer"
@@ -46,7 +51,7 @@
                         :disabled="!notion.token || notion.running"
                         @click="sync('notion')"
                     >Sync now</UButton>
-                    <span v-if="notion.result" class="text-sm" :class="resultClass(notion.result)">{{ resultText(notion.result) }}</span>
+                    <span v-if="notion.result" class="text-sm" :class="resultClass(notion.result)">{{ resultText(notion.result, notion.autoApprove) }}</span>
                 </div>
             </div>
 
@@ -73,6 +78,11 @@
                     <UInput v-model="slack.ids" placeholder="C0123ABC, C0456DEF" :ui="inputUi" />
                 </div>
 
+                <label class="flex items-center gap-2 text-sm text-[#6b6b6b] cursor-pointer select-none">
+                    <input type="checkbox" v-model="slack.autoApprove" class="rounded border-[#E9E0D3] text-[#C2541E] focus:ring-0" />
+                    Approve immediately (skip Review)
+                </label>
+
                 <div class="flex items-center gap-3">
                     <UButton
                         class="rounded-xl px-4 py-2.5 bg-[#C2541E] hover:bg-[#A8330F] text-white border-0 transition-colors cursor-pointer"
@@ -80,7 +90,7 @@
                         :disabled="!slack.token || slack.running"
                         @click="sync('slack')"
                     >Sync now</UButton>
-                    <span v-if="slack.result" class="text-sm" :class="resultClass(slack.result)">{{ resultText(slack.result) }}</span>
+                    <span v-if="slack.result" class="text-sm" :class="resultClass(slack.result)">{{ resultText(slack.result, slack.autoApprove) }}</span>
                 </div>
             </div>
 
@@ -116,8 +126,8 @@ async function loadFlag() {
 
 interface SyncResult { enabled: boolean; ok: boolean; ingested?: number; skipped?: number; errors?: number; reason?: string }
 
-const notion = reactive<{ token: string; ids: string; running: boolean; result: SyncResult | null }>({ token: '', ids: '', running: false, result: null })
-const slack = reactive<{ token: string; ids: string; running: boolean; result: SyncResult | null }>({ token: '', ids: '', running: false, result: null })
+const notion = reactive<{ token: string; ids: string; autoApprove: boolean; running: boolean; result: SyncResult | null }>({ token: '', ids: '', autoApprove: false, running: false, result: null })
+const slack = reactive<{ token: string; ids: string; autoApprove: boolean; running: boolean; result: SyncResult | null }>({ token: '', ids: '', autoApprove: false, running: false, result: null })
 
 function parseIds(raw: string): string[] {
     return raw.split(',').map(s => s.trim()).filter(Boolean)
@@ -129,7 +139,7 @@ async function sync(kind: 'notion' | 'slack') {
     state.running = true
     state.result = null
     // Token travels only in the POST body — never in the URL, never logged, never persisted.
-    const body: Record<string, any> = { token: state.token }
+    const body: Record<string, any> = { token: state.token, auto_approve: state.autoApprove }
     const ids = parseIds(state.ids)
     if (ids.length) body[kind === 'notion' ? 'page_ids' : 'channel_ids'] = ids
     try {
@@ -143,9 +153,13 @@ async function sync(kind: 'notion' | 'slack') {
     }
 }
 
-function resultText(r: SyncResult): string {
+function resultText(r: SyncResult, approved = false): string {
     if (r.reason) return `Nothing synced (${r.reason.replace(/_/g, ' ')}).`
-    return `Ingested ${r.ingested ?? 0} · skipped ${r.skipped ?? 0} · errors ${r.errors ?? 0}. Review them in Knowledge → Review.`
+    const counts = `Ingested ${r.ingested ?? 0} · skipped ${r.skipped ?? 0} · errors ${r.errors ?? 0}.`
+    const okApproved = approved && r.ok !== false && (r.errors ?? 0) === 0
+    return okApproved
+        ? `${counts} Synced + approved — grounding answers now.`
+        : `${counts} Review them in Knowledge → Review.`
 }
 function resultClass(r: SyncResult): string {
     if (r.reason || r.ok === false) return 'text-[#A8330F]'

@@ -209,12 +209,41 @@ def _fetch_blocks(token: str, page_id: str) -> List[dict]:
 # Persist (reuse docs_index.ingest_doc + external-id dedupe on the url column)
 # ---------------------------------------------------------------------------
 
-async def _persist_page(db: Any, *, organization_id: str, title: str, body: str, url: str) -> Optional[str]:
+async def _approve_doc(db: Any, doc_id: str) -> None:
+    """Flip one just-ingested ``KnowledgeDoc`` to ``status='approved'``. Fail-soft.
+
+    Reuses the EXACT mechanism of the Knowledge → Review approve endpoint
+    (``routes/knowledge.py``: ``row.status = "approved"; await db.commit()`` — no
+    bitemporal supersede for the ``doc`` kind). Only used when the caller opted into
+    auto-approve; NEVER raises (a failed flip just leaves the doc ``pending``).
+    """
+    from sqlalchemy import select
+    from app.models.knowledge_doc import KnowledgeDoc
+
+    try:
+        row = (
+            await db.execute(select(KnowledgeDoc).where(KnowledgeDoc.id == doc_id))
+        ).scalar_one_or_none()
+        if row is not None and row.status != "approved":
+            row.status = "approved"
+            await db.commit()
+    except Exception:  # noqa: BLE001 — approve is best-effort; pending is a safe fallback
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+
+
+async def _persist_page(
+    db: Any, *, organization_id: str, title: str, body: str, url: str, auto_approve: bool = False
+) -> Optional[str]:
     """Persist one page via the shared ingest path, dedupe by ``url``.
 
     Reuses ``docs_index.ingest_doc`` (chunk + FTS rows, lands ``status='pending'``)
     then soft-deletes any OTHER live ``KnowledgeDoc`` sharing this Notion URL so an
-    edited page (new content_hash) doesn't leave a stale twin. Returns the doc id,
+    edited page (new content_hash) doesn't leave a stale twin. When ``auto_approve``
+    is set, the freshly ingested doc is flipped to ``status='approved'`` (reusing the
+    Review approve mechanism) so it grounds answers immediately. Returns the doc id,
     or ``None`` on failure. Never raises.
     """
     from datetime import datetime, timezone
@@ -259,6 +288,10 @@ async def _persist_page(db: Any, *, organization_id: str, title: str, body: str,
             await db.rollback()
         except Exception:
             pass
+
+    # Optional: skip Review — flip the just-ingested doc live immediately.
+    if auto_approve and doc_id:
+        await _approve_doc(db, doc_id)
     return doc_id
 
 
@@ -272,13 +305,17 @@ async def sync_notion(
     organization_id: str,
     token: str,
     page_ids: Optional[List[str]] = None,
+    auto_approve: bool = False,
 ) -> dict:
     """Sync Notion pages into the org's institutional KnowledgeDocs. Fail-soft.
 
     Flag-gated (``flags.NOTION_KB``). With no ``page_ids`` the integration's
     accessible pages are discovered via ``/search``. Each page's block tree is
-    flattened to text and persisted (``status='pending'``, dedupe by URL). Returns
-    a summary ``{"enabled", "ok", "pages", "ingested", "skipped", "errors"}``;
+    flattened to text and persisted (``status='pending'``, dedupe by URL). With
+    ``auto_approve=True`` each ingested doc is flipped ``approved`` right away
+    (reusing the Review approve mechanism) so it grounds answers without a manual
+    Review step; default ``False`` keeps the pending-until-approved behavior.
+    Returns a summary ``{"enabled", "ok", "pages", "ingested", "skipped", "errors"}``;
     NEVER raises. The token is passed through only to the HTTP layer, never logged.
     """
     # Flag gate FIRST — OFF is a true no-op.
@@ -318,7 +355,8 @@ async def sync_notion(
                 continue
             title = _page_title(page) or f"Notion page {page_id[:8]}"
             doc_id = await _persist_page(
-                db, organization_id=org_id, title=title, body=body, url=_page_url(page_id)
+                db, organization_id=org_id, title=title, body=body, url=_page_url(page_id),
+                auto_approve=auto_approve,
             )
             if doc_id:
                 ingested += 1

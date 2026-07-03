@@ -148,6 +148,13 @@ async def save_from_report(
     return {"ok": True, "workflow": _serialize(wf)}
 
 
+# Workflows with more than this many steps replay in the BACKGROUND (create the
+# report, return its id immediately, run the steps off-request) so a multi-step
+# workflow doesn't block the request. Tiny workflows stay synchronous — they're
+# fast and the caller gets the real steps_run/answers inline.
+_BG_STEP_THRESHOLD = 1
+
+
 @router.post("/workflows-v2/{workflow_id}/run")
 async def run_workflow_route(
     workflow_id: str,
@@ -156,7 +163,14 @@ async def run_workflow_route(
     db: AsyncSession = Depends(get_async_db),
     organization: Organization = Depends(get_current_organization),
 ):
-    """Replay a saved workflow with concrete params. Body: {params:{...}}."""
+    """Replay a saved workflow with concrete params. Body: {params:{...}}.
+
+    Multi-step workflows replay in the background: we create the target report,
+    kick off the run, and return ``{ok, report_id, background: true}`` fast. The
+    caller opens the report and polls ``GET /api/reports/{report_id}/completions``
+    to watch the steps land. Single-step workflows run synchronously and return
+    the full result (``steps_run``/``answers``/``artifact_id``).
+    """
     _ensure_enabled()
 
     wf = await _load_visible(db, workflow_id, str(organization.id), str(current_user.id))
@@ -167,6 +181,35 @@ async def run_workflow_route(
     if not isinstance(params, dict):
         params = {}
 
+    step_count = len(
+        ((wf.steps_json or {}).get("steps") if isinstance(wf.steps_json, dict) else []) or []
+    )
+
+    # Background path for multi-step workflows: create the report now, return its
+    # id fast, replay off-request in a fresh session.
+    if step_count > _BG_STEP_THRESHOLD:
+        from app.services.workflows.replay import (
+            create_workflow_report,
+            schedule_run_workflow_bg,
+        )
+
+        try:
+            report = await create_workflow_report(
+                db, workflow=wf, user=current_user, organization=organization
+            )
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=502, detail=f"Could not start workflow: {e}")
+
+        schedule_run_workflow_bg(
+            report_id=str(report.id),
+            workflow_id=str(wf.id),
+            organization_id=str(organization.id),
+            user_id=str(current_user.id),
+            params=params,
+        )
+        return {"ok": True, "report_id": str(report.id), "background": True, "steps_run": 0}
+
+    # Synchronous path for tiny workflows.
     from app.services.workflows.replay import run_workflow
 
     result = await run_workflow(

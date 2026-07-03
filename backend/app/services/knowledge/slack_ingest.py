@@ -154,8 +154,40 @@ def _thread_messages(token: str, channel_id: str, thread_ts: str) -> List[dict]:
 # Persist (reuse docs_index.ingest_doc + external-id dedupe on the url column)
 # ---------------------------------------------------------------------------
 
-async def _persist_thread(db: Any, *, organization_id: str, title: str, body: str, url: str) -> Optional[str]:
-    """Persist one thread via the shared ingest path, dedupe by ``url``. Never raises."""
+async def _approve_doc(db: Any, doc_id: str) -> None:
+    """Flip one just-ingested ``KnowledgeDoc`` to ``status='approved'``. Fail-soft.
+
+    Reuses the EXACT mechanism of the Knowledge → Review approve endpoint
+    (``routes/knowledge.py``: ``row.status = "approved"; await db.commit()`` — no
+    bitemporal supersede for the ``doc`` kind). Only used when the caller opted into
+    auto-approve; NEVER raises (a failed flip just leaves the doc ``pending``).
+    """
+    from sqlalchemy import select
+    from app.models.knowledge_doc import KnowledgeDoc
+
+    try:
+        row = (
+            await db.execute(select(KnowledgeDoc).where(KnowledgeDoc.id == doc_id))
+        ).scalar_one_or_none()
+        if row is not None and row.status != "approved":
+            row.status = "approved"
+            await db.commit()
+    except Exception:  # noqa: BLE001 — approve is best-effort; pending is a safe fallback
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+
+
+async def _persist_thread(
+    db: Any, *, organization_id: str, title: str, body: str, url: str, auto_approve: bool = False
+) -> Optional[str]:
+    """Persist one thread via the shared ingest path, dedupe by ``url``. Never raises.
+
+    When ``auto_approve`` is set, the freshly ingested doc is flipped to
+    ``status='approved'`` (reusing the Review approve mechanism) so it grounds
+    answers immediately instead of waiting on a manual Review step.
+    """
     from datetime import datetime, timezone
     from sqlalchemy import select
     from app.ai.knowledge.docs_index import ingest_doc
@@ -197,6 +229,10 @@ async def _persist_thread(db: Any, *, organization_id: str, title: str, body: st
             await db.rollback()
         except Exception:
             pass
+
+    # Optional: skip Review — flip the just-ingested doc live immediately.
+    if auto_approve and doc_id:
+        await _approve_doc(db, doc_id)
     return doc_id
 
 
@@ -210,12 +246,16 @@ async def sync_slack(
     organization_id: str,
     token: str,
     channel_ids: Optional[List[str]] = None,
+    auto_approve: bool = False,
 ) -> dict:
     """Sync Slack channel threads into the org's institutional KnowledgeDocs. Fail-soft.
 
     Flag-gated (``flags.NOTION_KB``). With no ``channel_ids`` the workspace's
     accessible channels are discovered via ``conversations.list``. Each root thread
-    is flattened to text and persisted (``status='pending'``, dedupe by URL). Returns
+    is flattened to text and persisted (``status='pending'``, dedupe by URL). With
+    ``auto_approve=True`` each ingested doc is flipped ``approved`` right away (reusing
+    the Review approve mechanism) so it grounds answers without a manual Review step;
+    default ``False`` keeps the pending-until-approved behavior. Returns
     ``{"enabled", "ok", "threads", "ingested", "skipped", "errors"}``; NEVER raises.
     The token is passed only to the HTTP layer, never logged.
     """
@@ -272,6 +312,7 @@ async def sync_slack(
                     title=_thread_title(channel_id, msgs),
                     body=body,
                     url=_thread_url(channel_id, thread_ts),
+                    auto_approve=auto_approve,
                 )
                 if doc_id:
                     ingested += 1
