@@ -41,7 +41,7 @@
   </div>
 
   <!-- Normal mode -->
-  <div v-else class="home-root flex flex-col min-h-screen bg-[#F6F1EA] relative">
+  <div v-else class="home-root flex flex-col h-full overflow-y-auto bg-[#F6F1EA] relative">
 
     <!-- Add background div with grid -->
     <div class="absolute inset-0 pointer-events-none"

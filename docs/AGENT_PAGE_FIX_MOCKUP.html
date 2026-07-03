@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Agent page fix — mockup</title>
+<style>
+  :root{
+    --bg:#F1ECE3; --card:#FBFAF6; --ink:#211B14; --muted:#7A7062; --line:#E7DFD3;
+    --accent:#C2541E; --accent2:#A8330F; --railbg:#FBFAF6; --skel:#E9E3D8;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Hanken Grotesk',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+  .wrap{max-width:1180px;margin:0 auto;padding:22px 16px 60px}
+  h1{font-family:'Spectral',Georgia,serif;font-weight:600;font-size:26px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:14px;margin:0 0 18px}
+  .toggle{display:inline-flex;gap:6px;background:#EFE7DA;border-radius:11px;padding:4px;margin:0 0 18px}
+  .toggle button{border:0;cursor:pointer;background:transparent;font:inherit;font-weight:600;font-size:13px;padding:7px 14px;border-radius:8px;color:var(--muted)}
+  .toggle button.on{background:#fff;color:var(--accent2);box-shadow:0 2px 6px -2px rgba(60,40,20,.2)}
+  .browser{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 10px 30px -12px rgba(60,40,20,.18)}
+  .topnav{display:flex;align-items:center;gap:22px;padding:12px 18px;border-bottom:1px solid var(--line);background:#F6F1EA}
+  .brand{font-family:'Spectral',serif;font-weight:600}
+  .brand b{color:var(--accent)}
+  .topnav .item{font-size:13.5px;color:#5a5148;font-weight:600}
+  .topnav .item.active{color:var(--accent)}
+  .topnav .sp{flex:1}
+  .shell{display:flex;background:var(--bg)}
+  /* RAIL — always rendered */
+  .rail{width:240px;flex:none;background:var(--railbg);border-radius:16px;margin:8px;padding:14px 12px;min-height:520px}
+  .rail .back{font-size:12px;color:var(--muted);margin-bottom:12px}
+  .idrow{display:flex;gap:10px;align-items:center;margin-bottom:14px}
+  .logo{width:34px;height:34px;border-radius:9px;background:#FBEFE4;display:flex;align-items:center;justify-content:center;color:var(--accent);font-size:18px}
+  .idrow .nm{font-weight:700;font-size:14px;line-height:1.15}
+  .idrow .em{font-size:11px;color:var(--muted)}
+  .eyebrow{font-size:10.5px;letter-spacing:.08em;color:#9a8f7e;font-weight:700;margin:14px 6px 6px}
+  .link{display:flex;align-items:center;gap:9px;font-size:13.5px;color:#4a4238;padding:8px 10px;border-radius:9px;cursor:pointer}
+  .link .ic{width:16px;text-align:center;opacity:.8}
+  .link:hover{background:#F1ECE3}
+  .link.active{background:#ECEAE1;color:var(--accent2);font-weight:600}
+  .main{flex:1;min-width:0;background:var(--card);border-radius:16px;margin:8px 8px 8px 0;padding:18px 20px}
+  .mhead{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:16px}
+  .mtitle{font-family:'Spectral',serif;font-size:20px;font-weight:600}
+  .btn{border:1px solid var(--line);background:#fff;border-radius:9px;padding:7px 12px;font-size:12.5px;font-weight:600;color:#5a5148;cursor:pointer}
+  .btn.p{background:var(--accent);border-color:var(--accent);color:#fff}
+  /* skeleton */
+  .sk{background:var(--skel);border-radius:8px;position:relative;overflow:hidden}
+  .sk::after{content:"";position:absolute;inset:0;transform:translateX(-100%);
+    background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);animation:sh 1.2s infinite}
+  @keyframes sh{100%{transform:translateX(100%)}}
+  .glance{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+  .kpi{flex:1;min-width:150px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+  .kpi .l{font-size:11px;color:var(--muted);font-weight:600}
+  .kpi .v{font-size:22px;font-weight:700;margin-top:2px}
+  .note{font-size:11.5px;color:#9a8f7e;margin:4px 2px 14px}
+  .cardrow{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .blk{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;min-height:120px}
+  .cap{display:inline-block;font-size:11px;color:#8a7f6e;background:#F1ECE3;border:1px solid var(--line);border-radius:999px;padding:3px 9px;margin:14px 0}
+  .legend{font-size:12.5px;color:var(--muted);margin-top:22px;line-height:1.7}
+  .legend b{color:var(--ink)}
+  .tag{display:inline-block;font-size:10.5px;font-weight:700;border-radius:6px;padding:2px 7px;margin-right:6px}
+  .tag.a{background:#eaf7ee;color:#2f8f52}.tag.b{background:#FBEFE4;color:var(--accent)}.tag.c{background:#eef1f8;color:#4a63b0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Agent page — rail fix mockup</h1>
+  <p class="sub">Toggle: today (whole page skeletons, rail looks broken) vs the fix (rail always up, only the main panel loads, "At a glance" is lazy).</p>
+  <div class="toggle">
+    <button id="tBefore" onclick="setMode('before')">Today (broken)</button>
+    <button id="tAfter" class="on" onclick="setMode('after')">Proposed fix</button>
+  </div>
+
+  <div class="browser">
+    <div class="topnav">
+      <span class="brand">City Agent <b>Insights</b></span>
+      <span class="item">Agent Studios</span>
+      <span class="item active">Data Agents</span>
+      <span class="item">Workspace</span><span class="item">Build</span>
+      <span class="item">Manage</span><span class="item">Settings</span>
+      <span class="sp"></span>
+      <span class="item">⚡ Auto</span><span class="item" style="color:var(--accent)">＋ New report</span>
+    </div>
+
+    <div class="shell">
+      <!-- RAIL -->
+      <aside class="rail" id="rail"><!-- filled by JS --></aside>
+      <!-- MAIN -->
+      <section class="main" id="main"><!-- filled by JS --></section>
+    </div>
+  </div>
+
+  <div class="legend" id="legend"></div>
+</div>
+
+<script>
+const railReal = `
+  <div class="back">← Back to Data Agents</div>
+  <div class="idrow">
+    <div class="logo">▦</div>
+    <div><div class="nm">Power BI (User Sign-in)</div><div class="em">rahulgupta@…</div></div>
+  </div>
+  <div class="eyebrow">EXPLORE</div>
+  <div class="link active"><span class="ic">▤</span> Overview</div>
+  <div class="link"><span class="ic">💬</span> Queries</div>
+  <div class="link"><span class="ic">▦</span> Tables</div>
+  <div class="eyebrow">CONFIGURE</div>
+  <div class="link"><span class="ic">⚙</span> Instructions</div>
+  <div class="link"><span class="ic">🔧</span> Tools</div>
+  <div class="link"><span class="ic">✦</span> Settings</div>
+  <div class="eyebrow">OBSERVE</div>
+  <div class="link"><span class="ic">📈</span> Monitoring</div>
+  <div class="link"><span class="ic">✓</span> Evals</div>
+`;
+const railSkel = `
+  <div class="sk" style="height:12px;width:60%;margin:6px 4px 14px"></div>
+  <div class="idrow"><div class="sk" style="width:34px;height:34px;border-radius:9px"></div>
+    <div style="flex:1"><div class="sk" style="height:11px;width:80%;margin-bottom:6px"></div><div class="sk" style="height:9px;width:55%"></div></div></div>
+  ${Array.from({length:8}).map((_,i)=>`<div class="sk" style="height:12px;width:${[70,80,60,75,65,72,58,68][i]}%;margin:16px 6px"></div>`).join('')}
+`;
+const mainSkel = `
+  <div class="mhead"><div class="sk" style="height:18px;width:220px"></div>
+    <div style="display:flex;gap:8px"><div class="sk" style="height:30px;width:90px"></div><div class="sk" style="height:30px;width:110px"></div></div></div>
+  <div class="cardrow"><div class="blk sk" style="height:150px"></div><div class="blk sk" style="height:150px"></div></div>
+`;
+const glance = `
+  <div class="glance">
+    <div class="kpi"><div class="l">Total Projects</div><div class="v">258</div></div>
+    <div class="kpi"><div class="l">On Risk Projects</div><div class="v">26</div></div>
+    <div class="kpi"><div class="l">Avg Progress %</div><div class="v">82%</div></div>
+  </div>`;
+const mainReal = `
+  <div class="mhead"><div class="mtitle">Overview</div>
+    <div style="display:flex;gap:8px"><button class="btn">Test</button><button class="btn p">Sync now</button></div></div>
+  ${glance}
+  <div class="note">↑ "At a glance" loads on its own — it never blocks the page. For a 0-table agent it just doesn't show.</div>
+  <div class="cardrow">
+    <div class="blk"><b>Summary</b><div style="color:#8a7f6e;font-size:12.5px;margin-top:6px">Project management + retail analytics grounded on 10 tables…</div></div>
+    <div class="blk"><b>Suggested questions</b><div style="color:#8a7f6e;font-size:12.5px;margin-top:6px">• Projects on risk • Members by sector • Sales by location</div></div>
+  </div>`;
+
+function setMode(m){
+  document.getElementById('tBefore').classList.toggle('on', m==='before');
+  document.getElementById('tAfter').classList.toggle('on', m==='after');
+  const rail=document.getElementById('rail'), main=document.getElementById('main'), leg=document.getElementById('legend');
+  if(m==='before'){
+    rail.innerHTML=railSkel; main.innerHTML=mainSkel;
+    leg.innerHTML=`<p><span class="tag c">TODAY</span> The whole page — <b>rail + main</b> — is one skeleton behind <code>v-if="isLoading"</code>. Any slow/failed fetch (e.g. the 5.7s cold <code>/headline</code>) keeps the rail grey → looks broken, unlike the Workspace rail which is always up.</p>`;
+  } else {
+    rail.innerHTML=railReal; main.innerHTML=`<div style="filter:none">${mainReal}</div>`;
+    // show a subtle "main still loading" variant note
+    leg.innerHTML=`<p><span class="tag a">FIX A</span> Rail renders <b>immediately</b> (static tabs) — never skeletons. <span class="tag b">FIX B</span> "At a glance" is <b>lazy + non-blocking</b> (kills the 5.7s stall; hidden for 0-table agents). <span class="tag c">FIX C</span> an 8s timeout swaps endless skeleton → content or a clear message. Main panel can still show its own small skeleton while the overview loads (≈20ms), but the shell + rail are instant.</p>`;
+  }
+}
+setMode('after');
+</script>
+</body>
+</html>

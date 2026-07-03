@@ -1,31 +1,38 @@
 <template>
-  <div v-if="!isLoading && hasAnyReports" class="mt-12">
+  <div v-if="!isLoading && myReports.length" class="mt-12">
     <div class="flex items-center justify-between mb-[18px]">
-      <!-- Segmented tab toggle (design): one filled pill for the active scope. -->
+      <!-- Output-type tabs: Reports / Dashboards / Presentations / Spreadsheets -->
       <div class="rr-tabs">
         <button
-          v-for="opt in availableOptions"
-          :key="opt.value"
+          v-for="t in tabs"
+          :key="t.key"
           class="rr-tab"
-          :class="{ 'rr-tab-active': viewMode === opt.value }"
-          @click="viewMode = opt.value"
+          :class="{ 'rr-tab-active': activeTab === t.key }"
+          @click="activeTab = t.key"
         >
-          {{ opt.label }}
+          <Icon :name="t.icon" class="w-3.5 h-3.5" />
+          <span>{{ t.label }}</span>
+          <span v-if="counts[t.key]" class="rr-count">{{ counts[t.key] }}</span>
         </button>
       </div>
-      <NuxtLink to="/reports" class="rr-viewall">
-        View All Reports →
+      <NuxtLink :to="activeMeta.to" class="rr-viewall">
+        View All {{ activeMeta.label }} →
       </NuxtLink>
     </div>
 
-    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+    <div v-if="displayed.length" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
       <RecentReportCard
-        v-for="report in displayedReports"
+        v-for="report in displayed"
         :key="report.id"
         :report="report"
-        :view-mode="viewMode"
+        view-mode="my"
         :is-owner="report.user?.id === (currentUser as any)?.id"
       />
+    </div>
+    <!-- Empty state for a type with no items yet -->
+    <div v-else class="rr-empty">
+      No {{ activeMeta.label.toLowerCase() }} yet — ask the agent to build one, or
+      <NuxtLink :to="activeMeta.to" class="rr-empty-link">open {{ activeMeta.label }}</NuxtLink>.
     </div>
   </div>
 
@@ -35,11 +42,7 @@
       <div class="h-5 w-32 bg-gray-200 rounded animate-pulse"></div>
     </div>
     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-      <div
-        v-for="i in 4"
-        :key="i"
-        class="bg-gray-100 rounded-xl overflow-hidden"
-      >
+      <div v-for="i in 4" :key="i" class="bg-gray-100 rounded-xl overflow-hidden">
         <div class="aspect-[4/3] bg-gray-200 animate-pulse"></div>
         <div class="p-3 space-y-2">
           <div class="h-4 bg-gray-200 rounded animate-pulse w-3/4"></div>
@@ -66,82 +69,48 @@ interface RecentReport {
 }
 
 const { data: currentUser } = useAuth()
-const { organization } = useOrganization()
 
-const orgReports = ref<RecentReport[]>([])
 const myReports = ref<RecentReport[]>([])
 const isLoading = ref(true)
-const viewMode = ref('org')
+const activeTab = ref<'reports' | 'dashboards' | 'presentations' | 'spreadsheets'>('reports')
 
-const orgName = computed(() => organization.value?.name || 'Organization')
+// Each tab = an output type. `mode` filters my reports by their artifact_modes;
+// Reports (mode null) shows everything. `to` = the full Workspace page for that type.
+const tabs = [
+  { key: 'reports',       label: 'Reports',       to: '/reports',       icon: 'heroicons-chat-bubble-left-right',      mode: null },
+  { key: 'dashboards',    label: 'Dashboards',    to: '/dashboards',    icon: 'heroicons-chart-bar-square',            mode: 'page' },
+  { key: 'presentations', label: 'Presentations', to: '/presentations', icon: 'heroicons-presentation-chart-line',     mode: 'slides' },
+  { key: 'spreadsheets',  label: 'Spreadsheets',  to: '/spreadsheets',  icon: 'heroicons-table-cells',                 mode: 'excel' },
+] as const
 
-const hasAnyReports = computed(() => {
-  return orgReports.value.length > 0 || myReports.value.length > 0
+const activeMeta = computed(() => tabs.find(t => t.key === activeTab.value) || tabs[0])
+
+const _forMode = (mode: string | null) =>
+  mode === null ? myReports.value : myReports.value.filter(r => r.artifact_modes?.includes(mode))
+
+const counts = computed<Record<string, number>>(() => {
+  const c: Record<string, number> = {}
+  for (const t of tabs) c[t.key] = _forMode(t.mode).length
+  return c
 })
 
-// Build available options based on what's available
-const availableOptions = computed(() => {
-  const options = []
-  if (orgReports.value.length > 0) {
-    options.push({ label: `${orgName.value} Reports`, value: 'org' })
-  }
-  if (myReports.value.length > 0) {
-    options.push({ label: 'My Reports', value: 'my' })
-  }
-  return options
-})
-
-const selectedLabel = computed(() => {
-  if (viewMode.value === 'org') return `${orgName.value} Reports`
-  return 'My Reports'
-})
-
-const displayedReports = computed(() => {
-  const list = viewMode.value === 'org' ? orgReports.value : myReports.value
-  return list.slice(0, 8)
-})
-
-// Auto-select valid mode when data changes
-watch([orgReports, myReports], () => {
-  if (viewMode.value === 'org' && orgReports.value.length === 0 && myReports.value.length > 0) {
-    viewMode.value = 'my'
-  } else if (viewMode.value === 'my' && myReports.value.length === 0 && orgReports.value.length > 0) {
-    viewMode.value = 'org'
-  }
-})
+const displayed = computed(() => _forMode(activeMeta.value.mode).slice(0, 8))
 
 const fetchReports = async () => {
   try {
-    // Fetch org (published) reports and my reports in parallel
-    const [orgResponse, myResponse] = await Promise.all([
-      useMyFetch('/reports', {
-        method: 'GET',
-        query: { filter: 'published', limit: 8 }
-      }),
-      useMyFetch('/reports', {
-        method: 'GET',
-        query: { filter: 'my', limit: 8 }
-      })
-    ])
-
-    if (!orgResponse.error.value && orgResponse.data.value) {
-      orgReports.value = (orgResponse.data.value as any).reports || []
-    }
-    if (!myResponse.error.value && myResponse.data.value) {
-      myReports.value = (myResponse.data.value as any).reports || []
+    const res = await useMyFetch('/reports', { method: 'GET', query: { filter: 'my', limit: 40 } })
+    if (!res.error.value && res.data.value) {
+      myReports.value = (res.data.value as any).reports || []
     }
   } catch (e) {
     console.error('Failed to fetch recent reports:', e)
-    orgReports.value = []
     myReports.value = []
   } finally {
     isLoading.value = false
   }
 }
 
-onMounted(() => {
-  fetchReports()
-})
+onMounted(() => { fetchReports() })
 </script>
 
 <style scoped>
@@ -152,16 +121,29 @@ onMounted(() => {
 }
 .rr-tab {
   border: none; cursor: pointer; background: transparent;
+  display: inline-flex; align-items: center; gap: 6px;
   font-family: inherit; font-size: 14px; font-weight: 600;
-  padding: 8px 15px; border-radius: 8px; color: #7A7062; transition: .15s;
+  padding: 8px 14px; border-radius: 8px; color: #7A7062; transition: .15s;
 }
 .rr-tab-active {
   background: #FFFFFF; color: #A8330F;
   box-shadow: 0 2px 6px -2px rgba(60, 40, 20, .2);
 }
+.rr-count {
+  font-size: 11px; font-weight: 700; line-height: 1;
+  padding: 2px 6px; border-radius: 999px;
+  background: #EFE7DA; color: #7A7062;
+}
+.rr-tab-active .rr-count { background: #FBEFE4; color: #C2541E; }
 .rr-viewall {
   font-size: 14px; font-weight: 600; color: #C2541E;
   text-decoration: none; transition: color .15s;
 }
 .rr-viewall:hover { color: #A8330F; }
+.rr-empty {
+  font-size: 13px; color: #8a8073; padding: 28px 8px;
+  border: 1px dashed #E0D6C7; border-radius: 12px; text-align: center;
+}
+.rr-empty-link { color: #C2541E; text-decoration: none; font-weight: 600; }
+.rr-empty-link:hover { color: #A8330F; }
 </style>
