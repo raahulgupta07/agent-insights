@@ -9,6 +9,14 @@ Bullet rules (this is the user-facing "What's new" feed):
     Hidden from the popover; shown collapsed on the full /changelog page only.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.81.0 — Smart Excel build + tidier Outputs  (2026-07-03)
+- The Outputs "Excel" tab can become a smart builder: type what you want ("pivot revenue by region × month") and it reshapes the existing result in place — no re-running queries. Off by default. Also removed a fake "Report" tile from the Outputs quick-launch grid.
+  - Merged parked branches `feature/smart-excel` (`HYBRID_SMART_WORKBOOK`, `routes/smart_workbook.py` + `SmartWorkbookSheet.vue`, LLM intent→transform spec applied in pure Python over existing grids; flag default OFF) and `feature/drop-report-tile` (Outputs grid). Flag 3-place. `feature/smart-slides` + `feature/smart-dashboard` deferred — they rewrite the same Outputs button grid (semantic conflicts, need a deliberate merge).
+
+## v1.80.1 — Mixture-of-Agents in the model picker  (2026-07-03)
+- You can now pick **Mixture-of-Agents** in the model dropdown (when the feature is on). Choosing it makes a panel of models weigh in on your question, then an aggregator writes the final answer with full data access — slower, higher confidence on hard questions.
+  - FE `PromptBoxV2.vue`: dropdown option gated on `HYBRID_MOA`, sentinel `model_id="moa"` (mirrors the Auto sentinel). BE `completion_service.py`: `moa` branch in both create + stream paths resolves the aggregator (z-ai/glm-5.2); estimate path guards `!= "moa"`. BE `agent_v2.py`: self-detects the `moa` sentinel, runs `consult()` once per turn, folds the peer block into instructions (advisory, not the saved prompt). Cached, fail-soft.
+
 ## v1.80.0 — Mixture-of-Agents peer-consult (experimental, off by default)  (2026-07-03)
 - New experimental tool for comparing answers: ask one question and a small panel of different AI models each answer in parallel, then an aggregator can combine their views. It's a measurement surface for evaluating answer quality — it does not change how the normal agent, dashboards, or reports work. Off unless you turn it on in Settings → Features.
   - Merged the parked `feature/mixture-of-agents` branch (cherry-pick `e21dcfb6`). New files `ai/mixture_of_agents.py` (`consult`/`aggregate`/`build_peer_block`, 4 diverse OpenRouter panel models + a GLM aggregator, parallel, 20s/model timeout, fail-soft → `[]`) + route `routes/moa_test.py` (`POST /api/llm/moa/test`, returns each advisor's analysis + peer block + per-model latency + rough cost). OpenRouter-only (uses the org's provider via `LLMService`, no direct SDKs), no new pip dependency, no migration.
