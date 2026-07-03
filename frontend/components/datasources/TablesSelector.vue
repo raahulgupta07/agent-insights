@@ -1,28 +1,28 @@
 <template>
   <div class="w-full">
-    <div v-if="showHeader" class="mb-2 flex items-center justify-between">
+    <div v-if="showHeader" class="mb-3 flex items-start justify-between gap-4">
       <div>
-        <h1 class="text-lg font-semibold">{{ headerTitle }}</h1>
-        <p class="text-gray-500 text-sm">{{ headerSubtitle }}</p>
+        <h1 class="text-lg font-semibold text-[#1C1917]">{{ headerTitle }}</h1>
+        <p class="text-[#78716C] text-sm mt-0.5">{{ headerSubtitle }}</p>
       </div>
       <div>
         <button
           v-if="showRefresh"
           @click="onRefresh"
           :disabled="loading || refreshing"
-          :class="refreshIconOnly ? 'p-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50' : 'flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50'"
+          :class="refreshIconOnly ? 'p-1.5 rounded-lg border border-[#EAE8E4] text-[#44403C] hover:bg-[#F1EFEC] disabled:opacity-50' : 'flex items-center gap-2 border border-[#EAE8E4] rounded-lg px-3 py-1.5 text-xs text-[#44403C] hover:bg-[#F1EFEC] disabled:opacity-50'"
         >
           <Spinner v-if="loading || refreshing" class="w-4 h-4" />
           <span v-if="!refreshIconOnly">Reload {{ props.itemNoun.plural }}</span>
         </button>
       </div>
     </div>
-    <div v-else class="mb-2 flex items-center justify-end">
+    <div v-else class="mb-3 flex items-center justify-end">
       <button
         v-if="showRefresh"
         @click="onRefresh"
         :disabled="loading || refreshing"
-        :class="refreshIconOnly ? 'p-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50' : 'flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50'"
+        :class="refreshIconOnly ? 'p-1.5 rounded-lg border border-[#EAE8E4] text-[#44403C] hover:bg-[#F1EFEC] disabled:opacity-50' : 'flex items-center gap-2 border border-[#EAE8E4] rounded-lg px-3 py-1.5 text-xs text-[#44403C] hover:bg-[#F1EFEC] disabled:opacity-50'"
       >
         <Spinner v-if="loading || refreshing" class="w-4 h-4" />
         <span v-if="!refreshIconOnly">Reload tables</span>
@@ -31,13 +31,36 @@
 
     <!-- Search and filters row -->
     <div>
+      <!-- Segmented view filter: All / Business / Hidden (client-side, reuses
+           relevanceOf + active state). Sits alongside the server search box. -->
+      <div class="mb-2 inline-flex rounded-lg border border-[#EAE8E4] overflow-hidden bg-white">
+        <button
+          type="button"
+          @click="viewFilter = 'all'"
+          class="px-3 py-1.5 text-xs border-r border-[#EAE8E4]"
+          :class="viewFilter === 'all' ? 'bg-[#F1EFEC] text-[#1C1917] font-semibold' : 'text-[#78716C] hover:bg-[#FAFAF9]'"
+        >All <span class="text-[#A8A29E]">{{ totalTables }}</span></button>
+        <button
+          type="button"
+          @click="viewFilter = 'business'"
+          class="px-3 py-1.5 text-xs border-r border-[#EAE8E4]"
+          :class="viewFilter === 'business' ? 'bg-[#F1EFEC] text-[#1C1917] font-semibold' : 'text-[#78716C] hover:bg-[#FAFAF9]'"
+        >Business <span class="text-[#A8A29E]">{{ businessCount }}</span></button>
+        <button
+          type="button"
+          @click="viewFilter = 'hidden'"
+          class="px-3 py-1.5 text-xs"
+          :class="viewFilter === 'hidden' ? 'bg-[#F1EFEC] text-[#1C1917] font-semibold' : 'text-[#78716C] hover:bg-[#FAFAF9]'"
+        >Hidden <span class="text-[#A8A29E]">{{ hiddenCount }}</span></button>
+      </div>
+
       <div class="relative flex items-center gap-1.5">
-        <input 
-          v-model="searchInput" 
+        <input
+          v-model="searchInput"
           @input="onSearchInput"
-          type="text" 
+          type="text"
           :placeholder="`Search ${props.itemNoun.plural}...`"
-          class="border border-gray-300 rounded px-2 py-1.5 w-full h-7 text-xs focus:outline-none focus:border-[#C2541E]" 
+          class="border border-[#EAE8E4] rounded-lg px-2.5 py-1.5 w-full h-8 text-xs focus:outline-none focus:border-[#C2541E]"
         />
         
         <!-- Filter button (contains both status and schema filters) -->
@@ -238,8 +261,8 @@
       </div>
       
       <!-- Active count row -->
-      <div class="text-[10px] text-gray-500">
-        {{ selectedCount }}/{{ totalTables }} active
+      <div class="mt-1 text-[11px] text-[#78716C]">
+        <span class="font-semibold text-[#15803D]">{{ selectedCount }}</span> of {{ totalTables }} active
       </div>
     </div>
 
@@ -252,10 +275,25 @@
     <!-- Tables list -->
     <div v-else class="flex-1 flex flex-col h-full">
       <div v-if="tables.length === 0" class="text-sm text-gray-500 py-4">No {{ props.itemNoun.plural }} found.</div>
+      <div v-else-if="filteredTables.length === 0" class="text-sm text-gray-500 py-4">No {{ props.itemNoun.plural }} match this filter.</div>
       <div v-else class="flex-1 flex flex-col min-h-full">
         <div class="flex-1 overflow-y-auto min-h-0 mt-2" :style="{ maxHeight }">
-          <ul class="divide-y divide-gray-100">
-            <li v-for="table in tables" :key="tableKey(table)" class="py-2 px-2">
+          <!-- Grouped by dataset -->
+          <div v-for="group in groupedTables" :key="group.key">
+            <!-- Dataset group header -->
+            <div class="flex items-center gap-2 pt-3.5 pb-1.5 px-1">
+              <span class="text-[11px] font-semibold uppercase tracking-wider text-[#A8A29E] truncate">{{ group.key }}</span>
+              <span class="flex-1 h-px bg-[#F1EFEC]" />
+              <span class="text-[11px] text-[#78716C] whitespace-nowrap">{{ group.active }} active · {{ group.hidden }} hidden</span>
+            </div>
+
+            <ul class="divide-y divide-gray-100">
+            <li
+              v-for="table in group.tables"
+              :key="tableKey(table)"
+              class="py-2 px-2 transition-opacity"
+              :class="!isTableActive(tableKey(table)) ? 'opacity-60' : ''"
+            >
               <div class="flex items-center">
                 <UCheckbox
                   v-if="canUpdate"
@@ -265,13 +303,19 @@
                   class="me-3"
                 />
                 <button type="button" class="flex items-center justify-between text-start flex-1" @click="toggleTableExpand(table)">
-                  <div class="flex items-center min-w-0">
+                  <div class="min-w-0">
+                    <div class="flex items-center min-w-0">
                     <UIcon :name="expandedTables[table.name] ? 'heroicons-chevron-down' : 'heroicons-chevron-right'" class="w-4 h-4 me-1 text-gray-500 rtl-flip" />
                     <template v-if="availableConnections.length > 1">
                       <DataSourceIcon :type="table.connection_type" class="h-3.5 me-1 flex-shrink-0" />
                       <span class="text-[9px] px-1 py-0.5 rounded bg-gray-100 text-gray-500 me-1.5 flex-shrink-0 truncate max-w-[120px]">{{ table.connection_name || table.connection_type }}</span>
                     </template>
-                    <span class="text-sm text-gray-800 truncate">{{ table.name }}</span>
+                    <span class="text-sm text-gray-800 truncate font-mono">{{ tableShortName(table) }}</span>
+                    <span
+                      v-if="tableHasPii(table)"
+                      class="ms-1.5 text-[9.5px] font-bold px-1 py-px rounded whitespace-nowrap"
+                      :style="{ color: '#B4331A', backgroundColor: '#FBEAE6', border: '1px solid #F1D4CC' }"
+                    >PII</span>
                     <UTooltip v-if="relevanceOf(table)" :text="relevanceOf(table).reason || ''">
                       <span
                         class="ms-2 text-[10px] px-1 py-0.5 rounded whitespace-nowrap"
@@ -280,6 +324,12 @@
                     </UTooltip>
                     <span v-if="!isTableActive(tableKey(table)) && canUpdate" class="ms-2 text-[10px] px-1 py-0.5 rounded bg-gray-100 text-gray-500">inactive</span>
                     <span v-if="isTableDirty(tableKey(table))" class="ms-1 text-[10px] px-1 py-0.5 rounded bg-yellow-100 text-yellow-700">modified</span>
+                    </div>
+                    <!-- Hidden-row reason sub-line (from classifier) -->
+                    <div
+                      v-if="!isTableActive(tableKey(table)) && hiddenReasonOf(table)"
+                      class="ms-5 mt-0.5 text-[11px] text-[#A8A29E] truncate"
+                    >{{ hiddenReasonOf(table) }}</div>
                   </div>
                   <span v-if="props.showStats && (table.usage_count !== undefined)" class="ms-2 text-[11px] text-gray-500 whitespace-nowrap flex items-center gap-2">
                     <span>usage {{ table.usage_count }}</span>
@@ -424,9 +474,10 @@
                 </div>
               </div>
             </li>
-          </ul>
+            </ul>
+          </div>
         </div>
-        
+
         <!-- Pagination controls -->
         <div v-if="isPaginated && totalPages > 1" class="mt-3 flex items-center justify-center gap-2">
           <button
@@ -715,6 +766,79 @@ function relevanceClass(audience: string): string {
   if (audience === 'business') return 'bg-green-50 text-green-700'
   if (audience === 'admin') return 'bg-amber-50 text-amber-700'
   return 'bg-gray-100 text-gray-500' // system
+}
+
+// --- v4 redesign: segmented view filter (All / Business / Hidden) ---
+// Local-only client-side filter layered on top of the existing server search.
+// Reuses relevanceOf() + isTableActive() — no new fetch, no logic change.
+const viewFilter = ref<'all' | 'business' | 'hidden'>('all')
+
+// PII detection (cheap, from REAL column names only — never fabricated).
+function tableHasPii(table: Table): boolean {
+  const cols = table.columns
+  if (!cols?.length) return false
+  return cols.some(c => /passport|identity|birth|ssn|national.?id/i.test(c.name || ''))
+}
+
+// Short reason sub-line for hidden/inactive rows, if the classifier gave one.
+function hiddenReasonOf(table: Table): string | null {
+  const c = (table as any)?.metadata_json?.classification
+  return (c && typeof c.reason === 'string' && c.reason.trim()) ? c.reason.trim() : null
+}
+
+// Dataset key: name is "<dataset>/<table>" → group by the part before the
+// first "/". No slash → fall back to the connection name/type, else "Other".
+function datasetKeyOf(table: Table): string {
+  const nm = table.name || ''
+  const slash = nm.indexOf('/')
+  if (slash > 0) return nm.substring(0, slash)
+  return table.connection_name || table.connection_type || 'Other'
+}
+
+// Rows that pass the segmented view filter (business / hidden / all).
+const filteredTables = computed<Table[]>(() => {
+  if (viewFilter.value === 'all') return tables.value
+  return tables.value.filter(t => {
+    if (viewFilter.value === 'hidden') return !isTableActive(tableKey(t))
+    // 'business' → business-audience tables (classifier), active-first sense.
+    const rel = relevanceOf(t)
+    return rel?.audience === 'business'
+  })
+})
+
+// Grouped-by-dataset view: [{ key, tables, active, hidden }], preserving the
+// server-provided ordering of the underlying tables array.
+const groupedTables = computed(() => {
+  const groups: { key: string; tables: Table[]; active: number; hidden: number }[] = []
+  const index: Record<string, number> = {}
+  for (const t of filteredTables.value) {
+    const key = datasetKeyOf(t)
+    let g = index[key] !== undefined ? groups[index[key]] : undefined
+    if (!g) {
+      g = { key, tables: [], active: 0, hidden: 0 }
+      index[key] = groups.length
+      groups.push(g)
+    }
+    g.tables.push(t)
+    if (isTableActive(tableKey(t))) g.active++
+    else g.hidden++
+  }
+  return groups
+})
+
+// Counts for the segmented control (from real rows).
+const businessCount = computed(() =>
+  tables.value.filter(t => relevanceOf(t)?.audience === 'business').length
+)
+const hiddenCount = computed(() =>
+  tables.value.filter(t => !isTableActive(tableKey(t))).length
+)
+
+// Display name inside a group = the table portion after "<dataset>/".
+function tableShortName(table: Table): string {
+  const nm = table.name || ''
+  const slash = nm.indexOf('/')
+  return slash > 0 ? nm.substring(slash + 1) : nm
 }
 
 function isTableActive(key: string): boolean {

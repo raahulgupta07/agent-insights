@@ -1,16 +1,24 @@
 <template>
-    <div class="py-6 space-y-6">
+    <div class="py-6 space-y-5">
         <!-- Hide content when there's a fetch error (layout shows error state) -->
         <template v-if="injectedFetchError" />
         <template v-else>
+        <!-- Page header -->
+        <div class="flex items-start gap-4 mb-1">
+            <div>
+                <h1 class="text-[19px] font-semibold tracking-[-0.01em] text-[#1C1917]">Instructions</h1>
+                <p class="text-[13.5px] text-[#78716C] mt-0.5">How the agent should read this data. The primary instruction is loaded on every query.</p>
+            </div>
+        </div>
+
         <!-- Connect Git Repository Section (only shown when not connected) -->
-        <div v-if="!hasGitConnection" class="border border-gray-200 rounded-lg p-6">
-            <div class="bg-white">
-                <div class="flex items-center border-b border-gray-200 pb-3 w-full">
-                    <h3 class="text-lg mt-1 font-semibold text-gray-900">Connect your git repository and load dbt, Dataform, LookML, markdown, and Tableau metadata files</h3>
-                </div>
-                <div class="text-start mb-4 mt-5">
-                    <p class="text-sm text-gray-500 leading-relaxed">
+        <div v-if="!hasGitConnection" class="bg-white border border-[#EAE8E4] rounded-xl shadow-[0_1px_2px_rgba(28,25,23,0.04),0_1px_3px_rgba(28,25,23,0.06)]">
+            <div class="px-4 py-3.5 border-b border-[#F1EFEC]">
+                <h3 class="text-[13.5px] font-semibold text-[#1C1917]">Connect your git repository and load dbt, Dataform, LookML, markdown, and Tableau metadata files</h3>
+            </div>
+            <div class="p-4">
+                <div class="text-start mb-4">
+                    <p class="text-[13px] text-[#78716C] leading-relaxed">
                         Connect additional context from Tableau, dbt, Dataform, LookML, code, and markdown files to your data sources. It will be used by AI agents throughout data analysis.
                         <br />
                         Integration is via git repository.
@@ -24,12 +32,12 @@
                     </div>
                 </div>
 
-                <div class="mb-4 mt-6">
-                    <div v-if="isLoading" class="inline-flex items-center text-gray-500 text-xs">
+                <div>
+                    <div v-if="isLoading" class="inline-flex items-center text-[#78716C] text-xs">
                         <Spinner class="w-4 h-4 me-2" />
                         Loading...
                     </div>
-                    <UButton v-else-if="canUpdateDataSource" icon="heroicons:code-bracket" class="bg-white border border-gray-300 rounded-lg px-3 py-1 text-xs text-black hover:bg-gray-50" @click="showGitModal = true">Connect Git Repository</UButton>
+                    <UButton v-else-if="canUpdateDataSource" icon="heroicons:code-bracket" class="bg-white border border-[#EAE8E4] rounded-lg px-3 py-1.5 text-xs text-[#1C1917] hover:bg-[#F1EFEC]" @click="showGitModal = true">Connect Git Repository</UButton>
                 </div>
             </div>
         </div>
@@ -37,9 +45,9 @@
         <GitRepoModalComponent v-model="showGitModal" :datasource-id="String(dsId)" :git-repository="integration?.git_repository" :metadata-resources="metadataResources" @changed="handleGitRepoChanged" />
 
         <!-- Instructions Section -->
-        <div class="border border-gray-200 rounded-lg p-6">
+        <div class="bg-white border border-[#EAE8E4] rounded-xl shadow-[0_1px_2px_rgba(28,25,23,0.04),0_1px_3px_rgba(28,25,23,0.06)] p-4">
             <!-- Header with filter bar, bulk actions, and count -->
-            <div class="flex items-center justify-between gap-4 mb-3">
+            <div class="flex items-center justify-between gap-4 mb-4 pb-3.5 border-b border-[#F1EFEC]">
                 <InstructionsFilterBar
                     :search="inst.filters.search"
                     :source-types="inst.filters.sourceTypes"

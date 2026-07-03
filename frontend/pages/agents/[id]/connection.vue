@@ -1,25 +1,27 @@
 <template>
-    <div class="py-6">
+    <div class="py-6" style="background:#FAFAF9">
         <!-- Hide content when there's a fetch error (layout shows error state) -->
         <div v-if="injectedFetchError" />
         <div v-else>
             <!-- Loading state -->
-            <div v-if="!integration" class="text-sm text-gray-500">Loading...</div>
+            <div v-if="!integration" class="text-sm text-[#78716C]">Loading...</div>
 
             <!-- Main content -->
-            <div v-else>
-                <!-- Header with Add button -->
-                <div class="flex items-center justify-between mb-4" v-if="canManageConnections">
-                    <h2 class="text-sm font-medium text-gray-700">Connections</h2>
-                    <UButton
-                        color="primary"
-                        variant="soft"
-                        size="xs"
+            <div v-else class="max-w-[720px]">
+                <!-- Page heading with Add button -->
+                <div class="flex items-start justify-between gap-4 mb-4">
+                    <div>
+                        <h1 class="text-[19px] font-semibold tracking-tight text-[#1C1917]">Connections</h1>
+                        <div class="text-[13.5px] text-[#78716C] mt-0.5">Data sources linked to this agent.</div>
+                    </div>
+                    <button
+                        v-if="canManageConnections"
                         @click="openLinkModal"
+                        class="px-3 py-1.5 text-xs rounded-lg border border-[#EAE8E4] text-[#1C1917] hover:bg-[#F1EFEC] flex items-center gap-1 flex-none"
                     >
-                        <UIcon name="heroicons-plus" class="w-4 h-4 me-1" />
-                        Link Another Connection
-                    </UButton>
+                        <UIcon name="heroicons-plus" class="w-4 h-4" />
+                        Link another connection
+                    </button>
                 </div>
 
                 <!-- Connections list -->
@@ -27,23 +29,25 @@
                     <div
                         v-for="conn in connections"
                         :key="conn.id"
-                        class="border border-gray-200 rounded-lg p-4"
+                        class="bg-white border border-[#EAE8E4] rounded-xl"
+                        style="box-shadow:0 1px 2px rgba(28,25,23,.04),0 1px 3px rgba(28,25,23,.06)"
                     >
-                        <div class="flex items-center justify-between">
-                            <div class="flex items-center gap-3">
-                                <DataSourceIcon :type="conn.type" class="h-8" />
-                                <div>
-                                    <div class="font-semibold text-gray-900">{{ conn.name }}</div>
-                                    <div class="text-xs text-gray-500">{{ conn.type }}</div>
+                        <!-- Card header: identity + actions -->
+                        <div class="px-4 py-3.5 border-b border-[#F1EFEC] flex items-center justify-between gap-3">
+                            <div class="flex items-center gap-3 min-w-0">
+                                <DataSourceIcon :type="conn.type" class="h-8 flex-none" />
+                                <div class="min-w-0">
+                                    <div class="font-semibold text-[13.5px] text-[#1C1917] truncate">{{ conn.name }}</div>
+                                    <div class="text-xs text-[#78716C]">{{ conn.type }}</div>
                                 </div>
                             </div>
-                            <div class="flex items-center gap-2">
+                            <div class="flex items-center gap-2 flex-none">
                                 <!-- Connection status badge -->
                                 <span :class="['px-2 py-0.5 rounded text-xs border flex items-center gap-1', getStatusClass(conn)]">
                                     {{ getStatusLabel(conn) }}
                                 </span>
                                 <!-- Last checked time -->
-                                <span v-if="getLastChecked(conn)" class="text-[10px] text-gray-400">
+                                <span v-if="getLastChecked(conn)" class="text-[10px] text-[#A8A29E]">
                                     {{ getLastChecked(conn) }}
                                 </span>
                                 <!-- Test button (admin only) -->
@@ -51,11 +55,11 @@
                                     v-if="canManageConnections"
                                     @click="testConnection(conn.id)"
                                     :disabled="testingConnectionId === conn.id"
-                                    class="p-1.5 rounded hover:bg-gray-100 disabled:opacity-50"
+                                    class="p-1.5 rounded hover:bg-[#F1EFEC] disabled:opacity-50"
                                     title="Test connection"
                                 >
                                     <Spinner v-if="testingConnectionId === conn.id" class="w-4 h-4" />
-                                    <UIcon v-else name="heroicons-arrow-path" class="w-4 h-4 text-gray-500" />
+                                    <UIcon v-else name="heroicons-arrow-path" class="w-4 h-4 text-[#78716C]" />
                                 </button>
                                 <!-- Edit button -->
                                 <UButton
@@ -81,65 +85,72 @@
                             </div>
                         </div>
 
-                        <!-- Indexing progress / completion / failure (shared component, with logs toggle) -->
-                        <div v-if="conn.indexing" class="mt-3 ms-11">
-                            <ConnectionIndexingProgress :indexing="conn.indexing" :show-logs="true" />
-                            <div v-if="conn.indexing.status === 'failed' && canManageConnections" class="mt-2">
-                                <UButton size="xs" color="amber" variant="soft" @click="reindexConnection(conn.id)">
-                                    Retry
-                                </UButton>
-                            </div>
-                        </div>
-
-                        <!-- Test result (inline) -->
-                        <div v-if="testResults[conn.id]" class="mt-2 ms-11 text-xs">
-                            <div :class="testResults[conn.id]?.success ? 'text-green-600' : 'text-red-600'">
-                                {{ testResults[conn.id]?.success ? 'Connection successful' : (testResults[conn.id]?.message || 'Connection failed') }}
-                            </div>
-                            <!-- Timings -->
-                            <div v-if="testResults[conn.id]?.timings" class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-gray-500">
-                                <span v-for="(ms, key) in testResults[conn.id].timings" :key="key">
-                                    {{ key }}: {{ ms }}ms
-                                </span>
-                            </div>
-                            <!-- Per-client details -->
-                            <div
-                                v-if="testResults[conn.id]?.details && Object.keys(testResults[conn.id].details).length"
-                                class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-gray-500"
-                            >
-                                <span v-for="(val, key) in testResults[conn.id].details" :key="key">
-                                    {{ key }}: {{ typeof val === 'object' ? JSON.stringify(val) : val }}
-                                </span>
-                            </div>
-                        </div>
-
-                        <!-- User Connection (only for user_required auth, non-admin) -->
-                        <div class="mt-4 ms-11" v-if="conn.auth_policy === 'user_required' && !isAdmin">
-                            <div class="text-sm text-gray-800 flex items-center space-x-3">
-                                <template v-if="conn.user_status?.has_user_credentials">
-                                    <span class="inline-flex items-center text-green-700 text-xs">
-                                        <UIcon name="heroicons-check-circle" class="w-3 h-3 me-1" />
-                                        Connected as {{ connectedUserDisplay }}
-                                    </span>
-                                    <UButton size="xs" color="gray" variant="ghost" :loading="testingUserConnectionId === conn.id" @click="testUserConnection(conn.id)">
-                                        <UIcon name="heroicons-play" class="w-4 h-4" />
+                        <div class="p-4">
+                            <!-- Indexing progress / completion / failure (shared component, with logs toggle) -->
+                            <div v-if="conn.indexing">
+                                <ConnectionIndexingProgress :indexing="conn.indexing" :show-logs="true" />
+                                <div v-if="conn.indexing.status === 'failed' && canManageConnections" class="mt-2">
+                                    <UButton size="xs" color="amber" variant="soft" @click="reindexConnection(conn.id)">
+                                        Retry
                                     </UButton>
-                                    <UButton size="xs" color="red" variant="ghost" @click="disconnectUserCredentials(conn.id)">Disconnect</UButton>
-                                </template>
-                                <template v-else>
-                                    <span class="inline-flex items-center text-gray-500 text-xs">
-                                        <UIcon name="heroicons-exclamation-circle" class="w-3 h-3 me-1" />
-                                        User credentials required
+                                </div>
+                            </div>
+
+                            <!-- Test result (inline) -->
+                            <div v-if="testResults[conn.id]" class="text-xs" :class="{ 'mt-2': conn.indexing }">
+                                <div :class="testResults[conn.id]?.success ? 'text-[#15803D]' : 'text-[#B4331A]'">
+                                    {{ testResults[conn.id]?.success ? 'Connection successful' : (testResults[conn.id]?.message || 'Connection failed') }}
+                                </div>
+                                <!-- Timings -->
+                                <div v-if="testResults[conn.id]?.timings" class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[#78716C]">
+                                    <span v-for="(ms, key) in testResults[conn.id].timings" :key="key">
+                                        {{ key }}: {{ ms }}ms
                                     </span>
-                                    <UButton size="xs" color="primary" variant="soft" @click="openAddCredentials(conn.id)">Connect</UButton>
-                                </template>
+                                </div>
+                                <!-- Per-client details -->
+                                <div
+                                    v-if="testResults[conn.id]?.details && Object.keys(testResults[conn.id].details).length"
+                                    class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[#78716C]"
+                                >
+                                    <span v-for="(val, key) in testResults[conn.id].details" :key="key">
+                                        {{ key }}: {{ typeof val === 'object' ? JSON.stringify(val) : val }}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- User Connection (only for user_required auth, non-admin) -->
+                            <div v-if="conn.auth_policy === 'user_required' && !isAdmin" :class="{ 'mt-3 pt-3 border-t border-[#F1EFEC]': conn.indexing || testResults[conn.id] }">
+                                <div class="text-sm text-[#1C1917] flex items-center space-x-3">
+                                    <template v-if="conn.user_status?.has_user_credentials">
+                                        <span class="inline-flex items-center text-[#15803D] text-xs">
+                                            <UIcon name="heroicons-check-circle" class="w-3 h-3 me-1" />
+                                            Connected as {{ connectedUserDisplay }}
+                                        </span>
+                                        <UButton size="xs" color="gray" variant="ghost" :loading="testingUserConnectionId === conn.id" @click="testUserConnection(conn.id)">
+                                            <UIcon name="heroicons-play" class="w-4 h-4" />
+                                        </UButton>
+                                        <UButton size="xs" color="red" variant="ghost" @click="disconnectUserCredentials(conn.id)">Disconnect</UButton>
+                                    </template>
+                                    <template v-else>
+                                        <span class="inline-flex items-center text-[#78716C] text-xs">
+                                            <UIcon name="heroicons-exclamation-circle" class="w-3 h-3 me-1" />
+                                            User credentials required
+                                        </span>
+                                        <UButton size="xs" color="primary" variant="soft" @click="openAddCredentials(conn.id)">Connect</UButton>
+                                    </template>
+                                </div>
+                            </div>
+
+                            <!-- No inline body content -->
+                            <div v-if="!conn.indexing && !testResults[conn.id] && !(conn.auth_policy === 'user_required' && !isAdmin)" class="text-xs text-[#A8A29E]">
+                                Connection linked and ready.
                             </div>
                         </div>
                     </div>
 
                     <!-- Empty state -->
-                    <div v-if="connections.length === 0" class="text-center py-8 text-gray-500">
-                        <UIcon name="heroicons-link" class="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                    <div v-if="connections.length === 0" class="bg-white border border-[#EAE8E4] rounded-xl text-center py-10 text-[#78716C]" style="box-shadow:0 1px 2px rgba(28,25,23,.04),0 1px 3px rgba(28,25,23,.06)">
+                        <UIcon name="heroicons-link" class="w-8 h-8 mx-auto mb-2 text-[#A8A29E]" />
                         <p class="text-sm">No connections linked to this agent.</p>
                         <UButton
                             v-if="canManageConnections"

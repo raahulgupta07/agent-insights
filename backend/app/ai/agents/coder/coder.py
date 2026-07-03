@@ -284,12 +284,27 @@ class Coder:
            - Do not invent columns that do not exist or cannot be derived.
            - Do not include client names or non-relevant info inside queries. The data source queries should be generic and directly usable by the ds_clients.
 
+        3b. **Power BI / DAX discipline (when the data source is Power BI / a semantic model)**:
+           - **Let DAX do ALL the work.** Push counting, summing, grouping, filtering, and JOINS into the DAX query. Python must ONLY assign `df = ds_clients[key].execute_query(dax, table_name)` and `return df`. Do NOT pull raw tables and then group/merge/aggregate them in pandas.
+           - **Prefer a MEASURE.** If the model exposes a measure that answers the question (see the MEASURES list in the schema), use it directly: `EVALUATE ROW("v", [Measure Name])` — measures already contain the correct aggregation. Only aggregate raw columns when no measure fits.
+           - **Combine tables ONLY through the relationship, INSIDE one DAX query.** To answer across two related tables, use a single `SUMMARIZECOLUMNS` (the relationship auto-joins) or `RELATED()`. **NEVER** call `execute_query` twice and `pd.merge` / `pd.concat` the two model tables in pandas — with no shared key that produces a cartesian explosion (every row × every row) and a wrong answer. If the tables are NOT related, say so; do not cross-join.
+           - Use the BARE table name inside DAX (`'projects'`), never the `Dataset/Table` display name. Pass the full `Dataset/Table` name only as the 2nd arg to `execute_query`.
+           - pandas is allowed ONLY for trivial post-shaping of an already-aggregated single DAX result (rename/round/sort) — never for the aggregation or the join itself.
+
         4. **Handling Previous Code and Errors**:
            - If `retries` ≥ 1, review the code_and_error_messages:
              * Understand the error.
              * If it's related to a missing column or invalid query, fix it by removing or correcting that column/query.
-           - If `retries` ≥ 2 and still failing due to a specific column or measure, remove that problematic part and return a reduced but valid DataFrame.
-           - Ensure you produce some output even if reduced. Not returning anything is worse than returning partial data.
+           - Power BI / DAX errors are usually FIXABLE by aggregating, not by dropping:
+             * "A single value for column '<col>' cannot be determined" → the column is many-valued in a
+               scalar context. FIX by wrapping that column in an aggregation (MAX/MIN/SUM/COUNT/DISTINCTCOUNT)
+               or moving it into SUMMARIZECOLUMNS as a group-by key. Do NOT remove the column.
+             * For a "count" / "how many" intent use COUNTROWS or DISTINCTCOUNT at the source, never a
+               full-table pull followed by pandas .nunique().
+           - If `retries` ≥ 2 and still failing due to a specific column or measure, correct that part
+             (aggregate it) rather than deleting it. For Power BI / DAX, NEVER return an empty DataFrame as
+             a fallback — the client_key is guaranteed valid, so a correctly-aggregated query WILL return data.
+           - Ensure you produce a correct, non-empty output. Returning an empty DataFrame is a failure, not a fallback.
 
         5. **Sorting and Final Output**:
            - Sort the DataFrame by the most relevant key column.
@@ -613,12 +628,23 @@ class Coder:
                - Use metadata resources for tables/cols enrichments, code examples, etc.
                - Do not use tables/cols that exist in instructions but are not in the provided schemas.
 
+            3b. **Power BI / DAX discipline (semantic-model sources)**:
+               - Let DAX do ALL work (count/sum/group/filter/JOIN). Python only `df = ds_clients[key].execute_query(dax, table_name)` then `return df`. No pandas aggregation/merge on raw pulls.
+               - Prefer a MEASURE if one answers the question: `EVALUATE ROW("v", [Measure Name])`.
+               - Combine related tables in ONE DAX query (SUMMARIZECOLUMNS / RELATED — the relationship joins them). NEVER `pd.merge`/`pd.concat` two model tables in pandas → cartesian explosion + wrong answer. Unrelated tables → don't cross-join; say so.
+               - Bare table name inside DAX (`'projects'`), full `Dataset/Table` only as execute_query's 2nd arg.
+
             4. **Handling Previous Code and Errors**:
                - If `retries` ≥ 1, review the code_and_error_messages:
                  * Understand the error.
                  * If it's related to a missing column or invalid query, fix it by removing or correcting that column/query.
-               - If `retries` ≥ 2 and still failing due to a specific column or measure, remove that problematic part and return a reduced but valid DataFrame.
-               - Ensure you produce some output even if reduced.
+               - Power BI / DAX "A single value for column '<col>' cannot be determined" → the column is
+                 many-valued in a scalar context. FIX by wrapping it in an aggregation
+                 (MAX/MIN/SUM/COUNT/DISTINCTCOUNT) or using it as a SUMMARIZECOLUMNS group key. Do NOT drop it.
+               - If `retries` ≥ 2 and still failing due to a specific column or measure, correct that part
+                 (aggregate it) rather than deleting it. For Power BI / DAX, NEVER return an empty DataFrame —
+                 a correctly-aggregated query WILL return data.
+               - Ensure you produce a correct, non-empty output.
                - If the error is related to size of the query, try to use partitions when available in context/metadata resources.
 
             5. **Sorting and Final Output**:

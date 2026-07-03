@@ -262,61 +262,58 @@
                     </div>
                 </div>
 
-                <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                    <div class="px-5 py-3 border-b border-gray-200 flex items-center gap-3">
-                        <div class="text-sm font-medium text-gray-700 me-auto">Result-set goldens</div>
+                <div class="bg-white border border-[#EAE8E4] rounded-xl shadow-sm overflow-hidden">
+                    <div class="px-4 py-3 border-b border-[#EAE8E4] flex items-center gap-3">
+                        <div class="text-[13.5px] font-semibold text-[#1C1917] me-auto">Golden questions</div>
                         <!-- Pass-rate sparkline -->
                         <div class="flex items-center gap-2" :title="'Pass rate across recent runs'">
-                            <span class="text-xs text-gray-500">Pass rate</span>
+                            <span class="text-[11.5px] text-[#78716C]">Pass rate</span>
                             <svg v-if="sparkPoints" width="120" height="28" viewBox="0 0 120 28" class="shrink-0" aria-hidden="true">
                                 <polyline
                                     :points="sparkPoints"
                                     fill="none"
-                                    stroke="#6b7280"
+                                    stroke="#C2541E"
                                     stroke-width="1.5"
                                     stroke-linecap="round"
                                     stroke-linejoin="round"
                                 />
                             </svg>
-                            <span class="text-xs font-medium text-gray-700">{{ sparkLatestPct }}</span>
+                            <span class="text-[12px] font-medium text-[#1C1917] tabular-nums">{{ sparkLatestPct }}</span>
                         </div>
+                        <UButton
+                            :disabled="goldenCases.length === 0"
+                            color="primary" size="xs" icon="i-heroicons-play"
+                            @click="runAllGoldens"
+                        >Run all</UButton>
                     </div>
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th class="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase tracking-wider">Blessed question</th>
-                                    <th class="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase tracking-wider">Shape</th>
-                                    <th class="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase tracking-wider">Tolerance</th>
-                                    <th class="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase tracking-wider">Source completion</th>
-                                    <th class="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase tracking-wider">{{ $t('evals.tests.colOptions') }}</th>
-                                </tr>
-                            </thead>
-                            <tbody class="bg-white divide-y divide-gray-200 text-xs">
-                                <tr v-if="loadingCases">
-                                    <td colspan="5" class="px-6 py-6 text-center text-gray-400 text-xs">{{ $t('common.loading') }}</td>
-                                </tr>
-                                <tr v-for="g in goldenCases" :key="g.case.id" class="hover:bg-gray-50">
-                                    <td class="px-6 py-3">
-                                        <div class="flex items-center gap-1.5 max-w-[420px]">
-                                            <span class="inline-flex items-center rounded-full bg-gray-200 text-gray-700 text-[10px] font-medium px-2 py-0.5 shrink-0">GOLDEN</span>
-                                            <span class="truncate flex-1" :title="g.name">{{ g.name }}</span>
-                                        </div>
-                                    </td>
-                                    <td class="px-6 py-3 text-gray-700">{{ g.rows }} rows × {{ g.cols }} cols</td>
-                                    <td class="px-6 py-3 text-gray-700">{{ toleranceLabel(g.tolerance) }}</td>
-                                    <td class="px-6 py-3">
-                                        <span class="font-mono text-gray-500" :title="g.completionId || ''">{{ truncId(g.completionId) }}</span>
-                                    </td>
-                                    <td class="px-6 py-3">
-                                        <UButton color="red" size="xs" variant="soft" icon="i-heroicons-trash" @click="deleteCase(g.case)">{{ $t('evals.tests.actionDelete') }}</UButton>
-                                    </td>
-                                </tr>
-                                <tr v-if="!loadingCases && goldenCases.length === 0">
-                                    <td colspan="5" class="px-6 py-8 text-center text-gray-500">No goldens yet. Thumbs-up an answer in chat to capture one.</td>
-                                </tr>
-                            </tbody>
-                        </table>
+
+                    <div v-if="loadingCases" class="px-4 py-6 text-center text-[#A8A29E] text-xs">{{ $t('common.loading') }}</div>
+
+                    <div v-else-if="goldenCases.length === 0" class="px-4 py-10 text-center text-[13px] text-[#78716C]">
+                        No goldens yet. Thumbs-up an answer in chat to capture one.
+                    </div>
+
+                    <div v-else class="px-4 py-1">
+                        <div
+                            v-for="g in goldenCases"
+                            :key="g.case.id"
+                            class="flex items-center gap-3 py-3 border-b border-[#F1EFEC] last:border-b-0"
+                        >
+                            <!-- check icon -->
+                            <div class="w-[18px] h-[18px] rounded-md bg-[#C2541E] flex items-center justify-center shrink-0">
+                                <UIcon name="i-heroicons-check-20-solid" class="w-3 h-3 text-white" />
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <div class="text-[13.5px] font-medium text-[#1C1917] truncate" :title="g.name">{{ g.name }}</div>
+                                <div class="text-[11.5px] text-[#78716C] mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                                    <span class="font-mono">expects {{ g.rows }} rows × {{ g.cols }} cols</span>
+                                    <span v-if="toleranceLabel(g.tolerance) !== '—'">tolerance {{ toleranceLabel(g.tolerance) }}</span>
+                                    <span class="font-mono text-[#A8A29E]" :title="g.completionId || ''">{{ truncId(g.completionId) }}</span>
+                                </div>
+                            </div>
+                            <span class="inline-flex items-center rounded-full bg-[#E7F5EC] text-[#15803D] text-[11px] font-medium px-2.5 py-0.5 shrink-0">Golden</span>
+                            <UButton color="red" size="xs" variant="soft" icon="i-heroicons-trash" @click="deleteCase(g.case)">{{ $t('evals.tests.actionDelete') }}</UButton>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -733,6 +730,19 @@ async function runSelected() {
         else activeTab.value = 'runs'
     } catch {
         toast.add({ title: 'Failed to run tests', color: 'red' })
+    }
+}
+
+async function runAllGoldens() {
+    const case_ids = goldenCases.value.map(g => g.case.id)
+    if (!case_ids.length) return
+    try {
+        const res: any = await useMyFetch('/api/tests/runs', { method: 'POST', body: { case_ids, trigger_reason: 'manual' } })
+        const run = res?.data?.value
+        if (run?.id) router.push(`/evals/runs/${run.id}`)
+        else activeTab.value = 'runs'
+    } catch {
+        toast.add({ title: 'Failed to run goldens', color: 'red' })
     }
 }
 

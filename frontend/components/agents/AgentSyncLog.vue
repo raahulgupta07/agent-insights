@@ -2,7 +2,7 @@
     <!-- Only render once a real sync run exists (sync-status returned non-empty). -->
     <div
         v-if="hasRun"
-        class="cai-panel mb-6 rounded-2xl overflow-hidden"
+        class="cai-panel mb-6 rounded-xl overflow-hidden"
         :class="{ 'is-done': phase === 'done', 'is-error': phase === 'error' }"
     >
         <!-- Header row: status dot + label + counters + elapsed + auto-scroll hint -->
@@ -96,7 +96,7 @@
 
 <script lang="ts" setup>
 const props = defineProps<{ dataSourceId: string }>()
-const emit = defineEmits<{ (e: 'done'): void }>()
+const emit = defineEmits<{ (e: 'done'): void; (e: 'phase', phase: string): void }>()
 
 const router = useRouter()
 
@@ -165,7 +165,7 @@ function fmtTime(ts: string): string {
 }
 
 function glyph(level: string): string {
-    return { step: '▸', ok: '✓', active: '⟳', error: '✕' }[level] || '·'
+    return { step: '▶', ok: '✓', active: '⟳', warn: '◦', error: '✕' }[level] || '◦'
 }
 
 // Zero-rows label fix: Power BI catalogs report no counts and the backend emits
@@ -220,7 +220,11 @@ function scrollToBottom() {
 }
 
 function apply(s: any) {
+    const prevPhase = phase.value
     phase.value = s.phase || phase.value
+    // Tell the parent about the live phase so it can gate the "Synced & ready" strip
+    // (never show "ready" while still discovering, or show green when 0 tables kept).
+    if (phase.value !== prevPhase) emit('phase', phase.value)
     tablesTotal.value = s.tables_total ?? tablesTotal.value
     tablesDone.value = s.tables_done ?? tablesDone.value
     rows.value = s.rows ?? rows.value
@@ -297,9 +301,10 @@ onBeforeUnmount(() => {
 /* ---------- SYNC PANEL ---------- */
 .cai-panel {
     position: relative;
-    border: 1px solid #E9E0D3;
-    background: #FBFAF6;
-    box-shadow: 0 1px 0 rgba(0, 0, 0, .02), 0 18px 44px -28px rgba(33, 27, 20, .5);
+    border-radius: 12px;
+    border: 1px solid #EAE8E4;
+    background: #FFFFFF;
+    box-shadow: 0 1px 2px rgba(28, 25, 23, .04), 0 1px 3px rgba(28, 25, 23, .06);
 }
 
 /* header */
@@ -308,8 +313,8 @@ onBeforeUnmount(() => {
     align-items: center;
     gap: 12px;
     padding: 12px 16px;
-    background: #FBFAF6;
-    border-bottom: 1px solid #E9E0D3;
+    background: #FFFFFF;
+    border-bottom: 1px solid #F1EFEC;
 }
 .cai-dot {
     width: 9px;
@@ -325,8 +330,8 @@ onBeforeUnmount(() => {
     animation: cai-pulse 1.4s infinite;
 }
 .cai-dot.done {
-    background: #3f9e6a;
-    box-shadow: 0 0 0 4px rgba(63, 158, 106, .15);
+    background: #15803D;
+    box-shadow: 0 0 0 4px rgba(21, 128, 61, .15);
 }
 .cai-dot.error {
     background: #B4432B;
@@ -340,18 +345,18 @@ onBeforeUnmount(() => {
     font-weight: 700;
     font-size: 14px;
     letter-spacing: .2px;
-    color: #211B14;
+    color: #1C1917;
 }
-.cai-plabel.is-green { color: #3f9e6a }
+.cai-plabel.is-green { color: #15803D }
 .cai-plabel.is-red { color: #B4432B }
 .cai-counter {
-    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-family: 'SF Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 11.5px;
-    color: #6b6b6b;
+    color: #78716C;
     font-variant-numeric: tabular-nums;
 }
-.cai-counter b { color: #211B14; font-weight: 700 }
-.cai-counter b.g { color: #3f9e6a }
+.cai-counter b { color: #1C1917; font-weight: 700 }
+.cai-counter b.g { color: #15803D }
 .cai-spacer { flex: 1 }
 .cai-thint {
     font-size: 11px;

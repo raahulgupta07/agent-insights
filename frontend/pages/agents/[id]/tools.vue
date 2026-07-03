@@ -1,16 +1,26 @@
 <template>
-    <div class="py-6">
+    <div class="py-6 space-y-5">
         <div v-if="injectedFetchError" />
         <div v-else>
-            <ToolsSelector
-                :ds-id="id"
-                :connections="mcpConnections"
-                :can-update="canUpdateDataSource"
-                @add-mcp="showMCPModal = true"
-                @add-custom-api="showCustomAPIModal = true"
-                @edit-connection="openEditModal"
-                @delete-connection="confirmDelete"
-            />
+            <!-- Page header -->
+            <div class="flex items-start gap-4 mb-4">
+                <div>
+                    <h1 class="text-[19px] font-semibold tracking-[-0.01em] text-[#1C1917]">Tools</h1>
+                    <p class="text-[13.5px] text-[#78716C] mt-0.5">Capabilities the agent can use when answering.</p>
+                </div>
+            </div>
+
+            <div class="bg-white border border-[#EAE8E4] rounded-xl shadow-[0_1px_2px_rgba(28,25,23,0.04),0_1px_3px_rgba(28,25,23,0.06)] p-4">
+                <ToolsSelector
+                    :ds-id="id"
+                    :connections="mcpConnections"
+                    :can-update="canUpdateDataSource"
+                    @add-mcp="showMCPModal = true"
+                    @add-custom-api="showCustomAPIModal = true"
+                    @edit-connection="openEditModal"
+                    @delete-connection="confirmDelete"
+                />
+            </div>
         </div>
 
         <!-- Add MCP Modal -->
@@ -26,8 +36,8 @@
         <!-- Delete confirmation -->
         <UModal v-model="showDeleteModal" :ui="{ width: 'sm:max-w-sm' }">
             <div class="p-6">
-                <h3 class="text-sm font-semibold text-gray-900 mb-2">Remove Connection</h3>
-                <p class="text-xs text-gray-500 mb-4">
+                <h3 class="text-sm font-semibold text-[#1C1917] mb-2">Remove Connection</h3>
+                <p class="text-xs text-[#78716C] mb-4">
                     Remove <strong>{{ deletingConnection?.name }}</strong> from this agent? The connection will remain available for other agents.
                 </p>
                 <div class="flex justify-end gap-2">

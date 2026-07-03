@@ -1909,6 +1909,27 @@ class DataSourceService:
                     "construct_clients: installed PBI offline table_index size=%d conn=%s",
                     len(idx), connection.id,
                 )
+                # Ground DAX generation: fetch the model's relationships + measures via
+                # INFO.VIEW.* (delegated-user friendly, DAX-cached) and attach them so
+                # system_prompt() renders the join graph + measure surface. This is what
+                # prevents cartesian joins and "single value" scalar errors. Live but
+                # cached (CONNECTOR_ROBUSTNESS DAX cache); fail-soft, best-effort.
+                try:
+                    if hasattr(client, "fetch_model_metadata") and hasattr(client, "set_model_meta"):
+                        ds_ids = list({e.get("datasetId") for e in idx.values() if e.get("datasetId")})
+                        if ds_ids:
+                            meta = client.fetch_model_metadata(ds_ids)
+                            client.set_model_meta(meta)
+                            logging.getLogger(__name__).info(
+                                "construct_clients: installed PBI model_meta rels=%d measures=%d conn=%s",
+                                len(meta.get("relationships") or []),
+                                len(meta.get("measures") or []),
+                                connection.id,
+                            )
+                except Exception:
+                    logging.getLogger(__name__).debug(
+                        "construct_clients: PBI model_meta fetch skipped", exc_info=True
+                    )
         except Exception:
             logging.getLogger(__name__).debug(
                 "construct_clients: PBI offline index install skipped", exc_info=True

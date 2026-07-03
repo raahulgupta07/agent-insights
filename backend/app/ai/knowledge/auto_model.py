@@ -202,6 +202,18 @@ async def _llm_tiebreak(small_model: Any, question: str) -> Optional[str]:
 # Public entry point
 # ---------------------------------------------------------------------------
 
+_TIER_ORDER = {"fast": 0, "balanced": 1, "reason": 2}
+
+
+def _floor_tier(tier: str, min_tier: Optional[str]) -> str:
+    """Raise ``tier`` to at least ``min_tier`` (never lowers it)."""
+    if not min_tier:
+        return tier
+    if _TIER_ORDER.get(min_tier, 0) > _TIER_ORDER.get(tier, 0):
+        return min_tier
+    return tier
+
+
 async def choose_auto_model(
     *,
     question: str,
@@ -209,11 +221,16 @@ async def choose_auto_model(
     default_model: Any,
     small_model: Any = None,
     allow_llm: bool = True,
+    min_tier: Optional[str] = None,
 ) -> Tuple[Any, Dict[str, Any]]:
     """Pick the best model for ``question`` from ``models``. NEVER raises.
 
     Returns ``(model, decision)``. On any failure returns the default model with a
     ``via='fallback'`` decision so the caller behaves exactly as if AUTO were OFF.
+
+    ``min_tier`` (fast|balanced|reason) floors the chosen tier — used to keep
+    code-generation connectors (Power BI / DAX, warehouses) off the weakest model
+    even when the question text scores as trivial ("how many projects?").
     """
     try:
         sc = score_complexity(question)
@@ -229,6 +246,12 @@ async def choose_auto_model(
                 tier = llm_tier
                 via = "llm"
                 reason = f"tiebreak→{llm_tier}"
+
+        # Floor to the connector-required minimum tier (e.g. Power BI code-gen).
+        floored = _floor_tier(tier, min_tier)
+        if floored != tier:
+            reason = f"{reason}|floor→{floored}({min_tier})"
+            tier = floored
 
         chosen = pick_model_for_tier(tier, models, default_model=default_model)
         if chosen is None:

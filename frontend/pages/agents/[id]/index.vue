@@ -3,8 +3,54 @@
         <!-- Hide content when there's a fetch error (layout shows error state) -->
         <div v-if="fetchError" />
         <div v-else>
-            <!-- Live sync-log terminal (self-hides when there's no active/recent sync run) -->
-            <AgentSyncLog :data-source-id="(route.params.id as string)" />
+            <!-- Live sync-log terminal (self-hides when there's no active/recent sync run;
+                 the FULL warm-dark terminal appears only while a sync is actually running) -->
+            <AgentSyncLog :data-source-id="(route.params.id as string)" @phase="onSyncPhase" />
+
+            <!-- Status strip — HONEST: green "ready" only when the sync has actually
+                 finished AND kept at least one queryable table. While a sync is running
+                 the AgentSyncLog terminal above shows live progress and NO strip shows,
+                 so the user never sees a false "ready". 0 tables → amber "no data" with a
+                 Build-permission hint. Sync error → red. -->
+            <!-- 1) Finished + tables kept → green ready -->
+            <NuxtLink
+                v-if="hasOverview && !syncActive && syncPhase !== 'error' && overview.stats.active_tables > 0"
+                :to="`/agents/${route.params.id}/activity`"
+                class="mb-4 flex items-center gap-2.5 bg-[#E7F5EC] border border-[#CDE9D6] rounded-xl px-3.5 py-2.5 text-sm text-[#166534] hover:bg-[#DFF1E6] transition-colors"
+            >
+                <span class="w-2 h-2 rounded-full bg-[#15803D] shrink-0"></span>
+                <span class="font-semibold">Synced &amp; ready</span>
+                <span class="text-[#8AAE97]">·</span>
+                <span>{{ overview.stats.active_tables }} {{ overview.stats.active_tables === 1 ? 'table' : 'tables' }} kept · {{ overview.stats.total_columns }} columns</span>
+                <span class="ml-auto font-semibold text-[#15803D]">View sync log →</span>
+            </NuxtLink>
+
+            <!-- 2) Finished but NO queryable tables → honest amber (not a false "ready") -->
+            <NuxtLink
+                v-else-if="hasOverview && !syncActive && syncPhase === 'done' && overview.stats.active_tables === 0"
+                :to="`/agents/${route.params.id}/activity`"
+                class="mb-4 flex items-start gap-2.5 bg-[#FBF3E4] border border-[#F0E2C4] rounded-xl px-3.5 py-2.5 text-sm text-[#92610A] hover:bg-[#F7ECD8] transition-colors"
+            >
+                <span class="w-2 h-2 mt-1.5 rounded-full bg-[#C2841E] shrink-0"></span>
+                <span class="flex-1">
+                    <span class="font-semibold">Sync finished — no queryable tables found.</span>
+                    Your Power BI account may not have <span class="font-medium">Build permission</span> on any dataset, so there's nothing to query yet.
+                </span>
+                <span class="ml-auto font-semibold text-[#C2841E] whitespace-nowrap">View sync log →</span>
+            </NuxtLink>
+
+            <!-- 3) Sync failed → red -->
+            <NuxtLink
+                v-else-if="syncPhase === 'error'"
+                :to="`/agents/${route.params.id}/activity`"
+                class="mb-4 flex items-center gap-2.5 bg-[#FCEBEA] border border-[#F5D0CD] rounded-xl px-3.5 py-2.5 text-sm text-[#9B2C2C] hover:bg-[#F9E0DE] transition-colors"
+            >
+                <span class="w-2 h-2 rounded-full bg-[#C53030] shrink-0"></span>
+                <span class="font-semibold">Sync didn't finish</span>
+                <span class="text-[#C99]">·</span>
+                <span>Open the sync log to see what happened, then try again.</span>
+                <span class="ml-auto font-semibold text-[#C53030]">View sync log →</span>
+            </NuxtLink>
 
             <!-- Indexing banner: shown while any linked connection is discovering schema -->
             <div
@@ -39,42 +85,13 @@
                 <!-- CENTER column (main knowledge) -->
                 <div class="flex-1 min-w-0 w-full flex flex-col gap-4">
 
-                    <!-- 1 · Launcher card -->
-                    <div class="order-1 bg-[#FBFAF6] border border-[#E9E0D3] rounded-2xl p-4">
-                        <div class="flex gap-2 items-center bg-white border border-[#E9E0D3] rounded-xl pl-3.5 pr-2 py-2">
-                            <input
-                                v-model="launchText"
-                                type="text"
-                                placeholder="Ask this agent — opens a new Report…"
-                                class="flex-1 min-w-0 text-sm bg-transparent outline-none text-[#1f2328] placeholder:text-[#9a958c]"
-                                @keydown.enter="launchReport(launchText)"
-                            />
-                            <button
-                                :disabled="launching || !launchText.trim()"
-                                @click="launchReport(launchText)"
-                                class="shrink-0 text-xs font-medium px-3 py-1.5 bg-[#C2541E] text-white rounded-lg hover:bg-[#A8330F] transition-colors disabled:opacity-50"
-                            >
-                                Start report →
-                            </button>
-                        </div>
-                        <div v-if="starterList.length" class="mt-2.5 flex flex-wrap gap-2">
-                            <button
-                                v-for="(starter, idx) in starterList"
-                                :key="idx"
-                                @click="launchReport(starterPrompt(starter))"
-                                class="bg-white border border-[#E9E0D3] rounded-full px-3 py-1.5 text-xs text-[#4a4034] hover:border-[#C2541E] hover:text-[#C2541E] transition-colors"
-                            >
-                                ↗ {{ starter.split('\n')[0] }}
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- 2 · What this agent knows (existing primary-instruction block) -->
-                    <div class="order-4 bg-[#FBFAF6] border border-[#E9E0D3] rounded-2xl p-4">
-                        <div class="text-sm font-semibold text-[#1f2328] mb-3 flex items-center gap-2" style="font-family: 'Spectral', ui-serif, Georgia, serif">
+                    <!-- 1 · What this agent knows (existing primary-instruction block) -->
+                    <div class="order-1 bg-white border border-[#EAE8E4] rounded-xl shadow-[0_1px_2px_rgba(28,25,23,.04),0_1px_3px_rgba(28,25,23,.06)]">
+                        <div class="px-4 py-3 border-b border-[#F1EFEC] text-[13.5px] font-semibold text-[#1C1917] flex items-center gap-2">
                             <UIcon name="heroicons-book-open" class="w-4 h-4 text-[#C2541E]" />
                             What this agent knows
                         </div>
+                        <div class="p-4">
 
                         <!-- Inline create form -->
                         <div
@@ -129,7 +146,7 @@
                                     :prose="true"
                                     :markdown="true"
                                 />
-                                <div v-if="!showFullInstruction" class="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-[#FBFAF6] to-transparent" />
+                                <div v-if="!showFullInstruction" class="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-white to-transparent" />
                             </div>
                             <button @click="showFullInstruction = !showFullInstruction" class="mt-1.5 text-xs font-medium text-[#C2541E] hover:underline">
                                 {{ showFullInstruction ? 'Show less' : 'Show more' }}
@@ -167,79 +184,78 @@
                                 </button>
                             </div>
                         </div>
+                        </div>
                     </div>
 
-                    <!-- 3 · Core tables card (from overview endpoint) -->
-                    <div v-if="hasOverview && overview.tables.length" class="order-2 bg-[#FBFAF6] border border-[#E9E0D3] rounded-2xl p-4">
-                        <div class="text-sm font-semibold text-[#1f2328] mb-1 flex items-center gap-2" style="font-family: 'Spectral', ui-serif, Georgia, serif">
+                    <!-- 2 · Core tables card (from overview endpoint) — grouped by dataset -->
+                    <div v-if="hasOverview && overview.tables.length" class="order-2 bg-white border border-[#EAE8E4] rounded-xl shadow-[0_1px_2px_rgba(28,25,23,.04),0_1px_3px_rgba(28,25,23,.06)]">
+                        <div class="px-4 py-3 border-b border-[#F1EFEC] text-[13.5px] font-semibold text-[#1C1917] flex items-center gap-2">
                             <UIcon name="heroicons-table-cells" class="w-4 h-4 text-[#C2541E]" />
                             Core tables
-                            <span class="text-xs font-normal text-[#6b6b6b]">· {{ overview.stats.active_tables }} active · {{ overview.stats.total_columns }} columns</span>
+                            <span class="ml-auto text-[11.5px] font-medium text-[#A8A29E]">{{ overview.stats.active_tables }} active · {{ overview.stats.total_columns }} columns</span>
                         </div>
-                        <div>
-                            <div
-                                v-for="tbl in visibleTables"
-                                :key="tbl.name"
-                                class="flex gap-3 py-2.5 border-b border-[#F2ECE1] last:border-0"
-                            >
-                                <div class="w-7 h-7 rounded-lg bg-[#F0E9DB] grid place-items-center shrink-0">
-                                    <UIcon :name="tbl.entity_like ? 'heroicons-cube' : 'heroicons-table-cells'" class="w-4 h-4 text-[#C2541E]" />
+                        <div class="px-4 pb-4 pt-1">
+                            <template v-for="grp in groupedTables" :key="grp.dataset || '_'">
+                                <!-- dataset group header (omitted when there is no dataset prefix) -->
+                                <div v-if="grp.dataset" class="flex items-center gap-2 pt-3.5 pb-1.5">
+                                    <span class="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#A8A29E]">{{ grp.dataset }}</span>
+                                    <span class="flex-1 h-px bg-[#F1EFEC]"></span>
                                 </div>
-                                <div class="flex-1 min-w-0">
-                                    <div class="flex items-center gap-2 flex-wrap">
-                                        <code class="font-mono text-[11px] bg-[#F0E9DB] px-1.5 rounded text-[#211B14]">{{ tbl.name }}</code>
-                                        <span class="font-mono text-[11px] bg-[#E9F1EC] text-[#2F6F4F] border border-[#d4e3d4] px-1.5 rounded">{{ tbl.entity_like ? 'entity' : 'table' }}</span>
+                                <div
+                                    v-for="tbl in grp.tables"
+                                    :key="tbl.name"
+                                    class="flex items-center gap-3 py-2.5 border-b border-[#F1EFEC] last:border-0"
+                                >
+                                    <div class="w-7 h-7 rounded-lg bg-[#F1EFEC] grid place-items-center shrink-0">
+                                        <UIcon :name="tbl.entity_like ? 'heroicons-cube' : 'heroicons-table-cells'" class="w-4 h-4 text-[#78716C]" />
                                     </div>
-                                    <div v-if="tbl.purpose" class="text-xs text-[#6b6b6b] leading-snug mt-1">{{ tbl.purpose }}</div>
+                                    <div class="flex-1 min-w-0">
+                                        <div class="font-mono text-[13.5px] font-medium text-[#1C1917] truncate">{{ shortTableName(tbl.name) }}</div>
+                                        <!-- grain sub-line, only when a purpose is present (no fabrication) -->
+                                        <div v-if="tbl.purpose" class="text-[11.5px] text-[#A8A29E] leading-snug truncate">{{ tbl.purpose }}</div>
+                                    </div>
+                                    <!-- relevance badge from classification metadata; hidden when absent -->
+                                    <span
+                                        v-if="tableClassification(tbl)"
+                                        class="text-[10.5px] font-semibold px-1.5 py-0.5 rounded-md whitespace-nowrap"
+                                        :class="{
+                                            'text-[#15803D] bg-[#E7F5EC]': badgeTone(tableClassification(tbl)!.audience) === 'biz',
+                                            'text-[#B45309] bg-[#FBF0DD]': badgeTone(tableClassification(tbl)!.audience) === 'admin',
+                                            'text-[#6B7280] bg-[#F1F1F0]': badgeTone(tableClassification(tbl)!.audience) === 'sys',
+                                        }"
+                                    >{{ tableClassification(tbl)!.audience }}<template v-if="tableClassification(tbl)!.role"> · {{ tableClassification(tbl)!.role }}</template></span>
+                                    <span class="text-[12px] text-[#78716C] tabular-nums whitespace-nowrap shrink-0">{{ tbl.column_count }} cols</span>
                                 </div>
-                                <div class="text-[11px] text-[#9a958c] whitespace-nowrap self-center text-right">
-                                    <div>{{ tbl.column_count }} cols</div>
-                                    <div v-if="tbl.row_count > 0">{{ tbl.row_count.toLocaleString() }} rows</div>
-                                </div>
+                            </template>
+                            <div v-if="overview.tables.length > visibleTables.length" class="pt-3 text-center">
+                                <NuxtLink :to="`/agents/${route.params.id}/tables`" class="text-[12.5px] font-medium text-[#C2541E] hover:underline">
+                                    See all {{ overview.tables.length }} tables →
+                                </NuxtLink>
                             </div>
-                        </div>
-                        <div v-if="overview.tables.length > visibleTables.length" class="mt-2">
-                            <NuxtLink :to="`/agents/${route.params.id}/tables`" class="text-xs font-medium text-[#C2541E] hover:underline">
-                                See all {{ overview.tables.length }} tables →
-                            </NuxtLink>
                         </div>
                     </div>
 
-                    <!-- 4 · Key relationships & joins card (honest empty state when none) -->
-                    <div v-if="hasOverview && overview.tables.length" class="order-3 bg-[#FBFAF6] border border-[#E9E0D3] rounded-2xl p-4">
-                        <div class="text-sm font-semibold text-[#1f2328] mb-2 flex items-center gap-2" style="font-family: 'Spectral', ui-serif, Georgia, serif">
+                    <!-- 3 · Key relationships card (honest empty state when none) -->
+                    <div v-if="hasOverview && overview.tables.length" class="order-3 bg-white border border-[#EAE8E4] rounded-xl shadow-[0_1px_2px_rgba(28,25,23,.04),0_1px_3px_rgba(28,25,23,.06)]">
+                        <div class="px-4 py-3 border-b border-[#F1EFEC] text-[13.5px] font-semibold text-[#1C1917] flex items-center gap-2">
                             <UIcon name="heroicons-link" class="w-4 h-4 text-[#C2541E]" />
-                            Key relationships &amp; joins
+                            Key relationships
+                            <span v-if="!overview.joins.length" class="ml-auto text-[11.5px] font-medium text-[#A8A29E]">inferred — Power BI hides FKs over the API</span>
                         </div>
-                        <template v-if="overview.joins.length">
-                            <div
-                                v-for="(j, idx) in overview.joins"
-                                :key="idx"
-                                class="flex items-center gap-2 py-1.5 text-xs text-[#3a332a] flex-wrap"
-                            >
-                                <code class="font-mono text-[11px] bg-[#ECEAE1] px-1.5 rounded">{{ j.from_table }}</code>
-                                <span class="text-[#9a958c]">→</span>
-                                <code class="font-mono text-[11px] bg-[#ECEAE1] px-1.5 rounded">{{ j.to_table }}</code>
-                                <span class="text-[11px] text-[#9a958c]">via</span>
-                                <code class="font-mono text-[11px] bg-[#ECEAE1] px-1.5 rounded">{{ j.from_column }}</code>
-                            </div>
-                        </template>
-                        <div v-else class="text-xs text-[#9a958c] leading-relaxed">
-                            No table relationships are defined in this source's schema — Power BI models don't expose foreign keys over the API, so joins are inferred at query time by the agent instead.
-                        </div>
-                    </div>
-
-                    <!-- 5 · Conversation Starters (existing) -->
-                    <div class="order-5 bg-[#FBFAF6] border border-[#E9E0D3] rounded-2xl p-4">
-                        <div class="flex items-center gap-2">
-                            <div class="text-xs uppercase tracking-wide text-[#9a958c]">{{ $t('dataSource.conversationStarters') }}</div>
-                            <button v-if="useCan('update_data_source')" @click="openEditStarters" class="text-[10px] text-[#C2541E] hover:underline">{{ $t('dataSource.edit') }}</button>
-                        </div>
-                        <div class="mt-3 flex flex-wrap gap-2">
-                            <div v-for="starter in displayDataSource?.conversation_starters" :key="starter"
-                            class="bg-[#F4EEE5] border border-[#E9E0D3] text-[#1f2328] rounded-lg px-3 py-2 text-xs"
-                            >
-                                <span>{{ starter.split('\n')[0] }}</span>
+                        <div class="p-4">
+                            <template v-if="overview.joins.length">
+                                <div
+                                    v-for="(j, idx) in overview.joins"
+                                    :key="idx"
+                                    class="flex items-center gap-2 py-2 text-[12.5px] flex-wrap border-b border-[#F1EFEC] last:border-0"
+                                >
+                                    <code class="font-mono text-[12px] text-[#1C1917] font-medium">{{ j.from_table }}.{{ j.from_column }}</code>
+                                    <span class="text-[#A8A29E]">→</span>
+                                    <code class="font-mono text-[12px] text-[#C2541E] font-medium">{{ j.to_table }}.{{ j.to_column }}</code>
+                                </div>
+                            </template>
+                            <div v-else class="text-[12.5px] text-[#78716C] leading-relaxed">
+                                No table relationships are defined in this source's schema — Power BI models don't expose foreign keys over the API, so joins are inferred at query time by the agent instead.
                             </div>
                         </div>
                     </div>
@@ -250,40 +266,100 @@
                 <div v-if="hasOverview" class="w-full lg:w-[300px] lg:shrink-0 space-y-4">
 
                     <!-- At a glance -->
-                    <div class="bg-[#FBFAF6] border border-[#E9E0D3] rounded-2xl p-3.5">
-                        <div class="text-sm font-semibold text-[#1f2328] mb-2" style="font-family: 'Spectral', ui-serif, Georgia, serif">At a glance</div>
-                        <div class="grid grid-cols-2 gap-2 mb-1">
-                            <div class="bg-white border border-[#E9E0D3] rounded-xl px-3 py-2">
-                                <div class="text-xl font-bold text-[#211B14]" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ overview.stats.active_tables }}</div>
-                                <div class="text-[11px] text-[#6b6b6b]">tables</div>
+                    <div class="bg-white border border-[#EAE8E4] rounded-xl shadow-[0_1px_2px_rgba(28,25,23,.04),0_1px_3px_rgba(28,25,23,.06)]">
+                        <div class="px-4 py-3 border-b border-[#F1EFEC] text-[13.5px] font-semibold text-[#1C1917]">At a glance</div>
+                        <div class="p-4">
+                            <div class="grid grid-cols-2 gap-3">
+                                <div class="border border-[#EAE8E4] rounded-[10px] px-3.5 py-3">
+                                    <div class="text-[24px] font-bold tracking-[-0.02em] text-[#1C1917] tabular-nums">{{ overview.stats.active_tables }}</div>
+                                    <div class="text-[11.5px] text-[#78716C] mt-0.5">active tables</div>
+                                </div>
+                                <div class="border border-[#EAE8E4] rounded-[10px] px-3.5 py-3">
+                                    <div class="text-[24px] font-bold tracking-[-0.02em] text-[#1C1917] tabular-nums">{{ overview.stats.total_columns }}</div>
+                                    <div class="text-[11.5px] text-[#78716C] mt-0.5">columns</div>
+                                </div>
                             </div>
-                            <div class="bg-white border border-[#E9E0D3] rounded-xl px-3 py-2">
-                                <div class="text-xl font-bold text-[#211B14]" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ overview.stats.total_columns }}</div>
-                                <div class="text-[11px] text-[#6b6b6b]">columns</div>
+
+                            <!-- Agent readiness — computed only from data already fetched -->
+                            <div v-if="readiness !== null" class="mt-3.5">
+                                <div class="flex items-baseline justify-between mb-1.5">
+                                    <span class="text-[12.5px] text-[#78716C]">Agent readiness</span>
+                                    <span class="text-[15px] font-bold text-[#15803D] tabular-nums">{{ readiness }}<span class="text-[11px] font-medium text-[#A8A29E]">/100</span></span>
+                                </div>
+                                <div class="h-[7px] rounded bg-[#F1EFEC] overflow-hidden">
+                                    <div class="h-full bg-[#C2541E]" :style="{ width: readiness + '%' }"></div>
+                                </div>
+                                <div class="text-[11.5px] text-[#78716C] mt-1.5">
+                                    {{ readinessDescribed.described }}/{{ readinessDescribed.total }} tables described<template v-if="overview.joins.length"> · joins mapped</template><template v-if="starterList.length"> · starters ready</template>
+                                </div>
+                            </div>
+
+                            <div class="flex justify-between items-center pt-3 mt-1 border-t border-[#F1EFEC] text-[13px]">
+                                <span class="text-[#78716C]">Connected</span>
+                                <span class="text-[#1C1917]">{{ overview.stats.connections }} {{ overview.stats.connections === 1 ? 'connection' : 'connections' }}</span>
                             </div>
                         </div>
-                        <div class="flex justify-between items-center py-1.5 text-xs text-[#3a332a]">
-                            <span>Connected</span>
-                            <span class="text-[#6b6b6b]">{{ overview.stats.connections }} {{ overview.stats.connections === 1 ? 'connection' : 'connections' }}</span>
+                    </div>
+
+                    <!-- Start a report (launcher moved here — manage-not-chat) -->
+                    <div class="bg-white border border-[#EAE8E4] rounded-xl shadow-[0_1px_2px_rgba(28,25,23,.04),0_1px_3px_rgba(28,25,23,.06)]">
+                        <div class="px-4 py-3 border-b border-[#F1EFEC] flex items-center gap-2 text-[13.5px] font-semibold text-[#1C1917]">
+                            Start a report
+                            <button v-if="useCan('update_data_source')" @click="openEditStarters" class="ml-auto text-[11px] font-medium text-[#C2541E] hover:underline">{{ $t('dataSource.edit') }}</button>
+                        </div>
+                        <div class="p-4">
+                            <!-- free-text launcher -->
+                            <div class="flex gap-2 items-center bg-white border border-[#EAE8E4] rounded-[10px] pl-3 pr-1.5 py-1.5 mb-3">
+                                <input
+                                    v-model="launchText"
+                                    type="text"
+                                    placeholder="Ask this agent…"
+                                    class="flex-1 min-w-0 text-[13px] bg-transparent outline-none text-[#1C1917] placeholder:text-[#A8A29E]"
+                                    @keydown.enter="launchReport(launchText)"
+                                />
+                                <button
+                                    :disabled="launching || !launchText.trim()"
+                                    @click="launchReport(launchText)"
+                                    class="shrink-0 text-[12px] font-medium px-2.5 py-1.5 bg-[#C2541E] text-white rounded-lg hover:bg-[#A8330F] transition-colors disabled:opacity-50"
+                                >→</button>
+                            </div>
+                            <!-- starter chips -->
+                            <div v-if="starterList.length" class="flex flex-col gap-2">
+                                <button
+                                    v-for="(starter, idx) in starterList"
+                                    :key="idx"
+                                    @click="launchReport(starterPrompt(starter))"
+                                    class="flex items-center justify-between gap-2 text-left border border-[#EAE8E4] rounded-[10px] px-3 py-2 text-[12.5px] text-[#44403C] hover:border-[#C2541E] hover:text-[#C2541E] transition-colors"
+                                >
+                                    <span class="truncate">{{ starter.split('\n')[0] }}</span>
+                                    <span class="text-[#C2541E] shrink-0">→</span>
+                                </button>
+                            </div>
+                            <div class="flex items-start gap-2 mt-3 text-[12px] text-[#A8A29E] bg-[#F1EFEC] rounded-lg px-3 py-2 leading-snug">
+                                <span class="shrink-0">↗</span>
+                                <span>Opens a new report — this page is for managing the agent, not chatting.</span>
+                            </div>
                         </div>
                     </div>
 
                     <!-- View-only (only if present) -->
-                    <div v-if="overview.view_only.length" class="bg-[#FBFAF6] border border-[#E9E0D3] rounded-2xl p-3.5">
-                        <div class="text-sm font-semibold text-[#1f2328] mb-2" style="font-family: 'Spectral', ui-serif, Georgia, serif">View-only</div>
-                        <div
-                            v-for="(v, idx) in overview.view_only"
-                            :key="idx"
-                            class="flex justify-between items-center py-1.5 text-xs text-[#3a332a] border-b border-[#F2ECE1] last:border-0"
-                        >
-                            <span class="truncate">{{ v.name }}</span>
-                            <span class="shrink-0 ml-2 text-[10px] font-medium bg-[#FBF3E2] text-[#8a6d3b] border border-[#ECDCBB] px-1.5 py-0.5 rounded">view-only</span>
+                    <div v-if="overview.view_only.length" class="bg-white border border-[#EAE8E4] rounded-xl shadow-[0_1px_2px_rgba(28,25,23,.04),0_1px_3px_rgba(28,25,23,.06)]">
+                        <div class="px-4 py-3 border-b border-[#F1EFEC] text-[13.5px] font-semibold text-[#1C1917]">View-only</div>
+                        <div class="p-4 pt-1">
+                            <div
+                                v-for="(v, idx) in overview.view_only"
+                                :key="idx"
+                                class="flex justify-between items-center py-2 text-[12.5px] text-[#44403C] border-b border-[#F1EFEC] last:border-0"
+                            >
+                                <span class="truncate">{{ v.name }}</span>
+                                <span class="shrink-0 ml-2 text-[10px] font-semibold text-[#B45309] bg-[#FBF0DD] px-1.5 py-0.5 rounded-md">view-only</span>
+                            </div>
                         </div>
                     </div>
 
                     <!-- Guiding instruction CTA -->
-                    <div class="bg-[#FBFAF6] border border-[#E9E0D3] rounded-2xl p-3.5">
-                        <div class="text-sm font-semibold text-[#1f2328] mb-2" style="font-family: 'Spectral', ui-serif, Georgia, serif">Guiding instruction</div>
+                    <div class="bg-white border border-[#EAE8E4] rounded-xl shadow-[0_1px_2px_rgba(28,25,23,.04),0_1px_3px_rgba(28,25,23,.06)] p-4">
+                        <div class="text-[13.5px] font-semibold text-[#1C1917] mb-2">Guiding instruction</div>
                         <div v-if="dataSource?.primary_instruction" class="text-xs text-[#2F6F4F] flex items-center gap-1.5">
                             <UIcon name="heroicons-check-circle" class="w-4 h-4" />
                             instruction set
@@ -388,15 +464,92 @@ const availableMeta = ref<any | null>(null)
 const showEditModal = ref(false)
 
 // --- Overview endpoint (NEW; degrades gracefully when flag OFF → returns {}) ---
+type OverviewTable = {
+    name: string
+    column_count: number
+    row_count: number
+    entity_like: boolean
+    centrality?: number
+    purpose: string | null
+    metadata_json?: { classification?: { audience?: string; role?: string } | null } | null
+}
 const overview = ref<{
     stats: { active_tables: number; total_columns: number; connections: number }
-    tables: { name: string; column_count: number; row_count: number; entity_like: boolean; centrality?: number; purpose: string | null }[]
+    tables: OverviewTable[]
     joins: { from_table: string; from_column: string; to_table: string; to_column: string }[]
     view_only: { name: string }[]
 }>({ stats: { active_tables: 0, total_columns: 0, connections: 0 }, tables: [], joins: [], view_only: [] })
 const hasOverview = ref(false)
+
+// Live sync phase from AgentSyncLog, so the status strip is HONEST: never show a
+// green "ready" while a sync is still running or when 0 tables were kept.
+const syncPhase = ref<string>('')
+const syncActive = computed(
+    () => !!syncPhase.value && !['done', 'error', 'idle'].includes(syncPhase.value),
+)
+function onSyncPhase(p: string) {
+    syncPhase.value = p || ''
+    // A finished sync changed the kept-table set → refresh the overview once so the
+    // strip + cards reflect the real result instead of the pre-sync snapshot.
+    if (p === 'done') { try { fetchOverview() } catch (_e) {} }
+}
 const TABLE_CAP = 8
 const visibleTables = computed(() => overview.value.tables.slice(0, TABLE_CAP))
+
+// --- Restyle helpers (grouping + readiness) — use ONLY data already fetched ---
+
+// A relevance badge from the table's classification metadata; null when absent (no badge).
+function tableClassification(tbl: OverviewTable): { audience: string; role: string } | null {
+    const c = tbl?.metadata_json?.classification
+    if (!c || !c.audience) return null
+    return { audience: String(c.audience), role: String(c.role || '') }
+}
+// audience → badge colour bucket (business green / admin amber / system gray)
+function badgeTone(audience: string): 'biz' | 'admin' | 'sys' {
+    const a = (audience || '').toLowerCase()
+    if (a === 'business') return 'biz'
+    if (a === 'admin') return 'admin'
+    return 'sys'
+}
+
+// The overview table name is "<dataset>/<table>" — group the capped visible tables by dataset.
+const groupedTables = computed(() => {
+    const groups: { dataset: string; tables: OverviewTable[] }[] = []
+    const byName: Record<string, OverviewTable[]> = {}
+    for (const tbl of visibleTables.value) {
+        const slash = tbl.name.indexOf('/')
+        const dataset = slash > 0 ? tbl.name.slice(0, slash) : ''
+        if (!byName[dataset]) { byName[dataset] = []; groups.push({ dataset, tables: byName[dataset] }) }
+        byName[dataset].push(tbl)
+    }
+    return groups
+})
+// Show just the table part ("<dataset>/<table>" → "<table>") in grouped rows.
+function shortTableName(name: string): string {
+    const slash = name.indexOf('/')
+    return slash > 0 ? name.slice(slash + 1) : name
+}
+
+// Agent readiness — real fraction of curated tables that carry a purpose/description,
+// nudged by whether joins + conversation starters exist. All inputs already fetched.
+const readiness = computed<number | null>(() => {
+    const tables = overview.value.tables
+    if (!tables.length) return null
+    const described = tables.filter(t => (t.purpose || '').trim().length > 0).length
+    const describedFrac = described / tables.length            // 0..1
+    const hasJoins = overview.value.joins.length > 0 ? 1 : 0
+    const hasStarters = (starterList.value?.length || 0) > 0 ? 1 : 0
+    // weighted: 70% described, 15% joins present, 15% starters present
+    const score = describedFrac * 0.7 + hasJoins * 0.15 + hasStarters * 0.15
+    return Math.round(score * 100)
+})
+const readinessDescribed = computed(() => {
+    const tables = overview.value.tables
+    return {
+        described: tables.filter(t => (t.purpose || '').trim().length > 0).length,
+        total: tables.length,
+    }
+})
 
 async function fetchOverview() {
     const id = route.params.id as string
@@ -412,7 +565,7 @@ async function fetchOverview() {
                     total_columns: d.stats.total_columns ?? 0,
                     connections: d.stats.connections ?? 0,
                 },
-                tables: Array.isArray(d.tables) ? d.tables : [],
+                tables: Array.isArray(d.tables) ? (d.tables as OverviewTable[]) : [],
                 joins: Array.isArray(d.joins) ? d.joins : [],
                 view_only: Array.isArray(d.view_only) ? d.view_only : [],
             }

@@ -10,6 +10,10 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   ssr: false,
 
+  // Static app-shell skeleton injected into the initial HTML, shown BEFORE the
+  // SPA bundle hydrates — kills the blank-white flash on first / cold-cache load.
+  spaLoadingTemplate: 'app/spa-loading-template.html',
+
   // Page route transition DISABLED. The global { name:'page', mode:'out-in' }
   // cross-fade stranded the entering page at opacity:0 on the FIRST SPA nav
   // (blank screen, worked on 2nd click) — same strand bug the report page had

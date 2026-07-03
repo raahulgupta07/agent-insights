@@ -916,6 +916,37 @@ Do not use generic placeholders like "value" unless that is the actual column na
             return resolved, warnings
 
     @staticmethod
+    def _pbi_user_message(text: str):
+        """Classify a (already JSON-stripped) Power BI error string into a clean
+        user-facing message + category + whether it's terminal (no point retrying).
+        Returns (user_message, category, terminal) or (None, None, False) if the text
+        isn't a recognizable Power BI error. Never raises.
+        """
+        try:
+            low = (text or "").lower()
+            if "dax query failed" not in low and "powerbi" not in low and "cannot find table" not in low \
+               and "build permission" not in low and "single value" not in low:
+                return (None, None, False)
+            if "build permission" in low or ("does not have" in low and "permission" in low) or "forbidden" in low:
+                return ("You can see this report but don't have permission to query its data. "
+                        "Ask the data owner for Build access to this Power BI model.", "no_access", True)
+            if "unauthorized" in low or ("token" in low and "expired" in low) or "not signed in" in low:
+                return ("You're not signed in to Power BI or your session expired — please reconnect your account.",
+                        "auth", True)
+            if "cannot find table" in low or ("cannot find" in low and "table" in low):
+                return ("I couldn't find that table in the model — it may have been renamed, "
+                        "or you may not have access to it.", "not_found", False)
+            if "more than" in low and ("rows" in low or "result table" in low):
+                return ("That question returns too much data to show at once — "
+                        "I'll summarise it or you can add a filter.", "too_much_data", False)
+            if "single value" in low and "cannot be determined" in low:
+                return (None, "invalid_dax", False)  # retry can fix this — no terminal user message
+            return ("I couldn't build a reliable query for that. Try rephrasing — for example, "
+                    "name the exact metric, table, or time range.", "invalid_dax", False)
+        except Exception:  # noqa: BLE001
+            return (None, None, False)
+
+    @staticmethod
     def _summarize_errors(errors) -> dict:
         """Summarize retry errors for the planner observation.
 
@@ -946,6 +977,15 @@ Do not use generic placeholders like "value" unless that is the actual column na
         if summary_line or detail:
             payload["error_detail"] = detail or summary_line
             payload["error_message"] = summary_line or detail[:300]
+        # Power BI: attach a clean user-facing message + category so the final answer
+        # never shows raw DAX/HTTP text. Terminal categories (no access / auth) tell
+        # the planner to stop retrying and just relay the message.
+        um, cat, terminal = CreateDataTool._pbi_user_message(detail or summary_line)
+        if cat:
+            payload["error_category"] = cat
+            payload["terminal"] = bool(terminal)
+            if um:
+                payload["user_message"] = um
         return payload
 
     @property
@@ -1374,6 +1414,16 @@ Do not use generic placeholders like "value" unless that is the actual column na
                 error_observation["error"]["message"] = summary["error_message"]
             if summary.get("error_detail"):
                 error_observation["error"]["detail"] = summary["error_detail"]
+            # Power BI clean messaging: hand the planner a user-facing sentence + a
+            # terminal flag so it relays the message instead of surfacing raw DAX/HTTP
+            # text, and stops retrying on access/auth failures.
+            if summary.get("user_message"):
+                error_observation["error"]["user_message"] = summary["user_message"]
+            if summary.get("error_category"):
+                error_observation["error"]["category"] = summary["error_category"]
+            if summary.get("terminal"):
+                error_observation["error"]["terminal"] = True
+                error_observation["error"]["retryable"] = False
 
             # Surface the DB-level error and failing SQL — these come from the
             # QueryCapturingClientWrapper and are much more actionable for the

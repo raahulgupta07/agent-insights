@@ -96,7 +96,7 @@
                 </UButton>
             </div>
 
-            <div v-else class="border border-gray-200 rounded-lg p-6">
+            <div v-else class="border border-[#EAE8E4] rounded-xl bg-white p-6 shadow-sm">
                 <TablesSelector :ds-id="id" :schema="schemaMode" :can-update="canUpdateDataSource" :show-refresh="true" :show-save="canUpdateDataSource" :show-header="true" :header-title="headerTitle" :header-subtitle="headerSubtitle" :save-label="t('agentPage.tables.save')" :show-stats="true" :item-noun="shapeNoun" @saved="onSaved" />
             </div>
 

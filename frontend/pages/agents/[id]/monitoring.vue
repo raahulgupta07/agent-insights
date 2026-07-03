@@ -9,35 +9,52 @@
                 @period-change="handlePeriodChange"
             />
 
-            <!-- Metric cards -->
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 mt-4">
-                <div class="bg-white p-5 border border-gray-200 rounded-xl">
-                    <div class="text-2xl font-bold text-gray-900">{{ dashboardMetrics?.failed_queries || 0 }}</div>
-                    <div class="text-sm text-gray-500 mt-1">{{ $t('monitoring.diagnosis.cardFailedQueries') }}</div>
+            <!-- Stat tiles -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6 mt-4">
+                <div class="bg-white p-4 border border-[#EAE8E4] rounded-xl shadow-sm">
+                    <div class="text-2xl font-semibold text-[#1C1917] tabular-nums tracking-tight">{{ dashboardMetrics?.total_items || 0 }}</div>
+                    <div class="text-[11.5px] text-[#78716C] mt-0.5">{{ $t('monitoring.diagnosis.cardTotalAgentRuns') }}</div>
                 </div>
-                <div class="bg-white p-5 border border-gray-200 rounded-xl">
-                    <div class="text-2xl font-bold text-gray-900">{{ dashboardMetrics?.negative_feedback || 0 }}</div>
-                    <div class="text-sm text-gray-500 mt-1">{{ $t('monitoring.diagnosis.cardNegativeFeedback') }}</div>
+                <div class="bg-white p-4 border border-[#EAE8E4] rounded-xl shadow-sm">
+                    <div class="text-2xl font-semibold tabular-nums tracking-tight" :class="successRate >= 90 ? 'text-[#15803D]' : 'text-[#1C1917]'">{{ successRateLabel }}</div>
+                    <div class="text-[11.5px] text-[#78716C] mt-0.5">{{ $t('monitoring.diagnosis.statSuccessRate', 'Success rate') }}</div>
                 </div>
-                <div class="bg-white p-5 border border-gray-200 rounded-xl">
-                    <div class="text-2xl font-bold text-gray-900">
+                <div class="bg-white p-4 border border-[#EAE8E4] rounded-xl shadow-sm">
+                    <div class="text-2xl font-semibold text-[#1C1917] tabular-nums tracking-tight">{{ dashboardMetrics?.failed_queries || 0 }}</div>
+                    <div class="text-[11.5px] text-[#78716C] mt-0.5">{{ $t('monitoring.diagnosis.cardFailedQueries') }}</div>
+                </div>
+                <div class="bg-white p-4 border border-[#EAE8E4] rounded-xl shadow-sm">
+                    <div class="text-2xl font-semibold text-[#1C1917] tabular-nums tracking-tight">
                         {{ isJudgeEnabled ? (getInstructionsEffectiveness() + '%') : $t('monitoring.diagnosis.naAbbr') }}
                     </div>
-                    <div class="text-sm text-gray-500 mt-1 flex items-center gap-1">
+                    <div class="text-[11.5px] text-[#78716C] mt-0.5 flex items-center gap-1">
                         {{ $t('monitoring.diagnosis.cardInstructionCoverage') }}
                         <UTooltip :text="isJudgeEnabled ? $t('monitoring.diagnosis.judgeEnabledTooltip') : $t('monitoring.diagnosis.judgeDisabledTooltip')">
-                            <UIcon name="i-heroicons-information-circle" class="w-3.5 h-3.5 text-gray-400" />
+                            <UIcon name="i-heroicons-information-circle" class="w-3.5 h-3.5 text-[#A8A29E]" />
                         </UTooltip>
                     </div>
                 </div>
-                <div class="bg-white p-5 border border-gray-200 rounded-xl">
-                    <div class="text-2xl font-bold text-gray-900">{{ dashboardMetrics?.total_items || 0 }}</div>
-                    <div class="text-sm text-gray-500 mt-1">{{ $t('monitoring.diagnosis.cardTotalAgentRuns') }}</div>
+            </div>
+
+            <!-- Most-used steps (aggregated from real execution step titles) -->
+            <div v-if="mostUsedSteps.length" class="bg-white border border-[#EAE8E4] rounded-xl shadow-sm mb-6 overflow-hidden">
+                <div class="px-4 py-3 border-b border-[#EAE8E4] flex items-center gap-2">
+                    <span class="text-[13.5px] font-semibold text-[#1C1917]">{{ $t('monitoring.diagnosis.mostUsedTables', 'Most-used steps') }}</span>
+                    <span class="ms-auto text-[11.5px] text-[#A8A29E]">{{ $t('monitoring.diagnosis.mostUsedTablesNote', 'across recent runs') }}</span>
+                </div>
+                <div class="px-4 py-2">
+                    <div v-for="s in mostUsedSteps" :key="s.title" class="flex items-center gap-3 py-2.5 border-b border-[#F1EFEC] last:border-b-0">
+                        <span class="font-mono text-[12.5px] text-[#1C1917] truncate" style="flex:0 0 200px" :title="s.title">{{ s.title }}</span>
+                        <div class="flex-1 h-[7px] rounded bg-[#F1EFEC] overflow-hidden">
+                            <div class="h-full rounded bg-[#C2541E]" :style="{ width: (mostUsedMax ? Math.round((s.count / mostUsedMax) * 100) : 0) + '%' }" />
+                        </div>
+                        <span class="text-[12px] text-[#78716C] tabular-nums text-right" style="width:32px">{{ s.count }}</span>
+                    </div>
                 </div>
             </div>
 
             <!-- Filter tabs -->
-            <div class="border-b border-gray-200 mb-4">
+            <div class="border-b border-[#EAE8E4] mb-4">
                 <nav class="-mb-px flex space-x-6">
                     <button
                         v-for="filter in filterOptions"
@@ -69,10 +86,11 @@
             </div>
 
             <!-- Execution table -->
-            <div v-else class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+            <div v-else class="bg-white border border-[#EAE8E4] rounded-xl shadow-sm overflow-hidden">
+                <div class="px-4 py-3 border-b border-[#EAE8E4] text-[13.5px] font-semibold text-[#1C1917]">{{ $t('monitoring.diagnosis.executionsTitle', 'Agent executions') }}</div>
                 <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200">
-                        <thead class="bg-gray-50">
+                    <table class="min-w-full divide-y divide-[#F1EFEC]">
+                        <thead class="bg-[#FAFAF9]">
                             <tr>
                                 <th class="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[280px]">{{ $t('monitoring.diagnosis.colPrompt') }}</th>
                                 <th class="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase tracking-wider">{{ $t('monitoring.diagnosis.colStatus') }}</th>
@@ -229,6 +247,34 @@ const visiblePages = computed(() => {
     for (let i = start; i <= end; i++) pages.push(i)
     return pages
 })
+
+// Success rate derived from real dashboard metrics (total runs vs failed).
+const successRate = computed(() => {
+    const total = Number(dashboardMetrics.value?.total_items || 0)
+    const failed = Number(dashboardMetrics.value?.failed_queries || 0)
+    if (total <= 0) return 0
+    return Math.max(0, Math.min(100, Math.round(((total - failed) / total) * 100)))
+})
+const successRateLabel = computed(() => {
+    if (!dashboardMetrics.value || Number(dashboardMetrics.value?.total_items || 0) <= 0) return t('monitoring.diagnosis.naAbbr')
+    return successRate.value + '%'
+})
+
+// Most-used steps: aggregate real step_titles across the loaded executions.
+const mostUsedSteps = computed(() => {
+    const counts: Record<string, number> = {}
+    for (const item of executionItems.value) {
+        for (const title of (item.step_titles || [])) {
+            if (!title) continue
+            counts[title] = (counts[title] || 0) + 1
+        }
+    }
+    return Object.entries(counts)
+        .map(([title, count]) => ({ title, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 6)
+})
+const mostUsedMax = computed(() => mostUsedSteps.value.reduce((m, s) => Math.max(m, s.count), 0))
 
 function getInstructionsEffectiveness() {
     if (instructionsEffectiveness.value == null) return t('monitoring.diagnosis.naAbbr')

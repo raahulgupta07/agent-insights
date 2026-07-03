@@ -190,6 +190,49 @@ class PowerBIUserClient(PowerBIClient):
         except Exception:  # noqa: BLE001
             return None
 
+    def test_connection(self) -> Dict:
+        """Test the user-sign-in connection via the SAME discovery path the agent
+        actually queries through (My-Workspace + apps + groups) — NOT the base
+        client's service-principal group-scope probe.
+
+        A user's queryable datasets frequently live in "My Workspace" (no group),
+        which the inherited ``test_connection`` never checks (it only probes
+        ``/groups/{ws}/datasets``). That yields a false "none of the datasets are
+        queryable" even though the agent queries them fine. Here we run
+        ``discover_via_reports`` (the exact classification used at sync) and pass
+        when at least one dataset is queryable.
+        """
+        try:
+            self.connect()
+        except Exception as e:  # noqa: BLE001
+            return {"success": False, "message": f"Sign-in failed: {e}", "connectivity": False}
+        try:
+            disc = self.discover_via_reports() or {}
+        except Exception as e:  # noqa: BLE001
+            return {"success": False, "message": f"Connected, but dataset discovery failed: {e}", "connectivity": True}
+        queryable = disc.get("queryable") or []
+        view_only = disc.get("view_only") or []
+        if queryable:
+            return {
+                "success": True,
+                "message": f"Connected to Power BI as this account. {len(queryable)} queryable dataset(s) available.",
+                "datasets": len(queryable),
+            }
+        if view_only:
+            return {
+                "success": False,
+                "message": (
+                    f"Connected, but the {len(view_only)} visible dataset(s) are view-only "
+                    f"(no Build permission). Ask the dataset owner to grant you Build access."
+                ),
+                "connectivity": True,
+            }
+        return {
+            "success": False,
+            "message": "Connected, but no queryable Power BI datasets are shared with this account.",
+            "connectivity": True,
+        }
+
     def _probe_queryable(self, dataset_id: str, workspace_id: Optional[str]) -> str:
         """Probe whether the user can run DAX against a dataset.
 

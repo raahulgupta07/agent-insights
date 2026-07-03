@@ -34,6 +34,55 @@ from app.core.permissions_decorator import requires_permission, requires_resourc
 from app.models.data_source import DataSource
 
 router = APIRouter(tags=["data_sources"])
+
+# ---------------------------------------------------------------------------
+# Overview cache — the agent Overview page recomputes get_data_source_schema
+# (all tables + columns) on EVERY open, which is the whole load cost. The result
+# only changes on a sync, so cache it per (data_source, user) with a short TTL and
+# bust it explicitly when a sync completes. Module-level (per worker); fail-open —
+# any cache error just recomputes. Keyed by user because per-user connector
+# overlays differ between users.
+# ---------------------------------------------------------------------------
+import time as _time
+_OVERVIEW_CACHE: dict = {}
+_OVERVIEW_TTL = 300.0
+_OVERVIEW_MAX = 512
+
+
+def _overview_cache_get(ds_id: str, user_id: str):
+    try:
+        ent = _OVERVIEW_CACHE.get((ds_id, user_id))
+        if not ent:
+            return None
+        exp, payload = ent
+        if exp < _time.monotonic():
+            _OVERVIEW_CACHE.pop((ds_id, user_id), None)
+            return None
+        return payload
+    except Exception:
+        return None
+
+
+def _overview_cache_put(ds_id: str, user_id: str, payload: dict) -> None:
+    try:
+        if len(_OVERVIEW_CACHE) >= _OVERVIEW_MAX:
+            now = _time.monotonic()
+            for k in [k for k, (e, _) in _OVERVIEW_CACHE.items() if e < now]:
+                _OVERVIEW_CACHE.pop(k, None)
+            while len(_OVERVIEW_CACHE) >= _OVERVIEW_MAX:
+                _OVERVIEW_CACHE.pop(next(iter(_OVERVIEW_CACHE)), None)
+        _OVERVIEW_CACHE[(ds_id, user_id)] = (_time.monotonic() + _OVERVIEW_TTL, payload)
+    except Exception:
+        pass
+
+
+def invalidate_overview_cache(ds_id: str) -> None:
+    """Drop all cached overviews for a data source (any user). Call on sync."""
+    try:
+        for k in [k for k in _OVERVIEW_CACHE if k[0] == str(ds_id)]:
+            _OVERVIEW_CACHE.pop(k, None)
+    except Exception:
+        pass
 data_source_service = DataSourceService()
 
 @router.get("/available_data_sources", response_model=list[dict])
@@ -248,13 +297,17 @@ async def connector_connect(
 async def connector_sync_now(
     data_source_id: str,
     background_tasks: BackgroundTasks,
+    learn: bool = True,
     current_user: User = Depends(current_user),
     db: AsyncSession = Depends(get_async_db),
     organization: Organization = Depends(get_current_organization),
 ):
     """Journey v2: start the clone's sync AFTER the user has confirmed identity +
     consented. Owner-gated (only the user who owns the private clone). Schedules
-    sync_clone_bg (discover → seed → learn) with the live pollable sync log."""
+    sync_clone_bg (discover → seed → classify → learn) with the live pollable sync
+    log. ``learn=false`` = re-discover only (refresh schema + relevance, skip the
+    LLM re-training) — the cheap "Re-discover only" caret action. Re-training is
+    also diff-gated inside sync_clone_bg, so a no-change sync never calls the LLM."""
     ds = (
         await db.execute(
             select(DataSource)
@@ -279,8 +332,10 @@ async def connector_sync_now(
         data_source_id,
         str(organization.id),
         str(current_user.id),
+        learn,
+        "manual",
     )
-    return {"status": "syncing", "data_source_id": data_source_id}
+    return {"status": "syncing", "data_source_id": data_source_id, "learn": learn}
 
 
 @router.get("/data_sources/{data_source_id}/sync-status", response_model=dict)
@@ -295,6 +350,60 @@ async def connector_sync_status(
     updated_at}. Lightweight (single-row read); cross-worker safe (log in DB)."""
     run = await connector_sync.get_run(db, data_source_id)
     return run or {}
+
+
+async def _assert_connector_owner(db, data_source_id: str, organization, current_user):
+    """Load the clone + owner-gate (only the connecting user or a superuser)."""
+    ds = (
+        await db.execute(
+            select(DataSource)
+            .options(selectinload(DataSource.connections))
+            .where(DataSource.id == data_source_id,
+                   DataSource.organization_id == str(organization.id),
+                   DataSource.deleted_at.is_(None))
+        )
+    ).scalars().first()
+    if ds is None:
+        raise HTTPException(status_code=404, detail="Data agent not found")
+    owner_ok = any(
+        str(getattr(c, "owner_user_id", "") or "") == str(current_user.id)
+        for c in (ds.connections or [])
+    )
+    if not owner_ok and not getattr(current_user, "is_superuser", False):
+        raise HTTPException(status_code=403, detail="Only the connecting user can manage this agent")
+    return ds
+
+
+@router.get("/connectors/{data_source_id}/auto_sync", response_model=dict)
+async def get_connector_auto_sync(
+    data_source_id: str,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Per-agent scheduled auto-sync config: {enabled, interval_hours, last_sync_at}."""
+    from app.services.scheduled_connector_sync import get_config
+    return await get_config(db, str(organization.id), data_source_id)
+
+
+@router.put("/connectors/{data_source_id}/auto_sync", response_model=dict)
+async def set_connector_auto_sync(
+    data_source_id: str,
+    payload: dict = Body(...),
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Enable/disable scheduled auto-sync for this agent + set the interval (hours,
+    clamped 1..168). Owner-gated. Re-training on each run is diff-gated, so an
+    unchanged schema costs nothing."""
+    await _assert_connector_owner(db, data_source_id, organization, current_user)
+    from app.services.scheduled_connector_sync import set_config
+    return await set_config(
+        db, str(organization.id), data_source_id,
+        bool(payload.get("enabled")),
+        int(payload.get("interval_hours") or 24),
+    )
 
 
 @router.delete("/data_sources/{data_source_id}")
@@ -423,6 +532,13 @@ async def get_data_source_overview(
 
     if not _journey_v2():
         return {}
+
+    # Serve a cached overview if fresh (the whole cost is recomputing the schema).
+    _uid = str(getattr(current_user, "id", "") or "")
+    _cached = _overview_cache_get(str(data_source_id), _uid)
+    if _cached is not None:
+        return _cached
+    _t0 = _time.monotonic()
 
     empty = {
         "stats": {"active_tables": 0, "total_columns": 0, "connections": 0},
@@ -566,7 +682,7 @@ async def get_data_source_overview(
     # so we do NOT — empty is a correct, FE-handled answer.
     view_only_out = []
 
-    return {
+    payload = {
         "stats": {
             "active_tables": len(active),
             "total_columns": total_columns,
@@ -576,6 +692,10 @@ async def get_data_source_overview(
         "joins": joins_out,
         "view_only": view_only_out,
     }
+    _overview_cache_put(str(data_source_id), _uid, payload)
+    _log.info("overview: built ds=%s in %.0fms tables=%d (cached %.0fs)",
+              data_source_id, (_time.monotonic() - _t0) * 1000.0, len(active), _OVERVIEW_TTL)
+    return payload
 
 
 @router.put("/data_sources/{data_source_id}/update_schema", response_model=DataSourceSchema)

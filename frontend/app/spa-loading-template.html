@@ -1,0 +1,71 @@
+<!-- Static app-shell skeleton shown BEFORE the Nuxt SPA bundle hydrates (ssr:false).
+     Kills the blank-white flash on first load / cold cache — YouTube-style shimmer.
+     Pure inline HTML+CSS, no JS, no external assets. Nuxt auto-injects this. -->
+<style>
+  #cag-spa-shell { position: fixed; inset: 0; background: #FAFAF9; z-index: 1;
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif; }
+  .cag-spa-top { height: 56px; background: #fff; border-bottom: 1px solid #EAE8E4;
+    display: flex; align-items: center; gap: 20px; padding: 0 22px; }
+  .cag-spa-logo { width: 26px; height: 26px; border-radius: 7px;
+    background: conic-gradient(from 210deg, #C2541E, #E8A87C, #C2541E); }
+  .cag-spa-body { display: flex; height: calc(100vh - 56px); }
+  .cag-spa-rail { width: 224px; background: #fff; border-right: 1px solid #EAE8E4;
+    padding: 18px 14px; box-sizing: border-box; }
+  .cag-spa-main { flex: 1; margin: 8px; background: #fff; border: 1px solid #EAE8E4;
+    border-radius: 12px; overflow: hidden; }
+  .cag-spa-mhead { padding: 18px 28px; border-bottom: 1px solid #F1EFEC;
+    display: flex; align-items: center; justify-content: space-between; }
+  .cag-spa-mbody { padding: 24px; display: flex; gap: 20px; }
+  .sk { background: #EEECE8; position: relative; overflow: hidden; border-radius: 6px; }
+  .sk::after { content: ''; position: absolute; inset: 0; transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.65), transparent);
+    animation: cag-spa-sh 1.4s ease-in-out infinite; }
+  @keyframes cag-spa-sh { 100% { transform: translateX(100%); } }
+</style>
+<div id="cag-spa-shell">
+  <div class="cag-spa-top">
+    <div class="cag-spa-logo"></div>
+    <div class="sk" style="width:120px;height:14px"></div>
+    <div class="sk" style="width:90px;height:12px"></div>
+    <div class="sk" style="width:70px;height:12px"></div>
+    <div class="sk" style="width:80px;height:12px"></div>
+    <div style="margin-left:auto" class="sk" style="width:120px;height:30px;border-radius:8px"></div>
+  </div>
+  <div class="cag-spa-body">
+    <div class="cag-spa-rail">
+      <div class="sk" style="width:72px;height:12px;margin-bottom:18px"></div>
+      <div style="display:flex;gap:10px;align-items:center;padding-bottom:16px;border-bottom:1px solid #F1EFEC;margin-bottom:14px">
+        <div class="sk" style="width:34px;height:34px;border-radius:9px"></div>
+        <div style="flex:1">
+          <div class="sk" style="width:80%;height:11px;margin-bottom:6px"></div>
+          <div class="sk" style="width:48%;height:9px"></div>
+        </div>
+      </div>
+      <div class="sk" style="width:70%;height:13px;margin:9px 0"></div>
+      <div class="sk" style="width:48%;height:13px;margin:9px 0"></div>
+      <div class="sk" style="width:72%;height:13px;margin:9px 0"></div>
+      <div class="sk" style="width:38%;height:9px;margin:16px 0 8px"></div>
+      <div class="sk" style="width:66%;height:13px;margin:9px 0"></div>
+      <div class="sk" style="width:50%;height:13px;margin:9px 0"></div>
+    </div>
+    <div class="cag-spa-main">
+      <div class="cag-spa-mhead">
+        <div class="sk" style="width:340px;height:14px"></div>
+        <div style="display:flex;gap:12px">
+          <div class="sk" style="width:88px;height:30px;border-radius:8px"></div>
+          <div class="sk" style="width:112px;height:30px;border-radius:8px"></div>
+        </div>
+      </div>
+      <div class="cag-spa-mbody">
+        <div style="flex:1;display:flex;flex-direction:column;gap:16px">
+          <div class="sk" style="height:120px;border-radius:12px"></div>
+          <div class="sk" style="height:240px;border-radius:12px"></div>
+        </div>
+        <div style="width:300px;display:flex;flex-direction:column;gap:16px">
+          <div class="sk" style="height:160px;border-radius:12px"></div>
+          <div class="sk" style="height:120px;border-radius:12px"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

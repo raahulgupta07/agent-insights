@@ -130,6 +130,33 @@ def register_join_mine_jobs(scheduler) -> bool:
         return False
 
 
+def register_connector_sync_jobs(scheduler) -> bool:
+    """Register the connector auto-sync sweep (every 15 min).
+
+    Registered UNCONDITIONALLY (not flag-gated at registration): the sweep
+    self-gates on ``flags.CONNECTOR_AUTO_SYNC`` + per-agent config, so it is a
+    cheap no-op when the feature is off and can be enabled at runtime via a DB
+    override without a restart. Leader-gated by the caller (main.py lifespan).
+    ``sweep_due_syncs`` opens its own session and never raises. Never raises here.
+    """
+    try:
+        from app.services.scheduled_connector_sync import sweep_due_syncs
+        scheduler.add_job(
+            sweep_due_syncs,
+            trigger="interval",
+            minutes=15,
+            id="connector_auto_sync_sweep",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
+        logger.info("Scheduled job: connector_auto_sync_sweep @ every 15m")
+        return True
+    except Exception as e:  # never let registration crash scheduler startup
+        logger.error(f"Failed to schedule connector_auto_sync_sweep job: {e}")
+        return False
+
+
 def register_skill_optimize_jobs(scheduler) -> bool:
     """Phase 7: register the nightly skill-optimize job (flag + leader gated).
 

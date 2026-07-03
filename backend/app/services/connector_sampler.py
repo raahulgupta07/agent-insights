@@ -39,7 +39,12 @@ logger = logging.getLogger(__name__)
 # Don't put these values in a prompt or the DB — sample presence only.
 _PII_COL = re.compile(
     r"passport|identity|identific|\bnric\b|\bnrc\b|national.?id|\bssn\b|"
-    r"birth|dob|date.?of.?birth|phone|mobile|email|address|tax.?id|account.?number",
+    r"birth|dob|date.?of.?birth|phone|mobile|\bmsisdn\b|e[-_ ]?mail|\bmail\b|address|tax.?id|"
+    r"account.?number|account.?no\b|"
+    # person names only — NOT bare "name" (would wrongly hide Brand Name / Shop Name /
+    # Month Name / project name, which are useful dimensions)
+    r"full.?name|first.?name|last.?name|staff.?name|cashier.?name|cashier|"
+    r"employee.?name|customer.?name|person.?name|contact.?name|\bcontact\b",
     re.I,
 )
 

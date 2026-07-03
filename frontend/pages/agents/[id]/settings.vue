@@ -1,74 +1,117 @@
 <template>
-    <div class="py-6">
+    <div class="py-6" style="background:#FAFAF9">
         <!-- Hide content when there's a fetch error (layout shows error state) -->
         <div v-if="injectedFetchError" />
-        <div v-else class="border border-gray-200 rounded-xl p-6 bg-white">
-            <div v-if="!ready" class="inline-flex items-center text-gray-500 text-xs">
+        <div v-else>
+            <div v-if="!ready" class="inline-flex items-center text-[#78716C] text-xs">
                 <Spinner class="w-4 h-4 me-2" />
                 Loading settings...
             </div>
 
-            <div v-else class="space-y-8">
-                <!-- Agent Name -->
-                <div class="space-y-2">
-                    <label class="block text-sm font-medium text-gray-800">Agent name</label>
-                    <div class="flex items-center gap-2">
-                        <input
-                            v-model="form.name"
-                            type="text"
-                            :disabled="!canManageDs"
-                            class="border border-gray-200 rounded-lg px-3 py-2 w-full max-w-md h-9 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8C9B5] disabled:bg-gray-50 disabled:text-gray-500"
-                            placeholder="Name"
-                        />
-                        <button
-                            v-if="canManageDs"
-                            @click="saveName"
-                            :disabled="saving.name || form.name.trim() === '' || form.name === original.name"
-                            :class="['px-3 py-1.5 text-xs rounded-lg border transition-colors', (saving.name || form.name.trim() === '' || form.name === original.name) ? 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed' : 'border-gray-300 text-gray-700 hover:bg-gray-50']"
-                        >
-                            {{ saving.name ? 'Saving…' : 'Save' }}
-                        </button>
+            <div v-else class="max-w-[720px] space-y-4">
+                <!-- Page heading -->
+                <div class="mb-1">
+                    <h1 class="text-[19px] font-semibold tracking-tight text-[#1C1917]">Settings</h1>
+                    <div class="text-[13.5px] text-[#78716C] mt-0.5">Identity, access, members and lifecycle.</div>
+                </div>
+
+                <!-- ===== Identity card (Agent name) ===== -->
+                <div class="bg-white border border-[#EAE8E4] rounded-xl" style="box-shadow:0 1px 2px rgba(28,25,23,.04),0 1px 3px rgba(28,25,23,.06)">
+                    <div class="px-4 py-3.5 border-b border-[#F1EFEC] font-semibold text-[13.5px] text-[#1C1917]">Agent name</div>
+                    <div class="p-4">
+                        <div class="flex items-center gap-2">
+                            <input
+                                v-model="form.name"
+                                type="text"
+                                :disabled="!canManageDs"
+                                class="border border-[#EAE8E4] rounded-lg px-3 py-2 w-full max-w-md h-9 text-sm text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-[#E8C9B5] disabled:bg-[#FAFAF9] disabled:text-[#78716C]"
+                                placeholder="Name"
+                            />
+                            <button
+                                v-if="canManageDs"
+                                @click="saveName"
+                                :disabled="saving.name || form.name.trim() === '' || form.name === original.name"
+                                :class="['px-3 py-1.5 text-xs rounded-lg border transition-colors', (saving.name || form.name.trim() === '' || form.name === original.name) ? 'border-[#EAE8E4] text-[#A8A29E] bg-[#FAFAF9] cursor-not-allowed' : 'border-[#EAE8E4] text-[#1C1917] hover:bg-[#F1EFEC]']"
+                            >
+                                {{ saving.name ? 'Saving…' : 'Save' }}
+                            </button>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Access -->
-                <div class="space-y-2">
-                    <label class="block text-sm font-medium text-gray-800">Access</label>
-                    <div class="flex items-center space-x-3">
-                        <UToggle v-model="form.isPublic" @update:model-value="onTogglePublic" :disabled="!canManageDs" />
-                        <span class="text-xs text-gray-500">
-                            Public access allows all organization members to use this agent.
-                        </span>
+                <!-- ===== Access card ===== -->
+                <div class="bg-white border border-[#EAE8E4] rounded-xl" style="box-shadow:0 1px 2px rgba(28,25,23,.04),0 1px 3px rgba(28,25,23,.06)">
+                    <div class="px-4 py-3.5 border-b border-[#F1EFEC] font-semibold text-[13.5px] text-[#1C1917]">Access</div>
+                    <div class="p-4">
+                        <div class="flex items-center justify-between gap-3">
+                            <div class="min-w-0">
+                                <div class="font-semibold text-[13.5px] text-[#1C1917]">Public access</div>
+                                <div class="text-xs text-[#78716C] mt-0.5">Public access allows all organization members to use this agent.</div>
+                            </div>
+                            <UToggle v-model="form.isPublic" @update:model-value="onTogglePublic" :disabled="!canManageDs" />
+                        </div>
                     </div>
                 </div>
 
-                <!-- Members Section (only shown when not public) -->
-                <div v-if="!form.isPublic" class="space-y-4">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <h3 class="text-sm font-medium text-gray-800">Members</h3>
-                            <p class="text-xs text-gray-500 mt-0.5">Everyone listed here can query this agent. The role below only grants extra management rights — use <span class="font-medium">Remove</span> to revoke access.</p>
+                <!-- ===== Auto-sync card (connector clones only) ===== -->
+                <div v-if="isClone" class="bg-white border border-[#EAE8E4] rounded-xl" style="box-shadow:0 1px 2px rgba(28,25,23,.04),0 1px 3px rgba(28,25,23,.06)">
+                    <div class="px-4 py-3.5 border-b border-[#F1EFEC] font-semibold text-[13.5px] text-[#1C1917]">Scheduled auto-sync</div>
+                    <div class="p-4 space-y-4">
+                        <div class="flex items-center justify-between gap-3">
+                            <div class="min-w-0">
+                                <div class="font-semibold text-[13.5px] text-[#1C1917]">Auto-sync this agent</div>
+                                <div class="text-xs text-[#78716C] mt-0.5">Periodically re-discover new reports/datasets and re-train. Re-training only runs when the schema actually changed — no cost otherwise.</div>
+                            </div>
+                            <UToggle v-model="autoSync.enabled" @update:model-value="saveAutoSync" :disabled="!canManageDs || autoSyncSaving" />
+                        </div>
+                        <div v-if="autoSync.enabled" class="flex items-center justify-between gap-3">
+                            <div class="text-[13px] text-[#44403C]">Check every</div>
+                            <select
+                                v-model.number="autoSync.interval_hours"
+                                @change="saveAutoSync"
+                                :disabled="!canManageDs || autoSyncSaving"
+                                class="border border-[#EAE8E4] rounded-lg px-2.5 py-1.5 text-sm text-[#1C1917] bg-white focus:outline-none focus:border-[#C2541E]"
+                            >
+                                <option :value="1">1 hour</option>
+                                <option :value="6">6 hours</option>
+                                <option :value="12">12 hours</option>
+                                <option :value="24">Daily</option>
+                                <option :value="168">Weekly</option>
+                            </select>
+                        </div>
+                        <div v-if="autoSync.enabled && autoSync.last_sync_at" class="text-[11.5px] text-[#A8A29E]">
+                            Last auto-synced {{ new Date(autoSync.last_sync_at).toLocaleString() }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ===== Members card (only shown when not public) ===== -->
+                <div v-if="!form.isPublic" class="bg-white border border-[#EAE8E4] rounded-xl" style="box-shadow:0 1px 2px rgba(28,25,23,.04),0 1px 3px rgba(28,25,23,.06)">
+                    <div class="px-4 py-3.5 border-b border-[#F1EFEC] flex items-center justify-between gap-3">
+                        <div class="min-w-0">
+                            <div class="font-semibold text-[13.5px] text-[#1C1917]">Members</div>
+                            <p class="text-xs text-[#78716C] mt-0.5">Everyone listed here can query this agent. The role below only grants extra management rights — use <span class="font-medium">Remove</span> to revoke access.</p>
                         </div>
                         <button
                             v-if="canManageDsMembers"
                             @click="openAdd"
-                            class="px-2.5 py-1.5 text-xs bg-[#C2541E] text-white rounded-lg hover:bg-[#A8330F]"
+                            class="px-2.5 py-1.5 text-xs bg-[#C2541E] text-white rounded-lg hover:bg-[#A8330F] flex-none"
                         >
                             Add member
                         </button>
                     </div>
 
-                    <div class="border border-gray-200 rounded-lg shadow-sm">
-                        <table class="min-w-full divide-y divide-gray-200">
-                            <thead class="bg-gray-50">
+                    <div class="p-2">
+                        <table class="min-w-full divide-y divide-[#F1EFEC]">
+                            <thead>
                                 <tr>
-                                    <th class="px-4 py-2 text-start text-xs font-medium text-gray-500 uppercase">User / Group</th>
-                                    <th class="px-4 py-2 text-start text-xs font-medium text-gray-500 uppercase">Management role</th>
-                                    <th v-if="canManageDsMembers" class="px-4 py-2 text-start text-xs font-medium text-gray-500 uppercase">Actions</th>
+                                    <th class="px-3 py-2 text-start text-[11px] font-semibold text-[#A8A29E] uppercase tracking-wide">User / Group</th>
+                                    <th class="px-3 py-2 text-start text-[11px] font-semibold text-[#A8A29E] uppercase tracking-wide">Management role</th>
+                                    <th v-if="canManageDsMembers" class="px-3 py-2 text-start text-[11px] font-semibold text-[#A8A29E] uppercase tracking-wide">Actions</th>
                                 </tr>
                             </thead>
-                            <tbody class="bg-white divide-y divide-gray-200">
-                                <tr v-for="m in members" :key="m.grant_id" class="hover:bg-gray-50">
+                            <tbody class="divide-y divide-[#F1EFEC]">
+                                <tr v-for="m in members" :key="m.grant_id" class="hover:bg-[#FAFAF9]">
                                     <td class="px-4 py-3">
                                         <div class="flex items-center gap-1.5">
                                             <UIcon
@@ -77,9 +120,9 @@
                                             />
                                             <div class="min-w-0">
                                                 <div class="flex items-center gap-1.5">
-                                                    <span class="text-sm font-medium text-gray-900">{{ principalDisplayName(m) }}</span>
+                                                    <span class="text-sm font-medium text-[#1C1917]">{{ principalDisplayName(m) }}</span>
                                                     <template v-if="m.principal_type === 'group'">
-                                                        <span class="text-xs text-gray-400">({{ groupMemberCount(m) }} {{ groupMemberCount(m) === 1 ? 'member' : 'members' }})</span>
+                                                        <span class="text-xs text-[#A8A29E]">({{ groupMemberCount(m) }} {{ groupMemberCount(m) === 1 ? 'member' : 'members' }})</span>
                                                         <button
                                                             @click="toggleGroupExpand(m.principal_id)"
                                                             class="w-4 h-4 flex items-center justify-center rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 text-xs leading-none"
@@ -88,7 +131,7 @@
                                                         </button>
                                                     </template>
                                                 </div>
-                                                <div class="text-xs text-gray-500" v-if="principalEmail(m)">{{ principalEmail(m) }}</div>
+                                                <div class="text-xs text-[#78716C]" v-if="principalEmail(m)">{{ principalEmail(m) }}</div>
                                                 <!-- Expanded group members -->
                                                 <div v-if="m.principal_type === 'group' && expandedGroups.has(m.principal_id)" class="mt-1.5 ps-1 space-y-1">
                                                     <div
@@ -132,7 +175,7 @@
                                                         {{ formatPermission(p) }}
                                                     </UBadge>
                                                 </span>
-                                                <span v-else class="text-gray-400" title="This member can query the agent but has no extra management rights">Query only</span>
+                                                <span v-else class="text-[#A8A29E]" title="This member can query the agent but has no extra management rights">Query only</span>
                                             </UButton>
                                         </UDropdown>
                                         <div v-else class="flex gap-1 flex-wrap">
@@ -145,15 +188,15 @@
                                             >
                                                 {{ formatPermission(p) }}
                                             </UBadge>
-                                            <span v-if="!m.permissions?.length" class="text-xs text-gray-400" title="This member can query the agent but has no extra management rights">Query only</span>
+                                            <span v-if="!m.permissions?.length" class="text-xs text-[#A8A29E]" title="This member can query the agent but has no extra management rights">Query only</span>
                                         </div>
                                     </td>
-                                    <td v-if="canManageDsMembers" class="px-4 py-3">
-                                        <button @click="removeMember(m)" class="text-xs border border-gray-300 text-gray-700 rounded-lg px-2 py-0.5 hover:bg-gray-50">Remove</button>
+                                    <td v-if="canManageDsMembers" class="px-3 py-3">
+                                        <button @click="removeMember(m)" class="text-xs border border-[#EAE8E4] text-[#1C1917] rounded-lg px-2 py-0.5 hover:bg-[#F1EFEC]">Remove</button>
                                     </td>
                                 </tr>
                                 <tr v-if="members.length === 0">
-                                    <td :colspan="canManageDsMembers ? 3 : 2" class="px-4 py-6 text-xs text-gray-500 text-center">
+                                    <td :colspan="canManageDsMembers ? 3 : 2" class="px-4 py-6 text-xs text-[#78716C] text-center">
                                         No members yet. All organization members have access by default.
                                     </td>
                                 </tr>
@@ -162,14 +205,19 @@
                     </div>
                 </div>
 
-                <!-- Danger zone -->
-                <div v-if="canManageDs" class="max-w-md border border-red-200 p-4 rounded-lg bg-red-50/40">
-                    <div class="text-sm font-medium text-red-700">Danger zone</div>
-                    <div class="text-xs text-gray-600 mt-1">Removing this agent will disconnect it from the data source. You can reconnect later.</div>
-                    <div class="mt-3">
-                        <button @click="showDelete = true" class="px-3 py-1.5 text-xs border border-red-300 text-red-700 rounded-lg hover:bg-red-50 transition-colors">
-                            Remove agent
-                        </button>
+                <!-- ===== Danger zone card ===== -->
+                <div v-if="canManageDs" class="bg-white border border-[#F1D4CC] rounded-xl" style="box-shadow:0 1px 2px rgba(28,25,23,.04),0 1px 3px rgba(28,25,23,.06)">
+                    <div class="px-4 py-3.5 border-b border-[#F1EFEC] font-semibold text-[13.5px] text-[#B4331A]">Danger zone</div>
+                    <div class="p-4">
+                        <div class="flex items-center justify-between gap-3">
+                            <div class="min-w-0">
+                                <div class="font-semibold text-[13.5px] text-[#1C1917]">Remove agent</div>
+                                <div class="text-xs text-[#78716C] mt-0.5">Removing this agent will disconnect it from the data source. You can reconnect later.</div>
+                            </div>
+                            <button @click="showDelete = true" class="px-3 py-1.5 text-xs rounded-lg border border-[#F1D4CC] text-[#B4331A] hover:bg-[#FCEEEA] transition-colors flex-none">
+                                Remove agent
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -306,6 +354,46 @@ const adding = ref(false)
 const dsResource = computed(() => ({ type: 'data_source', id: route.params.id as string }))
 const canManageDs = computed(() => useCan('manage', dsResource.value))
 const canManageDsMembers = computed(() => useCan('manage', dsResource.value))
+
+// Scheduled auto-sync (connector clones only). Config lives server-side; we read
+// it on mount and PUT on toggle/interval change. Re-training is diff-gated server
+// side, so enabling this never costs LLM calls unless the schema actually changes.
+const isClone = computed(() => !!injectedIntegration.value?.template_source_id)
+const autoSync = ref<{ enabled: boolean; interval_hours: number; last_sync_at: string | null }>({ enabled: false, interval_hours: 24, last_sync_at: null })
+const autoSyncSaving = ref(false)
+async function fetchAutoSync() {
+    if (!isClone.value) return
+    try {
+        const dsId = route.params.id as string
+        const { data } = await useMyFetch(`/connectors/${dsId}/auto_sync`, { method: 'GET' })
+        const d: any = (data as any)?.value
+        if (d && typeof d === 'object') {
+            autoSync.value = {
+                enabled: !!d.enabled,
+                interval_hours: Number(d.interval_hours) || 24,
+                last_sync_at: d.last_sync_at || null,
+            }
+        }
+    } catch { /* fail-soft: keep defaults */ }
+}
+async function saveAutoSync() {
+    if (autoSyncSaving.value) return
+    autoSyncSaving.value = true
+    try {
+        const dsId = route.params.id as string
+        const { error } = await useMyFetch(`/connectors/${dsId}/auto_sync`, {
+            method: 'PUT',
+            body: { enabled: autoSync.value.enabled, interval_hours: autoSync.value.interval_hours },
+        })
+        if (error?.value) throw error.value
+        toast?.add?.({ title: autoSync.value.enabled ? 'Auto-sync on' : 'Auto-sync off', icon: 'i-heroicons-check-circle' })
+    } catch (e: any) {
+        toast?.add?.({ title: 'Could not update auto-sync', description: e?.data?.detail || e?.message || '', color: 'red' })
+    } finally {
+        autoSyncSaving.value = false
+    }
+}
+watch(isClone, (v) => { if (v) fetchAutoSync() }, { immediate: true })
 const { hasFeature } = useEnterprise()
 const isEnterprise = computed(() => hasFeature('custom_roles'))
 

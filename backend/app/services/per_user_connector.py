@@ -115,8 +115,26 @@ async def list_available_templates(db, organization: Organization) -> list[dict]
     return out
 
 
-async def _existing_clone(db, *, template_id: str, user_id: str) -> Optional[DataSource]:
-    return (
+def _conn_account_email(conn) -> str:
+    """The Power BI / MS account email stored on a clone's connection config
+    (ms_identity: email/upn) or its username credential-hint. Lowercased. '' if none."""
+    try:
+        import json as _json
+        cfg = conn.config
+        if isinstance(cfg, str):
+            cfg = _json.loads(cfg) if cfg else {}
+        cfg = cfg or {}
+        return str(cfg.get("email") or cfg.get("upn") or cfg.get("username") or "").strip().lower()
+    except Exception:
+        return ""
+
+
+async def _existing_clone(db, *, template_id: str, user_id: str, pbi_email: str = None) -> Optional[DataSource]:
+    """Find this user's private clone of a template. When ``pbi_email`` is given,
+    match ONLY a clone whose connection is for that same MS/Power BI account — so a
+    DIFFERENT account makes a NEW agent instead of overwriting, and the SAME account
+    re-syncs the existing one. When omitted, falls back to the first clone (legacy)."""
+    clones = (
         await db.execute(
             select(DataSource)
             .options(selectinload(DataSource.connections))
@@ -125,7 +143,24 @@ async def _existing_clone(db, *, template_id: str, user_id: str) -> Optional[Dat
                 DataSource.owner_user_id == str(user_id),
             )
         )
-    ).scalars().first()
+    ).scalars().all()
+    if not clones:
+        return None
+    if not pbi_email:
+        return clones[0]
+    want = str(pbi_email).strip().lower()
+    # 1) config-stamped account email (new clones)
+    for c in clones:
+        for conn in (c.connections or []):
+            if _conn_account_email(conn) == want:
+                return c
+    # 2) legacy clones (no stamped email) — match by the "· <email>" name suffix so
+    #    reconnecting the same account re-syncs instead of colliding on the name.
+    for c in clones:
+        nm = (c.name or "").strip().lower()
+        if nm.endswith("· " + want) or nm == want or ("· " + want + " (") in nm:
+            return c
+    return None  # same user, different account → caller creates a new agent
 
 
 async def register_template_for_user(
@@ -182,6 +217,23 @@ async def register_template_for_user(
     tmpl_name = template.name
     creds = dict(credentials or {})
 
+    # Identify the actual Power BI / MS ACCOUNT being connected (the email the user
+    # typed), NOT the app-login email. This is what names the agent and decides
+    # whether a repeat connect re-syncs the same account or creates a new agent for
+    # a different account.
+    _mi = ms_identity or {}
+    pbi_email = (
+        str(
+            (_mi.get("ms_account_email") or "")
+            or (_mi.get("email") or "")
+            or (_mi.get("upn") or "")
+            or (_mi.get("preferred_username") or "")
+            or (creds.get("username") or "")
+        ).strip()
+        or (user.email or "")
+        or str(user_id)[:8]
+    )
+
     # The per-user clone connection is 1:1 private to this user, so we store the
     # user's OWN credentials directly on it as system_only creds (Fernet at rest).
     # This is what refresh_schema (connection-level) AND the chat credential
@@ -189,8 +241,12 @@ async def register_template_for_user(
     # data is still fully isolated: the connection is owner_user_id-private and
     # only this user's is_public=False DataSource points to it.
 
-    # Re-registration → reuse the existing private clone; refresh its creds.
-    clone = await _existing_clone(db, template_id=str(template_id), user_id=user_id)
+    # Re-registration of the SAME account → reuse that private clone (re-sync).
+    # A DIFFERENT account → _existing_clone returns None → a new agent is created
+    # below, named after this account, so the two never collide.
+    clone = await _existing_clone(
+        db, template_id=str(template_id), user_id=user_id, pbi_email=pbi_email
+    )
     if clone is not None:
         new_conn = clone.connections[0] if clone.connections else None
         if new_conn is not None and creds:
@@ -198,8 +254,9 @@ async def register_template_for_user(
             new_conn.encrypt_credentials(creds)
             new_conn.auth_policy = "system_only"
             # Capture the signed-in MS identity (CONNECTOR_JOURNEY_V2) onto the
-            # connection config so it's durable + shown in the UI. Fail-soft.
-            _merge_ms_identity_into_config(new_conn, ms_identity or {})
+            # connection config so it's durable + shown in the UI, and always stamp
+            # the account email so a future connect can match this exact account.
+            _merge_ms_identity_into_config(new_conn, {**(ms_identity or {}), "email": pbi_email})
             db.add(new_conn)
             await db.commit()
             await db.refresh(new_conn)
@@ -209,7 +266,7 @@ async def register_template_for_user(
         #    surface as a 400 to the user) and kicks off catalog indexing.
         from app.services.connection_service import ConnectionService
         conn_svc = ConnectionService()
-        base_name = f"{tmpl_name} · {user.email or user_id[:8]}"
+        base_name = f"{tmpl_name} · {pbi_email}"
         new_conn = None
         for attempt in range(4):
             name_try = base_name if attempt == 0 else f"{base_name} ({attempt+1})"
@@ -238,10 +295,11 @@ async def register_template_for_user(
             raise HTTPException(status_code=409, detail="Could not create your connection")
 
         # Capture the signed-in MS identity (CONNECTOR_JOURNEY_V2) onto the new
-        # connection's config so it's durable + shown in the UI. Fail-soft — the
-        # clone commit below persists it alongside the connection.
-        if ms_identity:
-            _merge_ms_identity_into_config(new_conn, ms_identity)
+        # connection's config so it's durable + shown in the UI, and ALWAYS stamp
+        # the account email (even for ROPC where ms_identity is empty) so a repeat
+        # connect can match this exact account and re-sync instead of duplicating.
+        if True:
+            _merge_ms_identity_into_config(new_conn, {**(ms_identity or {}), "email": pbi_email})
             db.add(new_conn)
             try:
                 await db.commit()
@@ -518,6 +576,10 @@ async def connect(
             creds["tenant_id"] = tenant_id
         # Capture the signed-in MS identity from the token's id_token (flag-gated, fail-soft).
         ms_identity = _ms_identity_from_token(res)
+        # Guarantee the ACCOUNT email is present even if the id_token omitted it, so
+        # the clone is named + matched by the account the user actually typed.
+        if not ms_identity.get("ms_account_email"):
+            ms_identity["ms_account_email"] = (email or "").strip()
         clone_id = await _register_clone_fresh_session(
             template_id=template_id, org_id=str(organization.id), user_id=str(user.id),
             credentials=creds, ms_identity=ms_identity,
@@ -583,6 +645,12 @@ async def sync_clone_bg(clone_id: str, org_id: str, user_id: str,
     """
     from app.dependencies import async_session_maker
     from app.services import connector_sync
+    # Hoist DataSourceService to the top of the function. It is used both in the
+    # learn-from-data step (construct_client) and the llm_sync step; a later
+    # function-local `from ... import DataSourceService` made Python treat the name
+    # as local for the WHOLE function, so the earlier use raised UnboundLocalError,
+    # which then cascaded (rollback → MissingGreenlet in llm_sync) → empty agent.
+    from app.services.data_source_service import DataSourceService
 
     clone_id = str(clone_id)
     org_id = str(org_id)
@@ -925,6 +993,12 @@ async def sync_clone_bg(clone_id: str, org_id: str, user_id: str,
             await connector_sync.log_step(
                 db, clone_id, level="ok", phase="done", msg="agent ready"
             )
+            # Bust the cached agent Overview so the next open reflects the fresh sync.
+            try:
+                from app.routes.data_source import invalidate_overview_cache
+                invalidate_overview_cache(str(clone_id))
+            except Exception:
+                pass
     except Exception as e:
         logger.warning("per_user_connector.sync_clone_bg failed for %s: %s", clone_id, e)
         try:

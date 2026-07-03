@@ -647,6 +647,15 @@ async def startup_event():
         except Exception as e:
             logger.error(f"Failed to schedule skill-optimize job: {e}")
 
+    # Connector auto-sync sweep (every 15m). Self-no-ops unless CONNECTOR_AUTO_SYNC
+    # is on AND an agent has per-agent auto-sync enabled; leader-gated.
+    if is_scheduler_leader:
+        try:
+            from app.core.scheduler import register_connector_sync_jobs
+            register_connector_sync_jobs(scheduler)
+        except Exception as e:
+            logger.error(f"Failed to schedule connector auto-sync job: {e}")
+
     # Register LDAP group sync job if configured AND licensed (sync is enterprise-only)
     if is_scheduler_leader and settings.dash_config.ldap.enabled and has_feature("ldap"):
         try:

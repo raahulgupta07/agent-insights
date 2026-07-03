@@ -176,7 +176,34 @@ class CompletionService:
         self.llm_service = LLMService()
         self.data_source_service = DataSourceService()
 
-    async def _auto_pick_model(self, db, organization, current_user, question, small_model=None):
+    async def _report_min_tier(self, db, report):
+        """Floor the auto-model tier for connectors whose query IS generated code
+        against a live semantic model (Power BI / Fabric DAX). Short questions like
+        "how many projects?" score as trivial, but the DAX the coder must write is
+        not — a weak model produces invalid DAX and retry storms. Returns "balanced"
+        when any attached data source is a Power BI / Fabric connector, else None.
+
+        Uses an explicit SQL query (not report.data_sources lazy access) to avoid
+        the async MissingGreenlet landmine.
+        """
+        try:
+            from sqlalchemy import text as _sql_text
+            row = await db.execute(_sql_text("""
+                SELECT 1
+                FROM report_data_source_association rdsa
+                JOIN domain_connection dc ON dc.data_source_id = rdsa.data_source_id
+                JOIN connections c ON c.id = dc.connection_id
+                WHERE rdsa.report_id = :rid
+                  AND c.type IN ('powerbi','powerbi_user','ms_fabric','ms_fabric_user')
+                LIMIT 1
+            """), {"rid": str(report.id)})
+            if row.first() is not None:
+                return "balanced"
+        except Exception:
+            logger.warning("auto_model: _report_min_tier failed", exc_info=True)
+        return None
+
+    async def _auto_pick_model(self, db, organization, current_user, question, small_model=None, min_tier=None):
         """HYBRID_AUTO_MODEL: classify question complexity → cheapest capable model.
 
         Returns (model, decision_dict). NEVER raises — on any failure returns the org
@@ -193,6 +220,7 @@ class CompletionService:
                 models=list(all_models or []),
                 default_model=default_model,
                 small_model=small_model,
+                min_tier=min_tier,
             )
         except Exception:
             logger.warning("auto_model: _auto_pick_model failed", exc_info=True)
@@ -533,10 +561,12 @@ class CompletionService:
             small_model = await self.llm_service.get_default_model(db, organization, current_user, is_small=True)
             if flags.AUTO_MODEL and _req_mid == "auto":
                 # Auto model selection: classify question complexity → cheapest capable model.
+                # Floor to BALANCED for Power BI / Fabric so DAX code-gen never lands on the weakest model.
+                _min_tier = await self._report_min_tier(db, report)
                 model, _auto_decision = await self._auto_pick_model(
                     db, organization, current_user,
                     (completion_data.prompt.content if completion_data.prompt else "") or "",
-                    small_model,
+                    small_model, _min_tier,
                 )
             elif _req_mid and _req_mid != "auto":
                 model = await self.llm_service.get_model_by_id(db, organization, current_user, _req_mid)
@@ -2058,9 +2088,12 @@ class CompletionService:
             _req_mid = completion_data.prompt.model_id if completion_data.prompt else None
             if flags.AUTO_MODEL and _req_mid == "auto":
                 # Auto model selection: classify question complexity → cheapest capable model.
+                # Floor to BALANCED for Power BI / Fabric so DAX code-gen never lands on the weakest model.
+                _min_tier = await self._report_min_tier(db, report)
                 model, _auto_decision = await self._auto_pick_model(
                     db, organization, current_user,
                     (completion_data.prompt.content if completion_data.prompt else "") or "",
+                    None, _min_tier,
                 )
                 _log(f"auto_model→{(_auto_decision or {}).get('model')} ({(_auto_decision or {}).get('tier')})")
             elif _req_mid and _req_mid != "auto":

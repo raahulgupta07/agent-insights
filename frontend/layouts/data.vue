@@ -1,95 +1,129 @@
 <template>
     <NuxtLayout name="default">
-        <div class="flex bg-[#F1ECE3] text-sm" style="min-height: calc(100vh - 56px)">
+        <div class="flex bg-[#FAFAF9] text-sm overflow-hidden h-full">
 
-            <!-- Loading skeleton (rail + main cards) -->
+            <!-- Loading skeleton (YouTube-style content-shaped shimmer) -->
             <template v-if="isLoading">
-                <div class="w-[240px] shrink-0 m-2 rounded-2xl bg-[#FBFAF6] border border-[#E9E0D3] animate-pulse" />
-                <div class="flex-1 my-2 me-2 rounded-2xl bg-[#FBFAF6] border border-[#E9E0D3] animate-pulse" />
+                <!-- rail skeleton -->
+                <aside class="cag-side shrink-0 self-stretch flex flex-col">
+                    <div class="cag-sk cag-sk-line" style="width:72px;height:12px;margin-bottom:18px"></div>
+                    <div class="flex items-center gap-2.5 pb-4 mb-3 border-b border-[#F1EFEC]">
+                        <div class="cag-sk" style="width:34px;height:34px;border-radius:9px"></div>
+                        <div class="flex-1 min-w-0">
+                            <div class="cag-sk cag-sk-line" style="width:80%;height:11px;margin-bottom:6px"></div>
+                            <div class="cag-sk cag-sk-line" style="width:48%;height:9px"></div>
+                        </div>
+                    </div>
+                    <template v-for="n in 9" :key="n">
+                        <div v-if="n === 4 || n === 7" class="cag-sk cag-sk-line" style="width:38%;height:9px;margin:14px 0 6px"></div>
+                        <div class="cag-sk cag-sk-line" :style="{ width: (n % 3 === 0 ? '48%' : '72%'), height: '13px', margin: '9px 4px' }"></div>
+                    </template>
+                </aside>
+                <!-- main skeleton -->
+                <div class="flex-1 min-w-0 m-2">
+                    <div class="bg-white border border-[#EAE8E4] rounded-xl overflow-hidden h-full">
+                        <div class="px-8 py-5 border-b border-[#F1EFEC] flex items-center justify-between">
+                            <div class="cag-sk cag-sk-line" style="width:min(46%,360px);height:14px"></div>
+                            <div class="flex gap-3">
+                                <div class="cag-sk" style="width:88px;height:30px;border-radius:8px"></div>
+                                <div class="cag-sk" style="width:112px;height:30px;border-radius:8px"></div>
+                            </div>
+                        </div>
+                        <div class="p-6 flex gap-5">
+                            <div class="flex-1 space-y-4">
+                                <div class="cag-sk" style="height:120px;border-radius:12px"></div>
+                                <div class="cag-sk" style="height:240px;border-radius:12px"></div>
+                            </div>
+                            <div class="w-[300px] shrink-0 space-y-4 hidden lg:block">
+                                <div class="cag-sk" style="height:160px;border-radius:12px"></div>
+                                <div class="cag-sk" style="height:120px;border-radius:12px"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </template>
 
             <!-- Access errors -->
             <div v-else-if="fetchError === 403" class="flex-1 m-2">
-                <div class="bg-[#FBFAF6] border border-[#E9E0D3] rounded-2xl p-10 text-center">
-                    <Icon name="i-heroicons-lock-closed" class="w-10 h-10 text-[#9a958c] mx-auto mb-3" />
-                    <h2 class="text-base font-medium text-[#1f2328]">Access Restricted</h2>
-                    <p class="mt-1.5 text-sm text-[#6b6b6b] max-w-sm mx-auto">This agent is private. Contact the owner or an admin to request access.</p>
+                <div class="bg-white border border-[#EAE8E4] rounded-xl p-10 text-center">
+                    <Icon name="i-heroicons-lock-closed" class="w-10 h-10 text-[#A8A29E] mx-auto mb-3" />
+                    <h2 class="text-base font-medium text-[#1C1917]">Access Restricted</h2>
+                    <p class="mt-1.5 text-sm text-[#78716C] max-w-sm mx-auto">This agent is private. Contact the owner or an admin to request access.</p>
                     <NuxtLink to="/agents" class="mt-4 inline-block text-sm text-[#C2541E] hover:underline">← Back to agents</NuxtLink>
                 </div>
             </div>
             <div v-else-if="fetchError === 404" class="flex-1 m-2">
-                <div class="bg-[#FBFAF6] border border-[#E9E0D3] rounded-2xl p-10 text-center">
-                    <Icon name="i-heroicons-exclamation-circle" class="w-10 h-10 text-[#9a958c] mx-auto mb-3" />
-                    <h2 class="text-base font-medium text-[#1f2328]">Agent Not Found</h2>
-                    <p class="mt-1.5 text-sm text-[#6b6b6b] max-w-sm mx-auto">The agent you're looking for doesn't exist or has been removed.</p>
+                <div class="bg-white border border-[#EAE8E4] rounded-xl p-10 text-center">
+                    <Icon name="i-heroicons-exclamation-circle" class="w-10 h-10 text-[#A8A29E] mx-auto mb-3" />
+                    <h2 class="text-base font-medium text-[#1C1917]">Agent Not Found</h2>
+                    <p class="mt-1.5 text-sm text-[#78716C] max-w-sm mx-auto">The agent you're looking for doesn't exist or has been removed.</p>
                     <NuxtLink to="/agents" class="mt-4 inline-block text-sm text-[#C2541E] hover:underline">← Back to agents</NuxtLink>
                 </div>
             </div>
             <div v-else-if="fetchError" class="flex-1 m-2">
-                <div class="bg-[#FBFAF6] border border-[#E9E0D3] rounded-2xl p-10 text-center text-sm text-[#6b6b6b]">Failed to load this agent.</div>
+                <div class="bg-white border border-[#EAE8E4] rounded-xl p-10 text-center text-sm text-[#78716C]">Failed to load this agent.</div>
             </div>
 
             <!-- RAIL + MAIN (mirrors /workspace AppRail .cag-rail-card + main card) -->
             <template v-else>
 
-                <!-- LEFT RAIL -->
-                <aside class="cag-rail-card shrink-0 self-stretch min-h-0 overflow-y-auto m-2 flex flex-col">
-                    <!-- header card: back link + identity -->
-                    <div class="px-3 pt-3 pb-2.5 border-b border-[#E9E0D3]">
-                        <NuxtLink to="/agents" class="text-[11px] text-[#9a958c] hover:text-[#6b6b6b] mb-1.5 inline-flex items-center gap-1">
-                            <UIcon name="i-heroicons-arrow-left" class="w-3 h-3" /> All agents
-                        </NuxtLink>
-                        <div class="flex items-center gap-2">
-                            <div class="shrink-0 flex items-center justify-center w-7 h-7 rounded-lg bg-[#F4F1EA] border border-[#E9E0D3] text-[#C2541E] p-1">
-                                <img v-if="connectorMeta" :src="connectorMeta.logo" :alt="connectorMeta.name" class="w-full h-full object-contain" />
-                                <UIcon v-else name="i-heroicons-circle-stack" class="w-4 h-4" />
-                            </div>
-                            <div class="min-w-0">
-                                <div class="flex items-center gap-1.5">
-                                    <span class="text-sm font-semibold text-[#1f2328] truncate" style="font-family:'Spectral',ui-serif,Georgia,serif">{{ connectorMeta ? connectorMeta.name : (integration?.name || 'Agent') }}</span>
-                                    <span v-if="(integration?.connections || []).length" class="text-[9px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded bg-[#EDEBE3] text-[#6b6b6b] shrink-0">Connected</span>
-                                </div>
-                                <p v-if="connectorMeta?.subtitle" class="text-[11px] text-[#9a958c] truncate">{{ connectorMeta.subtitle }}</p>
-                            </div>
+                <!-- LEFT RAIL / AGENT SUB-NAV -->
+                <aside class="cag-side shrink-0 self-stretch min-h-0 overflow-y-auto flex flex-col">
+                    <!-- back link -->
+                    <NuxtLink to="/agents" class="cag-back">
+                        <UIcon name="i-heroicons-arrow-left" class="w-3.5 h-3.5" /> All agents
+                    </NuxtLink>
+
+                    <!-- agent identity head -->
+                    <div class="cag-agenthead">
+                        <div class="cag-ic">
+                            <img v-if="connectorMeta" :src="connectorMeta.logo" :alt="connectorMeta.name" class="w-4.5 h-4.5 object-contain" />
+                            <UIcon v-else name="i-heroicons-circle-stack" class="w-[18px] h-[18px]" />
+                        </div>
+                        <div class="min-w-0">
+                            <div class="cag-nm truncate">{{ connectorMeta ? connectorMeta.name : (integration?.name || 'Agent') }}</div>
+                            <div v-if="(integration?.connections || []).length" class="cag-st"><span class="d"></span>Connected</div>
+                            <div v-else-if="connectorMeta?.subtitle" class="cag-sub truncate">{{ connectorMeta.subtitle }}</div>
                         </div>
                     </div>
 
                     <!-- grouped tab nav -->
-                    <nav class="px-2 py-2 space-y-px flex-1">
+                    <nav class="flex-1 pb-2">
                         <template v-for="grp in tabGroups" :key="grp.label">
-                            <div class="cag-eyebrow px-2 pt-3 pb-1">{{ grp.label }}</div>
+                            <div class="cag-navgrp">{{ grp.label }}</div>
                             <NuxtLink
                                 v-for="tab in grp.items"
                                 :key="tab.name"
                                 :to="tabTo(tab.name)"
-                                :class="['cag-sec-link', isTabActive(tab.name) ? 'cag-sec-active' : '']"
+                                :class="['cag-navitem', isTabActive(tab.name) ? 'on' : '']"
                             >
-                                <span class="cag-sec-ic"><UIcon :name="tabIcon(tab.name)" class="w-[15px] h-[15px]" /></span>
+                                <UIcon :name="tabIcon(tab.name)" class="cag-navitem-ic" />
                                 <span class="flex-1 truncate">{{ tab.label }}</span>
-                                <span v-if="tab.name === 'tables' && catalog.shouldShow && catalog.count > 0" class="text-[11px] text-[#9a958c] shrink-0">{{ catalog.count }}</span>
+                                <span v-if="tab.name === 'tables' && catalog.shouldShow && catalog.count > 0" class="ct">{{ catalog.count }}</span>
                             </NuxtLink>
                         </template>
-                    </nav>
 
-                    <!-- lifecycle actions (plain rail items under a Connection eyebrow) -->
-                    <div class="px-2 pb-2">
-                        <div class="border-t border-[#E9E0D3] mx-2"></div>
-                        <div class="cag-eyebrow px-2 pt-2 pb-1">Connection</div>
-                        <button @click="testConn" :disabled="testing" class="cag-sec-link w-full">
-                            <span class="cag-sec-ic"><Spinner v-if="testing" class="w-3.5 h-3.5" /><UIcon v-else name="i-heroicons-bolt" class="w-[15px] h-[15px]" /></span>
-                            <span class="flex-1 text-start truncate">Test connection</span>
+                        <!-- lifecycle actions -->
+                        <div class="cag-navgrp">Connection</div>
+                        <button @click="testConn" :disabled="testing" class="cag-navitem w-full text-left">
+                            <Spinner v-if="testing" class="cag-navitem-ic" />
+                            <UIcon v-else name="i-heroicons-bolt" class="cag-navitem-ic" />
+                            <span class="flex-1 truncate">Test connection</span>
                         </button>
-                        <button v-if="isClone" @click="showDisconnect = true" class="cag-sec-link cag-sec-danger w-full">
-                            <span class="cag-sec-ic"><UIcon name="i-heroicons-x-mark" class="w-[15px] h-[15px]" /></span>
-                            <span class="flex-1 text-start truncate">Disconnect</span>
+                        <button v-if="isClone" @click="showDisconnect = true" class="cag-navitem cag-danger w-full text-left">
+                            <UIcon name="i-heroicons-x-mark" class="cag-navitem-ic" />
+                            <span class="flex-1 truncate">Disconnect</span>
                         </button>
-                    </div>
+                    </nav>
                 </aside>
 
-                <!-- MAIN (page card) -->
-                <div class="flex-1 min-w-0 my-2 me-2">
-                    <div class="px-6 md:px-8 py-6 bg-[#FBFAF6] border border-[#E9E0D3] rounded-2xl" style="min-height: calc(100vh - 72px)">
-                        <div class="flex items-start justify-between gap-4 mb-5">
+                <!-- MAIN (page card) — own scroll container so the page scrolls
+                     internally within the fixed shell (parent app clips body scroll) -->
+                <div class="flex-1 min-w-0 m-2 min-h-0 flex flex-col">
+                    <div class="flex flex-col min-h-0 flex-1 bg-white border border-[#EAE8E4] rounded-xl overflow-hidden" style="box-shadow: 0 1px 2px rgba(28,25,23,.04), 0 1px 3px rgba(28,25,23,.06)">
+                        <!-- FROZEN header (identity / description / actions) — stays put while content scrolls -->
+                        <div class="shrink-0 px-6 md:px-8 pt-6 pb-4 border-b border-[#F1EFEC]">
+                        <div class="flex items-start justify-between gap-4">
                             <div class="min-w-0 flex-1">
                                 <!-- Description (inline-editable) -->
                                 <div v-if="integration?.description || useCan('update_data_source')" class="flex items-center gap-2 group max-w-2xl">
@@ -98,7 +132,7 @@
                                             ref="descInputRef"
                                             v-model="descForm"
                                             type="text"
-                                            class="flex-1 text-sm text-[#6b6b6b] border-b border-[#C2541E] bg-transparent outline-none py-0.5"
+                                            class="flex-1 text-sm text-[#78716C] border-b border-[#C2541E] bg-transparent outline-none py-0.5"
                                             @keydown.enter="saveDesc"
                                             @keydown.escape="cancelDesc"
                                             @blur="saveDesc"
@@ -106,8 +140,8 @@
                                     </template>
                                     <template v-else>
                                         <p
-                                            class="text-sm text-[#6b6b6b] truncate rounded px-1 -mx-1 transition-colors"
-                                            :class="useCan('update_data_source') ? 'cursor-pointer hover:bg-[#ECEAE1]' : ''"
+                                            class="text-sm text-[#78716C] truncate rounded px-1 -mx-1 transition-colors"
+                                            :class="useCan('update_data_source') ? 'cursor-pointer hover:bg-[#F1EFEC]' : ''"
                                             @click="useCan('update_data_source') && startEditDesc()"
                                         >{{ integration?.description || 'No description' }}</p>
                                         <button
@@ -124,10 +158,35 @@
                                     :status="integration?.publish_status || 'published'"
                                     @updated="onPublishStatusUpdated"
                                 />
+                                <!-- Sync: re-discover schema (picks up newly-granted reports/
+                                     datasets), re-classify relevance, and (diff-gated) re-train.
+                                     Split button — caret offers "Re-discover only" (cheap, no
+                                     re-train). Clone-only + update permission. Progress streams
+                                     to the Activity sync log. -->
+                                <div v-if="isClone" class="inline-flex">
+                                    <button
+                                        type="button"
+                                        :disabled="syncing"
+                                        class="inline-flex items-center gap-1.5 border border-[#EAE8E4] rounded-l-lg px-3 py-1.5 text-sm font-medium text-[#44403C] hover:bg-[#F1EFEC] disabled:opacity-60"
+                                        @click="syncNow(true)"
+                                    >
+                                        <UIcon name="heroicons-arrow-path" class="w-4 h-4" :class="syncing ? 'animate-spin' : ''" />
+                                        {{ syncing ? 'Syncing…' : 'Sync' }}
+                                    </button>
+                                    <UDropdown :items="syncMenu" :disabled="syncing" :popper="{ placement: 'bottom-end' }">
+                                        <button
+                                            type="button"
+                                            :disabled="syncing"
+                                            class="inline-flex items-center border border-l-0 border-[#EAE8E4] rounded-r-lg px-1.5 py-1.5 text-[#44403C] hover:bg-[#F1EFEC] disabled:opacity-60"
+                                        >
+                                            <UIcon name="heroicons-chevron-down" class="w-4 h-4" />
+                                        </button>
+                                    </UDropdown>
+                                </div>
                                 <UButton
                                     color="gray"
                                     size="sm"
-                                    class="bg-[#C2541E] hover:bg-[#A8330F] text-white ring-0"
+                                    class="bg-[#C2541E] hover:bg-[#A8461A] text-white ring-0 rounded-lg font-medium"
                                     :loading="startingChat"
                                     @click="startChat"
                                 >
@@ -136,8 +195,12 @@
                                 </UButton>
                             </div>
                         </div>
+                        </div>
 
-                        <slot />
+                        <!-- SCROLLING page content -->
+                        <div class="flex-1 min-h-0 overflow-y-auto px-6 md:px-8 py-6">
+                            <slot />
+                        </div>
                     </div>
                 </div>
             </template>
@@ -145,11 +208,11 @@
             <!-- Disconnect confirm -->
             <UModal v-model="showDisconnect">
                 <div class="p-6">
-                    <h3 class="text-lg text-[#1f2328] mb-1" style="font-family:'Spectral',ui-serif,Georgia,serif">Disconnect this source?</h3>
-                    <p class="text-sm text-[#6b6b6b] mb-4">Removes your private agent and sign-in. Your data stays in Microsoft — you can sign in again anytime.</p>
+                    <h3 class="text-lg font-semibold text-[#1C1917] mb-1">Disconnect this source?</h3>
+                    <p class="text-sm text-[#78716C] mb-4">Removes your private agent and sign-in. Your data stays in Microsoft — you can sign in again anytime.</p>
                     <div class="flex justify-end gap-2">
-                        <button @click="showDisconnect = false" class="px-3 py-2 rounded-lg text-sm bg-white border border-[#E9E0D3]">Cancel</button>
-                        <button @click="disconnect" :disabled="disconnecting" class="px-3 py-2 rounded-lg text-sm text-[#B4432B] border border-[#F0D8D1] bg-[#FCF3F0]"><Spinner v-if="disconnecting" class="w-3.5 h-3.5 inline" /> Disconnect</button>
+                        <button @click="showDisconnect = false" class="px-3 py-2 rounded-lg text-sm bg-white border border-[#EAE8E4] hover:bg-[#F1EFEC]">Cancel</button>
+                        <button @click="disconnect" :disabled="disconnecting" class="px-3 py-2 rounded-lg text-sm text-[#B4331A] border border-[#F1D4CC] bg-[#FBEAE6] hover:bg-[#FCEEEA]"><Spinner v-if="disconnecting" class="w-3.5 h-3.5 inline" /> Disconnect</button>
                     </div>
                 </div>
             </UModal>
@@ -195,6 +258,7 @@ const allTabs = computed(() => {
         { name: 'context', label: 'Instructions' },
         { name: 'queries', label: 'Queries' },
         { name: 'tools', label: 'Tools' },
+        { name: 'activity', label: 'Activity' },
         { name: 'monitoring', label: 'Monitoring', gate: canViewMonitoring },
         { name: 'evals', label: 'Evals', gate: canManageEvals },
         { name: 'settings', label: 'Settings' },
@@ -222,6 +286,7 @@ const TAB_ICONS: Record<string, string> = {
     context: 'i-heroicons-document-text',
     queries: 'i-heroicons-command-line',
     tools: 'i-heroicons-wrench-screwdriver',
+    activity: 'i-heroicons-signal',
     monitoring: 'i-heroicons-chart-bar',
     evals: 'i-heroicons-check-badge',
     settings: 'i-heroicons-cog-6-tooth',
@@ -284,7 +349,7 @@ const connectorMeta = computed(() => {
 const TAB_GROUPS: { label: string; names: string[] }[] = [
     { label: 'Explore', names: ['', 'tables', 'queries'] },
     { label: 'Configure', names: ['context', 'tools', 'settings'] },
-    { label: 'Observe', names: ['monitoring', 'evals'] },
+    { label: 'Observe', names: ['activity', 'monitoring', 'evals'] },
 ]
 const tabGroups = computed(() => {
     const byName: Record<string, any> = Object.fromEntries(tabs.value.map(t => [t.name, t]))
@@ -342,6 +407,46 @@ const integration = ref<any>(null)
 const isLoading = ref(true)
 const fetchError = ref<number | null>(null)
 const startingChat = ref(false)
+
+// Sync now: re-run the full connector pipeline (re-discover schema → relevance
+// classify → re-seed → re-learn) via the existing owner-gated endpoint, then poll
+// the live sync log until done and toast the result. Use after gaining access to
+// a new Power BI report/dataset so the agent picks it up + re-trains.
+const syncing = ref(false)
+const syncMenu = computed(() => [[
+    { label: 'Sync now', icon: 'i-heroicons-arrow-path', click: () => syncNow(true) },
+    { label: 'Re-discover only', icon: 'i-heroicons-magnifying-glass', click: () => syncNow(false) },
+]])
+async function syncNow(learn = true) {
+    if (syncing.value || !id.value) return
+    syncing.value = true
+    toast?.add?.({ title: 'Sync started', description: learn ? 'Re-discovering data and re-training…' : 'Re-discovering schema (no re-training)…', icon: 'i-heroicons-arrow-path' })
+    try {
+        const { error } = await useMyFetch(`/connectors/${id.value}/sync?learn=${learn}`, { method: 'POST' })
+        if (error?.value) throw error.value
+        const deadline = Date.now() + 5 * 60 * 1000
+        while (Date.now() < deadline) {
+            await new Promise((r) => setTimeout(r, 2000))
+            const { data } = await useMyFetch(`/data_sources/${id.value}/sync-status`, { method: 'GET' })
+            const run: any = (data as any)?.value || {}
+            if (run.phase === 'done') {
+                const n = run.tables_done ?? run.tables_total
+                toast?.add?.({ title: 'Sync complete', description: n != null ? `${n} tables synced — agent re-trained` : 'Agent re-trained', icon: 'i-heroicons-check-circle' })
+                setTimeout(() => window.location.reload(), 800)
+                return
+            }
+            if (run.phase === 'error') {
+                toast?.add?.({ title: 'Sync failed', description: run.error || 'See the Activity tab for details', color: 'red' })
+                return
+            }
+        }
+        toast?.add?.({ title: 'Sync still running', description: 'Check the Activity tab for progress', icon: 'i-heroicons-clock' })
+    } catch (e: any) {
+        toast?.add?.({ title: 'Sync failed', description: e?.data?.detail || e?.message || '', color: 'red' })
+    } finally {
+        syncing.value = false
+    }
+}
 
 const editingDesc = ref(false)
 const descForm = ref('')
@@ -485,16 +590,41 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-/* Exact parity with components/nav/AppRail.vue .cag-rail-card (Workspace/Manage rail). */
-.cag-rail-card { width: 240px; background: #FBFAF6; border: 1px solid #E9E0D3; border-radius: 16px; font-family: 'Hanken Grotesk', system-ui, sans-serif; }
-.cag-eyebrow { font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: #9a958c; font-weight: 700; }
-.cag-sec-link { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 12px; border-radius: 8px; font-size: 12px; color: #6b6b6b; text-decoration: none; text-align: left; background: none; border: none; cursor: pointer; transition: background .12s, color .12s; }
-.cag-sec-link:hover { background: #faf8f3; color: #1f2328; }
-.cag-sec-link:disabled { opacity: .55; cursor: default; }
-.cag-sec-ic { display: flex; align-items: center; justify-content: center; width: 14px; height: 14px; flex: 0 0 14px; color: #8c8479; }
-.cag-sec-active { background: #ECEAE1; color: #1f2328; font-weight: 500; }
-.cag-sec-active .cag-sec-ic { color: #C2541E; }
-.cag-sec-danger { color: #B4432B; }
-.cag-sec-danger .cag-sec-ic { color: #B4432B; }
-.cag-sec-danger:hover { background: #FCF3F0; color: #B4432B; }
+/* Agent sub-nav — matches the redesign mockup (.side / .agenthead / .navgrp / .navitem). */
+.cag-side { width: 224px; background: #FFFFFF; border-right: 1px solid #EAE8E4; padding: 16px 12px; font-family: 'Hanken Grotesk', system-ui, sans-serif; }
+
+.cag-back { display: inline-flex; align-items: center; gap: 6px; color: #78716C; font-size: 13px; margin-bottom: 16px; text-decoration: none; }
+.cag-back:hover { color: #1C1917; }
+
+.cag-agenthead { display: flex; align-items: center; gap: 10px; padding: 0 6px 16px; border-bottom: 1px solid #F1EFEC; margin-bottom: 14px; }
+.cag-ic { width: 34px; height: 34px; border-radius: 9px; background: #FBEDE4; display: flex; align-items: center; justify-content: center; color: #C2541E; flex: none; }
+.cag-nm { font-weight: 600; font-size: 13.5px; line-height: 1.25; color: #1C1917; }
+.cag-st { font-size: 11px; color: #15803D; display: flex; align-items: center; gap: 4px; margin-top: 2px; }
+.cag-st .d { width: 6px; height: 6px; border-radius: 50%; background: #15803D; }
+.cag-sub { font-size: 11px; color: #A8A29E; margin-top: 2px; }
+
+.cag-navgrp { font-size: 10.5px; font-weight: 600; letter-spacing: .06em; color: #A8A29E; text-transform: uppercase; padding: 14px 8px 6px; }
+.cag-navitem { display: flex; align-items: center; gap: 10px; padding: 7px 9px; border-radius: 8px; color: #44403C; font-weight: 500; font-size: 13.5px; cursor: pointer; margin-bottom: 1px; text-decoration: none; background: none; border: none; transition: background .12s, color .12s; }
+.cag-navitem:hover { background: #F1EFEC; }
+.cag-navitem.on { background: #FBEDE4; color: #C2541E; font-weight: 600; }
+.cag-navitem:disabled { opacity: .55; cursor: default; }
+.cag-navitem-ic { width: 16px; height: 16px; flex: 0 0 16px; }
+.cag-navitem .ct { margin-left: auto; font-size: 11.5px; color: #A8A29E; font-weight: 600; }
+.cag-navitem.on .ct { color: #C2541E; }
+
+.cag-danger { color: #B4331A; }
+.cag-danger:hover { background: #FCEEEA; color: #B4331A; }
+
+/* YouTube-style shimmer skeleton */
+.cag-sk { background: #EEECE8; position: relative; overflow: hidden; }
+.cag-sk-line { border-radius: 6px; }
+.cag-sk::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+    animation: cag-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes cag-shimmer { 100% { transform: translateX(100%); } }
 </style>

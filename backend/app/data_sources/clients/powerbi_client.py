@@ -1,6 +1,6 @@
 from app.data_sources.clients.base import DataSourceClient
 from app.ai.prompt_formatters import Table, TableColumn, ForeignKey, ServiceFormatter
-from typing import List, Dict, Optional, Tuple
+from typing import Any, List, Dict, Optional, Tuple
 import requests
 import pandas as pd
 import re
@@ -107,6 +107,76 @@ def _clean_table_display_name(table_name: str) -> str:
     return table_name
 
 
+class PowerBIQueryError(RuntimeError):
+    """A Power BI query failure carrying BOTH a technical detail (for the agent's
+    self-correction retry) and a clean human message + category (for the final
+    user-facing answer). ``str(err)`` == the technical detail so existing retry
+    logic that reads the exception text still gets something useful and readable —
+    never the raw JSON blob.
+    """
+
+    def __init__(self, technical: str, human: str, category: str):
+        super().__init__(technical)
+        self.technical = technical
+        self.human = human
+        self.category = category  # no_access | not_found | invalid_dax | too_much_data | throttled | auth | unknown
+
+
+def _humanize_pbi_error(status: int, text: str):
+    """Parse a Power BI executeQueries error body into (technical, human, category).
+
+    ``technical`` = the useful DAX detail message (e.g. "A single value for column
+    'created_at' cannot be determined...") with the JSON envelope stripped — good for
+    the retry loop. ``human`` = a plain sentence for the end user, no codes/JSON.
+    Never raises.
+    """
+    detail = ""
+    try:
+        import json as _json
+        body = _json.loads(text) if text and text.strip().startswith("{") else {}
+        err = (body.get("error") or {})
+        pbi = (err.get("pbi.error") or {})
+        for d in (pbi.get("details") or []):
+            dv = ((d or {}).get("detail") or {}).get("value")
+            if dv and "code" not in str(d.get("code", "")).lower() or dv:
+                if dv:
+                    detail = str(dv)
+                    break
+        if not detail:
+            detail = str(err.get("message") or "").strip()
+    except Exception:  # noqa: BLE001
+        detail = ""
+    low = (detail or text or "").lower()
+
+    if status in (401,) or "unauthorized" in low or "token" in low and "expired" in low:
+        return (detail or "authentication failed",
+                "You're not signed in to Power BI or your session expired — please reconnect your account.",
+                "auth")
+    if status in (403,) or "forbidden" in low or "does not have" in low and "permission" in low or "build permission" in low:
+        return (detail or "forbidden",
+                "You can see this report but don't have permission to query its data. Ask the data owner for Build access to this Power BI model.",
+                "no_access")
+    if "cannot find table" in low or "cannot find" in low and "table" in low:
+        return (detail or "table not found",
+                "I couldn't find that table in the model — it may have been renamed or you may not have access to it.",
+                "not_found")
+    if "single value" in low and "cannot be determined" in low:
+        return (detail, "", "invalid_dax")  # keep technical for auto-fix; no user message (retry handles it)
+    if status == 429 or "throttl" in low or "too many requests" in low:
+        return (detail or "throttled",
+                "Power BI is busy right now — retrying automatically.",
+                "throttled")
+    if "more than" in low and ("rows" in low or "result table" in low):
+        return (detail or "result too large",
+                "That question returns too much data to show at once — I'll summarise it or you can add a filter.",
+                "too_much_data")
+    if status >= 400:
+        return (detail or f"query failed (HTTP {status})",
+                "I couldn't build a reliable query for that. Try rephrasing — for example, name the exact metric, table, or time range.",
+                "invalid_dax")
+    return (detail or "unknown error", "Something went wrong reading the data. Please try again.", "unknown")
+
+
 class PowerBIClient(DataSourceClient):
     """
     Power BI client for discovering semantic models and executing DAX queries.
@@ -151,6 +221,87 @@ class PowerBIClient(DataSourceClient):
         # discovery call (which rate-limits / triggers 429). Keyed by both the
         # full "Dataset/Table" name and the bare DAX table name.
         self._table_index: Dict[str, Dict[str, Optional[str]]] = {}
+        # Model metadata for grounding DAX generation: relationships (the join graph)
+        # and measures (the preferred query surface). Populated from INFO.VIEW.* at
+        # discovery / offline-index install, rendered into system_prompt().
+        self._model_meta: Dict[str, Any] = {"relationships": [], "measures": []}
+
+    def set_model_meta(self, meta: Dict[str, Any]) -> None:
+        """Install model metadata {relationships:[...], measures:[...]} for grounding."""
+        if isinstance(meta, dict):
+            self._model_meta = {
+                "relationships": list(meta.get("relationships") or []),
+                "measures": list(meta.get("measures") or []),
+            }
+
+    def fetch_model_metadata(self, dataset_ids) -> Dict[str, Any]:
+        """Fetch relationships + measures for the given dataset IDs via INFO.VIEW.*.
+
+        Returns {"relationships":[{from,to,fromCard,toCard,active,crossFilter}...],
+        "measures":[{name,table}...]}. Uses executeQueries (same token, delegated-user
+        friendly). Fail-soft per dataset — a dataset that rejects INFO.VIEW just
+        contributes nothing. Never raises.
+        """
+        rels: List[dict] = []
+        meas: List[dict] = []
+        for ds_id in (dataset_ids or []):
+            if not ds_id:
+                continue
+            try:
+                rdf = self.execute_query(
+                    "EVALUATE INFO.VIEW.RELATIONSHIPS()", dataset_id=ds_id, max_rows=200
+                )
+                for _, r in rdf.iterrows():
+                    d = {str(k).split("[")[-1].rstrip("]"): v for k, v in r.items()}
+                    ft = d.get("FromTable") or d.get("FromFullName") or d.get("From")
+                    tt = d.get("ToTable") or d.get("ToFullName") or d.get("To")
+                    if not ft or not tt:
+                        continue
+                    rels.append({
+                        "from": f"{ft}[{d.get('FromColumn','')}]",
+                        "to": f"{tt}[{d.get('ToColumn','')}]",
+                        "fromCard": d.get("FromCardinality"),
+                        "toCard": d.get("ToCardinality"),
+                        "active": d.get("IsActive"),
+                        "crossFilter": d.get("CrossFilteringBehavior"),
+                    })
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                mdf = self.execute_query(
+                    "EVALUATE INFO.VIEW.MEASURES()", dataset_id=ds_id, max_rows=500
+                )
+                for _, r in mdf.iterrows():
+                    d = {str(k).split("[")[-1].rstrip("]"): v for k, v in r.items()}
+                    nm = d.get("Name") or d.get("Measure")
+                    if nm:
+                        meas.append({"name": str(nm), "table": str(d.get("Table") or "")})
+            except Exception:  # noqa: BLE001
+                pass
+        return {"relationships": rels, "measures": meas}
+
+    def _model_meta_prompt(self) -> str:
+        """Render the relationships + measures section for the system prompt. Empty
+        string when nothing is known (so behaviour is unchanged for models we never
+        fetched)."""
+        rels = (self._model_meta or {}).get("relationships") or []
+        meas = (self._model_meta or {}).get("measures") or []
+        if not rels and not meas:
+            return ""
+        parts = ["\n### MODEL METADATA (use for grounding — do not invent)\n"]
+        if meas:
+            parts.append("MEASURES (prefer these over raw-column aggregations):")
+            for m in meas[:60]:
+                tbl = f" [{m['table']}]" if m.get("table") else ""
+                parts.append(f"  - [{m['name']}]{tbl}")
+            parts.append("")
+        if rels:
+            parts.append("RELATIONSHIPS (the ONLY valid join paths — never combine unrelated tables):")
+            for r in rels[:60]:
+                act = "" if str(r.get("active")).lower() in ("true", "1", "yes") else " (INACTIVE — needs USERELATIONSHIP)"
+                parts.append(f"  - {r['from']} -> {r['to']}{act}")
+            parts.append("")
+        return "\n".join(parts)
 
     def set_table_index(self, mapping: Dict[str, Dict[str, Optional[str]]]) -> None:
         """Install an offline name → {datasetId, workspaceId} map (P4).
@@ -183,6 +334,43 @@ class PowerBIClient(DataSourceClient):
         if entry:
             return entry.get("datasetId"), entry.get("workspaceId")
         return None, None
+
+    def _sanitize_dax(self, query: str) -> str:
+        """Rewrite any synthetic ``Dataset/Table`` name inside a DAX string to the
+        bare, single-quoted table name DAX actually accepts.
+
+        The schema exposes each table as ``Dataset/Table`` for display/lookup, but
+        DAX has NO dataset qualifier — ``EVALUATE 'Dataset/Table'`` fails with HTTP
+        400 "Cannot find table 'Dataset/Table'". LLMs copy the display name into the
+        query anyway. Rather than hope the prompt prevents it, we fix it mechanically
+        here: for every full name in the offline index, replace both the quoted
+        (``'Dataset/Table'``) and bare (``Dataset/Table``) forms with the bare
+        single-quoted table name (``'Table'``). Longest-first so a name that is a
+        prefix of another can't partially match. No-op when the index is empty or the
+        query contains no ``/`` qualifier. Never raises.
+        """
+        try:
+            if not query or "/" not in query or not self._table_index:
+                return query
+            full_names = [k for k in self._table_index.keys() if "/" in k]
+            if not full_names:
+                return query
+            import re as _re
+            out = query
+            for full in sorted(full_names, key=len, reverse=True):
+                bare = full.split("/")[-1]
+                repl = f"'{bare}'"
+                # 'Dataset/Table' (already quoted) -> 'Table'
+                out = out.replace(f"'{full}'", repl)
+                # bare Dataset/Table (unquoted) -> 'Table' (word-ish boundary)
+                out = _re.sub(
+                    r"(?<!['\w])" + _re.escape(full) + r"(?!['\w])",
+                    repl,
+                    out,
+                )
+            return out
+        except Exception:  # noqa: BLE001 — sanitize must never break a query
+            return query
 
     def connect(self):
         """
@@ -265,19 +453,34 @@ class PowerBIClient(DataSourceClient):
                 "connectivity": True,
             }
 
-        # Phase 4: Try DAX query on the first dataset to verify query access
-        first_ds = ds_list[0]
-        first_ds_id = first_ds["id"]
-        first_ds_name = first_ds.get("name") or first_ds_id
-        try:
-            url = f"{self.BASE_URL}/groups/{first_ws_id}/datasets/{first_ds_id}/executeQueries"
-            body = {
-                "queries": [{"query": "EVALUATE ROW(\"test\", 1)"}],
-                "serializerSettings": {"includeNulls": True},
-            }
-            resp = self._http.post(url, json=body, headers=headers, timeout=30)
-            if resp.status_code >= 300:
-                # Extract the detail message from Power BI's error response
+        # Phase 4: verify query access. A dataset with ZERO tables rejects any
+        # DAX EVALUATE ("DAX Evaluate queries work only on databases which have
+        # at least one table"), so probing only the FIRST dataset yields a false
+        # failure when that dataset happens to be empty / report-only / a push
+        # dataset — even though other datasets are perfectly queryable. Probe the
+        # datasets in order and succeed as soon as ANY one is queryable; only fail
+        # if none are.
+        probe_error = ""
+        probed = 0
+        for ds in ds_list[:8]:
+            ds_id = ds["id"]
+            ds_name = ds.get("name") or ds_id
+            probed += 1
+            try:
+                url = f"{self.BASE_URL}/groups/{first_ws_id}/datasets/{ds_id}/executeQueries"
+                body = {
+                    "queries": [{"query": "EVALUATE ROW(\"test\", 1)"}],
+                    "serializerSettings": {"includeNulls": True},
+                }
+                resp = self._http.post(url, json=body, headers=headers, timeout=30)
+                if resp.status_code < 300:
+                    return {
+                        "success": True,
+                        "message": f"Connected to Power BI. Found {len(workspaces)}+ workspace(s), {len(ds_list)} dataset(s); dataset '{ds_name}' is queryable.",
+                        "workspaces": len(workspaces),
+                        "datasets": len(ds_list),
+                    }
+                # Not queryable — capture Power BI's detail for the final error.
                 detail_msg = ""
                 try:
                     err = resp.json().get("error", {})
@@ -289,27 +492,19 @@ class PowerBIClient(DataSourceClient):
                             break
                 except Exception:
                     pass
+                probe_error = detail_msg or f"HTTP {resp.status_code} on dataset '{ds_name}'"
+            except Exception as e:  # noqa: BLE001
+                probe_error = f"dataset '{ds_name}': {e}"
 
-                if not detail_msg:
-                    detail_msg = f"HTTP {resp.status_code} on dataset '{first_ds_name}'. Ensure the service principal is added as a Member or Contributor in your Power BI workspaces, and that the workspace is on Premium/PPU/Embedded capacity."
-
-                return {
-                    "success": False,
-                    "message": f"Connected but cannot query datasets: {detail_msg}",
-                    "connectivity": True,
-                }
-        except Exception as e:
-            return {
-                "success": False,
-                "message": f"Connected but cannot query dataset '{first_ds_name}': {e}",
-                "connectivity": True,
-            }
-
+        # No probed dataset was queryable.
         return {
-            "success": True,
-            "message": f"Connected to Power BI. Found {len(workspaces)}+ workspace(s), {len(ds_list)} dataset(s) in first workspace.",
-            "workspaces": len(workspaces),
-            "datasets": len(ds_list),
+            "success": False,
+            "message": (
+                f"Connected, but none of the first {probed} dataset(s) are queryable. "
+                f"Last error: {probe_error}. Empty / report-only datasets reject DAX; "
+                f"ensure at least one dataset has tables and the account has Build permission."
+            ),
+            "connectivity": True,
         }
 
     def list_workspaces(self) -> List[Dict]:
@@ -970,6 +1165,10 @@ class PowerBIClient(DataSourceClient):
         if not query:
             raise ValueError("DAX query is required")
 
+        # Mechanically strip any synthetic "Dataset/Table" qualifier the LLM may have
+        # placed inside the DAX (DAX has no dataset qualifier -> "Cannot find table").
+        query = self._sanitize_dax(query)
+
         # If table_name provided (but not dataset_id), look up the IDs.
         if table_name and not dataset_id:
             # P4: try the offline index FIRST (no live call, no 429). Falls back
@@ -1173,7 +1372,11 @@ class PowerBIClient(DataSourceClient):
                 headers = self._build_headers()
                 resp = self._post_dax_with_retry(url, body, headers)
         if resp.status_code >= 300:
-            raise RuntimeError(f"DAX query failed: HTTP {resp.status_code} {resp.text}")
+            technical, human, category = _humanize_pbi_error(resp.status_code, resp.text)
+            # Log the raw envelope server-side only; never surface it to the user.
+            logger.warning("powerbi.dax.error status=%s category=%s raw=%s",
+                           resp.status_code, category, resp.text[:500])
+            raise PowerBIQueryError(f"DAX query failed: {technical}", human, category)
 
         payload = resp.json() or {}
         results = payload.get("results") or []
@@ -1182,6 +1385,14 @@ class PowerBIClient(DataSourceClient):
             return pd.DataFrame()
 
         first_result = results[0]
+        # "Success with error" (HTTP 200): row/table-limit errors arrive here, not as
+        # a 4xx. Surface them through the same humanizer so they never leak raw.
+        _perr = first_result.get("error")
+        if _perr:
+            _msg = (_perr.get("message") or str(_perr)) if isinstance(_perr, dict) else str(_perr)
+            technical, human, category = _humanize_pbi_error(200, '{"error":{"message":%s}}' % __import__("json").dumps(_msg))
+            logger.warning("powerbi.dax.error200 category=%s msg=%s", category, _msg[:300])
+            raise PowerBIQueryError(f"DAX query failed: {technical}", human, category)
         tables = first_result.get("tables") or []
 
         if not tables:
@@ -1213,6 +1424,9 @@ class PowerBIClient(DataSourceClient):
         return text
 
     def system_prompt(self) -> str:
+        return self._system_prompt_base() + self._model_meta_prompt()
+
+    def _system_prompt_base(self) -> str:
         return """
 ## Power BI DAX Query Guide
 
@@ -1287,6 +1501,69 @@ TOPN(10,
 - String literals use double quotes: "value"
 - Relationships between tables are in `fks` - use RELATED() to traverse them
 - INFO.TABLES() and INFO.COLUMNS() do NOT work via REST API - use the schema metadata instead
+
+### CRITICAL — Aggregation / scalar-column rule (READ THIS)
+DAX is NOT SQL. Every column reference in the OUTPUT must be EITHER:
+  (a) a group-by key inside SUMMARIZECOLUMNS, OR
+  (b) wrapped in an aggregation: SUM / MIN / MAX / COUNT / COUNTROWS / DISTINCTCOUNT / AVERAGE.
+NEVER place a bare, many-valued column in a scalar / measure / ROW context. Power BI
+will reject it with HTTP 400: "A single value for column '<col>' cannot be determined."
+This is the #1 cause of failed DAX. When in doubt, aggregate.
+
+### Canonical patterns — COPY THESE (do not invent SQL-style column selects)
+Count all rows:
+    EVALUATE ROW("count", COUNTROWS('projects'))
+Count distinct values of a column:
+    EVALUATE ROW("count", DISTINCTCOUNT('projects'[id]))
+Latest / earliest date (scalar):
+    EVALUATE ROW("latest", MAX('projects'[created_at]))
+Sum / average of a measure column (scalar):
+    EVALUATE ROW("total", SUM('SalesDetails_2024'[NetAmount]))
+Group + aggregate (the workhorse — one row per group):
+    EVALUATE
+    SUMMARIZECOLUMNS(
+        'projects'[project_status],
+        "cnt", COUNTROWS('projects')
+    )
+Filter to a subset, then return rows (row-level detail is allowed here):
+    EVALUATE FILTER('projects', 'projects'[project_status] = "Off Track")
+Top N groups by an aggregate:
+    EVALUATE
+    TOPN(10, SUMMARIZECOLUMNS('projects'[project_sector], "cnt", COUNTROWS('projects')), [cnt], DESC)
+
+### Always aggregate AT THE SOURCE
+Push counting / summing / grouping / filtering INTO the DAX query. Do NOT pull every
+row into pandas to count or sum — that is slow (Power BI's engine is 40-84s per query)
+and wasteful. Return the smallest result that answers the question.
+
+### If a query FAILS with "single value ... cannot be determined"
+The named column is many-valued in a scalar context. FIX = wrap THAT column in an
+aggregation (MAX/MIN/SUM/COUNT/DISTINCTCOUNT) or move it into SUMMARIZECOLUMNS as a
+group key. DO NOT drop the column. DO NOT return an empty DataFrame. Re-run the fixed query.
+
+### CRITICAL — table naming inside DAX (the #1 "Cannot find table" cause)
+The schema lists each table as `Dataset/Table` (e.g. `Open Project Tracking/projects`).
+That `Dataset/` prefix is a DISPLAY label — DAX has NO dataset qualifier. Inside the DAX
+query you MUST use ONLY the bare table name, single-quoted:
+  - RIGHT: `EVALUATE 'projects'`  /  `'projects'[On Risk]`
+  - WRONG: `EVALUATE 'Open Project Tracking/projects'`  (400 "Cannot find table")
+Pass the full `Dataset/Table` name as the 2nd argument to execute_query; use the BARE
+name in the DAX text. Never put a `/` inside a DAX table reference.
+
+### Prefer MEASURES over raw columns
+If the model exposes a measure that answers the question (see the MEASURES list in the
+schema), reference it directly — `EVALUATE ROW("v", [Measure Name])` — instead of
+re-aggregating raw columns. Measures already contain the correct aggregation and are the
+safest, fastest surface. Only aggregate raw columns when no measure fits.
+
+### Joining across tables — use RELATIONSHIPS, never a blind cross join
+Two tables can only be combined along a defined relationship (see the RELATIONSHIPS list
+in the schema: from-table[col] -> to-table[col]). To answer across related tables use ONE
+of: SUMMARIZECOLUMNS with a measure (cross-table filtering flows through the measure via
+the relationship), or RELATED('OtherTable'[col]) to pull an attribute along an active
+relationship. NEVER build a result from two tables that have NO relationship between them —
+that produces a cartesian explosion (every row × every row) and a wrong answer. If the
+tables you need are not related, say so rather than cross-joining.
 """
 
     # ----------------------------
