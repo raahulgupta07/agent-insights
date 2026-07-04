@@ -68,14 +68,22 @@ def setup_logging():
     stderr_handler.setLevel(logging.ERROR)
     root_logger.addHandler(stderr_handler)
     
-    # File handler with rotation
-    file_handler = RotatingFileHandler(
-        "logs/app.log",
-        maxBytes=10*1024*1024,  # 10MB
-        backupCount=5
-    )
-    file_handler.setFormatter(formatter)
-    root_logger.addHandler(file_handler)
+    # File handler with rotation.
+    # Opt-in stdout-only mode for OpenShift/containers: when LOG_STDOUT_ONLY is
+    # set, log to stdout instead of a rotating file on disk (the arbitrary-UID
+    # container can't write logs/app.log). Unset = unchanged (rotating file).
+    if os.getenv("LOG_STDOUT_ONLY") in ("1", "true", "True"):
+        stdout_handler = logging.StreamHandler(sys.stdout)
+        stdout_handler.setFormatter(formatter)
+        root_logger.addHandler(stdout_handler)
+    else:
+        file_handler = RotatingFileHandler(
+            "logs/app.log",
+            maxBytes=10*1024*1024,  # 10MB
+            backupCount=5
+        )
+        file_handler.setFormatter(formatter)
+        root_logger.addHandler(file_handler)
     
     # Set levels for third-party loggers to reduce noise
     logging.getLogger("uvicorn.access").setLevel(logging.INFO)

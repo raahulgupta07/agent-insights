@@ -153,10 +153,15 @@ def _get_async_database_url() -> str:
 
 
 def _get_async_ssl_connect_args(db_config) -> dict:
-    """Build SSL connect_args for asyncpg (uses a different ssl param format)."""
+    """Build SSL connect_args for asyncpg (uses a different ssl param format).
+
+    When ssl_mode is empty, explicitly pass ssl=False to prevent asyncpg from
+    auto-detecting client certificates in ~/.postgresql/ (which fails on OCP
+    where the container runs under an arbitrary UID that cannot read those files).
+    """
     ssl_mode = db_config.auth.ssl_mode
     if not ssl_mode:
-        return {}
+        return {"ssl": False}
     import ssl
     ssl_ctx = ssl.create_default_context()
     if ssl_mode == "verify-full":
