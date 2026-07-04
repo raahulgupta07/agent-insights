@@ -17,42 +17,7 @@
                 </div>
 
                 <div class="px-5 py-4 max-h-[calc(100vh-180px)] overflow-y-auto">
-                    <!-- mode toggle: queue for Train (inbox) vs route now (per file) -->
-                    <div v-if="trainRoutingEnabled" class="flex flex-col sm:flex-row gap-2 mb-4">
-                        <button
-                            type="button"
-                            class="flex-1 text-left rounded-xl border px-3.5 py-2.5 transition-colors"
-                            :class="mode === 'inbox' ? 'border-[#C2541E] bg-[#FFF6F1]' : 'border-[#E9E0D3] bg-white hover:bg-[#FCFBFA]'"
-                            @click="mode = 'inbox'"
-                        >
-                            <div class="flex items-center gap-2">
-                                <span class="w-4 h-4 rounded-full border flex items-center justify-center shrink-0" :class="mode === 'inbox' ? 'border-[#C2541E]' : 'border-[#cfc8bd]'">
-                                    <span v-if="mode === 'inbox'" class="w-2 h-2 rounded-full bg-[#C2541E]"></span>
-                                </span>
-                                <span class="text-[12.5px] font-semibold text-[#1f2328]">Add to inbox &mdash; sort when I Train</span>
-                            </div>
-                            <p class="text-[11px] text-[#6b7280] mt-1 ms-6">Queue files now; the router sorts each into its lane when you train the agent.</p>
-                        </button>
-                        <button
-                            type="button"
-                            class="flex-1 text-left rounded-xl border px-3.5 py-2.5 transition-colors"
-                            :class="mode === 'route' ? 'border-[#C2541E] bg-[#FFF6F1]' : 'border-[#E9E0D3] bg-white hover:bg-[#FCFBFA]'"
-                            @click="mode = 'route'"
-                        >
-                            <div class="flex items-center gap-2">
-                                <span class="w-4 h-4 rounded-full border flex items-center justify-center shrink-0" :class="mode === 'route' ? 'border-[#C2541E]' : 'border-[#cfc8bd]'">
-                                    <span v-if="mode === 'route'" class="w-2 h-2 rounded-full bg-[#C2541E]"></span>
-                                </span>
-                                <span class="text-[12.5px] font-semibold text-[#1f2328]">Route now (per file)</span>
-                            </div>
-                            <p class="text-[11px] text-[#6b7280] mt-1 ms-6">Classify each file and confirm or override its destination right here.</p>
-                        </button>
-                    </div>
-
-                    <!-- inbox confirmation -->
-                    <div v-if="inboxResult" class="mb-4 rounded-xl border border-[#cfe7d5] bg-[#EEFAF1] px-4 py-3">
-                        <div class="text-[13px] font-semibold text-[#157A43]">{{ inboxResult }} file{{ inboxResult === 1 ? '' : 's' }} added to inbox &mdash; they&rsquo;ll be sorted when you Train.</div>
-                    </div>
+                    <!-- Single flow: drop → auto-sort → auto-place → summary. No mode choice. -->
 
                     <!-- drop zone -->
                     <div
@@ -80,23 +45,26 @@
                         <span>{{ busyLabel }}</span>
                     </div>
 
-                    <!-- result summary (after apply) -->
+                    <!-- result summary (after auto-place) -->
                     <div v-if="result" class="mb-4 rounded-xl border border-[#cfe7d5] bg-[#EEFAF1] px-4 py-3">
-                        <div class="text-[13px] font-semibold text-[#157A43]">Routing applied &mdash; {{ result.applied }} file{{ result.applied === 1 ? '' : 's' }} placed{{ result.train_started ? ' &middot; training started' : '' }}</div>
+                        <div class="text-[13px] font-semibold text-[#157A43]">&check; {{ result.applied }} file{{ result.applied === 1 ? '' : 's' }} sorted</div>
                         <div class="text-[12px] text-[#3b4250] mt-1 flex flex-wrap gap-x-3 gap-y-1">
-                            <span v-for="(n, dest) in resultByDest" :key="dest">{{ destMeta(dest).ic }} {{ n }} &rarr; {{ destMeta(dest).short }}</span>
+                            <span v-for="(n, dest) in resultByDest" :key="dest">{{ destMeta(dest).ic }} {{ n }} {{ destMeta(dest).short }}</span>
                         </div>
+                        <button
+                            v-if="unsureCount && !reviewOpen"
+                            type="button"
+                            class="mt-2 text-[12px] font-semibold text-[#b45309] hover:underline"
+                            @click="reviewOpen = true"
+                        >&#9888; {{ unsureCount }} we weren&rsquo;t sure about &mdash; review</button>
                     </div>
 
-                    <!-- banner + rows -->
-                    <template v-if="items.length && !busy">
+                    <!-- banner + rows (review only) -->
+                    <template v-if="items.length && !busy && reviewOpen">
                         <div class="flex items-center gap-2 mb-3 mt-1">
-                            <h3 class="text-[14px] font-semibold text-[#1f2329]" style="font-family: 'Spectral', ui-serif, Georgia, serif">Detected &amp; routed</h3>
+                            <h3 class="text-[14px] font-semibold text-[#1f2329]" style="font-family: 'Spectral', ui-serif, Georgia, serif">Review &amp; adjust</h3>
                             <span class="flex-1"></span>
-                            <span class="text-[11.5px] text-[#6b7280]">
-                                <b class="text-[#1f2329]">{{ summary.auto }}</b> auto-routed &middot;
-                                <b :class="summary.needs_confirm ? 'text-[#b45309]' : 'text-[#1f2329]'">{{ summary.needs_confirm }}</b> need a look
-                            </span>
+                            <span class="text-[11.5px] text-[#6b7280]">Change any destination, then re-apply.</span>
                         </div>
 
                         <div
@@ -154,37 +122,33 @@
                     </div>
                 </div>
 
-                <!-- footer -->
+                <!-- footer: single flow — Review (optional) + Done -->
                 <div class="flex items-center gap-3 px-5 py-3.5 border-t border-[#ECECEC] bg-white">
-                    <!-- INBOX mode: files are added + closed automatically; footer just shows Close -->
-                    <template v-if="mode === 'inbox'">
-                        <span class="text-[12px] text-[#6b7280]">Drop or browse files above &mdash; they queue to the inbox.</span>
-                        <span class="flex-1"></span>
-                        <button type="button" class="text-[12.5px] font-semibold text-[#3b4250] bg-white border border-[#ECECEC] rounded-lg px-4 py-2 hover:bg-[#F4F3F1]" @click="emitClose">
-                            Close
-                        </button>
-                    </template>
-                    <!-- ROUTE-NOW mode: unchanged classify → confirm → apply -->
-                    <template v-else>
-                        <label class="inline-flex items-center gap-2 text-[12px] text-[#3b4250] cursor-pointer">
-                            <input v-model="autoTrain" type="checkbox" class="accent-[#C2541E]" />
-                            Auto-train after applying
-                        </label>
-                        <span class="flex-1"></span>
-                        <span class="text-[12px] text-[#6b7280]"><b class="text-[#1f2329]">{{ keepCount }}</b> of {{ items.length }} routed</span>
-                        <button type="button" class="text-[12.5px] font-semibold text-[#3b4250] bg-white border border-[#ECECEC] rounded-lg px-4 py-2 hover:bg-[#F4F3F1]" @click="emitClose">
-                            Cancel
-                        </button>
-                        <button
-                            type="button"
-                            class="text-[13px] font-bold text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-lg px-4 py-2 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                            :disabled="!keepCount || applying || busy"
-                            @click="apply"
-                        >
-                            <span v-if="applying">Applying&hellip;</span>
-                            <span v-else>Apply routing &rarr;</span>
-                        </button>
-                    </template>
+                    <span v-if="!result && !busy" class="text-[12px] text-[#6b7280]">Drop files above &mdash; we sort each one for you.</span>
+                    <!-- review toggle appears once files are placed -->
+                    <button
+                        v-if="result && items.length"
+                        type="button"
+                        class="text-[12.5px] font-semibold text-[#3b4250] bg-white border border-[#ECECEC] rounded-lg px-4 py-2 hover:bg-[#F4F3F1]"
+                        @click="reviewOpen = !reviewOpen"
+                    >
+                        {{ reviewOpen ? 'Hide review' : 'Review' }}
+                    </button>
+                    <span class="flex-1"></span>
+                    <!-- re-apply only shown while reviewing -->
+                    <button
+                        v-if="reviewOpen && items.length"
+                        type="button"
+                        class="text-[13px] font-bold text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-lg px-4 py-2 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        :disabled="!keepCount || applying || busy"
+                        @click="apply"
+                    >
+                        <span v-if="applying">Applying&hellip;</span>
+                        <span v-else>Re-apply changes</span>
+                    </button>
+                    <button type="button" class="text-[12.5px] font-semibold text-[#3b4250] bg-white border border-[#ECECEC] rounded-lg px-4 py-2 hover:bg-[#F4F3F1]" @click="emitClose">
+                        Done
+                    </button>
                 </div>
             </div>
         </div>
@@ -209,10 +173,9 @@ const props = withDefaults(
 )
 const emit = defineEmits<{ (e: 'close'): void; (e: 'applied', summary: any): void; (e: 'inbox-updated', added: number): void }>()
 
-// Mode: 'inbox' = queue files, sort when the user Trains; 'route' = classify + place per file now.
-// Default to inbox when train-routing is on, else the legacy route-now flow.
-const mode = ref<'inbox' | 'route'>(props.trainRoutingEnabled ? 'inbox' : 'route')
-const inboxResult = ref<number | null>(null)
+// Single flow: drop → upload → classify → auto-place. No mode choice.
+// `reviewOpen` reveals the per-file override rows for anyone who wants to adjust.
+const reviewOpen = ref(false)
 
 const DESTS = ['database', 'semantic', 'instructions', 'examples', 'knowledge', 'skip']
 const DEST_META: Record<string, { ic: string; label: string; short: string; cls: string }> = {
@@ -233,15 +196,17 @@ const applying = ref(false)
 const error = ref('')
 const items = ref<SmartItem[]>([])
 const summary = ref<{ auto: number; needs_confirm: number; total: number }>({ auto: 0, needs_confirm: 0, total: 0 })
-const autoTrain = ref(true)
 const result = ref<any>(null)
 
-const busy = computed(() => uploading.value || classifying.value)
+const busy = computed(() => uploading.value || classifying.value || applying.value)
 const busyLabel = computed(() => {
     if (uploading.value) return 'Uploading files…'
-    return mode.value === 'inbox' ? 'Adding to inbox…' : 'Classifying & routing…'
+    if (applying.value) return 'Sorting your files…'
+    return 'Sorting your files…'
 })
 const keepCount = computed(() => items.value.filter(it => it.dest !== 'skip').length)
+// Files the classifier was unsure about — surfaced in the summary so a human can peek.
+const unsureCount = computed(() => items.value.filter(it => it.needs_confirm).length)
 // confidence may arrive as 0..1 or 0..100 — normalize for the bar + label.
 const pctScale = computed(() => (items.value.some(it => (it.confidence || 0) > 1) ? 1 : 100))
 function confPct(c: number) { return Math.max(0, Math.min(100, Math.round((c || 0) * pctScale.value))) }
@@ -276,7 +241,8 @@ function onDrop(e: DragEvent) {
 async function handleFiles(files: File[]) {
     error.value = ''
     result.value = null
-    inboxResult.value = null
+    reviewOpen.value = false
+    items.value = []
     uploading.value = true
     const fileIds: string[] = []
     try {
@@ -297,32 +263,7 @@ async function handleFiles(files: File[]) {
         uploading.value = false
     }
     if (!fileIds.length) return
-    if (mode.value === 'inbox') await addToInbox(fileIds)
-    else await classify(fileIds)
-}
-
-// INBOX mode: queue the uploaded file ids; emit so the page's StudioInbox refetches; brief confirm + close.
-async function addToInbox(fileIds: string[]) {
-    classifying.value = true
-    error.value = ''
-    try {
-        const { data, error: ibErr } = await useMyFetch<any>(`/studios/${props.studioId}/smart-upload/inbox`, {
-            method: 'POST',
-            body: { file_ids: fileIds },
-        })
-        if (ibErr?.value) {
-            error.value = (ibErr.value as any)?.data?.detail || 'Could not add these files to the inbox.'
-            return
-        }
-        const added = Number((data.value as any)?.added ?? fileIds.length)
-        inboxResult.value = added
-        emit('inbox-updated', added)
-        setTimeout(() => { emitClose() }, 900)
-    } catch (e: any) {
-        error.value = e?.data?.detail || e?.message || 'Could not add to inbox.'
-    } finally {
-        classifying.value = false
-    }
+    await classify(fileIds)
 }
 
 async function classify(fileIds: string[]) {
@@ -338,20 +279,20 @@ async function classify(fileIds: string[]) {
         }
         const res = data.value as any
         const incoming: SmartItem[] = res?.items || []
-        // append so a second drop adds to the list
-        items.value = [...items.value, ...incoming]
-        const s = res?.summary || {}
+        // replace: each drop is its own batch (auto-applied below)
+        items.value = incoming
         summary.value = {
             auto: items.value.filter(it => !it.needs_confirm).length,
             needs_confirm: items.value.filter(it => it.needs_confirm).length,
             total: items.value.length,
         }
-        if (typeof s.auto === 'number' && incoming.length === items.value.length) summary.value = { auto: s.auto, needs_confirm: s.needs_confirm, total: s.total }
     } catch (e: any) {
         error.value = e?.data?.detail || e?.message || 'Classify failed.'
     } finally {
         classifying.value = false
     }
+    // Single flow: place everything immediately, no confirm step.
+    if (!error.value && keepCount.value) await apply()
 }
 
 async function apply() {
@@ -363,7 +304,7 @@ async function apply() {
             items: items.value
                 .filter(it => it.dest !== 'skip')
                 .map(it => ({ file_id: it.file_id, dest: it.dest, filename: it.filename })),
-            train: autoTrain.value,
+            train: false,
         }
         if (props.dataSourceId) payload.data_source_id = props.dataSourceId
         const { data, error: apErr } = await useMyFetch<any>(`/studios/${props.studioId}/smart-upload/apply`, { method: 'POST', body: payload })
