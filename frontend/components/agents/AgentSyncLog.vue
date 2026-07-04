@@ -5,8 +5,15 @@
         class="cai-panel mb-6 rounded-xl overflow-hidden"
         :class="{ 'is-done': phase === 'done', 'is-error': phase === 'error' }"
     >
-        <!-- Header row: status dot + label + counters + elapsed + auto-scroll hint -->
+        <!-- Header row: robot mascot + status dot + label + counters + elapsed -->
         <div class="cai-phead">
+            <svg class="cai-bot" viewBox="0 0 44 44" fill="none" aria-hidden="true">
+                <rect x="7" y="12" width="30" height="24" rx="8" fill="#211B14" stroke="#C2541E" stroke-width="1.6" />
+                <circle cx="17" cy="24" r="3.4" fill="#F2C811"><animate attributeName="r" values="3.4;1;3.4" dur="3.2s" repeatCount="indefinite" /></circle>
+                <circle cx="27" cy="24" r="3.4" fill="#33C6D6"><animate attributeName="r" values="3.4;1;3.4" dur="3.2s" begin="0.15s" repeatCount="indefinite" /></circle>
+                <rect x="20.4" y="4" width="3.2" height="7" rx="1.6" fill="#C2541E" /><circle cx="22" cy="3.4" r="2.4" fill="#E89461" />
+                <rect x="16" y="31" width="12" height="2.4" rx="1.2" fill="#3a2e22" />
+            </svg>
             <span class="cai-dot" :class="dotStateClass"></span>
             <span class="cai-plabel" :class="labelClass">{{ phaseLabel }}</span>
 
@@ -308,6 +315,7 @@ onBeforeUnmount(() => {
 }
 
 /* header */
+.cai-bot { width: 26px; height: 26px; flex: none; }
 .cai-phead {
     display: flex;
     align-items: center;

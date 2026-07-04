@@ -140,37 +140,88 @@ def _conn_account_email(conn) -> str:
         return ""
 
 
+async def _template_conn_type(db, template_id: str) -> Optional[str]:
+    """The connection type (e.g. 'powerbi_user', 'ms_fabric') of a connector template.
+    Used to recognise this user's existing clones of the SAME connector even when their
+    ``template_source_id`` is null/stale (older creation path or a re-published template)
+    — so reconnecting adopts+heals instead of spawning a duplicate agent. Fail-soft."""
+    try:
+        tpl = (
+            await db.execute(
+                select(DataSource)
+                .options(selectinload(DataSource.connections))
+                .where(DataSource.id == str(template_id))
+            )
+        ).scalars().first()
+        conns = getattr(tpl, "connections", None) or []
+        return getattr(conns[0], "type", None) if conns else None
+    except Exception:
+        return None
+
+
 async def _existing_clone(db, *, template_id: str, user_id: str, pbi_email: str = None) -> Optional[DataSource]:
     """Find this user's private clone of a template. When ``pbi_email`` is given,
     match ONLY a clone whose connection is for that same MS/Power BI account — so a
     DIFFERENT account makes a NEW agent instead of overwriting, and the SAME account
-    re-syncs the existing one. When omitted, falls back to the first clone (legacy)."""
-    clones = (
+    re-syncs the existing one. When omitted, falls back to the first clone (legacy).
+
+    Robust dedup: considers clones linked to this template BY ID *or*, when the link is
+    null/stale, by the same connector TYPE — then self-heals ``template_source_id`` on
+    the matched clone. This is what prevents a user ending up with many duplicate
+    agents for the same connector+account (applies to all MS connectors)."""
+    conn_type = await _template_conn_type(db, template_id)
+    all_clones = (
         await db.execute(
             select(DataSource)
             .options(selectinload(DataSource.connections))
             .where(
-                DataSource.template_source_id == str(template_id),
                 DataSource.owner_user_id == str(user_id),
+                DataSource.is_user_template.is_(False),
             )
         )
     ).scalars().all()
+
+    def _belongs(c) -> bool:
+        if str(getattr(c, "template_source_id", "") or "") == str(template_id):
+            return True
+        if conn_type:
+            for conn in (c.connections or []):
+                if getattr(conn, "type", None) == conn_type:
+                    return True
+        return False
+
+    clones = [c for c in all_clones if _belongs(c)]
     if not clones:
         return None
+
+    async def _heal(c):
+        # Re-link an adopted clone to the current template so the tile + future dedup
+        # recognise it. Fail-soft — never block the connect on a backfill.
+        try:
+            if str(getattr(c, "template_source_id", "") or "") != str(template_id):
+                c.template_source_id = str(template_id)
+                db.add(c)
+                await db.commit()
+        except Exception:
+            try:
+                await db.rollback()
+            except Exception:
+                pass
+        return c
     if not pbi_email:
-        return clones[0]
+        return await _heal(clones[0])
     want = str(pbi_email).strip().lower()
     # 1) config-stamped account email (new clones)
     for c in clones:
         for conn in (c.connections or []):
             if _conn_account_email(conn) == want:
-                return c
+                return await _heal(c)
     # 2) legacy clones (no stamped email) — match by the "· <email>" name suffix so
     #    reconnecting the same account re-syncs instead of colliding on the name.
     for c in clones:
         nm = (c.name or "").strip().lower()
         if nm.endswith("· " + want) or nm == want or ("· " + want + " (") in nm:
-            return c
+            return await _heal(c)
     return None  # same user, different account → caller creates a new agent
 
 
@@ -494,6 +545,157 @@ async def register_template_for_user(
     ).scalars().first()
 
 
+# --- Unified Microsoft sign-in: one token → Power BI + Fabric agents --------
+# HYBRID_MS_UNIFIED_SIGNIN. The Power BI clone is built by the normal path; this
+# then builds a Fabric SIBLING clone reusing the SAME FOCI refresh token (FOCI
+# redeems both resources). Power BI needs only the token; Fabric also needs a
+# warehouse SQL endpoint, which we auto-discover via the Fabric REST API. No
+# reachable warehouse → returns None so no dead Fabric agent is created.
+
+async def _existing_fabric_clone(db, *, user_id: str, account_email: str):
+    """This user's existing Fabric (ms_fabric) sibling clone for the same account,
+    so a repeat unified sign-in re-syncs instead of duplicating. Fail-soft."""
+    try:
+        rows = (
+            await db.execute(
+                select(DataSource)
+                .options(selectinload(DataSource.connections))
+                .where(
+                    DataSource.owner_user_id == str(user_id),
+                    DataSource.is_user_template.is_(False),
+                )
+            )
+        ).scalars().all()
+    except Exception:
+        return None
+    want = str(account_email or "").strip().lower()
+    for c in rows:
+        for conn in (c.connections or []):
+            if getattr(conn, "type", None) == "ms_fabric":
+                if not want or _conn_account_email(conn) == want:
+                    return c
+    return None
+
+
+async def _build_fabric_sibling(
+    db, *, organization: Organization, user: User, refresh_token: str,
+    tenant_id: str, account_email: str, ms_identity: Optional[dict], template_id: str,
+) -> Optional[str]:
+    """Build a private Fabric (ms_fabric) clone from the shared sign-in token by
+    auto-discovering the account's warehouse SQL endpoint. Returns the clone id, or
+    None when the account has no reachable Fabric warehouse (no dead agent) or the
+    flag is off. Fully fail-soft — never breaks the Power BI half."""
+    if not flags.MS_UNIFIED_SIGNIN:
+        return None
+    from app.services import ms_fabric_discovery as fd
+    try:
+        endpoint = await asyncio.to_thread(
+            fd.discover_fabric_endpoint, tenant_id or "organizations", refresh_token
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("ms_unified: fabric endpoint discovery failed: %s", e)
+        endpoint = None
+    if not endpoint or not endpoint.get("server_hostname"):
+        logger.info("ms_unified: no reachable Fabric warehouse — skipping Fabric agent")
+        return None
+
+    creds = {"refresh_token": refresh_token}
+    cfg = {"server_hostname": endpoint["server_hostname"]}
+    if endpoint.get("database"):
+        cfg["database"] = endpoint["database"]
+    if tenant_id and tenant_id != "organizations":
+        creds["tenant_id"] = tenant_id
+        cfg["tenant_id"] = tenant_id
+    base_email = str(account_email or user.email or str(user.id)[:8])
+    base_name = f"Microsoft Fabric · {base_email}"
+
+    # Re-sync an existing Fabric sibling for this account instead of duplicating.
+    existing = await _existing_fabric_clone(db, user_id=str(user.id), account_email=base_email)
+    if existing is not None:
+        conn = existing.connections[0] if existing.connections else None
+        if conn is not None:
+            conn.credentials = None
+            conn.encrypt_credentials(creds)
+            conn.auth_policy = "system_only"
+            _merge_ms_identity_into_config(conn, {**(ms_identity or {}), "email": base_email, **cfg})
+            db.add(conn)
+            try:
+                await db.commit()
+                await db.refresh(conn)
+            except Exception:
+                try:
+                    await db.rollback()
+                except Exception:
+                    pass
+        return str(existing.id)
+
+    from app.services.connection_service import ConnectionService
+    conn_svc = ConnectionService()
+    new_conn = None
+    for attempt in range(4):
+        name_try = base_name if attempt == 0 else f"{base_name} ({attempt+1})"
+        try:
+            new_conn = await conn_svc.create_connection(
+                db=db, organization=organization, current_user=user,
+                name=name_try, type="ms_fabric", config=dict(cfg), credentials=creds,
+                auth_policy="system_only", owner_user_id=str(user.id),
+                validate=False,  # identity proven; catalog syncs best-effort in bg
+            )
+            break
+        except HTTPException as e:
+            if e.status_code == 409 and attempt < 3:
+                continue
+            logger.warning("ms_unified: fabric connection create failed: %s", e.detail)
+            return None
+        except Exception as e:  # noqa: BLE001
+            logger.warning("ms_unified: fabric connection create error: %s", e)
+            return None
+    if new_conn is None:
+        return None
+    _merge_ms_identity_into_config(new_conn, {**(ms_identity or {}), "email": base_email})
+    db.add(new_conn)
+    try:
+        await db.commit()
+        await db.refresh(new_conn)
+    except Exception:
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+
+    clone = None
+    for attempt in range(4):
+        ds_name = base_name if attempt == 0 else f"{base_name} ({attempt+1})"
+        clone = DataSource(
+            name=ds_name,
+            organization_id=str(organization.id),
+            owner_user_id=str(user.id),
+            is_public=False,
+            is_user_template=False,
+            template_source_id=str(template_id) if template_id else None,
+            use_llm_sync=True,
+        )
+        clone.connections.append(new_conn)
+        db.add(clone)
+        try:
+            await db.commit()
+            await db.refresh(clone)
+            break
+        except IntegrityError:
+            await db.rollback()
+            clone = None
+    if clone is None:
+        return None
+    try:
+        from app.services.data_source_service import DataSourceService
+        await DataSourceService()._create_memberships(db, clone, [str(user.id)], permissions=["manage"])
+    except Exception as e:  # noqa: BLE001
+        logger.warning("ms_unified: fabric membership create failed: %s", e)
+    logger.info("ms_unified: built Fabric sibling agent %s (endpoint %s)",
+                clone.id, endpoint.get("workspace"))
+    return str(clone.id)
+
+
 # --- Device-code sign-in (MFA-safe, no app registration) --------------------
 # For Microsoft connectors a member proves identity via the OAuth device-code
 # flow instead of typing a password: we show a short code + verification URL,
@@ -579,14 +781,19 @@ async def device_code_start(db, *, template_id: str, organization: Organization)
 
 async def _register_clone_fresh_session(
     *, template_id: str, org_id: str, user_id: str, credentials: dict,
-    ms_identity: Optional[dict] = None,
-) -> str | None:
+    ms_identity: Optional[dict] = None, fanout: bool = False,
+) -> tuple[str | None, list[str]]:
     """Build the private clone in a BRAND-NEW db session with freshly-loaded org +
     user. The request session that served /connect is fragile here — by the time
     we reach create_connection its `organization` is expired, and accessing
     `organization.id` fires a SYNC lazy-load outside the async greenlet →
     MissingGreenlet. A fresh session + fresh rows sidesteps it entirely (same
-    greenlet-safe pattern as sync_clone_bg / autolearn_clone). Returns clone id."""
+    greenlet-safe pattern as sync_clone_bg / autolearn_clone).
+
+    Returns (primary_clone_id, [sibling_clone_ids]). When ``fanout`` is set and
+    HYBRID_MS_UNIFIED_SIGNIN is on, ALSO builds a Fabric sibling clone from the same
+    refresh token (auto-discovered warehouse endpoint) so one sign-in yields two
+    agents; the sibling list is empty when there's no reachable Fabric warehouse."""
     from app.dependencies import async_session_maker
     async with async_session_maker() as fresh:
         org = (
@@ -596,7 +803,7 @@ async def _register_clone_fresh_session(
             await fresh.execute(select(User).where(User.id == str(user_id)))
         ).scalars().first()
         if not org or not user:
-            return None
+            return None, []
         # create_connection reads ONLY organization.id / current_user.id (pure PK
         # scalars). Force-load those + user.email, then DETACH both objects: a
         # detached, fully-populated instance returns cached attribute values and
@@ -615,14 +822,35 @@ async def _register_clone_fresh_session(
             defer_sync=True,
             ms_identity=ms_identity,
         )
-        return str(clone.id) if clone else None
+        primary_id = str(clone.id) if clone else None
+        sibling_ids: list[str] = []
+        if fanout and primary_id and flags.MS_UNIFIED_SIGNIN:
+            try:
+                creds = credentials or {}
+                rt = creds.get("refresh_token")
+                tenant = creds.get("tenant_id") or "organizations"
+                account_email = (ms_identity or {}).get("ms_account_email") or ""
+                if rt:
+                    fab_id = await _build_fabric_sibling(
+                        fresh, organization=org, user=user, refresh_token=rt,
+                        tenant_id=tenant, account_email=account_email,
+                        ms_identity=ms_identity, template_id=template_id,
+                    )
+                    if fab_id:
+                        sibling_ids.append(fab_id)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("ms_unified: fan-out sibling build failed: %s", e)
+        return primary_id, sibling_ids
 
 
 async def device_code_poll(
-    db, *, template_id: str, organization: Organization, user: User, device_code: str
+    db, *, template_id: str, organization: Organization, user: User, device_code: str,
+    fanout: bool = False,
 ) -> dict:
     """Poll once. On success, auto-register the caller's private clone with the
-    returned refresh_token and return the created data source id."""
+    returned refresh_token and return the created data source id. When ``fanout``
+    is set (unified Microsoft sign-in), also builds a Fabric sibling agent from the
+    same token and returns its id under ``sibling_data_source_ids``."""
     if not flags.PER_USER_CONNECTOR:
         raise HTTPException(status_code=404, detail="Per-user connector is not enabled")
     tenant_id, _, _ = await _template_tenant_and_scope(
@@ -645,23 +873,27 @@ async def device_code_poll(
         creds["tenant_id"] = tenant_id
     # Capture the signed-in MS identity from the token's id_token (flag-gated, fail-soft).
     ms_identity = _ms_identity_from_token(res)
-    clone_id = await _register_clone_fresh_session(
+    clone_id, sibling_ids = await _register_clone_fresh_session(
         template_id=template_id, org_id=str(organization.id), user_id=str(user.id),
-        credentials=creds, ms_identity=ms_identity,
+        credentials=creds, ms_identity=ms_identity, fanout=fanout,
     )
     out = {"status": "success", "data_source_id": clone_id}
+    if sibling_ids:
+        out["sibling_data_source_ids"] = sibling_ids
     if ms_identity.get("ms_account_email"):
         out["ms_account_email"] = ms_identity["ms_account_email"]
     return out
 
 
 async def connect(
-    db, *, template_id: str, organization: Organization, user: User, email: str, password: str
+    db, *, template_id: str, organization: Organization, user: User, email: str, password: str,
+    fanout: bool = False,
 ) -> dict:
     """Adaptive sign-in: try ROPC (email+password) first. If the account has no
     MFA we connect immediately; if Microsoft demands MFA / conditional access /
     blocks legacy auth we auto-start the device-code flow and tell the caller to
-    poll `/device-code/poll`. Both paths end at the SAME refresh_token→clone build."""
+    poll `/device-code/poll`. Both paths end at the SAME refresh_token→clone build.
+    ``fanout`` (unified Microsoft sign-in) also builds a Fabric sibling agent."""
     if not flags.PER_USER_CONNECTOR:
         raise HTTPException(status_code=404, detail="Per-user connector is not enabled")
     if not flags.ADAPTIVE_CONNECT:
@@ -688,11 +920,13 @@ async def connect(
         # the clone is named + matched by the account the user actually typed.
         if not ms_identity.get("ms_account_email"):
             ms_identity["ms_account_email"] = (email or "").strip()
-        clone_id = await _register_clone_fresh_session(
+        clone_id, sibling_ids = await _register_clone_fresh_session(
             template_id=template_id, org_id=str(organization.id), user_id=str(user.id),
-            credentials=creds, ms_identity=ms_identity,
+            credentials=creds, ms_identity=ms_identity, fanout=fanout,
         )
         out = {"status": "connected", "data_source_id": clone_id}
+        if sibling_ids:
+            out["sibling_data_source_ids"] = sibling_ids
         if ms_identity.get("ms_account_email"):
             out["ms_account_email"] = ms_identity["ms_account_email"]
         return out
@@ -1121,6 +1355,21 @@ async def sync_clone_bg(clone_id: str, org_id: str, user_id: str,
             try:
                 from app.services.connector_warm import invalidate_headline
                 invalidate_headline(str(clone_id))
+            except Exception:
+                pass
+            # WARM ON SYNC: now that the catalog is synced, pre-warm the user's Power BI
+            # model and precompute the headline KPIs so the FIRST agent-open serves a
+            # cache hit instead of a cold 20-40s DAX pass. We're already in a background
+            # worker (this never blocks a request), so we can await the headline compute
+            # to guarantee it's cached before the user opens. Flag-gated + PBI-only +
+            # fail-soft INSIDE connector_warm (no-op when HOT_START is OFF).
+            try:
+                from app.services import connector_warm as _cw
+                _cw.schedule_warm(clone_id, org_id, user_id)
+                try:
+                    await _cw.compute_headline(clone_id, org_id, user_id, force=True)
+                except Exception:
+                    pass
             except Exception:
                 pass
     except Exception as e:

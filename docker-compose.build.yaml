@@ -58,6 +58,10 @@ services:
     image: cityagent-analytics:dev
     container_name: ca-app
     restart: unless-stopped
+    # Real memory cap (cgroup) — the correct place to bound total memory, replacing
+    # the per-worker RLIMIT_AS. Uncomment and size to ~70% of host RAM before prod.
+    # Docker OOM-kills + restarts (unless-stopped) the container if exceeded.
+    # mem_limit: ${APP_MEM_LIMIT:-8g}
     ports:
       - "${APP_PORT:-3007}:3000"
     environment:
@@ -68,6 +72,11 @@ services:
       - DASH_CONFIG_PATH=/app/dash-config.yaml
       # Tier-2 scale-out: Redis backs the per-user skill-run concurrency cap across replicas.
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      # Sandbox memory guard. The in-process RLIMIT_AS caps VIRTUAL address space
+      # per worker — pandas/numpy/duckdb reserve huge virtual ranges, so a low cap
+      # false-trips MemoryError server-wide. Default 0 = DISABLED; cap REAL memory
+      # at the container/cgroup level instead (see mem_limit on the app service).
+      - SANDBOX_MEM_LIMIT_MB=${SANDBOX_MEM_LIMIT_MB:-0}
       # First-run super-admin bootstrap. start.sh runs scripts/seed_admin.py ONCE
       # before uvicorn IF both email+password are non-empty in the CONTAINER env.
       # These MUST be passed through here — compose only uses .env for ${VAR}

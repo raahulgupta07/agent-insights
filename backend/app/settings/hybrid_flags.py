@@ -18,27 +18,84 @@ Usage:
 
 from __future__ import annotations
 
+import logging
 import os
+from contextvars import ContextVar
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Per-process override store (per-org hybrid-flag override layer)
+# Override stores (per-org hybrid-flag override layer)
 # ---------------------------------------------------------------------------
-# When a key is present here it WINS over the env default. Populated at boot
-# from organization_settings.config['hybrid_overrides'] (see
-# load_overrides_from_db) and kept live by the admin route via set_override.
-# Empty by default -> behaviour is byte-identical to the pure-env flags.
+# ISSUE #2 FIX — tenant isolation. `load_overrides_from_db` used to merge every
+# org's overrides into a single process-global dict (last-scanned org wins), so
+# in a multi-org deploy one org's flag state silently bled into every other. The
+# store is now split:
+#
+#   _OVERRIDES_BY_ORG  — per-org maps {org_id: {ENV_NAME: bool}}. Populated from
+#                        each organization_settings row. These are the truth for
+#                        a given tenant and NEVER cross orgs.
+#   _OVERRIDES         — the "merged global" store (historical name kept). Two
+#                        roles: (a) runtime pins from set_override that aren't
+#                        scoped to an org, and (b) the fallback used when NO org
+#                        context is bound (single-org deploys, daemons, offline
+#                        scripts). It is the union of every org's overrides; a
+#                        cross-org value conflict is logged LOUDLY at load time
+#                        (see load_overrides_from_db) rather than silently merged.
+#
+# Resolution consults the org bound via set_current_org() FIRST, then falls back
+# to the merged global. Empty stores + unbound context => byte-identical to the
+# pure-env flags (dormant until a caller binds an org / the DB has overrides).
+_OVERRIDES_BY_ORG: dict[str, dict[str, bool]] = {}
 _OVERRIDES: dict[str, bool] = {}
+
+# The organization whose per-org overrides win for the current request / task.
+# Bound by set_current_org() (e.g. from request middleware); None => use the
+# merged-global fallback. A ContextVar so it's isolated per asyncio task/thread.
+_current_org: ContextVar[str | None] = ContextVar("hybrid_current_org", default=None)
+
+
+def set_current_org(org_id: "str | None"):
+    """Bind the org whose per-org flag overrides win for the current context.
+
+    Call from request middleware / per-org task setup so `flags.X` resolves that
+    tenant's overrides instead of the merged-global fallback. Returns a token;
+    pass it to reset_current_org() to restore the previous binding. Unbound
+    (never called / reset) => merged-global fallback (unchanged single-org
+    behaviour).
+    """
+    return _current_org.set(str(org_id) if org_id is not None else None)
+
+
+def reset_current_org(token) -> None:
+    """Restore the org binding replaced by a set_current_org() token. Fail-soft."""
+    try:
+        _current_org.reset(token)
+    except Exception:
+        pass
+
+
+def get_current_org() -> "str | None":
+    """The org currently bound for flag resolution (or None)."""
+    return _current_org.get()
 
 
 def _bool(name: str, default: bool = False) -> bool:
     """Read a boolean flag.
 
     Resolution order:
-      1. process override (`_OVERRIDES[name]`) if present, else
-      2. the env var (truthy: 1/true/yes/on, case-insensitive), else
-      3. the supplied default.
+      1. the CURRENT-ORG override (`_OVERRIDES_BY_ORG[current_org][name]`) if an
+         org is bound (set_current_org) and the key is set for it, else
+      2. the merged-global / runtime-pin store (`_OVERRIDES[name]`), else
+      3. the env var (truthy: 1/true/yes/on, case-insensitive), else
+      4. the supplied default.
     """
+    org = _current_org.get()
+    if org is not None:
+        org_map = _OVERRIDES_BY_ORG.get(org)
+        if org_map is not None and name in org_map:
+            return org_map[name]
     if name in _OVERRIDES:
         return _OVERRIDES[name]
     raw = os.environ.get(name)
@@ -59,21 +116,39 @@ def _int(name: str, default: int) -> int:
         return default
 
 
-def set_override(env_name: str, value: "bool | None") -> None:
-    """Set or clear a per-process flag override.
+def set_override(env_name: str, value: "bool | None", org_id: "str | None" = None) -> None:
+    """Set or clear a flag override, effective immediately this process.
 
-    value=True/False pins the flag; value=None clears the override so the
-    env default takes over again. Takes effect immediately this process.
+    value=True/False pins the flag; value=None clears it so the env default takes
+    over again. The pin is written to the merged-global store AND, when scoped to
+    an org, to that org's per-org map so a live admin toggle resolves correctly
+    for the tenant that flipped it. The org is taken from `org_id` if given, else
+    from the current-org contextvar (set_current_org) — so the existing
+    single-arg call in the admin route becomes org-aware automatically once a
+    request binds its org, with no signature break for other callers.
     """
+    org = str(org_id) if org_id is not None else _current_org.get()
     if value is None:
         _OVERRIDES.pop(env_name, None)
+        if org is not None:
+            m = _OVERRIDES_BY_ORG.get(org)
+            if m is not None:
+                m.pop(env_name, None)
     else:
-        _OVERRIDES[env_name] = bool(value)
+        b = bool(value)
+        _OVERRIDES[env_name] = b
+        if org is not None:
+            _OVERRIDES_BY_ORG.setdefault(org, {})[env_name] = b
 
 
 def overrides_snapshot() -> dict[str, bool]:
-    """Current process override store (copy, for debugging / health)."""
+    """Merged-global override store (copy, for debugging / health)."""
     return dict(_OVERRIDES)
+
+
+def overrides_by_org_snapshot() -> dict[str, dict[str, bool]]:
+    """Per-org override maps (deep copy, for debugging / health)."""
+    return {org: dict(m) for org, m in _OVERRIDES_BY_ORG.items()}
 
 
 # ---------------------------------------------------------------------------
@@ -127,6 +202,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_CONNECTOR_JOURNEY_V2": {"label": "Connector journey v2 (confirm → consent → sync)", "role": "agent", "category": "Connectors", "status": "experimental", "note": "Revamped Power BI per-user connect flow: (1) capture the real Microsoft account email/tenant from the id_token on sign-in; (2) do NOT auto-sync — show 'Connected as <ms email>' + a consent gate + explicit 'Sync my data' button; (3) discover datasets via REPORTS + APPS (not just the datasets list) so shared-report users get their queryable data; (4) honest status — queryable vs view-only (no Build), never a hallucinated overview on 0 tables. Off = current auto-sync flow (byte-identical). Default OFF."},
     "HYBRID_PER_USER_CONNECTOR": {"label": "Per-User Connector (self-register)", "role": "admin", "category": "Connectors", "status": "experimental", "note": "Admin configures a connector template once (tenant/client, no creds). Each member registers with their own email+password → gets a PRIVATE copy with their own synced tables (not shared org-wide). Each builds their own analysis. Microsoft/source access control enforced per user. Default OFF."},
     "HYBRID_ADAPTIVE_CONNECT": {"label": "Adaptive connector sign-in (email+password, auto device-code on MFA)", "role": "admin", "category": "Connectors", "status": "experimental", "note": "One sign-in flow for per-user connectors: a member enters email+password and the backend tries ROPC (password grant) first. No MFA → connects immediately; MFA / conditional access / legacy-auth blocked → auto-falls-back to device-code sign-in. Both paths build the same private per-user clone. Default OFF."},
+    "HYBRID_MS_UNIFIED_SIGNIN": {"label": "One Microsoft sign-in → Power BI + Fabric agents", "role": "admin", "category": "Connectors", "status": "experimental", "note": "Adds a 'Microsoft (Fabric + Power BI)' tile. One sign-in mints a FOCI refresh token that redeems BOTH Power BI and Fabric — so a single sign-in provisions a Power BI Data Agent AND a Fabric Data Agent (shared credentials, re-sync refreshes both). The Fabric agent syncs a warehouse if the account has one, else shows an honest empty-state. Existing single-source tiles unchanged. Default OFF."},
     "HYBRID_SEMANTIC_SEARCH": {"label": "Hybrid Search (FTS + embeddings)", "role": "agent", "category": "Intelligence", "status": "experimental", "note": "Uses your OpenRouter key for embeddings (text-embedding-3-small). After enabling, click Rebuild search index."},
 
     # --- Agents & Access --------------------------------------------------
@@ -273,16 +349,19 @@ FLAG_CATEGORIES: list[str] = [
 async def load_overrides_from_db(db) -> int:
     """Scan organization_settings rows and apply their hybrid overrides.
 
-    Reads each row's `config['hybrid_overrides']` (a dict of
-    {ENV_NAME: bool}) and merges every recognised key into `_OVERRIDES`.
-    Only keys present in UPGRADE_FLAGS are honoured (ignores stale/unknown
-    keys). Returns the number of override keys loaded. Never raises into the
-    boot path — on any error it returns whatever was loaded so far.
-
-    NOTE: single-project deploys have one org; if multiple org rows set the
-    same key the last-scanned row wins (process-wide store, not per-org).
+    Reads each row's `config['hybrid_overrides']` (a dict of {ENV_NAME: bool})
+    into the PER-ORG map `_OVERRIDES_BY_ORG[organization_id]` (tenant isolation,
+    ISSUE #2). Each recognised key is ALSO folded into the merged-global
+    `_OVERRIDES` fallback (used when no org context is bound); if two orgs set
+    the SAME key to DIFFERENT values a loud WARNING is logged naming both the
+    losing and winning value rather than silently letting the last org win.
+    Only keys present in UPGRADE_FLAGS are honoured (ignores stale/unknown keys).
+    Returns the number of override keys loaded. Never raises into the boot path.
     """
     loaded = 0
+    # Track which org last wrote each merged-global key so a cross-org conflict
+    # can be reported with the specific orgs involved.
+    _global_source: dict[str, str] = {}
     try:
         from sqlalchemy import select  # local import: keep module dep-free
         from app.models.organization_settings import OrganizationSettings
@@ -294,9 +373,25 @@ async def load_overrides_from_db(db) -> int:
             overrides = config.get("hybrid_overrides") if isinstance(config, dict) else None
             if not isinstance(overrides, dict):
                 continue
+            org_id = str(getattr(row, "organization_id", "") or "")
+            org_map = _OVERRIDES_BY_ORG.setdefault(org_id, {}) if org_id else None
             for env_name, value in overrides.items():
                 if env_name in UPGRADE_FLAGS and value is not None:
-                    _OVERRIDES[env_name] = bool(value)
+                    b = bool(value)
+                    if org_map is not None:
+                        org_map[env_name] = b
+                    # Merged-global fallback + loud cross-org conflict guard.
+                    if env_name in _OVERRIDES and _OVERRIDES[env_name] != b:
+                        logger.warning(
+                            "hybrid flag override CONFLICT across orgs for %s: "
+                            "org %s=%s overrides org %s=%s in the merged-global "
+                            "fallback; per-org resolution (set_current_org) is "
+                            "unaffected. Bind org context per request to avoid bleed.",
+                            env_name, org_id or "?", b,
+                            _global_source.get(env_name, "?"), _OVERRIDES[env_name],
+                        )
+                    _OVERRIDES[env_name] = b
+                    _global_source[env_name] = org_id or "?"
                     loaded += 1
     except Exception:
         # Never break boot over a malformed override row.
@@ -696,9 +791,17 @@ class HybridFlags:
 
     @property
     def READONLY_ENFORCE(self) -> bool:
-        # Connection/engine-level read-only enforcement (not prompt/string).
-        # Default OFF.
-        return _bool("HYBRID_READONLY_ENFORCE", False)
+        # Connection/engine-level read-only enforcement (not prompt/string) on
+        # the AGENT query path: Postgres opens with default_transaction_read_only
+        # and every generated statement passes the structural write/DDL guard in
+        # code_execution. ISSUE #6 — default flipped OFF->ON as pure security
+        # hardening so a prompt-injection can't DROP/DELETE/ALTER source data out
+        # of the box. This deliberately DEVIATES from the upstream-parity rule
+        # (justified: it only blocks writes on external read paths, which the
+        # agent never legitimately writes to — ingest/Engineer use their own
+        # managed staging/analytics engines). Set HYBRID_READONLY_ENFORCE=0 to
+        # restore the legacy string-only-when-explicitly-enabled behaviour.
+        return _bool("HYBRID_READONLY_ENFORCE", True)
 
     @property
     def ASSET_MATERIALIZE(self) -> bool:
@@ -1270,6 +1373,15 @@ class HybridFlags:
         return _bool("HYBRID_ADAPTIVE_CONNECT", False)
 
     @property
+    def MS_UNIFIED_SIGNIN(self) -> bool:
+        # One Microsoft sign-in → TWO Data Agents. The FOCI refresh token minted on
+        # a Power BI sign-in also redeems a Fabric token (same token family), so a
+        # single sign-in builds BOTH a Power BI clone and a Fabric sibling clone
+        # (shared credentials). Additive: a NEW "Microsoft (Fabric + Power BI)" tile;
+        # the existing single-source tiles are untouched. Default OFF.
+        return _bool("HYBRID_MS_UNIFIED_SIGNIN", False)
+
+    @property
     def GOLDEN_QUERIES(self) -> bool:
         # Wave1 P4: promote thumbs-up / repeat-success learned queries to golden;
         # golden ranks first in coder injection. Default OFF.
@@ -1409,6 +1521,7 @@ class HybridFlags:
             "CONNECTOR_JOURNEY_V2": self.CONNECTOR_JOURNEY_V2,
             "PER_USER_CONNECTOR": self.PER_USER_CONNECTOR,
             "ADAPTIVE_CONNECT": self.ADAPTIVE_CONNECT,
+            "MS_UNIFIED_SIGNIN": self.MS_UNIFIED_SIGNIN,
             "GOLDEN_QUERIES": self.GOLDEN_QUERIES,
             "VERIFIED_METRICS": self.VERIFIED_METRICS,
             "SEMANTIC_SEARCH": self.SEMANTIC_SEARCH,

@@ -26,8 +26,13 @@
         </button>
       </div>
 
+      <!-- Body: UNIFIED — live CLI terminal streaming BOTH agents' sync -->
+      <div v-if="showCli" class="px-5 py-5">
+        <ConnectorsConnectCli :agents="cliAgents" @done="onCliDone" />
+      </div>
+
       <!-- Body: CONNECTED — confirm identity + consent + explicit sync (journey v2) -->
-      <div v-if="connectedStep" class="px-5 py-5 space-y-3.5">
+      <div v-else-if="connectedStep" class="px-5 py-5 space-y-3.5">
         <template v-if="!syncing">
           <div class="flex items-center gap-3 rounded-xl border border-[#d4e3d4] bg-[#ECF1EC] px-3.5 py-3">
             <span class="w-9 h-9 rounded-full bg-[#2F6F4F] text-white grid place-items-center text-sm font-semibold shrink-0">{{ (connectedEmail[0] || 'U').toUpperCase() }}</span>
@@ -178,11 +183,37 @@
 
 <script lang="ts" setup>
 import Spinner from '~/components/Spinner.vue'
+import ConnectorsConnectCli from '~/components/connectors/ConnectorsConnectCli.vue'
 
 const props = defineProps<{
   modelValue: boolean
   template: any | null
 }>()
+
+// ---- unified sign-in: live CLI terminal for BOTH agents ----
+const showCli = ref(false)
+const cliAgents = ref<{ id: string; kind: string; label: string }[]>([])
+const primaryDsId = ref('')
+
+// Enter the CLI view: primary (Power BI) + any Fabric siblings from the fan-out.
+function enterCli(r: any) {
+  stopProgress()
+  stopPoll()
+  submitting.value = false
+  mfaStep.value = false
+  connectedStep.value = false
+  primaryDsId.value = r?.data_source_id || ''
+  cliAgents.value = [
+    { id: r?.data_source_id, kind: 'pbi', label: 'Power BI' },
+    ...((r?.sibling_data_source_ids || []) as string[]).map((id) => ({ id, kind: 'fabric', label: 'Microsoft Fabric' })),
+  ].filter((a) => a.id)
+  showCli.value = true
+}
+function onCliDone() {
+  emit('registered', { id: primaryDsId.value })
+  showCli.value = false
+  emit('update:modelValue', false)
+}
 
 const emit = defineEmits<{
   (e: 'update:modelValue', v: boolean): void
@@ -318,6 +349,8 @@ watch(
       connectedDsId.value = ''
       consent.value = false
       syncing.value = false
+      showCli.value = false
+      cliAgents.value = []
       resetDevice()
     } else {
       stopPoll()
@@ -344,7 +377,8 @@ async function submit() {
   try {
     const res = await useMyFetch(`/connectors/${props.template.id}/connect`, {
       method: 'POST',
-      body: JSON.stringify({ email: email.value.trim(), password: password.value }),
+      // fanout: unified Microsoft sign-in → also build a Fabric sibling agent.
+      body: JSON.stringify({ email: email.value.trim(), password: password.value, fanout: props.template?.unified === true }),
       headers: { 'Content-Type': 'application/json' },
     })
 
@@ -362,6 +396,7 @@ async function submit() {
 
     const r = (res.data as any)?.value || {}
     if (r.status === 'connected') {
+      if (props.template?.unified) { enterCli(r); return }     // unified: dual-agent CLI
       if (r.needs_sync) { enterConnected(r, false); return }   // journey v2: consent gate
       emit('registered', { id: r.data_source_id })
       close()
@@ -423,7 +458,8 @@ async function poll() {
   try {
     const res = await useMyFetch(`/connectors/${props.template?.id}/device-code/poll`, {
       method: 'POST',
-      body: JSON.stringify({ device_code: deviceCode.value }),
+      // fanout: unified Microsoft sign-in → also build a Fabric sibling agent.
+      body: JSON.stringify({ device_code: deviceCode.value, fanout: props.template?.unified === true }),
       headers: { 'Content-Type': 'application/json' },
     })
     if ((res.error as any)?.value) throw (res.error as any).value
@@ -435,6 +471,7 @@ async function poll() {
     }
     if (r.status === 'success') {
       stopPoll()
+      if (props.template?.unified) { enterCli(r); return }    // unified: dual-agent CLI
       if (r.needs_sync) { enterConnected(r, true); return }   // journey v2: consent gate
       emit('registered', { id: r.data_source_id })
       close()

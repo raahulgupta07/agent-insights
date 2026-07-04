@@ -396,7 +396,15 @@ const textWidgetsIds = ref([])
 
 function connectWebSocket() {
 
-    const ws = new WebSocket(`${wsURL}/reports/${report_id}`)
+    // The /ws endpoint requires auth; browsers can't set WS headers, so pass
+    // the JWT (read from the auth_token cookie) as a query param.
+    let _wsTok = ''
+    try {
+        const _m = document.cookie.match(/(?:^|;\s*)auth_token=([^;]+)/)
+        _wsTok = _m ? decodeURIComponent(_m[1]).replace(/^Bearer\s+/i, '') : ''
+    } catch {}
+    const _wsQ = _wsTok ? `?token=${encodeURIComponent(_wsTok)}` : ''
+    const ws = new WebSocket(`${wsURL}/reports/${report_id}${_wsQ}`)
 
     ws.onopen = () => {
         //console.log('WebSocket connection opened');

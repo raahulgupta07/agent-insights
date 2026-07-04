@@ -15,6 +15,19 @@ from app.models.oauth_account import OAuthAccount
 
 from app.settings import config
 from app.errors import AppError, ErrorCode
+from app.settings.hybrid_flags import set_current_org as _hf_set_current_org
+
+
+def _bind_org_flags(org: Organization) -> None:
+    """Bind the resolved org into the hybrid-flags contextvar so per-org overrides
+    resolve for this request. The OrgFlagContextMiddleware already binds from the
+    X-Organization-Id header and owns the finally-reset; this covers the bow_
+    API-key path (no header) and runs in the same context, so the middleware's
+    reset still clears it. Fail-soft: never break the request on a binding error."""
+    try:
+        _hf_set_current_org(str(org.id))
+    except Exception:
+        pass
 
 # Create a session factory at the start to reuse
 SessionLocal = create_session_factory()
@@ -73,6 +86,7 @@ async def get_current_organization(request: Request, db: AsyncSession = Depends(
         organization = organization.scalar_one_or_none()
         if not organization:
             raise AppError.not_found(ErrorCode.ORG_NOT_FOUND, "Organization not found")
+        _bind_org_flags(organization)
         return organization
 
     # No header - try to get from API key
@@ -86,6 +100,7 @@ async def get_current_organization(request: Request, db: AsyncSession = Depends(
         key = api_key if api_key.startswith("bow_") else auth_header[7:]
         org = await api_key_service.get_organization_by_api_key(db, key)
         if org:
+            _bind_org_flags(org)
             return org
         # API key was provided but is invalid/expired
         raise AppError.unauthorized(ErrorCode.API_KEY_INVALID, "Invalid or expired API key")

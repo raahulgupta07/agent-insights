@@ -44,6 +44,21 @@ from app.core.telemetry import telemetry
 logger = logging.getLogger(__name__)
 
 
+# Strip embedded credentials (userinfo) from any URL that shows up in an error
+# message or log line. Git commands carry the full remote URL — which for HTTPS
+# auth is `https://user:token@host/...` — and GitPython surfaces that command
+# verbatim in GitCommandError. Redact before it ever reaches a log or an
+# HTTPException detail.
+_CREDENTIAL_URL_RE = re.compile(r"(https?://)([^/@\s]+)@")
+
+
+def _redact_url(text: str) -> str:
+    """Replace `scheme://userinfo@` with `scheme://***@` in arbitrary text."""
+    if not text:
+        return text
+    return _CREDENTIAL_URL_RE.sub(r"\1***@", text)
+
+
 class GitService:
     """Consolidated service for all Git operations."""
 
@@ -171,11 +186,11 @@ class GitService:
                 return {"success": True, "message": "Connection successful"}
 
         except git.GitCommandError as e:
-            raise HTTPException(status_code=400, detail=f"Git error: {str(e)}")
+            raise HTTPException(status_code=400, detail=f"Git error: {_redact_url(str(e))}")
         except HTTPException:
             raise
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Connection failed: {str(e)}")
+            raise HTTPException(status_code=400, detail=f"Connection failed: {_redact_url(str(e))}")
 
     async def _ls_remote_with_ssh(self, repo_url: str, ssh_key: str) -> str:
         """List remote refs using SSH key."""
@@ -651,7 +666,7 @@ class GitService:
         except Exception as e:
             repository.status = "failed"
             await db.commit()
-            raise HTTPException(status_code=500, detail=f"Failed to index repository: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to index repository: {_redact_url(str(e))}")
 
     async def clone_repository(
         self,
@@ -722,7 +737,7 @@ class GitService:
 
             return repo
         except git.GitCommandError as e:
-            raise HTTPException(status_code=500, detail=f"Failed to clone repository: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to clone repository: {_redact_url(str(e))}")
 
     async def get_indexing_job_status(
         self,
@@ -837,8 +852,8 @@ class GitService:
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Failed to sync branch '{branch}': {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to sync branch: {str(e)}")
+            logger.error(f"Failed to sync branch '{branch}': {_redact_url(str(e))}")
+            raise HTTPException(status_code=500, detail=f"Failed to sync branch: {_redact_url(str(e))}")
 
     # ==================== Push Build (Dash -> Git) ====================
 
@@ -964,8 +979,8 @@ class GitService:
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Failed to push build {build_id}: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to push build: {str(e)}")
+            logger.error(f"Failed to push build {build_id}: {_redact_url(str(e))}")
+            raise HTTPException(status_code=500, detail=f"Failed to push build: {_redact_url(str(e))}")
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -1005,15 +1020,17 @@ class GitService:
 
     async def _push_branch(self, repository: GitRepository, repo: git.Repo, branch_name: str):
         """Push a branch to the remote.
-        
-        Uses --force to allow updating existing branches. This is safe because:
+
+        Uses --force-with-lease to allow updating an existing per-build branch
+        without clobbering unexpected remote changes (rejects the push if the
+        remote ref moved since our clone). This is safe because:
         - Branch names are unique per build (DASH-{build_number})
         - Re-pushing a build should update the branch with latest changes
         - These are feature branches, not protected branches
         """
         if repository.has_access_token:
             # PAT is already embedded in the remote URL from clone
-            repo.git.push('origin', branch_name, '--set-upstream', '--force')
+            repo.git.push('origin', branch_name, '--set-upstream', '--force-with-lease')
         elif repository.has_ssh_key:
             ssh_dir = tempfile.mkdtemp()
             try:
@@ -1030,7 +1047,7 @@ class GitService:
                 git_env = os.environ.copy()
                 git_env["GIT_SSH_COMMAND"] = f'ssh -i {ssh_key_path} -o StrictHostKeyChecking=no'
 
-                repo.git.push('origin', branch_name, '--set-upstream', '--force', env=git_env)
+                repo.git.push('origin', branch_name, '--set-upstream', '--force-with-lease', env=git_env)
             finally:
                 shutil.rmtree(ssh_dir, ignore_errors=True)
 

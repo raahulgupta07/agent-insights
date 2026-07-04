@@ -69,11 +69,29 @@ class Settings(BaseSettings):
                 env_value = os.environ.get(env_var_name)
                 if env_value is not None:
                     return env_value
-                # If env var is not set and this is encryption key, generate one
+                # If env var is not set and this is the encryption key:
                 if env_var_name == "DASH_ENCRYPTION_KEY":
+                    # Phase-5 durability guard: in production (or when explicitly
+                    # required) refuse to silently auto-generate. An auto-gen key
+                    # lives only in this process/volume — losing it orphans every
+                    # Fernet-encrypted secret. Require an explicit key instead.
+                    require_explicit = (
+                        os.environ.get("ENVIRONMENT") == "production"
+                        or os.environ.get("DASH_REQUIRE_EXPLICIT_ENCRYPTION_KEY") == "1"
+                    )
+                    if require_explicit:
+                        raise RuntimeError(
+                            "DASH_ENCRYPTION_KEY is not set but ENVIRONMENT=production "
+                            "(or DASH_REQUIRE_EXPLICIT_ENCRYPTION_KEY=1) requires an "
+                            "explicitly provided encryption key. Set DASH_ENCRYPTION_KEY "
+                            "to a stable, durable value (env/secret on every node) so "
+                            "encrypted secrets stay decryptable across restarts and nodes; "
+                            "refusing to auto-generate a throwaway key."
+                        )
                     from .dash_config import generate_fernet_key
                     new_key = generate_fernet_key()
                     os.environ["DASH_ENCRYPTION_KEY"] = new_key  # Save for future use
+                    print("🔑 DASH_ENCRYPTION_KEY not set — auto-generated (dev fallback).")
                     return new_key
                 return None  # Env var not set — return None instead of raw placeholder
             return config

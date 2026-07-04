@@ -4481,7 +4481,13 @@ function connectWebhookSocket() {
 	try {
 		const wsURL = (_rtConfig.public as any)?.wsURL
 		if (!wsURL || !report_id) return
-		_webhookWs = new WebSocket(`${wsURL}/reports/${report_id}`)
+		let _wsTok = ''
+		try {
+			const _m = document.cookie.match(/(?:^|;\s*)auth_token=([^;]+)/)
+			_wsTok = _m ? decodeURIComponent(_m[1]).replace(/^Bearer\s+/i, '') : ''
+		} catch {}
+		const _wsQ = _wsTok ? `?token=${encodeURIComponent(_wsTok)}` : ''
+		_webhookWs = new WebSocket(`${wsURL}/reports/${report_id}${_wsQ}`)
 		_webhookWs.onmessage = (event: MessageEvent) => {
 			try {
 				const data = JSON.parse(event.data)

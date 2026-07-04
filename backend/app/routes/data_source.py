@@ -359,6 +359,9 @@ async def register_connector(
 
 class _DeviceCodePollRequest(_BaseModel):
     device_code: str
+    # Unified Microsoft sign-in (HYBRID_MS_UNIFIED_SIGNIN): also build a Fabric
+    # sibling agent from the same token. Ignored when the flag is off.
+    fanout: bool = False
 
 
 @router.post("/connectors/{template_id}/device-code/start", response_model=dict)
@@ -391,6 +394,7 @@ async def connector_device_code_poll(
         organization=organization,
         user=current_user,
         device_code=payload.device_code,
+        fanout=bool(getattr(payload, "fanout", False)),
     )
     # On a fresh sign-in, sync the clone in the background (discover tables →
     # seed → auto-learn description/starters/overview) while writing a live,
@@ -398,24 +402,32 @@ async def connector_device_code_poll(
     # Runs after the response so sign-in returns instantly. sync_clone_bg also
     # does the autolearn at the end, so it is not scheduled separately here.
     if result.get("status") == "success" and result.get("data_source_id"):
-        if _journey_v2():
+        _unified = bool(getattr(payload, "fanout", False))
+        if _journey_v2() and not _unified:
             # Journey v2: DON'T auto-sync. Return the captured MS identity so the UI
             # shows "Connected as <email>" + a consent gate; the user then explicitly
             # calls POST /connectors/{data_source_id}/sync.
             result["needs_sync"] = True
         else:
-            background_tasks.add_task(
-                per_user_connector.sync_clone_bg,
-                result["data_source_id"],
-                str(organization.id),
-                str(current_user.id),
-            )
+            # Sync the Power BI clone AND any unified-sign-in Fabric sibling.
+            # Unified sign-in implies consent (the user chose the combined tile), so
+            # it auto-syncs both instead of showing the per-agent consent gate.
+            for _ds_id in [result["data_source_id"], *result.get("sibling_data_source_ids", [])]:
+                background_tasks.add_task(
+                    per_user_connector.sync_clone_bg,
+                    _ds_id,
+                    str(organization.id),
+                    str(current_user.id),
+                )
     return result
 
 
 class _ConnectRequest(_BaseModel):
     email: str
     password: str
+    # Unified Microsoft sign-in (HYBRID_MS_UNIFIED_SIGNIN): also build a Fabric
+    # sibling agent from the same token. Ignored when the flag is off.
+    fanout: bool = False
 
 
 @router.post("/connectors/{template_id}/connect", response_model=dict)
@@ -438,17 +450,22 @@ async def connector_connect(
         user=current_user,
         email=payload.email,
         password=payload.password,
+        fanout=bool(getattr(payload, "fanout", False)),
     )
     if result.get("status") == "connected" and result.get("data_source_id"):
-        if _journey_v2():
+        _unified = bool(getattr(payload, "fanout", False))
+        if _journey_v2() and not _unified:
             result["needs_sync"] = True
         else:
-            background_tasks.add_task(
-                per_user_connector.sync_clone_bg,
-                result["data_source_id"],
-                str(organization.id),
-                str(current_user.id),
-            )
+            # Sync the Power BI clone AND any unified-sign-in Fabric sibling.
+            # Unified sign-in implies consent (combined tile) → auto-sync both.
+            for _ds_id in [result["data_source_id"], *result.get("sibling_data_source_ids", [])]:
+                background_tasks.add_task(
+                    per_user_connector.sync_clone_bg,
+                    _ds_id,
+                    str(organization.id),
+                    str(current_user.id),
+                )
     return result
 
 
@@ -876,10 +893,13 @@ async def get_data_source_headline(
 ):
     """HOT START: the user's headline KPIs (the model's own measures), computed on
     THEIR client and cached per (data_source, user). Returns {status, items:[{label,
-    value}]}. Fail-soft — returns an empty list rather than 500 on any issue."""
+    value}]}. STALE-WHILE-REVALIDATE — this request path NEVER runs the 20-40s live
+    DAX inline: it serves the cached value instantly if present (refreshing behind
+    the scenes when stale), or returns {status:"warming"} and kicks a background warm
+    when there's no cache yet. Fail-soft — returns an empty list rather than 500."""
     try:
-        from app.services.connector_warm import compute_headline
-        return await compute_headline(str(data_source_id), str(organization.id), str(current_user.id))
+        from app.services.connector_warm import headline_fast
+        return await headline_fast(str(data_source_id), str(organization.id), str(current_user.id))
     except Exception:
         return {"status": "error", "items": []}
 

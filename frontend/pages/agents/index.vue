@@ -1,5 +1,5 @@
 <template>
-    <div class="flex justify-center px-4 md:px-6 text-sm bg-[#F6F1EA] min-h-full">
+    <div class="flex justify-center px-4 md:px-6 text-sm bg-[#F6F1EA] h-full overflow-y-auto">
         <div class="w-full max-w-7xl py-2 text-[#1f2328]">
             <!-- Full page loading spinner -->
             <div v-if="loading" class="flex flex-col items-center justify-center py-20">
@@ -10,6 +10,10 @@
             <div v-else>
                 <!-- Microsoft Connectors Hub (per-user, device-code) -->
                 <ConnectorsMsHub :agents="allAgents" @refresh="refreshData" />
+
+                <!-- Always-on robot dock: live CLI log of your agents, pinned to the
+                     corner. Shown once you have at least one agent. -->
+                <AgentRobotDock v-if="allAgents.length > 0" :agents="allAgents" />
 
                 <!-- Data Agents Section - show once the user has any agent -->
                 <div v-if="allAgents.length > 0" class="mb-6">
@@ -131,6 +135,7 @@ import UserDataSourceCredentialsModal from '~/components/UserDataSourceCredentia
 import ConnectionDetailModal from '~/components/ConnectionDetailModal.vue'
 import AddConnectionModal from '~/components/AddConnectionModal.vue'
 import ConnectorsMsHub from '~/components/connectors/ConnectorsMsHub.vue'
+import AgentRobotDock from '~/components/agents/AgentRobotDock.vue'
 import DataAgentCard from '~/components/DataAgentCard.vue'
 import Spinner from '~/components/Spinner.vue'
 import { useCan } from '~/composables/usePermissions'

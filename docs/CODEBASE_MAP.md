@@ -5,7 +5,12 @@
 > Companion: `CLAUDE.md` (rules/current state), `DEVLOG.md` (dated history), `ROADMAP.md` (forward plan),
 > `docs/INGEST_BRAIN_DESIGN.md` (F09 universal-ingest design).
 > **Keep current:** when a ship changes a load-bearing path/pattern, update this file (same habit as DEVLOG bump).
-> Last verified: 2026-07-02 · `VERSION_HYBRID` 1.76.0 · mig head `connsyncrun1`.
+> Last verified: 2026-07-03 · `VERSION_HYBRID` 1.90.0 · mig head **single `docacl1`**.
+> 2026-07-03 PRE-PROD HARDENING (source-only, NOT baked — see CLAUDE.md "Current state"): 11 fixes
+> incl multi-worker Redis state, per-org flag ContextVar (`OrgFlagContextMiddleware`), console cross-org
+> leak, Fernet prod-boot guard, sandbox `__builtins__`+SyntaxError, `READONLY_ENFORCE` default-ON,
+> MCP/git/SSRF/WS auth, evaluator fail-closed, RESULT_CACHE→live create_data. LANDMINE: env change needs
+> recreate → BAKE FIRST or hot-cp fixes are wiped.
 > v1.76.0: **learn-from-data** — kills connector domain hallucination. A per-user PBI connector named
 > after its sign-in method ("Power BI (User Sign-in)") + a name-only schema (PBI has no FKs) made the
 > onboarding generators invent a fake domain (@SignInLogs). Fix1 (always-on, `ai/agents/data_source/data_source.py`):

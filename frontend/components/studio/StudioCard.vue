@@ -213,7 +213,11 @@ const scopeLabel = computed(() => {
     height: 118px;
     background: radial-gradient(130% 120% at 75% -10%, #33251B, #130E0A);
     padding: 15px;
-    overflow: hidden;
+    /* overflow VISIBLE so the icon badge (bottom:-24px) isn't clipped where it
+       overhangs into the body. Decorative bg spill is still contained by
+       .cr-card's own overflow-hidden. */
+    overflow: visible;
+    border-radius: 16px 16px 0 0;
 }
 .cr-grid {
     position: absolute; inset: 0; pointer-events: none;

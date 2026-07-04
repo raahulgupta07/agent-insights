@@ -801,8 +801,6 @@ class DataSourceService:
     CONNECTION_TEST_TTL_SECONDS = 300
 
     async def get_data_source(self, db: AsyncSession, data_source_id: str, organization: Organization, current_user: User = None) -> DataSourceSchema:
-        from datetime import datetime, timezone
-
         # lazyload("*") suppresses the model-level lazy="selectin" cascade
         # (reports → widgets/queries/completions/…). The detail schema does
         # surface git_repository and memberships, so keep those eager. We
@@ -827,57 +825,17 @@ class DataSourceService:
         if not data_source:
             raise HTTPException(status_code=404, detail="Data source not found")
 
-        # Check if any connection needs retesting (cache expired or never tested)
-        from app.services.connection_service import ConnectionService
-        conn_service = ConnectionService()
-        stale_connections = []
-        for conn in (data_source.connections or []):
-            needs_retest = True
-            if conn.last_connection_checked_at:
-                last_checked = conn.last_connection_checked_at
-                if last_checked.tzinfo is None:
-                    last_checked = last_checked.replace(tzinfo=timezone.utc)
-                age = (datetime.now(timezone.utc) - last_checked).total_seconds()
-                needs_retest = age > self.CONNECTION_TEST_TTL_SECONDS
-            if needs_retest:
-                stale_connections.append(conn)
+        # DETAIL PATH IS OFFLINE — never run a live connection/PBI test here. The
+        # old code synchronously called conn_service.test_connection() on any
+        # connection whose cached status was older than CONNECTION_TEST_TTL_SECONDS,
+        # which made GET /data_sources/{id} block on a 20-40s Power BI / warehouse
+        # round-trip on every stale open. The detail page only needs the last-known
+        # (cached) status; on-demand live testing has its own dedicated route
+        # (GET /data_sources/{id}/test_connection). So we serve cached status only
+        # and return in milliseconds.
 
-        # Retest stale connections
-        if stale_connections:
-            try:
-                for conn in stale_connections:
-                    try:
-                        await conn_service.test_connection(
-                            db=db,
-                            connection_id=str(conn.id),
-                            organization=organization,
-                            current_user=current_user or User(),
-                        )
-                    except Exception:
-                        pass
-                # After commits in tests, relationships may be expired; reload with eager options
-                try:
-                    stmt = (
-                        select(DataSource)
-                        .options(
-                            lazyload("*"),
-                            selectinload(DataSource.git_repository),
-                            selectinload(DataSource.data_source_memberships),
-                            selectinload(DataSource.connections).options(lazyload("*")),
-                            selectinload(DataSource.primary_instruction).selectinload(InstructionModel.references),
-                        )
-                        .where(DataSource.id == data_source.id)
-                    )
-                    refreshed_res = await db.execute(stmt)
-                    data_source = refreshed_res.scalar_one()
-                except Exception:
-                    pass
-            except Exception:
-                # Non-fatal: keep serving the resource even if the live check fails
-                pass
-
-        # Build connections list - always use cached status (live_test=False)
-        # since we already tested if needed above
+        # Build connections list - always use cached status (live_test=False),
+        # so this stays a pure DB read with no live connector round-trip.
         connections_list = await self._build_connections_list(
             db=db,
             data_source=data_source,
@@ -1068,6 +1026,7 @@ class DataSourceService:
                 type=conn.type if conn else None,
                 auth_policy=conn.auth_policy if conn else None,
                 user_status=connections_list[0].user_status if connections_list else None,
+                template_source_id=getattr(d, "template_source_id", None),
                 # Flag entries surfaced only by the admin "show all" view:
                 # private and not an explicit membership of the caller.
                 admin_only=(
@@ -1172,6 +1131,7 @@ class DataSourceService:
                 type=conn.type if conn else None,
                 auth_policy=conn.auth_policy if conn else None,
                 user_status=connections_list[0].user_status if connections_list else None,
+                template_source_id=getattr(d, "template_source_id", None),
             )
 
             # Exclude user_required data sources lacking user credentials,
@@ -1949,15 +1909,34 @@ class DataSourceService:
         connector client. So flipping a connector to read-only can't break any
         legitimate write path.
 
-        Only clients that opt in (expose a `read_only` attribute, e.g. Postgres)
-        are affected; others rely on the runtime statement guard in
-        code_execution. Flag OFF / unsupported client => no-op, never raises.
+        DEFENCE-IN-DEPTH across ALL sql clients (ISSUE #6):
+          1. DRIVER-LEVEL: any client that can honor read-only at the
+             connection/engine level is flipped here — a settable `read_only`
+             attribute (Postgres → default_transaction_read_only=on) or a
+             `set_read_only(True)` hook if a client exposes one. DuckDB already
+             opens read_only=True unconditionally.
+          2. STRING-LEVEL: every OTHER client (warehouses without a driver
+             read-only toggle — BigQuery, Snowflake, Redshift, MySQL/MariaDB,
+             MSSQL/Sybase, Oracle, ClickHouse, Trino/Presto, Fabric/PowerBI, …)
+             is still covered on the query path: `wrap_clients_for_capture`
+             wraps EVERY client exposing `execute_query` in
+             QueryCapturingClientWrapper, whose `execute_query` runs
+             `_enforce_readonly_query()` — the same READONLY_ENFORCE-gated
+             structural write/DDL guard — before the statement reaches the
+             driver. No warehouse client bypasses that chokepoint.
+
+        Flag OFF / unsupported client => no-op, never raises.
         """
         try:
             from app.settings.hybrid_flags import flags as _hflags
             if not getattr(_hflags, "READONLY_ENFORCE", False):
                 return
-            if hasattr(client, "read_only"):
+            # Prefer an explicit hook, else the settable attribute. Clients
+            # without either fall through to the string-level guard (2, above).
+            setter = getattr(client, "set_read_only", None)
+            if callable(setter):
+                setter(True)
+            elif hasattr(client, "read_only"):
                 client.read_only = True
         except Exception:
             pass

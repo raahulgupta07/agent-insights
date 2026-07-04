@@ -9,19 +9,53 @@ export ENVIRONMENT=production
 # key SURVIVES restarts/rebuilds — saved (encrypted) API keys keep decrypting. This
 # makes the key fully automatic: no .env edit required for a fresh install.
 DASH_SECRET_FILE="${DASH_ENCRYPTION_KEY_FILE:-/app/backend/uploads/.dash_encryption.key}"
+
+# Mask a secret for logs: show a short prefix + length, never the full key.
+_mask_key() {
+    local k="$1"; local n=${#k}
+    if [ "$n" -le 6 ]; then printf '****(%s chars)' "$n";
+    else printf '%s…****(%s chars)' "${k:0:6}" "$n"; fi
+}
+
+# Phase-5 durability guard: in production (or when explicitly required) we must NOT
+# silently mint a fresh key. An auto-generated key lives only on THIS node's uploads
+# volume — lose that volume, or add a 2nd node without it, and every Fernet-encrypted
+# secret (connector creds / SMTP / LDAP / refresh-tokens) becomes undecryptable.
+DASH_REQUIRE_EXPLICIT_KEY=0
+if [ "$ENVIRONMENT" = "production" ] || [ "$DASH_REQUIRE_EXPLICIT_ENCRYPTION_KEY" = "1" ]; then
+    DASH_REQUIRE_EXPLICIT_KEY=1
+fi
+
+DASH_KEY_SOURCE=""
 if [ -z "$DASH_ENCRYPTION_KEY" ]; then
     if [ -s "$DASH_SECRET_FILE" ]; then
+        # A key already exists on the volume. Keep using it — NEVER rotate (rotating
+        # would orphan every secret already encrypted with it). Allowed even in prod.
         export DASH_ENCRYPTION_KEY="$(cat "$DASH_SECRET_FILE")"
-        echo "🔑 Loaded persisted DASH_ENCRYPTION_KEY from $DASH_SECRET_FILE"
+        DASH_KEY_SOURCE="volume"
     else
+        # No key anywhere. In a require-explicit environment, refuse to boot rather
+        # than auto-generate a volume-only key (the exact durability risk of Issue #4).
+        if [ "$DASH_REQUIRE_EXPLICIT_KEY" = "1" ]; then
+            echo "❌ FATAL: DASH_ENCRYPTION_KEY is not set and no persisted key exists at $DASH_SECRET_FILE." >&2
+            echo "   ENVIRONMENT=$ENVIRONMENT (or DASH_REQUIRE_EXPLICIT_ENCRYPTION_KEY=1) requires an EXPLICITLY" >&2
+            echo "   provided encryption key so connector creds / SMTP / LDAP / refresh-tokens stay decryptable" >&2
+            echo "   across restarts, nodes, and volume loss. Refusing to auto-generate a throwaway volume-only key." >&2
+            echo "   Fix — generate a stable key once:" >&2
+            echo "     DASH_ENCRYPTION_KEY=\$(python3 -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" >&2
+            echo "   then set it as a durable env/secret on EVERY node (not just the uploads volume)." >&2
+            echo "   (Dev only: run with a non-production ENVIRONMENT to allow auto-generation.)" >&2
+            exit 1
+        fi
         export DASH_ENCRYPTION_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
         mkdir -p "$(dirname "$DASH_SECRET_FILE")"
         # write atomically + lock down perms
         ( umask 177; printf '%s' "$DASH_ENCRYPTION_KEY" > "$DASH_SECRET_FILE.tmp" ) \
             && mv -f "$DASH_SECRET_FILE.tmp" "$DASH_SECRET_FILE"
-        echo "🔑 No DASH_ENCRYPTION_KEY provided — generated one and persisted it to $DASH_SECRET_FILE (stable across restarts)."
+        DASH_KEY_SOURCE="generated"
     fi
 else
+    DASH_KEY_SOURCE="explicit"
     # Explicit key wins. Mirror it to the volume so an accidental later unset still resolves.
     if [ ! -s "$DASH_SECRET_FILE" ]; then
         mkdir -p "$(dirname "$DASH_SECRET_FILE")"
@@ -29,6 +63,21 @@ else
             && mv -f "$DASH_SECRET_FILE.tmp" "$DASH_SECRET_FILE" 2>/dev/null || true
     fi
 fi
+
+# Boot log: make key provenance (and any risky volume-only state) visible to ops.
+case "$DASH_KEY_SOURCE" in
+    explicit)
+        echo "🔑 DASH_ENCRYPTION_KEY source=EXPLICIT (env/secret) $(_mask_key "$DASH_ENCRYPTION_KEY") — durable + node-portable ✅" ;;
+    volume)
+        if [ "$DASH_REQUIRE_EXPLICIT_KEY" = "1" ]; then
+            echo "🔑 DASH_ENCRYPTION_KEY source=VOLUME $(_mask_key "$DASH_ENCRYPTION_KEY") from $DASH_SECRET_FILE — kept (no rotation)." >&2
+            echo "   ⚠️  This key lives ONLY on the uploads volume. If the volume is lost or a 2nd node lacks it, ALL stored secrets become undecryptable. Promote it to a durable env/secret (set DASH_ENCRYPTION_KEY)." >&2
+        else
+            echo "🔑 DASH_ENCRYPTION_KEY source=VOLUME $(_mask_key "$DASH_ENCRYPTION_KEY") from $DASH_SECRET_FILE (stable across restarts)." ;
+        fi ;;
+    generated)
+        echo "🔑 DASH_ENCRYPTION_KEY source=AUTO-GENERATED $(_mask_key "$DASH_ENCRYPTION_KEY"), persisted to $DASH_SECRET_FILE (dev fallback; lives only on this volume)." ;;
+esac
 
 # =============================================================================
 # Detect available CPUs (cgroup-aware for containers)

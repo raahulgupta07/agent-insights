@@ -38,6 +38,11 @@ _SCOPE = "https://analysis.windows.net/powerbi/api/.default offline_access openi
 SCOPE_POWERBI = _SCOPE
 SCOPE_FABRIC = "https://database.windows.net/.default offline_access openid profile"
 SCOPE_GRAPH = "https://graph.microsoft.com/.default offline_access openid profile"
+# Fabric REST API (control plane) — list workspaces/warehouses/lakehouses to
+# DISCOVER a warehouse SQL endpoint hostname. Distinct from SCOPE_FABRIC, which
+# is the SQL data-plane token (database.windows.net) fed to ODBC. Both redeem
+# from the same FOCI refresh token.
+SCOPE_FABRIC_REST = "https://api.fabric.microsoft.com/.default offline_access openid profile"
 # Fabric SQL endpoint token audience (used when minting an access token to feed
 # the ODBC driver via attrs_before={1256: ...}).
 FABRIC_TOKEN_SCOPE = "https://database.windows.net/.default"

@@ -192,6 +192,51 @@ init_cors(app)
 from app.errors import register_exception_handlers  # noqa: E402
 register_exception_handlers(app)
 
+# Bind the request's org into the hybrid-flags contextvar so every `flags.X` read
+# in the request path resolves that tenant's per-org overrides. Pure-ASGI (NOT
+# BaseHTTPMiddleware — that runs the endpoint in a separate anyio task, so a
+# contextvar set in it would NOT propagate downstream). This one awaits the app
+# inline → same context → the binding is visible to routes/dependencies and the
+# finally reset covers anything they bind too (e.g. the API-key path in
+# get_current_organization). Reads X-Organization-Id only (fast, no DB); the
+# bow_ API-key path has no such header and is bound inside the dependency.
+from app.settings.hybrid_flags import (  # noqa: E402
+    set_current_org as _hf_set_current_org,
+    reset_current_org as _hf_reset_current_org,
+)
+
+
+class OrgFlagContextMiddleware:
+    """Bind current-org for per-org hybrid-flag resolution; reset in finally so a
+    pooled worker never leaks an org into a later unauthenticated/background
+    request. Fail-soft: a binding error never breaks the request."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+        token = None
+        try:
+            org_id = None
+            for k, v in scope.get("headers", []):
+                if k == b"x-organization-id":
+                    org_id = v.decode("latin-1").strip() or None
+                    break
+            token = _hf_set_current_org(org_id)
+        except Exception:
+            token = None
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            if token is not None:
+                _hf_reset_current_org(token)
+
+
+app.add_middleware(OrgFlagContextMiddleware)
+
 oauth_providers = []
 google_oauth_client = None
 

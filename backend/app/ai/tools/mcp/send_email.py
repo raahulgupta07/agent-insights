@@ -85,7 +85,7 @@ class SendEmailMCPTool(MCPTool):
                     error="report_id is required when sending attachments.",
                 ).model_dump()
             try:
-                report = await self._load_report(db, input_data.report_id)
+                report = await self._load_report(db, input_data.report_id, organization)
             except Exception:
                 return MCPSendEmailOutput(
                     success=False, subject=input_data.subject,

@@ -58,22 +58,48 @@ _CODE_EXEC_POOL = ThreadPoolExecutor(
 )
 
 
-def _maybe_apply_memory_cap(logger=None) -> None:
-    """OPTIONAL, OFF-by-default best-effort address-space cap for code exec.
+# On-by-default address-space cap (MB) for code exec. Overridable via env
+# ``SANDBOX_MEM_LIMIT_MB``; set to 0 (or negative) to disable. The legacy
+# ``SKILL_EXEC_MEM_CAP_MB`` still works and, when present, takes precedence.
+DEFAULT_SANDBOX_MEM_LIMIT_MB = 2048
 
-    Gated entirely by the env var ``SKILL_EXEC_MEM_CAP_MB`` (integer MB). When
-    the var is unset or <= 0 this is a pure no-op and behavior is byte-identical
-    to having no memory limit at all. It is only ever reached when a caller
-    explicitly opts in via ``enforce_limits=True``.
+
+def _resolve_mem_cap_mb() -> int:
+    """Resolve the address-space cap in MB. <= 0 means disabled.
+
+    Precedence: legacy ``SKILL_EXEC_MEM_CAP_MB`` (explicit opt-in/override) >
+    ``SANDBOX_MEM_LIMIT_MB`` (the on-by-default knob) > built-in default. An
+    unparseable value for a var is skipped in favor of the next source.
+    """
+    for var in ("SKILL_EXEC_MEM_CAP_MB", "SANDBOX_MEM_LIMIT_MB"):
+        raw = os.environ.get(var)
+        if raw is None or not raw.strip():
+            continue
+        try:
+            return int(raw.strip())
+        except (TypeError, ValueError):
+            continue
+    return DEFAULT_SANDBOX_MEM_LIMIT_MB
+
+
+def _maybe_apply_memory_cap(logger=None) -> None:
+    """Best-effort, ON-by-default address-space cap for code exec.
+
+    Resolves the cap via :func:`_resolve_mem_cap_mb` (default
+    ``DEFAULT_SANDBOX_MEM_LIMIT_MB``). A cap <= 0 (env set to 0) is a pure no-op.
 
     IMPORTANT LIMITATION — ``resource.setrlimit(RLIMIT_AS, ...)`` is **per
     PROCESS, not per thread**. Our code-exec runs on a shared ThreadPool inside
     the API process, so this lowers the address-space ceiling for the WHOLE
     process (all sibling threads + the server itself), not just the one
-    execution. It is therefore only a coarse, best-effort guard — not isolation.
+    execution. It is therefore a coarse, best-effort guard — not isolation.
     Real per-execution isolation would need a subprocess/container/cgroup.
+    Because it is process-wide, tune ``SANDBOX_MEM_LIMIT_MB`` to sit safely above
+    the server's steady-state virtual footprint (glibc arenas + thread stacks +
+    pandas/duckdb can reserve a lot of VIRTUAL address space on many-core boxes),
+    or set it to 0 to disable if it proves too tight.
 
-    Safety rules (deliberately conservative):
+    Safety rules (deliberately conservative — unchanged):
       - Non-POSIX / no ``resource`` module (e.g. Windows) -> silent no-op.
       - Only RAISE the soft limit toward the requested cap when the current
         soft limit is unlimited or already HIGHER than the cap. We never lower
@@ -81,13 +107,7 @@ def _maybe_apply_memory_cap(logger=None) -> None:
         never touch the hard limit. (RLIMIT_AS is process-wide and risky.)
       - Any failure is caught, logged as a warning, and execution continues.
     """
-    cap_mb_raw = os.environ.get("SKILL_EXEC_MEM_CAP_MB")
-    if not cap_mb_raw:
-        return
-    try:
-        cap_mb = int(cap_mb_raw)
-    except (TypeError, ValueError):
-        return
+    cap_mb = _resolve_mem_cap_mb()
     if cap_mb <= 0:
         return
 
@@ -111,7 +131,7 @@ def _maybe_apply_memory_cap(logger=None) -> None:
     except Exception as exc:  # pragma: no cover - platform dependent
         if logger:
             try:
-                logger.warning(f"SKILL_EXEC_MEM_CAP_MB: failed to apply RLIMIT_AS cap ({cap_mb}MB): {exc}")
+                logger.warning(f"sandbox mem cap: failed to apply RLIMIT_AS cap ({cap_mb}MB): {exc}")
             except Exception:
                 pass
         # Continue regardless — the cap is best-effort, never fatal.
@@ -222,6 +242,64 @@ FORBIDDEN_BUILTINS = frozenset({
     'memoryview', 'bytearray',
 })
 
+# Curated safe builtins injected as the exec namespace's __builtins__.
+# Without this, exec() with a namespace that has no __builtins__ key auto-injects
+# the FULL builtins module — leaking open/eval/exec/__import__/getattr/... into
+# generated code (the AST deny-list is only an early scan, not a runtime fence).
+# We instead hand exec an explicit dict of pure-computational builtins + exception
+# classes: everything the model's generate_df() legitimately uses (pandas/numpy
+# helpers, comprehensions, math, try/except) still works, while capability-bearing
+# names are simply absent at runtime.
+#
+# NOTE: this restriction only governs NAME RESOLUTION inside the exec'd user code.
+# pandas/numpy were imported at module load with the real full builtins and keep
+# their own module globals, so their internals are unaffected — typical
+# generate_df pandas/numpy code runs unchanged.
+import builtins as _builtins_module
+
+_SAFE_BUILTIN_NAMES = frozenset({
+    # constructors / core types
+    'bool', 'int', 'float', 'complex', 'str', 'bytes', 'list', 'tuple',
+    'dict', 'set', 'frozenset', 'type', 'object', 'slice',
+    # numeric / math
+    'abs', 'round', 'min', 'max', 'sum', 'pow', 'divmod', 'len',
+    # iteration / functional
+    'range', 'enumerate', 'zip', 'sorted', 'reversed', 'iter', 'next',
+    'map', 'filter', 'any', 'all',
+    # safe reflection-lite / formatting
+    'isinstance', 'issubclass', 'callable', 'repr', 'format', 'hash', 'id',
+    'ord', 'chr', 'bin', 'hex', 'oct', 'ascii',
+    # output
+    'print',
+    # exception classes (generated code routinely uses try/except)
+    'BaseException', 'Exception', 'ArithmeticError', 'AssertionError',
+    'AttributeError', 'FloatingPointError', 'IndexError', 'KeyError',
+    'LookupError', 'NameError', 'NotImplementedError', 'OverflowError',
+    'RuntimeError', 'StopIteration', 'TypeError', 'ValueError',
+    'ZeroDivisionError', 'UnicodeError', 'ImportError', 'ModuleNotFoundError',
+    'RecursionError', 'MemoryError',
+})
+
+# Sanity: never let a forbidden builtin sneak into the allow-list.
+_SAFE_BUILTINS = {
+    name: getattr(_builtins_module, name)
+    for name in _SAFE_BUILTIN_NAMES
+    if hasattr(_builtins_module, name) and name not in FORBIDDEN_BUILTINS
+}
+# `__build_class__` is needed for any `class ...:` the model defines as a helper;
+# it is not itself an escape vector, so include it to avoid breaking legit codegen.
+_SAFE_BUILTINS['__build_class__'] = _builtins_module.__build_class__
+
+
+def _fresh_safe_builtins() -> Dict[str, Any]:
+    """Return a fresh copy of the curated builtins for one exec namespace.
+
+    A copy (not the shared dict) so user code that rebinds a builtin name can't
+    mutate the module-level template for sibling executions.
+    """
+    return dict(_SAFE_BUILTINS)
+
+
 # Attribute access patterns that indicate sandbox escape attempts
 FORBIDDEN_ATTRIBUTES = frozenset({
     '__class__', '__bases__', '__mro__', '__subclasses__',
@@ -331,9 +409,15 @@ def validate_python_code(code: str) -> None:
     try:
         tree = ast.parse(code)
     except SyntaxError as e:
-        # Let syntax errors pass through - they'll fail at exec() time
-        # with a more descriptive error
-        return
+        # HARD FAILURE — reject, never pass through. A SyntaxError means the
+        # AST security scan below could not run at all, so silently returning
+        # would let unscanned code reach exec(). Fail closed instead: unparseable
+        # code is not eligible for execution (the model's retry loop regenerates
+        # cleaner code from this message).
+        raise UnsafePythonError(
+            f"Code could not be parsed (SyntaxError: {e.msg} at line {e.lineno}); "
+            "it cannot be security-validated and will not be executed."
+        ) from e
 
     visitor = CodeSecurityVisitor()
     visitor.visit(tree)
@@ -773,6 +857,14 @@ class StreamingCodeExecutor:
             load_step, load_entity = self._build_loadable_closures(loadables)
 
             local_namespace = {
+                # Explicit curated builtins — prevents exec() from auto-injecting
+                # the FULL builtins module (which would leak open/eval/exec/
+                # __import__/getattr/...). See _SAFE_BUILTINS above.
+                '__builtins__': _fresh_safe_builtins(),
+                # A module name so a `class ...:` helper the model defines can
+                # resolve __module__ (class bodies read __name__ from globals);
+                # without it any helper class def raises NameError at exec.
+                '__name__': 'dash_sandbox_exec',
                 'pd': pd,
                 'np': np,
                 'db_clients': wrapped_clients,
@@ -802,12 +894,12 @@ class StreamingCodeExecutor:
                     lock_span.set_attribute("code_execution.code_chars", len(code or ""))
                     with io.StringIO() as stdout_capture:
                         with redirect_stdout(stdout_capture):
-                            # OPTIONAL opt-in, env-gated, best-effort memory cap.
-                            # No-op unless enforce_limits=True AND
-                            # SKILL_EXEC_MEM_CAP_MB > 0 (see helper docstring for
-                            # the per-PROCESS, not per-thread, limitation).
-                            if enforce_limits:
-                                _maybe_apply_memory_cap(self.logger)
+                            # Best-effort, ON-by-default memory cap (see helper
+                            # docstring for the per-PROCESS, not per-thread,
+                            # limitation). Disable via SANDBOX_MEM_LIMIT_MB=0.
+                            # `enforce_limits` is retained for backward-compat but
+                            # no longer gates the cap.
+                            _maybe_apply_memory_cap(self.logger)
                             exec(code, local_namespace)
                             generate_df = local_namespace.get('generate_df')
                             if not generate_df:

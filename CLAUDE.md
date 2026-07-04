@@ -453,8 +453,67 @@ Versioned feature feed surfaced as a 🔔 bell popover in TopNav (before profile
 
 **2026-06-29 FE EPHEMERAL (fe-sync only, NOT baked — pending `docker commit`):** (1) **plan-block chat leak FIXED** — `HYBRID_AGENT_PLAN` flag-on (org e02b1b04, default OFF) emits a `source_type='plan'` block; chat body renderer `reports/[id]/index.vue:387` was the 1-of-4 consumer missing the plan-skip guard → dumped raw `{"tasks":[...]}`. Fix = `&& block.source_type !== 'plan'`. RULE: skip `source_type='plan'` in EVERY render path (Progress=stepMap.ts:348/484, context=message_context_builder.py:597/1221 already do). (2) **merged Create/Activity into ONE no-tabs panel** (Option A) in the `coworkEnabled` block of `reports/[id]/index.vue` (removed `coworkTab` toggle; Create grid top + Activity below, one scroll). (3) **"only April summary" ROOT CAUSE = silent partial ingest:** CRM Agent source `0b9b39ac` has 1 table, 2447 rows ALL `_source_period=2025-04` (6 months uploaded, 5 never materialized; merged table mis-NAMED `_apr_25` → agent frames answer "April"). Guardrails proposed (manifest+reconcile / coverage-context to agent / neutral table naming / atomic batch merge / post-ingest verify-gate), NOT built. Detail → [[project_cityagent_panel_ingest_completeness]].
 
-**Current state (2026-07-03):** image `cityagent-analytics:dev` on `:3007`, branch
-**`feature/table-relevance-overview`** (PUSHED; PR to `dev` = user's click, gh not authed; `main` untouched per branch-flow), mig head **`wf2save1`**,
+**Current state (2026-07-04, LATEST):** UNIFIED MS SIGN-IN + `/agents` robot dock + login hero.
+- **Unified MS sign-in (BAKED at session start, `cityagent-analytics:dev`):** flag `HYBRID_MS_UNIFIED_SIGNIN`
+  (default OFF, ON org 7d372305). One Microsoft sign-in on the combined tile → provisions BOTH a Power BI agent
+  AND a Fabric agent (shared FOCI refresh_token). New `SCOPE_FABRIC_REST` + `services/ms_fabric_discovery.py`
+  (`discover_fabric_endpoint` redeems FOCI→api.fabric.microsoft.com, lists workspaces/warehouses→connectionString;
+  None→NO dead Fabric agent). Fan-out in `per_user_connector.py` (`_build_fabric_sibling`, `_register_clone_fresh_session(fanout=True)`
+  returns `(primary_id, sibling_ids)`); `data_source.py` poll/connect take `fanout` → sync BOTH, skip journey-v2 consent.
+  PROVEN live: real sign-in → Power BI 25 tables + Fabric 0 tables (no warehouse = honest empty-state). Detail →
+  [[project_cityagent_unified_signin_login_hero]].
+- **FE polish (EPHEMERAL — fe-sync only, NOT baked/committed):**
+  (1) **MS tile-swap** — `ConnectorsMsHub.vue` `catalog` computed: when `unifiedEnabled`, REPLACES the individual
+  Microsoft Fabric + Power BI (User Sign-in) tiles with the single combined tile (SharePoint/OneDrive stay);
+  flag OFF → individual tiles return. Super-admin toggles via Settings → Features (`MS_UNIFIED_SIGNIN`).
+  (2) **`/agents` robot dock** — NEW `components/agents/AgentRobotDock.vue`: always-on blocky-terracotta robot
+  pinned bottom-right, click → CLI log panel polling each agent's `/data_sources/{id}/sync-status`. LANDMINE:
+  a mid-session new component auto-imports as a LAZY `resolveComponent` chunk that gets TREE-SHAKEN out of
+  `nuxt generate` → renders nothing; FIX = EXPLICIT `import` in `pages/agents/index.vue` (verify class in dist:
+  `grep car-dock /app/frontend/dist`). Clear `.nuxt`+`.vite` before generate for new components.
+  (3) **Login hero** — `components/auth/AuthShowcase.vue` = "how City Agent works" pipeline (5-step sweep +
+  mini-widgets + rotating platform messages + feature marquee + canvas data-spine). Self-contained: PAINTS the
+  whole dark panel (`.cai-right` in `sign-in.vue` stripped to `<AuthShowcase/>` only, no padding/bg/header/footer).
+  LANDMINE: old `runShowcase` scene machine + its refs in `sign-in.vue` are now DEAD CODE (driver call commented,
+  `<AuthShowcase/>` owns the panel) — harmless, strip on next real edit. Iterated many hero versions this session
+  (video cabinet → pipeline → cinematic core → journey card → light stream); LIVE = the v3 enriched pipeline.
+  Standalone previews in scratchpad `login_all_improvements.html` / `v3_pipeline_enriched.html`.
+- **PENDING: bake** (`scripts/build.sh` + build.yaml recreate) to make the 3 FE items durable. UI/UX review done
+  (all-improvements mockup at `scratchpad/login_all_improvements.html`, NOT ported to `sign-in.vue` yet).
+
+**Current state (2026-07-03, prior):** `VERSION_HYBRID`=**1.90.0**, mig head **single `docacl1`**
+(`docacl1_knowledge_doc_acl.py`, per-doc ACL `allowed_user_ids`; 182 revisions, verified single leaf).
+v1.90 = Phase 4 = **LEAN_TOOLS** (F1, flag removes 7 audited dup tools from planner catalog, 24→13) +
+**DOC_ACL** (F3, `HYBRID_DOC_ACL` per-user KnowledgeDoc gate). Both flag-OFF default. Branch
+`feature/table-relevance-overview`. Superuser THIS DB = `demo@test.com`/`CityAgent#2026`.
+
+**PRE-PROD HARDENING PASS (2026-07-03, SOURCE-ONLY — NOT baked/committed/hot-cp'd yet):** 11
+prod-breaking issues fixed via 8 parallel disjoint-file subagents + 2 follow-ups, all flag-gated /
+fail-soft / backward-compatible / `py_compile`-verified. (1) multi-worker `--workers 4` state →
+Redis key-poll for confirmation + officejs (`ai/tools/confirmation.py`, `officejs_registry.py`; unset
+`REDIS_URL`=identical), train-status early DB-persist (`train_orchestrator.py`); (2) flag tenant-bleed
+→ per-org map + `set_current_org` ContextVar in `hybrid_flags.py`, WIRED via pure-ASGI
+`OrgFlagContextMiddleware` in `main.py` + `dependencies.py` (single-org=no-op); (3) console cross-org
+LEAK → org-filter on `console_service.get_tool_executions_diagnosis` + defined missing
+`_classify_error_type`; (4) Fernet durability → prod refuses boot on auto-gen key, demands explicit
+`DASH_ENCRYPTION_KEY` (`start.sh`, `app/settings/config.py`); (5) sandbox → SyntaxError hard-reject +
+curated `__builtins__` + `RLIMIT_AS` (`code_execution.py`); (6) `READONLY_ENFORCE` default flipped
+**ON** + all warehouse clients confirmed through string guard; (7) MCP `_load_report` org-check, git
+creds redacted + `--force-with-lease`, SSRF IP-pin (`safe_client.py`), WS `/ws/api/reports/{id}`
+token-auth (+2 FE files); (9) auto_evals vacuous-pass → evaluator `test_evaluation_service.py`
+fail-closed (malformed spec→error, unknown matcher/op→fail; `length.cmp` un-broken); (10) RESULT_CACHE
+ported into LIVE `implementations/create_data.py` (was only in unused `mcp/create_data.py`); (11) LDAP
+config-split verified already correct. **3 caveats set in `docker-compose.build.yaml`:**
+`SANDBOX_MEM_LIMIT_MB=0` (disables risky process-wide virtual rlimit) + commented `mem_limit:` (cgroup
+= correct real-mem cap, size ~70% host RAM); `DASH_ENCRYPTION_KEY` already valid Fernet in `.env`;
+`REDIS_URL` already wired. **APPLY-ORDER LANDMINE: env change needs container RECREATE → reverts
+ca-app to IMAGE → WIPES hot-cp'd fixes. MUST BAKE FIRST:** `bash scripts/build.sh` →
+`docker compose -f docker-compose.build.yaml up -d` → `bash scripts/fe-sync.sh` (FE WS-token) →
+`curl :3007/health`. PENDING: bake + `git commit` + live smokes (multi-worker confirm/officejs,
+RESULT_CACHE hit, webhook sig-verify with signed payload). Sandbox caveat: `RLIMIT_AS` is process-wide
+virtual — prefer the cgroup `mem_limit` over a low `SANDBOX_MEM_LIMIT_MB` (false-trips duckdb/pandas).
+
+**Prior state (2026-07-03, superseded above):** branch PUSHED; PR to `dev` = user's click; mig head **`wf2save1`**,
 `VERSION_HYBRID`=**1.89.0**. **v1.88.0 = OpenAI-data-agent gap-closers P2-P6** (`cd8312be`, 5 subagents, all flag-OFF ON org 7d372305): USAGE_TRUST (trust-rank tables, schema_context_builder), TABLE_CARD (unified card + Shared-Memory overlay, semantic_context_builder extra_cards, coupled SEMANTIC_LAYER), INSTITUTIONAL_KB (docs FTS→planner, org+approved), EVAL_CANARY (`/api/eval/canary/health|drift`+FE eval-health.vue), TOOL_AUDIT (`docs/TOOL_AUDIT.md` 24→13, consolidation deferred). **v1.89.0 = data-agent parity Parts A-E** (`2bf96125`, 5 subagents, mig `wf2save1`): WORKFLOWS_V2 (save/replay analysis, PromptBoxV2 "Use a workflow" chip, `models/analysis_workflow.py`+`services/workflows/`+`routes/workflows_v2.py`+`WorkflowPicker.vue`), OFFLINE_CONTEXT (nightly per-table context_doc+embed, `services/context_offline/`+scheduler 02:30, coupled TABLE_CARD, proven 28 docs), CODE_ENRICH_PLUS (PK/downstream/alternate into pipeline_logic, `code_enrich.py`+`enrich_signals.py`, rendered in table_card), GOLDEN_SQL (`services/evals/golden_sql.py`, `ResultSetRule.golden_sql`+eval_harness capture; DEFERRED live grade), NOTION_KB (`notion/slack_ingest.py`→KnowledgeDoc→P4, `routes/kb_sources.py`). import main 677 routes. Detail memory [[project_cityagent_openai_gapclosers]] + [[project_cityagent_dataagent_parity]]. Superuser THIS DB = `demo@test.com` / `CityAgent#2026`.
 **Prior v1.83.0 baseline** (superseded above; mig was `colprofile1`). Superuser THIS DB = `demo@test.com` / `CityAgent#2026` (NOT admin@cityagent.io — that email not on this DB).
 **v1.79.2→1.83.0 BRANCH CONSOLIDATION (baked+pushed):** every parked branch merged onto this feature branch, each flag-gated default OFF, image==git per step — v1.79.2 dup-agent fix (`_find_reusable_connection` adopts orphan conn, `delete_data_source` cascade-deletes owner-private conn+children), v1.80 **Mixture-of-Agents** (`HYBRID_MOA`, `ai/mixture_of_agents.py` 3-model consult→glm-5.2 aggregator, picker option `model_id="moa"` in `PromptBoxV2.vue`), v1.81 smart-excel+drop-tile, v1.82 smart-slides+dashboard (`HYBRID_SMART_SLIDES/DASHBOARD`), v1.83 **Ingest-Brain F09** (`HYBRID_INGEST_BRAIN`, `services/ingest_brain/*`, mig `colprofile1`). RECURRING MERGE LANDMINES (all in DEVLOG): parked branches call non-existent `LLMService._find_openrouter_provider`→direct provider query; keep-both perl DROPS `@property` on `hybrid_flags.py`→verify `flags.X` is bool; old-base migration forks alembic head→re-parent `down_revision`.

@@ -54,8 +54,9 @@
         <template v-else>
           <span class="flex-shrink-0">
             <span v-if="selectedStudio" class="text-sm leading-none">{{ selectedStudio.avatar || '🎬' }}</span>
-            <UIcon v-else-if="STUDIOS_ONLY" name="heroicons-bolt" class="w-3.5 h-3.5 text-gray-400" />
+            <img v-else-if="pinnedAgentLogo" :src="pinnedAgentLogo" alt="" class="h-3.5 w-3.5 object-contain" />
             <DataSourceIcon v-else-if="singleSelectedConnection" :type="singleSelectedConnection" class="h-3.5 w-3.5" />
+            <UIcon v-else-if="STUDIOS_ONLY" name="heroicons-bolt" class="w-3.5 h-3.5 text-gray-400" />
             <AgentIcon v-else class="w-3.5 h-3.5 text-gray-400" />
           </span>
           <span v-if="showText" class="flex-1 text-start min-w-0">
@@ -133,6 +134,51 @@
                   <UIcon name="heroicons-plus" class="w-3.5 h-3.5 flex-shrink-0" />
                   <span class="text-xs">New Agent Studio</span>
                 </NuxtLink>
+
+                <!-- Data Agents — selectable directly (parity with the composer
+                     picker). Shown in STUDIOS_ONLY too so a connected source
+                     (e.g. Power BI) can be picked as the chat context, not only
+                     reachable via a Studio. Picking one is exclusive with a
+                     Studio (toggleAgent clears the studio). -->
+                <template v-if="dataAgents.length > 0">
+                  <div class="my-1 border-t border-gray-100" />
+                  <div class="px-2 pt-1 pb-0.5">
+                    <span class="text-[8px] uppercase tracking-wide text-gray-400 font-semibold leading-none">Data Agents</span>
+                  </div>
+                  <div class="max-h-52 overflow-y-auto">
+                    <button
+                      v-for="a in dataAgents"
+                      :key="a.id"
+                      @click="toggleAgent(a.id)"
+                      @mouseenter="onAgentHover(a.id, $event)"
+                      @mouseleave="onAgentHoverLeave()"
+                      :class="[
+                        'w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-start transition-colors',
+                        isAgentSelected(a.id) ? 'bg-indigo-50' : 'hover:bg-gray-50'
+                      ]"
+                    >
+                      <img
+                        v-if="agentLogo(a)"
+                        :src="agentLogo(a)"
+                        :alt="agentLabel(a)"
+                        class="h-4 w-4 flex-shrink-0 object-contain"
+                      />
+                      <DataSourceIcon
+                        v-else-if="a.connections?.[0]?.type"
+                        :type="a.connections[0].type"
+                        class="h-4 w-4 flex-shrink-0"
+                      />
+                      <UIcon v-else name="heroicons-circle-stack" class="w-4 h-4 text-gray-400 flex-shrink-0" />
+                      <span :class="['text-xs font-medium truncate flex-1', isAgentSelected(a.id) ? 'text-indigo-700' : 'text-gray-700']">{{ agentLabel(a) }}</span>
+                      <!-- signed-in user initial (email tooltip) -->
+                      <span
+                        class="flex-shrink-0 w-4 h-4 rounded-full bg-gray-100 text-[9px] font-semibold text-gray-500 flex items-center justify-center"
+                        :title="agentEmail(a)"
+                      >{{ agentInitial(a) }}</span>
+                      <UIcon v-if="isAgentSelected(a.id)" name="heroicons-check" class="w-3.5 h-3.5 text-indigo-600 flex-shrink-0" />
+                    </button>
+                  </div>
+                </template>
 
                 <!-- Plan A: raw Data Agents hidden from the selector — a connector
                      is only reachable once pinned in a Studio. -->
@@ -319,11 +365,63 @@ let flyoutHideTimer: ReturnType<typeof setTimeout> | null = null
 // connector activates only when pinned in a Studio. Flip to restore legacy.
 const STUDIOS_ONLY = true
 
-// Display label for the trigger: studio name, else "Auto" (Studios-only) so the
-// user sees the agent will auto-pick, else the legacy agent-name summary.
-const contextLabel = computed(() =>
-  selectedStudio.value ? selectedStudio.value.name : (STUDIOS_ONLY ? 'Auto' : currentAgentName.value)
+// Display label for the trigger: studio name > pinned data-agent name > "Auto".
+const contextLabel = computed(() => {
+  if (selectedStudio.value) return selectedStudio.value.name
+  // a Data Agent is pinned → clean short label ("Power BI") not the raw name
+  if (!isAllAgents.value) {
+    const objs = selectedAgentObjects.value
+    if (objs.length === 1) return agentLabel(objs[0])
+    return currentAgentName.value
+  }
+  return STUDIOS_ONLY ? 'Auto' : currentAgentName.value
+})
+
+// Real Data Agents for the picker: drop admin connector TEMPLATES (the
+// is_user_template shell isn't a chattable agent) so only usable per-user
+// sources (e.g. the Power BI clone) are listed.
+const dataAgents = computed(() =>
+  (agents.value as any[]).filter(a => !a.is_user_template)
 )
+
+// Per-connector short product names — mirrors CONNECTOR_META in the agents
+// page. Keeps the row reading "Power BI" instead of the raw stored name
+// "Power BI (User Sign-in) · rahulgupta@cityholdings.com.mm".
+const CONNECTOR_NAMES: Record<string, string> = {
+  powerbi: 'Power BI', powerbi_user: 'Power BI',
+  ms_fabric: 'Microsoft Fabric', ms_fabric_user: 'Microsoft Fabric',
+  sharepoint: 'SharePoint', onedrive: 'OneDrive',
+}
+// Product logo PNGs (DataSourceIcon has no powerbi_user/ms_fabric_user glyph →
+// it falls back to a generic file icon, so use the real image like the card).
+const CONNECTOR_LOGOS: Record<string, string> = {
+  powerbi: '/data_sources_icons/powerbi.png', powerbi_user: '/data_sources_icons/powerbi.png',
+  ms_fabric: '/data_sources_icons/ms_fabric.png', ms_fabric_user: '/data_sources_icons/ms_fabric.png',
+  sharepoint: '/data_sources_icons/sharepoint.png', onedrive: '/data_sources_icons/onedrive.png',
+}
+function agentType(a: any): string { return a?.connections?.[0]?.type || a?.type || '' }
+function agentLogo(a: any): string { return CONNECTOR_LOGOS[agentType(a)] || '' }
+// Clean short label: known connector → product name; else strip the
+// "(User Sign-in) · email" framing off the raw name.
+function agentLabel(a: any): string {
+  const t = agentType(a)
+  if (CONNECTOR_NAMES[t]) return CONNECTOR_NAMES[t]
+  return String(a?.name || '').split('·')[0].replace(/\(user\s*sign-?in\)/i, '').trim() || 'Data Agent'
+}
+// The signed-in email (stored as "<Product> · email") → initial badge.
+function agentEmail(a: any): string {
+  const n = String(a?.name || '')
+  return n.includes('·') ? n.split('·').pop()!.trim() : (a?.owner_email || '')
+}
+function agentInitial(a: any): string {
+  const src = agentEmail(a) || agentLabel(a)
+  return (src.trim()[0] || '?').toUpperCase()
+}
+// Logo for the trigger when exactly one Data Agent is pinned.
+const pinnedAgentLogo = computed(() => {
+  const objs = selectedAgentObjects.value
+  return objs.length === 1 ? agentLogo(objs[0]) : ''
+})
 
 // Auto: clear the pinned studio → agent auto-selects sources/skills per question.
 function selectAuto() {
@@ -426,6 +524,9 @@ watch(() => route.fullPath, hideFlyoutNow)
 
 onMounted(() => {
   initStudios()
+  // Load Data Agents so they appear in this top-nav picker (composer already
+  // fetches its own list). Without this the agents[] ref stays empty here.
+  initAgent()
 })
 
 onBeforeUnmount(hideFlyoutNow)

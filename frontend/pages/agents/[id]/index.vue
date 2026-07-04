@@ -3,6 +3,21 @@
         <!-- Hide content when there's a fetch error (layout shows error state) -->
         <div v-if="fetchError" />
         <div v-else>
+            <!-- Non-blocking live-metrics indicator: subtle "refreshing…" while headline/overview
+                 are in flight, or a tiny fail-soft note + retry on error. NEVER a full-page skeleton
+                 — the page stays fully usable with whatever is cached/known. -->
+            <div v-if="liveRefreshing || liveError" class="mb-3 flex items-center gap-1.5 text-[11.5px]">
+                <template v-if="liveRefreshing">
+                    <UIcon name="heroicons-arrow-path" class="w-3.5 h-3.5 animate-spin text-[#A8A29E]" />
+                    <span class="text-[#A8A29E]">Refreshing live metrics…</span>
+                </template>
+                <template v-else>
+                    <span class="w-1.5 h-1.5 rounded-full bg-[#C2841E] shrink-0"></span>
+                    <span class="text-[#92610A]">Couldn't refresh live metrics.</span>
+                    <button type="button" @click="retryLive" class="font-medium text-[#C2541E] hover:underline">Retry</button>
+                </template>
+            </div>
+
             <!-- Live sync-log terminal (self-hides when there's no active/recent sync run;
                  the FULL warm-dark terminal appears only while a sync is actually running) -->
             <AgentSyncLog :data-source-id="(route.params.id as string)" @phase="onSyncPhase" />
@@ -500,6 +515,41 @@ const overview = ref<{
 }>({ stats: { active_tables: 0, total_columns: 0, connections: 0 }, tables: [], joins: [], view_only: [] })
 const hasOverview = ref(false)
 
+// --- Non-blocking live-metrics state (headline + overview run against Power BI, 20-40s,
+// rate-limited). The page must NEVER wait on them: we show cached/known content instantly,
+// refresh in the background, and fail soft (keep the page usable + offer a retry). ---
+const overviewLoading = ref(false)
+const overviewError = ref(false)
+const headlineLoading = ref(false)
+const headlineError = ref(false)
+
+// stale-while-revalidate cache (per data-source id) — last good values render instantly.
+const LS_OV_PREFIX = 'ca_agent_overview_v1:'
+const LS_HL_PREFIX = 'ca_agent_headline_v1:'
+function _lsGet(key: string): any | null {
+    try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : null } catch { return null }
+}
+function _lsSet(key: string, val: any) {
+    try { localStorage.setItem(key, JSON.stringify(val)) } catch { /* quota/private mode — non-fatal */ }
+}
+function loadCachedOverview(id: string) {
+    const c = _lsGet(LS_OV_PREFIX + id)
+    if (c && c.stats) { overview.value = c; hasOverview.value = true }
+}
+function loadCachedHeadline(id: string) {
+    const c = _lsGet(LS_HL_PREFIX + id)
+    if (c && Array.isArray(c.items) && c.items.length) headline.value = { status: c.status || 'ready', items: c.items }
+}
+
+// subtle, non-blocking indicators (never a full-page skeleton)
+const liveRefreshing = computed(() => overviewLoading.value || headlineLoading.value)
+const liveError = computed(() => overviewError.value || headlineError.value)
+function retryLive() {
+    _headlinePolls = 0
+    try { fetchOverview() } catch (_e) {}
+    try { fetchHeadline() } catch (_e) {}
+}
+
 // Live sync phase from AgentSyncLog, so the status strip is HONEST: never show a
 // green "ready" while a sync is still running or when 0 tables were kept.
 const syncPhase = ref<string>('')
@@ -518,18 +568,26 @@ const headline = ref<{ status: string; items: { label: string; value: string }[]
 const headlineItems = computed(() => headline.value.items || [])
 let _headlinePolls = 0
 async function fetchHeadline() {
+    const id = route.params.id as string
+    headlineLoading.value = true
     try {
-        const id = route.params.id as string
         const { data } = await useMyFetch<any>(`/data_sources/${id}/headline`, { method: 'GET' })
         const r = (data.value as any) || { status: 'error', items: [] }
         headline.value = { status: r.status || 'error', items: Array.isArray(r.items) ? r.items : [] }
+        headlineError.value = false
+        // persist good KPIs so the next visit shows them instantly (stale-while-revalidate)
+        if (headline.value.items.length) _lsSet(LS_HL_PREFIX + id, headline.value)
         // still warming + nothing yet → poll a few times (measures compute in the background)
         if (headline.value.status !== 'ready' && !headline.value.items.length && _headlinePolls < 6) {
             _headlinePolls++
             setTimeout(fetchHeadline, 4000)
         }
     } catch (_e) {
-        headline.value = { status: 'error', items: [] }
+        // fail soft: keep any cached/prior KPIs on screen; only blank if we have nothing
+        headlineError.value = true
+        if (!headlineItems.value.length) headline.value = { status: 'error', items: [] }
+    } finally {
+        headlineLoading.value = false
     }
 }
 
@@ -594,9 +652,11 @@ const readinessDescribed = computed(() => {
 async function fetchOverview() {
     const id = route.params.id as string
     if (!id) return
+    overviewLoading.value = true
     try {
         const { data, error } = await useMyFetch<any>(`/data_sources/${id}/overview`, { method: 'GET' })
-        if (error?.value) { hasOverview.value = false; return }
+        // fail soft: on error/empty, KEEP any cached/prior overview (do NOT blank hasOverview)
+        if (error?.value) { overviewError.value = true; return }
         const d = data?.value as any
         if (d && d.stats) {
             overview.value = {
@@ -610,11 +670,15 @@ async function fetchOverview() {
                 view_only: Array.isArray(d.view_only) ? d.view_only : [],
             }
             hasOverview.value = true
+            overviewError.value = false
+            _lsSet(LS_OV_PREFIX + id, overview.value)  // stale-while-revalidate
         } else {
-            hasOverview.value = false
+            overviewError.value = true
         }
     } catch {
-        hasOverview.value = false
+        overviewError.value = true
+    } finally {
+        overviewLoading.value = false
     }
 }
 
@@ -652,8 +716,18 @@ async function launchReport(text: string) {
     }
 }
 
-onMounted(() => { fetchOverview(); fetchHeadline() })
-watch(() => route.params.id, () => { _headlinePolls = 0; fetchOverview(); fetchHeadline() })
+onMounted(() => {
+    const id = route.params.id as string
+    // paint last-known values instantly, then revalidate live in the background
+    loadCachedOverview(id); loadCachedHeadline(id)
+    fetchOverview(); fetchHeadline()
+})
+watch(() => route.params.id, (id) => {
+    _headlinePolls = 0
+    overviewError.value = false; headlineError.value = false
+    loadCachedOverview(id as string); loadCachedHeadline(id as string)
+    fetchOverview(); fetchHeadline()
+})
 const editStarters = ref<{ title: string; prompt: string }[]>([])
 const savingStarters = ref(false)
 

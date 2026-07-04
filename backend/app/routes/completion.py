@@ -93,9 +93,71 @@ async def create_completion(
 async def get_completions(report_id: str, current_user: User = Depends(current_user), organization: Organization = Depends(get_current_organization), db: AsyncSession = Depends(get_async_db)):
     return await completion_service.get_completions(db, report_id, organization, current_user)
 
+async def _authenticate_websocket(websocket: WebSocket, db: AsyncSession) -> Optional[User]:
+    """Resolve the caller for a report websocket.
+
+    Browsers can't set headers on a WebSocket, so the primary channel is the
+    `?token=` query param (JWT or bow_ API key). Also accepts an
+    `Authorization: Bearer <jwt|bow_...>` header and an `X-API-Key: bow_...`
+    header for non-browser clients. Returns the User or None (never raises).
+    """
+    query_token = websocket.query_params.get("token")
+    auth_header = websocket.headers.get("authorization", "")
+    header_api_key = websocket.headers.get("x-api-key")
+
+    # 1) bow_ API keys (X-API-Key, ?token=bow_..., or Authorization: Bearer bow_...)
+    candidate_key = None
+    if header_api_key and header_api_key.startswith("bow_"):
+        candidate_key = header_api_key
+    elif query_token and query_token.startswith("bow_"):
+        candidate_key = query_token
+    elif auth_header.startswith("Bearer bow_"):
+        candidate_key = auth_header[len("Bearer "):]
+    if candidate_key:
+        try:
+            from app.services.api_key_service import ApiKeyService
+            user = await ApiKeyService().get_user_by_api_key(db, candidate_key)
+            if user is not None:
+                return user
+        except Exception:
+            pass
+
+    # 2) JWT (?token=<jwt> or Authorization: Bearer <jwt>)
+    jwt_token = None
+    if query_token and not query_token.startswith("bow_"):
+        jwt_token = query_token
+    elif auth_header.startswith("Bearer ") and not auth_header.startswith("Bearer bow_"):
+        jwt_token = auth_header[len("Bearer "):]
+    if jwt_token:
+        try:
+            from app.core.auth import UserManager, get_jwt_strategy
+            from fastapi_users.db import SQLAlchemyUserDatabase
+            user_manager = UserManager(SQLAlchemyUserDatabase(db, User))
+            user = await get_jwt_strategy().read_token(jwt_token, user_manager)
+            if user is not None:
+                return user
+        except Exception:
+            pass
+
+    return None
+
+
 @router.websocket("/ws/api/reports/{report_id}")
-async def websocket_endpoint(websocket: WebSocket, report_id: str):
-    print(f"=== websocket_endpoint for report {report_id} ===")
+async def websocket_endpoint(
+    websocket: WebSocket,
+    report_id: str,
+    db: AsyncSession = Depends(get_async_db),
+):
+    # Authenticate BEFORE accepting: an unauthenticated caller must not be able
+    # to subscribe to a report's live event stream. Close with 1008 (policy
+    # violation) on failure.
+    user = await _authenticate_websocket(websocket, db)
+    if user is None:
+        await websocket.accept()
+        await websocket.close(code=1008)
+        return
+
+    print(f"=== websocket_endpoint for report {report_id} (user {user.id}) ===")
     try:
         await websocket_manager.connect(websocket, report_id)
         

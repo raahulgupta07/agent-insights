@@ -513,6 +513,13 @@ async def run_training(studio_id, organization_id, user_id) -> None:
                 except Exception:
                     pass
 
+            # Mirror the initial "running" status to the DB NOW so a poll landing
+            # on another uvicorn worker (in-proc _RUNS is per-worker) sees the run
+            # from the start — the next _persist_db is only at pct 40 (profiling),
+            # which would otherwise leave cross-worker polls reading "idle" for the
+            # long route_inbox stage. Fail-soft (own commit inside _persist_db).
+            await _persist_db(db, studio, sid)
+
             # --- Stage 0: route inbox files (Inbox -> Train) ------------------
             # Classify + place any files queued in the studio inbox BEFORE we
             # resolve sources, so newly-placed Database sources are profiled in
@@ -750,6 +757,9 @@ async def run_training(studio_id, organization_id, user_id) -> None:
                     pass
                 detail["queries"] = f"error: {e}"
             _set(sid, pct=60)
+            # Mid-run persist: queries/evals are long LLM stages; mirror progress
+            # so cross-worker polls track past the pct-40 profiling checkpoint.
+            await _persist_db(db, studio, sid)
 
             # --- Stage 3: auto-evals (pct 75) ---------------------------------
             _set(sid, step="evals", pct=65)

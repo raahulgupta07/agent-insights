@@ -133,12 +133,20 @@ class MCPTool(ABC):
     
     # ==================== Report Loading ====================
 
-    async def _load_report(self, db: AsyncSession, report_id: str) -> Report:
+    async def _load_report(
+        self,
+        db: AsyncSession,
+        report_id: str,
+        organization: Organization,
+    ) -> Report:
         """Load report as ORM model with data sources and connections eagerly loaded.
 
         This loads the Report directly as an ORM object (not a Pydantic schema)
         so that Connection objects retain their get_credentials() /
         decrypt_credentials() methods needed by construct_clients().
+
+        Enforces org ownership: a report from another organization is reported
+        as "not found" (no-leak) so an MCP caller can't load cross-org reports.
         """
         result = await db.execute(
             select(Report)
@@ -148,7 +156,7 @@ class MCPTool(ABC):
             .filter(Report.id == report_id)
         )
         report = result.unique().scalar_one_or_none()
-        if not report:
+        if not report or str(report.organization_id) != str(organization.id):
             raise HTTPException(status_code=404, detail="Report not found")
         return report
 

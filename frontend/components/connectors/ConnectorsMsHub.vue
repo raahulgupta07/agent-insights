@@ -45,18 +45,21 @@
                     </span>
                 </div>
 
-                <!-- CONNECTED -->
+                <!-- CONNECTED — already signed in; do NOT offer a fresh "Sign in"
+                     (that spawned duplicate agents). Open / Re-sync the existing one;
+                     a new agent only via the explicit "another account" path. -->
                 <template v-if="cloneFor(c.key)">
                     <div class="text-[11px] flex items-center gap-1.5 font-semibold text-[#3f9e6a] mb-3">
-                        <span class="w-1.5 h-1.5 rounded-full bg-[#3f9e6a]"></span>{{ $t('connectors.connected') }} · {{ ownerLabel(cloneFor(c.key)) }}
+                        <span class="w-1.5 h-1.5 rounded-full bg-[#3f9e6a]"></span>{{ $t('connectors.connected') }} · {{ ownerLabel(cloneFor(c.key)) }}<span v-if="clonesFor(c.key).length > 1" class="text-[#9a958c] font-normal"> +{{ clonesFor(c.key).length - 1 }}</span>
                     </div>
-                    <div class="flex gap-1.5 items-center">
-                        <NuxtLink :to="`/agents/${cloneFor(c.key).id}`" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#C2541E] text-white hover:bg-[#A8330F]">{{ $t('connectors.open') }}</NuxtLink>
+                    <div class="flex gap-1.5 items-center flex-wrap">
+                        <NuxtLink :to="`/agents/${cloneFor(c.key).id}`" class="inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#3f9e6a] text-white hover:bg-[#348659]" :title="$t('connectors.open')">✓ {{ $t('connectors.connected') }}</NuxtLink>
                         <button @click="startConnect(c.key)" class="text-xs font-medium text-[#9a958c] hover:text-[#C2541E]">{{ $t('connectors.resync') }}</button>
+                        <button @click="startConnect(c.key)" class="text-xs font-medium text-[#9a958c] hover:text-[#C2541E]" :title="'Sign in with a different Microsoft account to add a separate agent'">＋ Another account</button>
                     </div>
                 </template>
 
-                <!-- CONFIGURED, NOT CONNECTED → Sign in (any user) -->
+                <!-- CONFIGURED, NOT CONNECTED → Sign in (first connect only) -->
                 <template v-else-if="c.live && templateFor(c.key)">
                     <div class="text-[11px] flex items-center gap-1.5 text-[#9a958c] mb-3">
                         <span class="w-1.5 h-1.5 rounded-full bg-[#3f9e6a]"></span>Ready to connect
@@ -186,21 +189,51 @@ function isReady(c: any) {
 // Fabric: server host + tenant; database is auto-discovered from what each user can
 // access at sign-in. Power BI (User Sign-in): tenant only — datasets a user can see
 // come back automatically. SharePoint/OneDrive queued (same device-code path).
-const catalog = [
+const baseCatalog = [
     { key: 'fabric', type: 'ms_fabric', name: 'Microsoft Fabric', icon: '/data_sources_icons/ms_fabric.png', desc: 'Lakehouse & warehouse SQL endpoint.', live: true, fields: ['server_hostname', 'tenant_id'] },
     { key: 'powerbi', type: 'powerbi_user', name: 'Power BI (User Sign-in)', icon: '/data_sources_icons/powerbi.png', desc: 'Datasets & reports — each user sees their own.', live: true, fields: ['tenant_id'] },
     { key: 'sharepoint', type: 'sharepoint', name: 'SharePoint', icon: '/data_sources_icons/sharepoint.png', desc: 'Sites, docs & lists.', live: false, fields: ['tenant_id'] },
     { key: 'onedrive', type: 'onedrive', name: 'OneDrive', icon: '/data_sources_icons/onedrive.png', desc: 'Your personal files.', live: false, fields: ['tenant_id'] },
 ]
 
+// Unified Microsoft sign-in (HYBRID_MS_UNIFIED_SIGNIN, super-admin toggle in
+// Settings › Features): a single tile that signs in once and provisions BOTH a
+// Power BI agent and a Fabric agent (shared token). It reuses the Power BI
+// template for sign-in (type powerbi_user) and carries `unified:true` so the
+// connect flow fans out to Fabric. When ON it REPLACES the two individual
+// Microsoft Fabric + Power BI (User Sign-in) tiles (SharePoint/OneDrive stay);
+// when OFF the individual tiles show and the combined tile is hidden.
+const unifiedEnabled = ref(false)
+const combinedTile = { key: 'ms_combined', type: 'powerbi_user', name: 'Microsoft (Fabric + Power BI)', icon: '/data_sources_icons/powerbi.png', desc: 'One sign-in → Power BI + Fabric agents.', live: true, fields: ['tenant_id'], unified: true }
+const catalog = computed(() => {
+    if (!unifiedEnabled.value) return baseCatalog
+    // Replace the two per-service MS tiles with the single combined tile.
+    const rest = baseCatalog.filter(c => c.key !== 'fabric' && c.key !== 'powerbi')
+    return [combinedTile, ...rest]
+})
+
 function templateFor(key: string) {
-    const type = catalog.find(c => c.key === key)?.type
+    const type = catalog.value.find(c => c.key === key)?.type
     return templates.value.find(tp => tp.type === type) || null
 }
-function cloneFor(key: string) {
+// All of THIS user's clones for a connector. `props.agents` is already owner-scoped
+// (the caller's own agents), so match by the explicit template link OR — resiliently,
+// when the template id has drifted / a clone was made by an older path — by the
+// connector TYPE. This is what makes the tile flip to "Connected" instead of wrongly
+// offering "Sign in" again (which is how duplicate agents got created). Generic for
+// all Microsoft connectors (Fabric / Power BI / SharePoint / OneDrive).
+function clonesFor(key: string) {
     const tpl = templateFor(key)
-    if (!tpl) return null
-    return (props.agents || []).find(a => a.template_source_id === tpl.id) || null
+    const type = catalog.value.find(c => c.key === key)?.type
+    return (props.agents || []).filter((a: any) => {
+        if (a.is_user_template) return false
+        if (tpl && a.template_source_id === tpl.id) return true
+        const at = a.connections?.[0]?.type || a.type
+        return !!type && at === type && !!a.template_source_id
+    })
+}
+function cloneFor(key: string) {
+    return clonesFor(key)[0] || null
 }
 function ownerLabel(clone: any) {
     return (clone?.name || '').split('·').pop()?.trim() || t('connectors.you')
@@ -212,6 +245,8 @@ async function loadFlag() {
         const rows = (data.value as any[]) || []
         const row = rows.find(r => r.key === 'PER_USER_CONNECTOR' || r.env_name === 'HYBRID_PER_USER_CONNECTOR')
         enabled.value = !!row?.effective
+        const urow = rows.find(r => r.key === 'MS_UNIFIED_SIGNIN' || r.env_name === 'HYBRID_MS_UNIFIED_SIGNIN')
+        unifiedEnabled.value = !!urow?.effective
     } catch { enabled.value = false }
 }
 async function loadTemplates() {
@@ -229,7 +264,7 @@ const resetting = ref(false)
 const adminError = ref('')
 const cfg = reactive<{ server_hostname: string; tenant_id: string }>({ server_hostname: '', tenant_id: '' })
 const editingKey = ref('fabric')
-const editingConn = computed(() => catalog.find(c => c.key === editingKey.value) || catalog[0])
+const editingConn = computed(() => catalog.value.find(c => c.key === editingKey.value) || baseCatalog[0])
 
 function openAdminConfig(key: string) {
     editingKey.value = key
@@ -310,13 +345,22 @@ let cancelled = false
 function startConnect(key: string) {
     const tpl = templateFor(key)
     if (!tpl) return
-    registerTemplate.value = { ...tpl, name: catalog.find(c => c.key === key)?.name || tpl.name }
+    const c = catalog.value.find(cc => cc.key === key)
+    // unified: carry the flag so the connect flow fans out to a Fabric agent too.
+    registerTemplate.value = { ...tpl, name: c?.name || tpl.name, unified: (c as any)?.unified === true }
     showRegister.value = true
 }
 function onRegistered(ds: any) {
+    const wasUnified = (registerTemplate.value as any)?.unified === true
     showRegister.value = false
     emit('refresh')
     const id = ds?.id
+    // Unified sign-in makes TWO agents — stay on /agents so both cards are visible
+    // rather than diving into just the Power BI one.
+    if (wasUnified) {
+        toast.add({ title: 'Connected — Power BI + Fabric agents are being built', color: 'green', icon: 'i-heroicons-check-circle' })
+        return
+    }
     if (id) navigateTo(`/agents/${id}?sync=live`)
 }
 function schedulePoll() {

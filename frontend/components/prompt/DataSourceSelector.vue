@@ -19,18 +19,17 @@
                     </span>
                     <span v-else-if="internalSelectedDataSources.length > 0" class="flex items-center">
                         <template v-if="isCompactFinal">
-                            <!-- Compact: show only first icon -->
-                            <DataSourceIcon :type="internalSelectedDataSources[0].type" class="h-4" />
+                            <!-- Compact: show only first icon (connector logo when known) -->
+                            <img v-if="dsLogo(internalSelectedDataSources[0])" :src="dsLogo(internalSelectedDataSources[0])" :alt="dsLabel(internalSelectedDataSources[0])" class="h-4 w-4 object-contain" />
+                            <DataSourceIcon v-else :type="internalSelectedDataSources[0].type" class="h-4" />
                         </template>
                         <template v-else>
-                            <!-- Non-compact: show stacked icons -->
+                            <!-- Non-compact: show stacked icons (connector logo when known) -->
                             <div class="flex -space-x-1">
-                                <DataSourceIcon
-                                    v-for="ds in internalSelectedDataSources.slice(0, 3)"
-                                    :key="ds.id"
-                                    :type="ds.type"
-                                    class="h-4 ring-1 ring-white rounded flex-shrink-0"
-                                />
+                                <template v-for="ds in internalSelectedDataSources.slice(0, 3)" :key="ds.id">
+                                    <img v-if="dsLogo(ds)" :src="dsLogo(ds)" :alt="dsLabel(ds)" class="h-4 w-4 ring-1 ring-white rounded flex-shrink-0 object-contain bg-white" />
+                                    <DataSourceIcon v-else :type="ds.type" class="h-4 ring-1 ring-white rounded flex-shrink-0" />
+                                </template>
                             </div>
                             <span v-if="internalSelectedDataSources.length > 3" class="ms-1 text-[10px] text-gray-400">
                                 +{{ internalSelectedDataSources.length - 3 }}
@@ -67,7 +66,7 @@
                                         <span class="text-[13px]">Auto</span>
                                         <span class="ms-2 text-[11px] text-gray-400">picks for you</span>
                                     </div>
-                                    <Icon v-if="!internalSelectedStudioId" name="heroicons-check" class="w-4 h-4 text-[#C2541E] flex-shrink-0" />
+                                    <Icon v-if="!internalSelectedStudioId && autoActive" name="heroicons-check" class="w-4 h-4 text-[#C2541E] flex-shrink-0" />
                                 </div>
                                 <div class="my-1 border-t border-gray-100" />
                             </template>
@@ -126,8 +125,9 @@
                                     @mouseleave="onDataSourceHoverLeave()"
                                 >
                                     <div class="flex items-center min-w-0">
-                                        <DataSourceIcon :type="ds.type" class="h-4 flex-shrink-0" />
-                                        <span class="ms-2 text-[13px] truncate">{{ ds.name }}</span>
+                                        <img v-if="dsLogo(ds)" :src="dsLogo(ds)" :alt="dsLabel(ds)" class="h-4 w-4 flex-shrink-0 object-contain" />
+                                        <DataSourceIcon v-else :type="ds.type" class="h-4 flex-shrink-0" />
+                                        <span class="ms-2 text-[13px] truncate">{{ dsLabel(ds) }}</span>
                                         <!-- Non-published agents only reach here for managers; flag
                                              them so it's clear they aren't live for consumers yet. -->
                                         <span
@@ -140,7 +140,13 @@
                                             class="ms-2 flex-shrink-0 text-[10px] text-gray-400 border border-gray-200 rounded px-1 py-0.5"
                                         >Service account</span>
                                     </div>
-                                    <Icon v-if="!isAutoMode && isSelected(ds)" name="heroicons-check" class="w-4 h-4 text-[#C2541E] flex-shrink-0" />
+                                    <div class="flex items-center gap-1.5 flex-shrink-0">
+                                        <span
+                                            class="w-4 h-4 rounded-full bg-gray-100 text-[9px] font-semibold text-gray-500 flex items-center justify-center"
+                                            :title="dsEmail(ds)"
+                                        >{{ dsInitial(ds) }}</span>
+                                        <Icon v-if="!autoActive && isSelected(ds)" name="heroicons-check" class="w-4 h-4 text-[#C2541E]" />
+                                    </div>
                                 </div>
                             </template>
 
@@ -254,6 +260,11 @@ const isAutoMode = computed(() =>
     visibleDataSources.value.length > 0 &&
     visibleDataSources.value.every(ds => internalSelectedDataSources.value.some(s => s.id === ds.id))
 )
+// EXPLICIT Auto flag. The all-selected heuristic above can't tell "Auto" from
+// "the user pinned the only Data Agent" when there is a single source — both
+// look like "everything selected". This flag records the user's actual intent
+// so the checkmark reflects the real pick even with one Data Agent.
+const autoActive = ref(true)
 
 // Hover flyout state
 const hoveredDataSourceId = ref<string | null>(null)
@@ -490,10 +501,14 @@ async function getDataSources() {
         if ((props.selectedDataSources as any[])?.length) {
             // Align to the objects from the current dataSources list by id
             const ids = new Set((props.selectedDataSources as any[]).map((x: any) => x.id))
-            internalSelectedDataSources.value = dataSources.value.filter((ds: any) => ids.has(ds.id))
+            const picked = dataSources.value.filter((ds: any) => ids.has(ds.id))
+            internalSelectedDataSources.value = picked
+            // Explicit pin unless it happens to equal every source (= Auto).
+            autoActive.value = picked.length > 0 && picked.length === visibleDataSources.value.length
             handleSelectionChange()
         } else if (!props.reportId) {
             // Landing page (no report): default to all data sources (auto).
+            autoActive.value = true
             internalSelectedDataSources.value = [...visibleDataSources.value]
             handleSelectionChange()
         }
@@ -539,6 +554,35 @@ function isSelected(option: any) {
     return internalSelectedDataSources.value.some((ds: any) => ds.id === option.id)
 }
 
+// Clean connector display (parity with the top-nav AgentSelector): show the
+// product logo + short name ("Power BI") + signed-in user initial instead of
+// the raw stored name "Power BI (User Sign-in) · email".
+const CONNECTOR_NAMES: Record<string, string> = {
+    powerbi: 'Power BI', powerbi_user: 'Power BI',
+    ms_fabric: 'Microsoft Fabric', ms_fabric_user: 'Microsoft Fabric',
+    sharepoint: 'SharePoint', onedrive: 'OneDrive',
+}
+const CONNECTOR_LOGOS: Record<string, string> = {
+    powerbi: '/data_sources_icons/powerbi.png', powerbi_user: '/data_sources_icons/powerbi.png',
+    ms_fabric: '/data_sources_icons/ms_fabric.png', ms_fabric_user: '/data_sources_icons/ms_fabric.png',
+    sharepoint: '/data_sources_icons/sharepoint.png', onedrive: '/data_sources_icons/onedrive.png',
+}
+function dsType(ds: any): string { return ds?.connections?.[0]?.type || ds?.type || '' }
+function dsLogo(ds: any): string { return CONNECTOR_LOGOS[dsType(ds)] || '' }
+function dsLabel(ds: any): string {
+    const t = dsType(ds)
+    if (CONNECTOR_NAMES[t]) return CONNECTOR_NAMES[t]
+    return String(ds?.name || '').split('·')[0].replace(/\(user\s*sign-?in\)/i, '').trim() || 'Data Agent'
+}
+function dsEmail(ds: any): string {
+    const n = String(ds?.name || '')
+    return n.includes('·') ? n.split('·').pop()!.trim() : (ds?.owner_email || '')
+}
+function dsInitial(ds: any): string {
+    const src = dsEmail(ds) || dsLabel(ds)
+    return (src.trim()[0] || '?').toUpperCase()
+}
+
 // The user can use this user_required source via the connection's system
 // (service principal) credentials — admin/owner fallback, no personal sign-in.
 function isServiceAccount(ds: any) {
@@ -555,6 +599,7 @@ function selectAuto() {
         clearStudioGlobal()
         emit('update:selectedStudioId', '')
     }
+    autoActive.value = true
     internalSelectedDataSources.value = [...visibleDataSources.value]
     handleSelectionChange()
     persistSelectionIfReport()
@@ -573,13 +618,21 @@ function toggleAutoMode() {
 
 function toggleDataSource(ds: DataSource) {
     clearStudio()
-    if (isAutoMode.value) {
-        // Exit auto: start fresh with only this source selected
+    if (autoActive.value) {
+        // Leaving Auto: pin only this source (explicit pick).
+        autoActive.value = false
         internalSelectedDataSources.value = [ds]
     } else {
         const exists = internalSelectedDataSources.value.find((x) => x.id === ds.id)
         if (exists) {
-            internalSelectedDataSources.value = internalSelectedDataSources.value.filter((x) => x.id !== ds.id)
+            const next = internalSelectedDataSources.value.filter((x) => x.id !== ds.id)
+            // Deselecting the last pinned source falls back to Auto rather than
+            // an empty (invalid) selection.
+            if (next.length === 0) {
+                selectAuto()
+                return
+            }
+            internalSelectedDataSources.value = next
         } else {
             internalSelectedDataSources.value = [...internalSelectedDataSources.value, ds]
         }

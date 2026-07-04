@@ -15,6 +15,7 @@ from sqlalchemy import select
 import json
 import hmac
 import hashlib
+import os
 
 from app.dependencies import get_async_db
 from app.services.external_platform_manager import ExternalPlatformManager
@@ -27,8 +28,55 @@ router = APIRouter(tags=["whatsapp-webhook"])
 platform_manager = ExternalPlatformManager()
 platform_service = ExternalPlatformService()
 
-# Simple in-memory dedupe (same pattern as Slack webhook)
+# In-memory fallback dedupe (single-worker/dev only when REDIS_URL is unset).
 processed_message_ids: set = set()
+
+# Cross-worker dedupe: Redis SETNX+TTL shared by all `--workers N` processes so a
+# Meta retry can't fire a duplicate agent run on a different worker.
+_DEDUPE_TTL = 86400  # seconds — Meta retries deliveries over a long window
+_redis = None
+_redis_init = False
+
+
+async def _get_redis():
+    """Lazily connect to Redis; return a client or None (→ in-memory fallback)."""
+    global _redis, _redis_init
+    if _redis_init:
+        return _redis
+    _redis_init = True
+    url = os.environ.get("REDIS_URL")
+    if not url:
+        return None
+    try:
+        import redis.asyncio as aioredis
+
+        client = aioredis.from_url(url, encoding="utf-8", decode_responses=True)
+        await client.ping()
+        _redis = client
+    except Exception as e:
+        print(f"whatsapp_webhook: Redis unavailable ({e}); using in-memory dedupe")
+        _redis = None
+    return _redis
+
+
+async def _seen_before(message_id: str) -> bool:
+    """True if message_id was already processed. Redis-backed (cross-worker) when
+    REDIS_URL is set, else the in-memory set (single-worker fallback)."""
+    if not message_id:
+        return False
+    client = await _get_redis()
+    if client is not None:
+        try:
+            first = await client.set(f"dedupe:whatsapp:{message_id}", "1", nx=True, ex=_DEDUPE_TTL)
+            return not first
+        except Exception as e:
+            print(f"whatsapp_webhook: Redis dedupe error ({e}); using in-memory fallback")
+    if message_id in processed_message_ids:
+        return True
+    processed_message_ids.add(message_id)
+    if len(processed_message_ids) > 1000:
+        processed_message_ids.clear()
+    return False
 
 
 async def _list_whatsapp_platforms(db: AsyncSession):
@@ -144,15 +192,11 @@ async def whatsapp_webhook(
         if not messages:
             return {"ok": True}
 
-        # Dedupe by message id
+        # Cross-worker dedupe by message id (Redis SETNX+TTL, in-mem fallback)
         message_id = messages[0].get("id")
-        if message_id and message_id in processed_message_ids:
+        if await _seen_before(message_id):
             print(f"WhatsApp message {message_id} already processed, skipping")
             return {"ok": True}
-        if message_id:
-            processed_message_ids.add(message_id)
-            if len(processed_message_ids) > 1000:
-                processed_message_ids.clear()
 
         # Only text messages flow to the agent in v1
         if messages[0].get("type") != "text":

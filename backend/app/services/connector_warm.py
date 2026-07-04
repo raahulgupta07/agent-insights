@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 # (data_source_id, user_id) -> monotonic time of last warm. Under the 300s DAX-cache
 # TTL so a re-open inside the hot window is a no-op. Module-level (per worker).
 _WARMED: dict = {}
-_WARM_TTL = 240.0
+_WARM_TTL = 1800.0
 _PER_QUERY_TIMEOUT = 20.0
 _MAX_DATASETS = 12
 
@@ -124,8 +124,11 @@ def schedule_warm(data_source_id: str, org_id: str, user_id: str) -> None:
 import re as _re
 
 _HEADLINE: dict = {}
-_HEADLINE_TTL = 300.0
+_HEADLINE_TTL = 1800.0
 _MAX_HEADLINE = 6
+# (data_source_id, user_id) currently being recomputed in the background — dedupes
+# stale-while-revalidate refreshes so a burst of headline requests fires ONE live pass.
+_HEADLINE_INFLIGHT: set = set()
 _HEADLINE_NAME = _re.compile(
     r"count|total|number|\bno\.?\b|amount|revenue|sales|progress|\brate\b|ratio|"
     r"average|\bavg\b|\bsum\b|percent|%|score|active|members?",
@@ -225,6 +228,53 @@ async def compute_headline(data_source_id: str, org_id: str, user_id: str, force
     except Exception:
         logger.warning("hot_start: compute_headline failed for %s", data_source_id, exc_info=True)
         return {"status": "error", "items": []}
+
+
+def schedule_headline_refresh(data_source_id: str, org_id: str, user_id: str) -> None:
+    """Fire-and-forget a fresh headline compute in the background (never blocks the
+    caller). Deduped per (data_source, user) so a burst of Overview opens triggers a
+    single live DAX pass; the in-flight lease clears when the compute finishes."""
+    key = (str(data_source_id), str(user_id))
+    if key in _HEADLINE_INFLIGHT:
+        return
+    _HEADLINE_INFLIGHT.add(key)
+
+    async def _run() -> None:
+        try:
+            await compute_headline(str(data_source_id), str(org_id), str(user_id), force=True)
+        except Exception:
+            logger.debug("hot_start: background headline refresh failed", exc_info=True)
+        finally:
+            _HEADLINE_INFLIGHT.discard(key)
+
+    try:
+        asyncio.create_task(_run())
+    except Exception:
+        _HEADLINE_INFLIGHT.discard(key)
+        logger.debug("hot_start: schedule_headline_refresh could not create task", exc_info=True)
+
+
+async def headline_fast(data_source_id: str, org_id: str, user_id: str) -> dict:
+    """Stale-while-revalidate headline for the request path. NEVER runs live DAX
+    inline. Returns immediately:
+      - flag OFF            -> {status:"off", items:[]}
+      - cached (fresh)      -> {status:"ready", items:[...]}
+      - cached (stale)      -> {status:"ready", items:[...]} + background refresh
+      - no cache yet        -> {status:"warming", items:[]} + background warm
+    """
+    from app.settings.hybrid_flags import flags
+    if not getattr(flags, "HOT_START", False):
+        return {"status": "off", "items": []}
+    key = (str(data_source_id), str(user_id))
+    ent = _HEADLINE.get(key)
+    if ent is not None:
+        exp, items = ent
+        if exp <= time.monotonic():  # stale — serve it now, refresh behind the scenes
+            schedule_headline_refresh(data_source_id, org_id, user_id)
+        return {"status": "ready", "items": items}
+    # Cold — kick the warm and tell the FE we're warming (fast, empty payload).
+    schedule_headline_refresh(data_source_id, org_id, user_id)
+    return {"status": "warming", "items": []}
 
 
 def invalidate_headline(data_source_id: str) -> None:

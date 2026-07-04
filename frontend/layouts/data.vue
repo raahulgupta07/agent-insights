@@ -397,6 +397,23 @@ const isLoading = ref(true)
 const fetchError = ref<number | null>(null)
 const startingChat = ref(false)
 
+// Instant-paint cache: persist the last-good integration per agent id so a
+// re-open renders immediately (rail + main) while the (possibly slow, Power BI)
+// GET refreshes silently in the background. First-ever visit has no cache → the
+// true cold skeleton still shows.
+const CACHE_PREFIX = 'dash_agent_cache_'
+function readCache(agentId: string): any | null {
+    if (typeof window === 'undefined' || !agentId) return null
+    try {
+        const raw = window.localStorage.getItem(CACHE_PREFIX + agentId)
+        return raw ? JSON.parse(raw) : null
+    } catch { return null }
+}
+function writeCache(agentId: string, val: any) {
+    if (typeof window === 'undefined' || !agentId || !val) return
+    try { window.localStorage.setItem(CACHE_PREFIX + agentId, JSON.stringify(val)) } catch {}
+}
+
 // Sync now: re-run the full connector pipeline (re-discover schema → relevance
 // classify → re-seed → re-learn) via the existing owner-gated endpoint, then poll
 // the live sync log until done and toast the result. Use after gaining access to
@@ -516,8 +533,8 @@ async function fetchIntegration(silent = false) {
             method: 'GET',
             // Never let this hang forever — without a timeout a stalled request
             // leaves isLoading=true and the WHOLE page (rail + main) stuck on the
-            // skeleton. 15s → reject → error card instead of an endless spinner.
-            timeout: 15000,
+            // skeleton. 8s → reject → error card (cold) or keep cached data (warm).
+            timeout: 8000,
             headers: {
                 Authorization: `${token.value}`,
                 'X-Organization-Id': organization.value?.id || '',
@@ -525,9 +542,15 @@ async function fetchIntegration(silent = false) {
         })
 
         integration.value = data as any
+        writeCache(id.value, data)
     } catch (e: any) {
         console.error('Failed to fetch integration:', e)
-        fetchError.value = e?.response?.status || e?.status || e?.statusCode || 500
+        // Only surface the error card when we have NOTHING to show. A background
+        // refresh that fails while cached data is already on screen keeps the
+        // cached view (don't blank an already-painted page on a transient error).
+        if (!integration.value) {
+            fetchError.value = e?.response?.status || e?.status || e?.statusCode || 500
+        }
     }
 
     if (!silent) isLoading.value = false
@@ -568,13 +591,28 @@ function maybeStartPolling() {
     }
 }
 
+// Warm start: if we have a cached last-good integration for this agent, paint it
+// IMMEDIATELY (rail + main, no skeleton) and refresh silently in the background.
+// No cache = true cold load → skeleton until the network returns.
+function startLoad() {
+    const cached = readCache(id.value)
+    if (cached) {
+        integration.value = cached
+        fetchError.value = null
+        isLoading.value = false
+        fetchIntegration(true)   // silent background refresh
+    } else {
+        fetchIntegration(false)  // cold: show skeleton
+    }
+}
+
 watch(id, () => {
     stopPolling()
-    fetchIntegration()
+    startLoad()
 })
 
 onMounted(() => {
-    fetchIntegration()
+    startLoad()
 })
 
 onBeforeUnmount(() => {

@@ -1197,7 +1197,51 @@ Do not use generic placeholders like "value" unless that is the actual column na
             mode = "files_only"
         
         yield ToolProgressEvent(type="tool.progress", payload={"stage": "data_sources_resolved", "mode": mode, "tables_count": total_resolved, "files_count": len(excel_files)})
-        
+
+        # ── Result cache serve-before-plan (flag RESULT_CACHE) ───────────────
+        # For static data, re-asking the same question rebuilds the schema excerpt,
+        # re-runs LLM codegen and re-executes the query — pure waste. If this exact
+        # (normalized) question was answered before AND the report's per-source
+        # row-count watermark is unchanged, serve the stored result and SKIP codegen
+        # + execution entirely. The watermark is baked into the key, so a re-train /
+        # new upload bumps it -> the key changes -> a natural MISS -> rebuild once.
+        # Fully fail-soft + flag-gated: any error (or flag OFF) falls through to the
+        # normal build path, byte-identical. Reuses app/ai/knowledge/result_cache.py
+        # (same helpers + `_looks_failed` guard the MCP tool uses) — no duplicate logic.
+        _cache_key = ""
+        _watermark_sig = ""
+        _cache_question = (data.user_prompt or data.interpreted_prompt or "")
+        try:
+            from app.settings.hybrid_flags import flags as _rc_flags
+            if getattr(_rc_flags, "RESULT_CACHE", False) and _cache_question:
+                from app.ai.knowledge import result_cache as _rc
+                _rc_db = runtime_ctx.get("db")
+                _rc_org = runtime_ctx.get("organization")
+                _rc_org_id = str(getattr(_rc_org, "id", "") or "")
+                _rc_ds_ids = list({g.get("data_source_id") for g in resolved_tables if g.get("data_source_id")})
+                if _rc_db is not None and _rc_org_id and _rc_ds_ids:
+                    _watermark_sig = await _rc.compute_watermark_signature(_rc_db, _rc_ds_ids)
+                    _cache_key = _rc.make_cache_key(_cache_question, _watermark_sig)
+                    if _cache_key:
+                        _hit = await _rc.lookup(
+                            _rc_db, organization_id=_rc_org_id, cache_key=_cache_key,
+                        )
+                        if _hit and isinstance(_hit.get("output"), dict):
+                            run_span.set_attribute("tool.result_cache", "hit")
+                            yield ToolProgressEvent(type="tool.progress", payload={"stage": "served_from_cache"})
+                            yield ToolEndEvent(
+                                type="tool.end",
+                                payload={
+                                    "output": _hit.get("output"),
+                                    "observation": _hit.get("observation") or {"summary": "Served cached result."},
+                                },
+                            )
+                            return
+        except Exception:
+            logger.debug("create_data result-cache lookup skipped", exc_info=True)
+            _cache_key = ""
+            _watermark_sig = ""
+
         # Build schemas excerpt using resolved active tables (skip if file-only mode)
         if total_resolved > 0:
             try:
@@ -1653,24 +1697,56 @@ Do not use generic placeholders like "value" unless that is the actual column na
             observation["step_id"] = current_step_id
         run_span.set_attribute("tool.success", True)
         run_span.set_attribute("tool.chart_type", final_dm.get("type", "table"))
+        _success_output = {
+            "success": True,
+            "code": generated_code,
+            "data": formatted,
+            "data_preview": data_preview,
+            "stats": info,
+            "execution_log": output_log,
+            "errors": code_errors,
+            "data_model": final_dm,
+            "view": view_payload,
+            "executed_queries": executed_queries,
+            "query_timings": query_timings,
+            "codegen_ms": codegen_ms,
+            "execution_ms": execution_ms,
+        }
+
+        # ── Result cache store-after-success (flag RESULT_CACHE) ─────────────
+        # Persist this deterministic result under the watermark-keyed key computed
+        # in the serve block so a future identical ask (same question, unchanged
+        # watermark) serves it without codegen/execution. `_cache_key` is only set
+        # when caching applies (flag ON + had a watermark). The shared `store`
+        # helper refuses empty/failed payloads via `_looks_failed` (top-level
+        # `formatted` here carries columns/rows for that guard). Fail-soft: a cache
+        # write must never break a successful turn.
+        try:
+            if _cache_key:
+                from app.settings.hybrid_flags import flags as _rc_flags
+                if getattr(_rc_flags, "RESULT_CACHE", False):
+                    from app.ai.knowledge import result_cache as _rc
+                    _rc_report = runtime_ctx.get("report")
+                    await _rc.store(
+                        runtime_ctx.get("db"),
+                        organization_id=str(getattr(runtime_ctx.get("organization"), "id", "") or ""),
+                        report_id=str(getattr(_rc_report, "id", "")) if _rc_report is not None else None,
+                        cache_key=_cache_key,
+                        question=_cache_question,
+                        watermark_sig=_watermark_sig,
+                        result_json={
+                            "output": _success_output,
+                            "observation": observation,
+                            "formatted": formatted,
+                        },
+                    )
+        except Exception:
+            logger.debug("create_data result-cache store skipped", exc_info=True)
+
         yield ToolEndEvent(
             type="tool.end",
             payload={
-                "output": {
-                    "success": True,
-                    "code": generated_code,
-                    "data": formatted,
-                    "data_preview": data_preview,
-                    "stats": info,
-                    "execution_log": output_log,
-                    "errors": code_errors,
-                    "data_model": final_dm,
-                    "view": view_payload,
-                    "executed_queries": executed_queries,
-                    "query_timings": query_timings,
-                    "codegen_ms": codegen_ms,
-                    "execution_ms": execution_ms,
-                },
+                "output": _success_output,
                 "observation": observation,
             },
         )

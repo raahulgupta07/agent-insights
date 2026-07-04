@@ -270,6 +270,20 @@ from app.services.completion_service import CompletionService
 from app.ai.agents.judge.judge import Judge
 
 
+class _InvalidExpectationsSpec(ExpectationsSpec):
+    """Marker spec produced when the raw expectations could NOT be interpreted
+    (validation raised, or a non-empty raw spec silently parsed to zero rules).
+
+    Carrying this instead of a plain empty ``ExpectationsSpec`` lets
+    ``evaluate_final`` fail CLOSED (terminal error result) rather than emit a
+    vacuous green pass that asserts nothing. A genuinely-empty spec (no rule
+    content in the raw) stays a plain ``ExpectationsSpec`` and keeps its
+    intended 'no assertions' behaviour.
+    """
+
+    eval_error_reason: str = "expectations spec invalid/empty — cannot evaluate"
+
+
 class TestEvaluationService:
     """
     End-of-run evaluator that produces a rule-aligned result_json.
@@ -314,12 +328,29 @@ class TestEvaluationService:
         if not case:
             raise HTTPException(status_code=404, detail="Test case not found")
 
-        # Expectations as Pydantic spec (strict but resilient)
+        # Expectations as Pydantic spec. Fail CLOSED for eval integrity: a spec
+        # we cannot interpret must become a terminal error (handled downstream in
+        # evaluate_final), NOT a silent empty pass that asserts nothing.
+        raw = getattr(case, "expectations_json", {}) or {}
         try:
-            raw = getattr(case, "expectations_json", {}) or {}
             expectations = ExpectationsSpec.model_validate(raw)
-        except Exception:
-            expectations = ExpectationsSpec.model_validate({"rules": []})
+            # A raw spec that carried rule content but parsed to zero rules means
+            # rules were silently dropped — that is the vacuous-pass bug, not a
+            # genuinely-empty (no-assertions) spec. Treat it as invalid.
+            raw_rules = raw.get("rules") if isinstance(raw, dict) else None
+            if not (expectations.rules or []) and isinstance(raw_rules, list) and len(raw_rules) > 0:
+                expectations = _InvalidExpectationsSpec(
+                    eval_error_reason=(
+                        f"expectations spec parsed to zero rules from a non-empty raw spec "
+                        f"({len(raw_rules)} raw rule(s) dropped) — cannot evaluate"
+                    )
+                )
+        except Exception as e:
+            expectations = _InvalidExpectationsSpec(
+                eval_error_reason=(
+                    f"expectations spec invalid ({type(e).__name__}) — cannot evaluate"
+                )
+            )
 
         return run, result, case, expectations
 
@@ -683,6 +714,27 @@ class TestEvaluationService:
         """
         Evaluate provided rules (Pydantic) against a minimal snapshot and return a rule-aligned result_json.
         """
+        # Fail-CLOSED integrity gate: an expectations spec we could not interpret
+        # (invalid, or one that silently dropped its rules) must NOT collapse to a
+        # vacuous green pass. Emit a terminal error result asserting the failure.
+        if isinstance(expectations, _InvalidExpectationsSpec):
+            reason = getattr(expectations, "eval_error_reason", "") or (
+                "expectations spec invalid/empty — cannot evaluate"
+            )
+            try:
+                _dur = int(round(run_duration_ms)) if isinstance(run_duration_ms, (int, float)) else None
+            except Exception:
+                _dur = None
+            totals = TestResultTotals(total=1, passed=0, failed=1, skipped=0, duration_ms=_dur)
+            rule_results = [RuleResult(ok=False, status="fail", message=reason, actual=None, evidence=None)]
+            spec_snapshot = RuleSpec(
+                spec_version=getattr(expectations, "spec_version", 1), rules=[], order_mode=None
+            )
+            result_json = TestResultJsonSchema(
+                spec=spec_snapshot, totals=totals, rule_results=rule_results
+            )
+            return "error", result_json
+
         rules = expectations.rules or []
         rule_results: List[RuleResult] = []
         passed = 0
@@ -1281,7 +1333,9 @@ class TestEvaluationService:
                     "eq": v == exp,
                     "ne": v != exp,
                 }
-                return ops.get(op, True), f"{v} {op} {exp}"
+                if op not in ops:
+                    return False, f"unsupported comparison op: {op}"
+                return ops[op], f"{v} {op} {exp}"
             except Exception:
                 return False, "invalid numeric comparison"
 
@@ -1297,13 +1351,18 @@ class TestEvaluationService:
             except Exception:
                 return False, "invalid length comparison"
 
-        # Unknown matcher type -> pass
-        return True, "unsupported matcher (skipped)"
+        # Unknown matcher type -> fail CLOSED (an uninterpretable matcher must
+        # never silently pass).
+        return False, f"unsupported matcher: {t}"
 
     def _apply_number_matcher(self, value: Any, matcher: Matcher) -> Tuple[bool, str]:
-        if getattr(matcher, "type", "") != "number.cmp":
-            # allow length.cmp on numeric by converting to string length if needed handled elsewhere
-            return True, "unsupported matcher (skipped)"
+        # This helper performs a numeric comparison and is legitimately reused by
+        # the length.cmp paths (list length + the typeless _Tmp shim from
+        # _apply_matcher, which has no ``type``). Accept those; fail CLOSED only
+        # for a genuinely-unknown matcher type (never a silent pass).
+        t = getattr(matcher, "type", "")
+        if t not in ("", "number.cmp", "length.cmp"):
+            return False, f"unsupported matcher: {t}"
         try:
             v = float(value)
             exp = float(matcher.value)
@@ -1316,7 +1375,9 @@ class TestEvaluationService:
                 "eq": v == exp,
                 "ne": v != exp,
             }
-            return ops.get(op, True), f"{v} {op} {exp}"
+            if op not in ops:
+                return False, f"unsupported comparison op: {op}"
+            return ops[op], f"{v} {op} {exp}"
         except Exception:
             return False, "invalid numeric comparison"
 
@@ -1335,6 +1396,7 @@ class TestEvaluationService:
             return ok, f"must contain all of {wants}"
         if t == "length.cmp":
             return self._apply_number_matcher(len(lst), matcher)
-        return True, "unsupported matcher (skipped)"
+        # Unknown list matcher type -> fail CLOSED (never a silent pass).
+        return False, f"unsupported matcher: {t}"
 
 

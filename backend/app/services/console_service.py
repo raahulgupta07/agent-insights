@@ -1600,6 +1600,29 @@ class ConsoleService:
             return table_name.split('.')[0]
         return None
 
+    def _classify_error_type(self, message: Optional[str]) -> str:
+        """Bucket a tool/error message into a coarse issue_type category.
+
+        Keyword-based, fail-soft (never raises). Falls back to 'tool_error'
+        for anything unrecognized or empty.
+        """
+        if not message:
+            return 'tool_error'
+        text = str(message).lower()
+        if 'timeout' in text or 'timed out' in text:
+            return 'timeout'
+        if 'permission' in text or 'denied' in text or 'unauthor' in text or 'forbidden' in text:
+            return 'permission_error'
+        if 'rate limit' in text or 'too many requests' in text or '429' in text:
+            return 'rate_limit'
+        if 'not found' in text or 'does not exist' in text or 'no such' in text:
+            return 'not_found'
+        if 'connect' in text or 'connection' in text or 'network' in text:
+            return 'connection_error'
+        if 'syntax' in text or 'sql' in text or 'invalid query' in text or 'parse' in text:
+            return 'query_error'
+        return 'tool_error'
+
     async def get_agent_execution_trace(
         self,
         db: AsyncSession,
@@ -1818,8 +1841,12 @@ class ConsoleService:
             iterations=iterations,
         )
 
-    async def get_tool_executions_diagnosis(self, db: AsyncSession, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None, page: int = 1, page_size: int = 20) -> dict:
-        """Return tool executions joined with plan decisions, feedback (via completion), and related step if exists."""
+    async def get_tool_executions_diagnosis(self, db: AsyncSession, organization: Organization, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None, page: int = 1, page_size: int = 20) -> dict:
+        """Return tool executions joined with plan decisions, feedback (via completion), and related step if exists.
+
+        Org-scoped: joins AgentExecution (which carries organization_id) and filters
+        to the caller's organization so tool executions never leak across tenants.
+        """
         from sqlalchemy import select, and_, desc
 
         base = (
@@ -1845,13 +1872,12 @@ class ConsoleService:
             .outerjoin(PlanDecision, PlanDecision.id == ToolExecution.plan_decision_id)
             .outerjoin(Step, Step.id == ToolExecution.created_step_id)
         )
-        conditions = []
+        conditions = [AgentExecution.organization_id == organization.id]
         if start_date:
             conditions.append(ToolExecution.created_at >= start_date)
         if end_date:
             conditions.append(ToolExecution.created_at <= end_date)
-        if conditions:
-            base = base.where(and_(*conditions))
+        base = base.where(and_(*conditions))
 
         total_q = select(func.count()).select_from(base.subquery())
         total_res = await db.execute(total_q)

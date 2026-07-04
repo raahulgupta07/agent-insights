@@ -154,142 +154,11 @@
         </section>
       </div>
 
-      <!-- RIGHT: agent-at-work showcase -->
-      <section class="cai-right" style="position:relative; align-self:stretch; min-height:0; border-radius:24px; overflow:hidden; background:radial-gradient(120% 90% at 70% 0%, #2A1F18 0%, #17120E 55%, #100C09 100%); padding:24px; display:flex; flex-direction:column; box-shadow:0 40px 90px -40px rgba(40,24,12,.7), inset 0 1px 0 rgba(255,255,255,.05); border:1px solid rgba(214,112,55,.14);">
-        <div style="position:absolute; inset:0; background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px); background-size:36px 36px; mask-image:radial-gradient(120% 80% at 65% 12%, #000 28%, transparent 82%); animation:cai-drift 7s linear infinite; pointer-events:none;"></div>
-        <div style="position:absolute; top:-50px; right:-30px; width:260px; height:260px; border-radius:50%; background:radial-gradient(circle, rgba(214,112,55,.42), transparent 65%); filter:blur(22px); animation:cai-orb 7s ease-in-out infinite; pointer-events:none;"></div>
-        <div style="position:absolute; bottom:-40px; left:-30px; width:220px; height:220px; border-radius:50%; background:radial-gradient(circle, rgba(168,51,15,.3), transparent 66%); filter:blur(26px); animation:cai-orb2 9s ease-in-out infinite; pointer-events:none;"></div>
-
-        <!-- header -->
-        <div style="display:flex; align-items:center; gap:9px; position:relative; flex-shrink:0;">
-          <span style="width:8px; height:8px; border-radius:50%; background:#D67037; box-shadow:0 0 12px 2px rgba(214,112,55,.7); animation:cai-pulse 1.8s ease-in-out infinite;"></span>
-          <span style="font-size:13px; color:#B8A99A;">{{ statusLine }}</span>
-          <span style="margin-left:auto; display:inline-flex; align-items:center; gap:6px; font-size:11.5px; color:#C2854F; background:rgba(214,112,55,.1); border:1px solid rgba(214,112,55,.28); padding:4px 10px; border-radius:999px;">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" style="animation:cai-spin 2.4s linear infinite;"><path d="M21 12a9 9 0 1 1-6.2-8.5" stroke="#D67037" stroke-width="2.6" stroke-linecap="round"/></svg>
-            agent
-          </span>
-        </div>
-
-        <!-- STAGE -->
-        <div style="position:relative; flex:1; min-height:0; display:flex; flex-direction:column; justify-content:center; padding:18px 2px;">
-
-          <!-- question prompt (persists across scenes 2-3) -->
-          <div v-if="showQuestion" style="align-self:flex-end; max-width:84%; margin-bottom:9px; background:#2C211A; border:1px solid rgba(255,255,255,.07); color:#E8DDD2; font-size:14px; line-height:1.45; padding:10px 15px; border-radius:14px 14px 5px 14px; animation:cai-rise .4s cubic-bezier(.2,.8,.2,1) both;">{{ question }}</div>
-
-          <!-- Auto model routing chip (real v1.47 Auto picker) -->
-          <div v-if="showModel" style="align-self:flex-end; margin-bottom:14px; display:inline-flex; align-items:center; gap:7px; font-size:11.5px; color:#C2854F; background:rgba(214,112,55,.1); border:1px solid rgba(214,112,55,.28); padding:4px 11px; border-radius:999px; animation:cai-pop .3s both;">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M13 2L4 14h6l-1 8 9-12h-6z" fill="#D67037"/></svg>
-            <span>Auto → <strong style="color:#E8C9A8; font-weight:700;">{{ modelPick.tier }}</strong> · {{ modelPick.name }}</span>
-          </div>
-
-          <!-- SCENE 1: pick a source -->
-          <div v-if="scene === 1" style="animation:cai-fade .45s both;">
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><ellipse cx="12" cy="6" rx="7" ry="3" stroke="#C2854F" stroke-width="2"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3" stroke="#C2854F" stroke-width="2"/></svg>
-              <span style="font-size:13.5px; color:#CABBAC; font-weight:600;">Select a data source</span>
-            </div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:9px;">
-              <div v-for="src in sourceTiles" :key="src.name" style="position:relative; display:flex; align-items:center; gap:11px; border-radius:12px; padding:13px; transition:border-color .35s, background .35s;"
-                :style="{ border: '1px solid ' + src.bd, background: src.bg }">
-                <span style="width:30px; height:30px; border-radius:8px; background:rgba(255,255,255,.06); display:flex; align-items:center; justify-content:center; flex-shrink:0;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="16" rx="2" stroke="#B8A99A" stroke-width="1.8"/><path d="M3 9h18M9 4v16" stroke="#B8A99A" stroke-width="1.8"/></svg></span>
-                <span style="line-height:1.2;"><span style="display:block; font-size:13.5px; font-weight:600;" :style="{ color: src.nameColor }">{{ src.name }}</span><span style="display:block; font-size:11.5px; color:#8A7868;">{{ src.sub }}</span></span>
-                <span v-if="src.picked" style="position:absolute; right:11px; top:50%; transform:translateY(-50%); animation:cai-pop .3s both;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M5 3l14 9-6 1 3 6-3 1-3-6-5 4z" fill="#fff" stroke="#1A1611" stroke-width="1.2" stroke-linejoin="round"/></svg></span>
-              </div>
-            </div>
-            <div v-if="connecting" style="display:flex; align-items:center; gap:9px; margin-top:13px; font-size:13px; color:#C2854F; animation:cai-fade .3s both;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="animation:cai-spin 1s linear infinite;"><path d="M21 12a9 9 0 1 1-6.2-8.5" stroke="#D67037" stroke-width="2.6" stroke-linecap="round"/></svg>
-              Connecting to {{ connectName }}…
-            </div>
-          </div>
-
-          <!-- SCENE 2: progress checklist -->
-          <div v-else-if="scene === 2" style="background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.08); border-radius:15px; padding:15px 16px; animation:cai-rise .4s cubic-bezier(.2,.8,.2,1) both;">
-            <div style="display:flex; align-items:center; gap:9px; margin-bottom:13px; padding-bottom:12px; border-bottom:1px solid rgba(255,255,255,.07);">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="animation:cai-spin 2s linear infinite;"><path d="M21 12a9 9 0 1 1-6.2-8.5" stroke="#D67037" stroke-width="2.6" stroke-linecap="round"/></svg>
-              <span style="font-size:13.5px; font-weight:600; color:#F1E6DB;">Working</span>
-              <span style="margin-left:auto; font-size:12px; color:#8A7868;">{{ progressCount }}</span>
-            </div>
-            <div style="display:flex; flex-direction:column; gap:11px;">
-              <div v-for="(t, ti) in taskRows" :key="ti" style="display:flex; align-items:center; gap:11px;">
-                <span style="width:20px; height:20px; flex-shrink:0; display:flex; align-items:center; justify-content:center;">
-                  <span v-if="t.done" style="width:20px; height:20px; border-radius:50%; background:#D67037; display:flex; align-items:center; justify-content:center; animation:cai-pop .3s both;"><svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2.5 6.2l2.2 2.3L9.5 3.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-                  <svg v-else-if="t.active" width="18" height="18" viewBox="0 0 24 24" fill="none" style="animation:cai-spin 1s linear infinite;"><circle cx="12" cy="12" r="9" stroke="rgba(214,112,55,.25)" stroke-width="2.6"/><path d="M21 12a9 9 0 0 0-9-9" stroke="#D67037" stroke-width="2.6" stroke-linecap="round"/></svg>
-                  <span v-else style="width:16px; height:16px; border-radius:50%; border:1.8px solid rgba(255,255,255,.16);"></span>
-                </span>
-                <span style="font-size:13.5px; transition:color .3s;" :style="{ color: t.color, textDecoration: t.deco }">{{ t.label }}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- SCENE 3: answer + Decision -->
-          <div v-else-if="scene === 3" style="background:linear-gradient(135deg,#D67037,#B8431A); border-radius:15px 15px 15px 5px; padding:16px 17px; color:#fff; animation:cai-glow 3.2s ease-in-out infinite, cai-rise .4s cubic-bezier(.2,.8,.2,1) both; align-self:flex-start; max-width:92%;">
-            <div style="display:flex; align-items:flex-end; gap:7px; height:64px; margin-bottom:13px;">
-              <span v-for="(bar, bi) in chartBars" :key="bi" style="flex:1; min-width:0; border-radius:5px 5px 2px 2px; background:rgba(255,255,255,.9); transition:height .65s cubic-bezier(.2,.8,.2,1);" :style="{ height: bar.h, transitionDelay: bar.delay }"></span>
-            </div>
-            <div style="font-size:15px; line-height:1.45; font-weight:500;"><span>{{ resultText }}</span><span v-if="streaming" style="display:inline-block; width:7px; height:15px; background:#fff; margin-left:2px; vertical-align:-2px; border-radius:1px; animation:cai-blink .9s steps(1) infinite;"></span></div>
-            <div v-if="delta" style="display:inline-flex; align-items:center; gap:6px; margin-top:11px; background:rgba(0,0,0,.24); padding:5px 11px; border-radius:8px; font-size:12.5px; font-weight:600; font-family:ui-monospace,monospace; animation:cai-pop .35s both;">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M4 7V5a2 2 0 0 1 2-2h2M4 17v2a2 2 0 0 0 2 2h2M20 7V5a2 2 0 0 0-2-2h-2M20 17v2a2 2 0 0 1-2 2h-2" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
-              {{ delta }}
-            </div>
-            <div v-if="decision.text" style="margin-top:13px; padding-top:12px; border-top:1px solid rgba(255,255,255,.2); display:flex; align-items:flex-start; gap:9px; animation:cai-fade .45s both;">
-              <span style="flex-shrink:0; font-size:10px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; background:rgba(0,0,0,.28); padding:3px 8px; border-radius:6px;">{{ decision.tone }}</span>
-              <span style="font-size:13px; line-height:1.4; opacity:.97;">{{ decision.text }}</span>
-            </div>
-          </div>
-
-          <!-- SCENE 4: build dashboard -->
-          <div v-else-if="scene === 4" style="animation:cai-rise .4s cubic-bezier(.2,.8,.2,1) both;">
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="1.5" stroke="#C2854F" stroke-width="2"/><rect x="13" y="3" width="8" height="5" rx="1.5" stroke="#C2854F" stroke-width="2"/><rect x="13" y="10" width="8" height="11" rx="1.5" stroke="#C2854F" stroke-width="2"/><rect x="3" y="13" width="8" height="8" rx="1.5" stroke="#C2854F" stroke-width="2"/></svg>
-              <span style="font-size:13.5px; color:#CABBAC; font-weight:600;">Building your dashboard</span>
-            </div>
-            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:9px; margin-bottom:9px;">
-              <div v-for="(k, ki) in kpis" :key="ki" style="background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:11px; padding:11px 12px; animation:cai-pop .35s both;" :style="{ animationDelay: (ki * 0.12) + 's' }">
-                <span style="display:block; font-size:10.5px; color:#8A7868; margin-bottom:5px;">{{ k.label }}</span>
-                <span style="display:block; font-size:18px; font-weight:700; color:#F1E6DB;">{{ k.val }}</span>
-              </div>
-            </div>
-            <div style="background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:13px;">
-              <div style="display:flex; align-items:flex-end; gap:6px; height:52px;">
-                <span v-for="(bar, bi) in chartBars" :key="bi" style="flex:1; min-width:0; border-radius:4px 4px 1px 1px; background:linear-gradient(180deg,#D67037,#B8431A); transition:height .6s cubic-bezier(.2,.8,.2,1);" :style="{ height: bar.h, transitionDelay: bar.delay }"></span>
-              </div>
-            </div>
-          </div>
-
-          <!-- SCENE 5: generate slide deck -->
-          <div v-else-if="scene === 5" style="animation:cai-rise .4s cubic-bezier(.2,.8,.2,1) both;">
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="13" rx="2" stroke="#C2854F" stroke-width="2"/><path d="M9 21h6M12 17v4" stroke="#C2854F" stroke-width="2" stroke-linecap="round"/></svg>
-              <span style="font-size:13.5px; color:#CABBAC; font-weight:600;">Generating the slide deck</span>
-            </div>
-            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:9px;">
-              <div v-for="(s, si) in slides" :key="si" style="background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.09); border-radius:9px; padding:10px; display:flex; flex-direction:column; gap:6px; min-height:88px; animation:cai-pop .35s both;" :style="{ animationDelay: (si * 0.14) + 's' }">
-                <span style="height:5px; width:68%; border-radius:3px; background:#D67037;"></span>
-                <span style="height:4px; width:92%; border-radius:3px; background:rgba(255,255,255,.14);"></span>
-                <span style="height:4px; width:60%; border-radius:3px; background:rgba(255,255,255,.1);"></span>
-                <span style="margin-top:auto; font-size:10px; color:#9A8678; font-weight:600;">{{ s }}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- SCENE 6: scheduled + emailed -->
-          <div v-else style="display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:13px; padding:16px 0; animation:cai-rise .4s cubic-bezier(.2,.8,.2,1) both;">
-            <span style="width:52px; height:52px; border-radius:50%; background:linear-gradient(135deg,#D67037,#B8431A); display:flex; align-items:center; justify-content:center; box-shadow:0 0 0 6px rgba(214,112,55,.12); animation:cai-pop .4s both;">
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M4 7l8 6 8-6M4 7v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V7M4 7a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </span>
-            <span style="font-size:15px; font-weight:600; color:#F1E6DB;">Scheduled &amp; delivered</span>
-            <span style="font-size:12.5px; color:#9A8678; line-height:1.5;">Emailed to your team — clean report,<br/>every Monday at 8:00am</span>
-          </div>
-        </div>
-
-        <!-- footer -->
-        <div style="position:relative; display:flex; align-items:center; gap:20px; padding-top:14px; border-top:1px solid rgba(255,255,255,.07); font-size:13px; color:#9A8678; flex-shrink:0;">
-          <span><strong style="color:#D9CABB;">4</strong> sources</span>
-          <span><strong style="color:#D9CABB;">11</strong> tables</span>
-          <span style="margin-left:auto; display:inline-flex; align-items:center; gap:7px;"><span style="width:6px; height:6px; border-radius:50%; background:#3FA86B;"></span><strong style="color:#D9CABB;">SSO</strong> ready</span>
-        </div>
+      <!-- RIGHT: cinematic launch hero (AuthShowcase owns the whole panel) -->
+      <section class="cai-right" style="position:relative; align-self:stretch; min-height:0; border-radius:24px; overflow:hidden; box-shadow:0 40px 90px -40px rgba(40,24,12,.7); border:1px solid rgba(214,112,55,.16);">
+        <AuthShowcase />
       </section>
-    </main>
+      </main>
 
     <footer style="text-align:center; padding:8px 0 12px; font-size:12.5px; color:#A89C8C; flex-shrink:0;">© 2026 City Agent Insights · Data Intelligence &amp; Analytics</footer>
   </div>
@@ -298,6 +167,7 @@
 
 
 <script setup lang="ts">
+import AuthShowcase from '~/components/auth/AuthShowcase.vue'
 
 import qs from 'qs';
 
@@ -639,7 +509,7 @@ onMounted(async () => {
   }
   pageLoaded.value = true
   // kick off the agent-at-work showcase loop
-  runShowcase(0)
+  // runShowcase(0)  // replaced by <AuthShowcase/> pipeline
 })
 
 
@@ -815,6 +685,7 @@ function onLDAP() {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  padding-left: 72px;   /* nudge the form a little right, toward the panel */
   min-height: 0;
 }
 .cai-h1 {
@@ -830,6 +701,7 @@ function onLDAP() {
   .cai-main { grid-template-columns: 1fr; }
   .cai-right { display: none; }
   .cai-header, .cai-main { padding-left: 24px; padding-right: 24px; }
+  .cai-left { padding-left: 0; }
   .cai-h1 { font-size: 34px; }
 }
 

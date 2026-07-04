@@ -53,23 +53,39 @@ _WHITESPACE_RE = re.compile(r"[ \t\f\v]+")
 _NEWLINE_RE = re.compile(r"\n{3,}")
 
 
-def is_safe_host(hostname: Optional[str]) -> bool:
-    """Reject non-public hosts (loopback, RFC1918, link-local, metadata, etc.)."""
+# Whether curl_cffi accepts a per-request `resolve=` pin. Assumed True; flipped
+# off the first time a call raises TypeError for it, after which we degrade to
+# host-validation only (see `_pinned_get`).
+_DNS_PIN_SUPPORTED = True
+
+
+def _validated_ips(hostname: Optional[str]) -> Optional[List[str]]:
+    """Resolve `hostname` and return its IPs iff EVERY one is public.
+
+    Returns the resolved IP set (deduped, resolution order preserved) so the
+    caller can pin curl to exactly these addresses. Pinning is what closes the
+    DNS-rebind TOCTOU: without it, this safety check and curl's own connect do
+    two independent DNS lookups, and an attacker-controlled name can resolve to
+    a public IP here and a private one (169.254.169.254, 127.0.0.1, RFC1918…)
+    a moment later at connect time. Returns None if the host is non-public or
+    unresolvable.
+    """
     if not hostname:
-        return False
+        return None
     lowered = hostname.lower()
     if lowered == "localhost" or lowered.endswith(".localhost"):
-        return False
+        return None
     try:
         infos = socket.getaddrinfo(hostname, None)
     except socket.gaierror:
-        return False
+        return None
+    ips: List[str] = []
     for info in infos:
         addr = info[4][0]
         try:
             ip = ipaddress.ip_address(addr)
         except ValueError:
-            return False
+            return None
         if (
             ip.is_private
             or ip.is_loopback
@@ -78,8 +94,51 @@ def is_safe_host(hostname: Optional[str]) -> bool:
             or ip.is_reserved
             or ip.is_unspecified
         ):
-            return False
-    return True
+            return None
+        if addr not in ips:
+            ips.append(addr)
+    return ips or None
+
+
+def is_safe_host(hostname: Optional[str]) -> bool:
+    """Reject non-public hosts (loopback, RFC1918, link-local, metadata, etc.)."""
+    return _validated_ips(hostname) is not None
+
+
+def _resolve_pin(parsed, ips: List[str]) -> Optional[List[str]]:
+    """Build a curl `resolve` entry (`HOST:PORT:IP[,IP…]`) pinning `parsed`'s
+    host to the already-validated `ips`."""
+    host = parsed.hostname
+    if not host or not ips:
+        return None
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    return [f"{host}:{port}:{','.join(ips)}"]
+
+
+async def _pinned_get(
+    session: "cf_requests.AsyncSession",
+    url: str,
+    timeout: int,
+    resolve: Optional[List[str]],
+):
+    """GET pinned to a pre-validated IP set via curl's `resolve`. Falls back to
+    an unpinned GET (host-validation only, residual TOCTOU risk) if this
+    curl_cffi build doesn't accept `resolve=`."""
+    global _DNS_PIN_SUPPORTED
+    if _DNS_PIN_SUPPORTED and resolve:
+        try:
+            return await session.get(
+                url, allow_redirects=False, stream=False, timeout=timeout, resolve=resolve
+            )
+        except TypeError:
+            _DNS_PIN_SUPPORTED = False
+            logger.warning(
+                "safe_http: curl_cffi build does not support resolve= DNS pinning; "
+                "falling back to host-validation only (residual DNS-rebind risk)."
+            )
+    return await session.get(
+        url, allow_redirects=False, stream=False, timeout=timeout
+    )
 
 
 def _content_type_matches(content_type: str, prefixes: Tuple[str, ...]) -> bool:
@@ -220,15 +279,18 @@ async def _fetch_one_async(
     parsed_url = urlparse(url)
     if parsed_url.scheme not in ("http", "https") or not parsed_url.hostname:
         return FetchedPage(url=url, error="URL must be http(s) with a hostname.")
-    if not is_safe_host(parsed_url.hostname):
+    # Resolve + validate ONCE, then pin curl to exactly these IPs so its own
+    # connect can't re-resolve to a private address (DNS-rebind TOCTOU).
+    pinned_ips = _validated_ips(parsed_url.hostname)
+    if not pinned_ips:
         return FetchedPage(url=url, error="Refusing to fetch a non-public address.")
 
     current_url = url
+    parsed_current = parsed_url
     try:
         for _hop in range(MAX_REDIRECTS + 1):
-            response = await session.get(
-                current_url, allow_redirects=False, stream=False, timeout=timeout
-            )
+            resolve = _resolve_pin(parsed_current, pinned_ips)
+            response = await _pinned_get(session, current_url, timeout, resolve)
             status = response.status_code
 
             if 300 <= status < 400 and status != 304:
@@ -236,7 +298,9 @@ async def _fetch_one_async(
                 if not location:
                     break
                 redirect_url = urljoin(current_url, location)
-                if not is_safe_host(urlparse(redirect_url).hostname):
+                # Re-resolve + re-validate every hop, then re-pin to the new host.
+                redirect_ips = _validated_ips(urlparse(redirect_url).hostname)
+                if not redirect_ips:
                     return FetchedPage(
                         url=url,
                         final_url=redirect_url,
@@ -244,6 +308,8 @@ async def _fetch_one_async(
                         error="Refusing to follow redirect to a non-public address.",
                     )
                 current_url = redirect_url
+                parsed_current = urlparse(redirect_url)
+                pinned_ips = redirect_ips
                 continue
 
             content_type = (response.headers.get("content-type") or "").lower()

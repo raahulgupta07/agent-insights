@@ -58,7 +58,7 @@ class EditArtifactMCPTool(MCPTool):
 
         # Load report
         try:
-            report = await self._load_report(db, input_data.report_id)
+            report = await self._load_report(db, input_data.report_id, organization)
         except Exception as e:
             return MCPEditArtifactOutput(
                 report_id=input_data.report_id,

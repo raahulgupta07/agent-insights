@@ -159,6 +159,37 @@ def _make_field_rule(expected: str) -> dict:
     }
 
 
+def _rules_assert_something(expectations_json: dict) -> bool:
+    """Fail-loud guard: confirm the expectations_json actually asserts something.
+
+    The evaluator parses ``TestCase.expectations_json`` through
+    ``ExpectationsSpec.model_validate`` and, on ANY validation error, silently
+    falls back to ``{"rules": []}`` -> a run with ZERO rules -> ``failed==0`` ->
+    a GREEN result that asserts NOTHING (a vacuous pass). A rule that isn't the
+    nested ``FieldRule`` shape (e.g. a flat ``{"type":"text.contains",...}``) is
+    exactly what triggers that fallback.
+
+    So before we persist a golden, re-parse it the SAME way the evaluator will
+    and require that (a) it validates, (b) no rule was dropped in parsing, and
+    (c) every parsed rule is a real ``FieldRule``. If it doesn't, we REFUSE to
+    write the case (caller logs + skips) rather than shipping a case that would
+    later light up green while checking nothing. Never raises -> False on error.
+    """
+    try:
+        from app.schemas.test_expectations import ExpectationsSpec, FieldRule
+
+        want = list((expectations_json or {}).get("rules") or [])
+        if not want:
+            return False
+        spec = ExpectationsSpec.model_validate(expectations_json)
+        got = list(spec.rules or [])
+        if len(got) != len(want):
+            return False  # a rule was dropped/misparsed -> would vacuous-pass
+        return all(isinstance(r, FieldRule) for r in got)
+    except Exception:
+        return False
+
+
 async def _resolve_first_pinned_source(db: Any, studio: Any, organization: Any):
     """Return the first pinned DataSource for the studio (org-scoped) or None.
 
@@ -345,16 +376,29 @@ async def generate_evals_for_studio(
                     continue
 
                 rule = _make_field_rule(expected)
+                expectations_json = {
+                    "spec_version": 1,
+                    "rules": [rule],
+                    "order_mode": "flexible",
+                }
+
+                # Fail-loud: never persist a golden whose rules wouldn't parse as
+                # nested FieldRules — the evaluator would fall back to zero rules
+                # and report a vacuous PASS (green while asserting nothing).
+                if not _rules_assert_something(expectations_json):
+                    logger.warning(
+                        "auto_evals: generated rule failed spec validation, skipping "
+                        "(would vacuous-pass): %r",
+                        rule,
+                    )
+                    skipped += 1
+                    continue
 
                 test_case = TestCase(
                     suite_id=suite_id,
                     name=name,
                     prompt_json={"content": question, "mode": "default"},
-                    expectations_json={
-                        "spec_version": 1,
-                        "rules": [rule],
-                        "order_mode": "flexible",
-                    },
+                    expectations_json=expectations_json,
                     data_source_ids_json=[source_id],
                     status="active",
                     auto_generated=True,

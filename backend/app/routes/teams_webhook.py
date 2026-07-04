@@ -5,13 +5,61 @@ from app.services.external_platform_manager import ExternalPlatformManager
 from app.services.platform_adapters.adapter_factory import PlatformAdapterFactory
 from app.models.external_platform import ExternalPlatform
 import json
+import os
 
 router = APIRouter(tags=["teams-webhook"])
 
 platform_manager = ExternalPlatformManager()
 
-# Simple in-memory set to track processed events
+# In-memory fallback dedupe (single-worker/dev only when REDIS_URL is unset).
 processed_events = set()
+
+# Cross-worker dedupe: Redis SETNX+TTL shared by all `--workers N` processes so a
+# Bot Connector retry can't fire a duplicate agent run on a different worker.
+_DEDUPE_TTL = 3600  # seconds
+_redis = None
+_redis_init = False
+
+
+async def _get_redis():
+    """Lazily connect to Redis; return a client or None (→ in-memory fallback)."""
+    global _redis, _redis_init
+    if _redis_init:
+        return _redis
+    _redis_init = True
+    url = os.environ.get("REDIS_URL")
+    if not url:
+        return None
+    try:
+        import redis.asyncio as aioredis
+
+        client = aioredis.from_url(url, encoding="utf-8", decode_responses=True)
+        await client.ping()
+        _redis = client
+    except Exception as e:
+        print(f"teams_webhook: Redis unavailable ({e}); using in-memory dedupe")
+        _redis = None
+    return _redis
+
+
+async def _seen_before(activity_id: str) -> bool:
+    """True if activity_id was already processed. Redis-backed (cross-worker) when
+    REDIS_URL is set, else the in-memory set (single-worker fallback)."""
+    if not activity_id:
+        return False
+    client = await _get_redis()
+    if client is not None:
+        try:
+            first = await client.set(f"dedupe:teams:{activity_id}", "1", nx=True, ex=_DEDUPE_TTL)
+            return not first
+        except Exception as e:
+            print(f"teams_webhook: Redis dedupe error ({e}); using in-memory fallback")
+    if activity_id in processed_events:
+        return True
+    processed_events.add(activity_id)
+    if len(processed_events) > 1000:
+        processed_events.clear()
+    return False
 
 
 @router.post("/api/settings/integrations/teams/webhook")
@@ -59,14 +107,11 @@ async def teams_webhook(
             print("TEAMS: Ignoring bot's own message")
             return {"ok": True}
 
-        # Deduplication by activity ID
+        # Cross-worker deduplication by activity ID (Redis SETNX+TTL, in-mem fallback)
         activity_id = activity.get("id")
-        if activity_id in processed_events:
+        if await _seen_before(activity_id):
             print(f"TEAMS: Activity {activity_id} already processed, skipping")
             return {"ok": True}
-        processed_events.add(activity_id)
-        if len(processed_events) > 1000:
-            processed_events.clear()
 
         # Skip empty messages
         text = activity.get("text", "").strip()

@@ -207,6 +207,11 @@ class DataSourceListItemSchema(BaseModel):
     auth_policy: Optional[str] = None
     user_status: Optional[DataSourceUserStatus] = None
 
+    # Per-user connector clone → its admin template. The MS Connectors Hub tile uses
+    # this to recognise "you already connected this" (show Connected, not Sign-in) and
+    # to avoid spawning duplicate agents. Omitting it made every tile offer Sign-in.
+    template_source_id: Optional[str] = None
+
     # True only when this private data source is visible solely because the
     # caller used the admin "show all" view (full_admin_access /
     # manage_connections) — i.e. it's not public and they hold no explicit
