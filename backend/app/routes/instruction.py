@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 
-from app.dependencies import get_async_db, get_current_organization
+from app.dependencies import get_async_db, get_current_organization, release_request_db
 from app.errors import AppError, ErrorCode
 from app.models.user import User
 from app.models.organization import Organization
@@ -134,7 +134,7 @@ async def get_instructions(
     elif data_source_id:
         parsed_data_source_ids = [data_source_id]
     
-    return await instruction_service.get_instructions(
+    result = await instruction_service.get_instructions(
         db, organization, current_user,
         skip=skip, limit=limit,
         status=status.value if status else None,
@@ -152,6 +152,8 @@ async def get_instructions(
         build_id=build_id,
         include_global=include_global
     )
+    await release_request_db(db)  # free the pooled connection before serialization (Cause A, Phase 1)
+    return result
 
 
 # BULK UPDATE

@@ -12,7 +12,7 @@ def _journey_v2() -> bool:
         return bool(getattr(_jf, "CONNECTOR_JOURNEY_V2", False))
     except Exception:
         return False
-from app.dependencies import get_async_db
+from app.dependencies import get_async_db, release_request_db
 from typing import Optional, List, Union
 
 from app.models.user import User
@@ -268,7 +268,9 @@ async def get_active_data_sources(
     db: AsyncSession = Depends(get_async_db),
     organization: Organization = Depends(get_current_organization)
 ):
-    return await data_source_service.get_active_data_sources(db, organization, current_user, include_unconnected=include_unconnected)
+    result = await data_source_service.get_active_data_sources(db, organization, current_user, include_unconnected=include_unconnected)
+    await release_request_db(db)  # free the pooled connection before serialization (Cause A, Phase 1)
+    return result
 
 @router.get("/data_sources/{data_source_id}", response_model=DataSourceSchema)
 @requires_resource_permission('data_source', 'view')
@@ -668,7 +670,7 @@ async def get_data_source_full_schema(
         if connection_filter:
             connection_filter_list = [c.strip() for c in connection_filter.split(",") if c.strip()]
 
-        return await data_source_service.get_data_source_schema_paginated(
+        paginated = await data_source_service.get_data_source_schema_paginated(
             db=db,
             data_source_id=data_source_id,
             organization=organization,
@@ -684,9 +686,13 @@ async def get_data_source_full_schema(
             with_stats=with_stats,
             current_user=current_user,
         )
-    
+        await release_request_db(db)  # free the pooled connection before serialization (Cause A, Phase 1)
+        return paginated
+
     # Legacy behavior: return full list
-    return await data_source_service.get_data_source_schema(db, data_source_id, include_inactive=True, organization=organization, current_user=current_user, with_stats=with_stats)
+    legacy = await data_source_service.get_data_source_schema(db, data_source_id, include_inactive=True, organization=organization, current_user=current_user, with_stats=with_stats)
+    await release_request_db(db)  # free the pooled connection before serialization (Cause A, Phase 1)
+    return legacy
 
 
 @router.get("/data_sources/{data_source_id}/overview")
