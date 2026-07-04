@@ -28,6 +28,7 @@ from app.models.user import User
 from app.models.organization import Organization
 from app.ai.tools.mcp import get_mcp_tool, list_mcp_tools
 from app.settings.config import settings
+from app.settings.hybrid_flags import flags
 
 logger = logging.getLogger(__name__)
 
@@ -448,3 +449,119 @@ async def get_tools_rest(
     _, organization = auth
     _check_mcp_enabled(organization)
     return {"tools": list_mcp_tools()}
+
+
+# ---------------------------------------------------------------------------
+# #487 — External MCP gateway: expose an *agent's own* connection tools OUT
+# through the MCP server surface so external MCP clients can list/execute them.
+#
+# Gated on flags.MCP_GATEWAY (default OFF). When OFF these routes return 404 —
+# byte-identical to today (no agent tool is exposed outward). Auth reuses the
+# existing mcp_auth (JWT / X-API-Key / OAuth) so the caller is always an
+# authenticated org member, and every request is org-scoped + access-gated to
+# the target agent. Fails closed: an agent outside the caller's org (or one the
+# caller can't access) is indistinguishable from a nonexistent one.
+# ---------------------------------------------------------------------------
+
+
+def _require_gateway_enabled():
+    """404 unless the external MCP gateway flag is on (inert when OFF)."""
+    if not flags.MCP_GATEWAY:
+        raise HTTPException(status_code=404, detail="Not Found")
+
+
+async def _resolve_gateway_agent(
+    db: AsyncSession, user: User, organization: Organization, data_source_id: str
+):
+    """Load an agent (DataSource) the caller may reach, or raise fail-closed.
+
+    Org-scope first (cross-org agents 404 identically to missing), then the
+    per-agent access gate (public bypass + grants/memberships + admin).
+    """
+    from sqlalchemy import select as _select
+    from app.models.data_source import DataSource
+    from app.core.permission_resolver import user_can_access_data_source
+
+    ds = (
+        await db.execute(
+            _select(DataSource).where(
+                DataSource.id == str(data_source_id),
+                DataSource.organization_id == str(organization.id),
+            )
+        )
+    ).scalars().first()
+    if not ds:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    can_access = await user_can_access_data_source(
+        db, str(user.id), str(organization.id), ds
+    )
+    if not can_access:
+        # Do not distinguish "exists but forbidden" from "missing".
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return ds
+
+
+class GatewayExecuteRequest(BaseModel):
+    data_source_id: str
+    tool_name: str
+    arguments: Optional[dict] = None
+    connection_id: Optional[str] = None
+
+
+@router.get("/mcp/gateway/tools")
+async def gateway_list_agent_tools(
+    data_source_id: str,
+    auth: Tuple[User, Organization] = Depends(mcp_auth),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """List the MCP / custom-API tools an agent exposes outward.
+
+    Enabled tools only, with their effective per-agent policy + input schema.
+    """
+    _require_gateway_enabled()
+    user, organization = auth
+    _check_mcp_enabled(organization)
+    ds = await _resolve_gateway_agent(db, user, organization, data_source_id)
+
+    from app.services.connection_tool_gateway import ConnectionToolGateway
+    tools = await ConnectionToolGateway().list_tools(
+        db, organization, data_source_ids=[str(ds.id)]
+    )
+    return {
+        "data_source_id": str(ds.id),
+        "data_source_name": ds.name,
+        "tools": [t.to_full() for t in tools],
+    }
+
+
+@router.post("/mcp/gateway/execute")
+async def gateway_execute_agent_tool(
+    body: GatewayExecuteRequest,
+    auth: Tuple[User, Organization] = Depends(mcp_auth),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """Execute one of an agent's exposed tools by name (server-side gateway).
+
+    Enforces the same per-agent enablement + policy the in-agent tool honors:
+    only ``allow`` tools run over the gateway; ``confirm``/``deny``/disabled are
+    blocked (no interactive confirm exists over MCP). Unknown/blocked tools
+    return ``success:false`` with a clean message — never a 500.
+    """
+    _require_gateway_enabled()
+    user, organization = auth
+    _check_mcp_enabled(organization)
+    ds = await _resolve_gateway_agent(db, user, organization, body.data_source_id)
+
+    from app.services.connection_tool_gateway import ConnectionToolGateway
+    result = await ConnectionToolGateway().execute(
+        db,
+        organization,
+        data_source_id=str(ds.id),
+        tool_name=body.tool_name,
+        arguments=body.arguments or {},
+        connection_id=body.connection_id,
+        current_user=user,
+        allow_confirm=False,
+    )
+    return result.to_dict()
