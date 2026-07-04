@@ -184,6 +184,91 @@ def _first_series_aggregation(series: List[Dict[str, Any]]) -> Optional[str]:
     return None
 
 
+# Single-value card types: they render exactly one row (the frontend shows
+# rows[0]), so a melted/long table must be narrowed to the asked-for row.
+_SINGLE_VALUE_CARD_TYPES = {"count", "metric_card"}
+
+
+def _norm(s: Any) -> str:
+    return str(s).strip().lower() if s is not None else ""
+
+
+def _norm_col(name: Any) -> str:
+    """Normalize a column header for comparison.
+
+    Tolerates the Power BI pandas landmine where a DAX result header arrives as
+    ``Table[col`` (pandas drops the trailing ``]``) or ``Table[col]`` — both
+    reduce to ``col`` so a series ``value`` written either way matches the cell.
+    """
+    s = str(name if name is not None else "").strip()
+    if "[" in s:
+        s = s.split("[", 1)[1]
+    if s.endswith("]"):
+        s = s[:-1]
+    return s.strip().lower()
+
+
+def derive_kpi_row_filter(
+    final_dm: Dict[str, Any],
+    formatted: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """Derive a row-selecting filter for a single-value card over a melted table.
+
+    A ``count``/``metric_card`` shows one row. When the underlying result is a
+    *melted / long* KPI table — a label column plus a single shared value column,
+    one row per metric (``Metric | Value | Format``) — picking ``value="Value"``
+    is ambiguous: the frontend falls back to ``rows[0]`` (the date/first metric)
+    unless a filter narrows the data to the asked-for metric.
+
+    The viz-inference prompt asks the model to emit that filter, but it does so
+    only sometimes (it may emit an ``aggregation`` instead, which the card
+    ignores). This is the deterministic safeguard: if no filter is present, match
+    the series' display name against the cells of a non-value column and, on a
+    hit, return a filter selecting that row. Conservative — returns ``None``
+    unless there is a clear single match, so normal results are untouched.
+    """
+    if (final_dm or {}).get("type") not in _SINGLE_VALUE_CARD_TYPES:
+        return None
+    if final_dm.get("filters"):
+        return None
+
+    rows = (formatted or {}).get("rows") or []
+    if len(rows) < 2:  # one row: rows[0] is already the answer
+        return None
+
+    series = final_dm.get("series") or []
+    first = series[0] if series and isinstance(series[0], dict) else {}
+    value_col = first.get("value")
+    label = first.get("name")
+    if not value_col or not label:
+        return None
+
+    columns = [
+        c.get("field")
+        for c in (formatted.get("columns") or [])
+        if isinstance(c, dict) and c.get("field")
+    ]
+    label_norm = _norm(label)
+    value_norm = _norm_col(value_col)
+
+    # Prefer an exact cell match; fall back to a substring match (the series name
+    # is often a shortened form of the label cell, e.g. "Revenue" vs
+    # "Total Revenue (Revenue)"). Require a single matching row to stay safe.
+    for matcher in (
+        lambda cell: _norm(cell) == label_norm,
+        lambda cell: len(label_norm) >= 3 and (label_norm in _norm(cell) or _norm(cell) in label_norm),
+    ):
+        for col in columns:
+            # Skip the value column itself. Bracket-tolerant so a stripped series
+            # value ("Revenue") still matches a PBI header ("Table[Revenue").
+            if _norm_col(col) == value_norm:
+                continue
+            hits = [r for r in rows if isinstance(r, dict) and r.get(col) is not None and matcher(r.get(col))]
+            if len(hits) == 1:
+                return {"column": col, "operator": "equals", "value": hits[0].get(col)}
+    return None
+
+
 def build_view_from_data_model(
     data_model: Dict[str, Any],
     title: Optional[str] = None,
@@ -1652,6 +1737,17 @@ Do not use generic placeholders like "value" unless that is the actual column na
             for key in ("series", "group_by", "sort", "limit"):
                 if inferred_dm.get(key) is not None:
                     final_dm[key] = inferred_dm.get(key)
+            # Carry an explicit row filter the inference emitted (the loop above
+            # only copied series/group_by/sort/limit, so it was dropped before).
+            if inferred_dm.get("filters") is not None:
+                final_dm["filters"] = inferred_dm.get("filters")
+        # For a single-value KPI card over a melted/long table, deterministically
+        # derive the row-selecting filter so the card points at the asked-for
+        # metric instead of rows[0] (a date, or a sum of every metric).
+        if not final_dm.get("filters"):
+            _kpi_filter = derive_kpi_row_filter(final_dm, formatted)
+            if _kpi_filter:
+                final_dm["filters"] = [_kpi_filter]
         palette_theme = _infer_palette_theme(runtime_ctx) or "default"
         # Extract available column names from formatted data for fallback inference
         available_columns = [c.get("field") for c in formatted.get("columns", []) if c.get("field")]

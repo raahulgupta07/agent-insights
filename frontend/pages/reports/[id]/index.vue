@@ -3709,6 +3709,23 @@ async function handleStreamingEvent(eventType: string | null, payload: any, sysM
 	}
 
 	switch (eventType) {
+		case 'report:updated':
+			// Backend generated a real report title inline (self.db still alive on
+			// Postgres). Live-update the header title in place (ReportHeader's watch
+			// syncs the input off report.title — no reload) and notify the sidebar
+			// rail via the existing report:titled listener.
+			if (payload && payload.title && report.value) {
+				if ((report.value.title || '') !== payload.title) {
+					report.value.title = payload.title
+				}
+				try {
+					window.dispatchEvent(new CustomEvent('report:titled', {
+						detail: { id: payload.report_id || report.value.id, title: payload.title },
+					}))
+				} catch {}
+			}
+			break
+
 		case 'completion.started':
 			// Update system message status
 			sysMessage.status = 'in_progress'

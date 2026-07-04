@@ -18,6 +18,7 @@
                     <input
                         type="text"
                         class="inline hover:bg-gray-100 p-1 pt-1 outline-none active:bg-gray-100 hover:cursor-pointer text-start w-full transition-all duration-300 ease-in-out transform motion-safe:hover:scale-[1.01]"
+                        :class="{ 'cai-title-flash': titleFlash }"
                         v-if="report"
                         v-model="localTitle"
                         :disabled="isSaving"
@@ -155,6 +156,8 @@ const report_id = route.params.id
 const reportTitleInput = ref<HTMLInputElement | null>(null)
 const localTitle = ref('')
 const isSaving = ref(false)
+// Brief fade when the title is updated externally (backend report:updated).
+const titleFlash = ref(false)
 const toast = useToast()
 
 // HYBRID_WORKFLOWS_V2: "Save as workflow" — turn this finished analysis into a reusable workflow.
@@ -206,9 +209,16 @@ async function saveAsWorkflow() {
 }
 
 // Watch for changes in report prop to update local title
-watch(() => props.report?.title, (newTitle) => {
+watch(() => props.report?.title, (newTitle, oldTitle) => {
     if (newTitle) {
         localTitle.value = newTitle
+        // Subtle fade-in when the title changes after initial load (e.g. the
+        // backend just generated a real title in place).
+        if (oldTitle !== undefined && oldTitle !== newTitle) {
+            titleFlash.value = false
+            requestAnimationFrame(() => { titleFlash.value = true })
+            setTimeout(() => { titleFlash.value = false }, 600)
+        }
     }
 }, { immediate: true })
 
@@ -294,5 +304,19 @@ async function toggleStar() {
     }
 }
 </script>
+
+<style scoped>
+/* Subtle fade-in when the report title is set/updated in place. */
+@keyframes cai-title-fade {
+    from { opacity: 0.35; }
+    to   { opacity: 1; }
+}
+.cai-title-flash {
+    animation: cai-title-fade 0.55s ease-in-out;
+}
+@media (prefers-reduced-motion: reduce) {
+    .cai-title-flash { animation: none; }
+}
+</style>
 
 

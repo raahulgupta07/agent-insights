@@ -1,7 +1,47 @@
+import contextlib
+from contextvars import ContextVar
+from typing import Optional, TypedDict
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.llm_model import LLMModel
 from app.models.llm_usage_record import LLMUsageRecord
+
+
+# --- Ambient usage attribution ------------------------------------------------
+# LLM calls happen deep in the agent / tool stack, far from where we know *who*
+# triggered the run and *against which report / data source*. Rather than thread
+# that context through every LLM(...) constructor, the orchestrator (AgentV2)
+# stamps this contextvar once at the start of a run and the recorder reads it
+# when it persists a record. Kept next to the recorder so the two stay in sync.
+
+
+class UsageAttribution(TypedDict, total=False):
+    organization_id: Optional[str]
+    user_id: Optional[str]
+    report_id: Optional[str]
+    data_source_id: Optional[str]
+
+
+_current_attribution: ContextVar[Optional[UsageAttribution]] = ContextVar(
+    "llm_usage_attribution", default=None
+)
+
+
+def get_usage_attribution() -> UsageAttribution:
+    """Return a snapshot of the current attribution (empty dict if unset)."""
+    value = _current_attribution.get()
+    return dict(value) if value else {}
+
+
+def set_usage_attribution(attribution: Optional[UsageAttribution]):
+    """Set the ambient attribution, returning the contextvar token for reset."""
+    return _current_attribution.set(attribution or None)
+
+
+def reset_usage_attribution(token) -> None:
+    with contextlib.suppress(Exception):
+        _current_attribution.reset(token)
 
 
 class LLMUsageRecorderService:
@@ -20,6 +60,10 @@ class LLMUsageRecorderService:
         completion_tokens: int = 0,
         cache_read_tokens: int = 0,
         cache_creation_tokens: int = 0,
+        organization_id: str | None = None,
+        user_id: str | None = None,
+        report_id: str | None = None,
+        data_source_id: str | None = None,
     ) -> LLMUsageRecord:
 
         provider_type = llm_model.provider.provider_type if llm_model.provider else ""
@@ -28,9 +72,25 @@ class LLMUsageRecorderService:
         )
         output_cost = self._calc_output_cost(llm_model, completion_tokens)
 
+        # Attribution: prefer values the caller passed explicitly, else fall back
+        # to the ambient contextvar snapshot stamped by AgentV2 at run start.
+        # (create_task copies the current context, so this reads the run's values
+        # for the normal agent path.) Org is always knowable from the model.
+        attribution = get_usage_attribution()
+        org_id = organization_id or attribution.get("organization_id") or (
+            str(llm_model.organization_id) if getattr(llm_model, "organization_id", None) else None
+        )
+        user_id = user_id or attribution.get("user_id")
+        report_id = report_id or attribution.get("report_id")
+        data_source_id = data_source_id or attribution.get("data_source_id")
+
         record = LLMUsageRecord(
             scope=scope,
             scope_ref_id=scope_ref_id,
+            organization_id=org_id,
+            user_id=user_id,
+            report_id=report_id,
+            data_source_id=data_source_id,
             llm_model_id=str(llm_model.id),
             model_id=llm_model.model_id,
             provider_type=provider_type,

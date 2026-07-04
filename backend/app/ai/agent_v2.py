@@ -1255,16 +1255,21 @@ class AgentV2:
             self.mode = prior_mode
 
     async def _generate_title_background(self, messages_context: str, plan_info: list, report_id: str):
-        """Generate report title in background after completion.finished is sent.
+        """Generate and persist the report title in its own DB session.
 
-        `report_id` is passed in as a plain string (captured while the request's
-        session is still alive). We must NOT read it off `self.report` here: this
-        runs as a fire-and-forget task that can outlive the request, at which point
-        `self.report` is detached from its (now-closed) session and any attribute
-        access raises "Instance is not bound to a Session". That silently skipped
-        title generation — most visibly on Postgres, whose pooled connections
-        return/expire faster than SQLite's, so the session was reliably gone by the
-        time this task ran.
+        Awaited INLINE by the caller (see main_execution) rather than spawned as a
+        fire-and-forget task. A discarded `asyncio.create_task` is only weakly
+        referenced by the loop and was routinely garbage-collected on Postgres —
+        whose pooled connection recycles the instant the response finishes — before
+        its small-model LLM call returned, leaving the report stuck on the
+        placeholder title. Awaiting keeps the work alive to completion.
+
+        `report_id` is passed in as a plain string and the report is re-fetched in
+        this method's own session, so we never touch a `self.report` that may be
+        detached from a closed session ("Instance is not bound to a Session").
+
+        Returns the new title string on success (so the caller can emit a
+        `report:updated` SSE), or None if nothing was written.
         """
         import logging
         logger = logging.getLogger(__name__)
@@ -1275,7 +1280,8 @@ class AgentV2:
                     title = await self.reporter.generate_report_title(messages_context, plan_info)
                     if not title or not title.strip():
                         logger.warning("Title generation returned empty result")
-                        return
+                        return None
+                    title = title.strip()
                     # Re-fetch report using select query (more reliable than session.get with UUID).
                     # lazyload("*") suppresses Report's lazy="selectin" cascade (14 rels +
                     # downstream DS/widget/query graph) — update_report_title only touches title.
@@ -1283,15 +1289,26 @@ class AgentV2:
                     stmt = select(Report).where(Report.id == report_id).options(_lazyload("*"))
                     result = await session.execute(stmt)
                     report = result.scalar_one_or_none()
-                    if report:
-                        await self.project_manager.update_report_title(session, report, title)
-                        logger.info(f"Report title updated to: {title}")
-                    else:
+                    if not report:
                         logger.warning(f"Report not found for title update: {report_id}")
+                        return None
+                    # Re-check the placeholder gate under a fresh read. The caller
+                    # gates on the same condition, but title generation is now
+                    # value-gated + self-healing (can run across turns); re-checking
+                    # here avoids clobbering a real title a concurrent turn just set.
+                    existing = (report.title or "").strip()
+                    if existing.lower() not in ("", "untitled report"):
+                        logger.info(f"Report {report_id} already titled; skipping")
+                        return None
+                    await self.project_manager.update_report_title(session, report, title)
+                    logger.info(f"Report title updated to: {title}")
+                    return title
                 except Exception as e:
                     logger.error(f"Failed to generate/update report title: {e}")
+                    return None
         except Exception as e:
             logger.error(f"Failed to create session for title generation: {e}")
+            return None
 
     def _build_slim_context_snapshot(self, view, top_k_schema: int = 10) -> dict:
         """
@@ -1963,6 +1980,21 @@ class AgentV2:
         # back to opening fresh short-lived sessions.
         if self._use_single_write_session():
             self._writes = self.db
+        # Stamp ambient LLM-usage attribution for every LLM call made during this
+        # run so the Cost console can break spend down by user / report / agent
+        # (data source). data_source_id is stamped only when the report has
+        # exactly one source (unambiguous); multi-source reports are split at
+        # query time. The recorder reads this contextvar at record time.
+        from app.services.llm_usage_recorder import set_usage_attribution, reset_usage_attribution
+        _single_ds = self.data_sources[0] if len(self.data_sources or []) == 1 else None
+        _attribution_token = set_usage_attribution(
+            {
+                "organization_id": str(getattr(self.organization, "id", "") or "") or None,
+                "user_id": str(getattr(self.head_completion, "user_id", "") or "") or None,
+                "report_id": str(self.report.id) if self.report else None,
+                "data_source_id": str(getattr(_single_ds, "id", "")) if _single_ds is not None else None,
+            }
+        )
         try:
             import time as _time
             _t0 = _time.monotonic()
@@ -4141,42 +4173,59 @@ class AgentV2:
             else:
                 asyncio.create_task(_bg_final_snap())
             
-            # Generate report title if this is the first completion (non-blocking)
+            # Generate the report title while it's still an empty/placeholder.
+            #
+            # Run INLINE (awaited) — NOT as a fire-and-forget asyncio.create_task.
+            # A discarded create_task is only weakly referenced by the loop, so on
+            # Postgres — where the request's pooled connection recycles the instant
+            # the response finishes — the suspended task was routinely garbage-
+            # collected before its small-model LLM call returned, leaving the report
+            # stuck on "untitled report". Awaiting here keeps self.db alive and lands
+            # the write (and the report:updated SSE) before main_execution returns.
+            #
+            # Gate on the title VALUE (empty or the frontend's "untitled report"
+            # placeholder), NOT on "is this the first completion". The old
+            # first-completion gate made generation one-shot: a single transient
+            # failure left the report untitled forever. Value-gating self-heals —
+            # a later turn retries until a real title sticks.
             try:
-                if self.head_completion and self.report:
-                    first_completion = await self.db.execute(
-                        select(Completion)
-                        .filter(Completion.report_id == self.report.id)
-                        .order_by(Completion.created_at.asc())
-                        .limit(1)
+                current_title = (getattr(self.report, "title", "") or "").strip() if self.report else ""
+                if self.head_completion and self.report and current_title.lower() in ("", "untitled report"):
+                    # Generate title (small model)
+                    messages_section = await self.context_hub.message_builder.build(max_messages=5)
+                    messages_context = messages_section.render()
+
+                    # Extract plan information from current execution
+                    plan_info = []
+                    if current_plan_decision:
+                        if hasattr(current_plan_decision, 'action_name') and current_plan_decision.action_name:
+                            plan_info.append({"action": current_plan_decision.action_name})
+
+                    # Capture the report id as a plain string NOW, while self.db is
+                    # still open. _generate_title_background re-fetches by this id in
+                    # its own session, so it never touches a detached self.report.
+                    report_id_for_title = str(self.report.id)
+
+                    new_title = await self._generate_title_background(
+                        messages_context, plan_info, report_id_for_title
                     )
-                    first_completion = first_completion.scalar_one_or_none()
-                    
-                    if first_completion and self.head_completion.id == first_completion.id:
-                        # Generate title in background to not block completion
-                        messages_section = await self.context_hub.message_builder.build(max_messages=5)
-                        messages_context = messages_section.render()
 
-                        # Extract plan information from current execution
-                        plan_info = []
-                        if current_plan_decision:
-                            if hasattr(current_plan_decision, 'action_name') and current_plan_decision.action_name:
-                                plan_info.append({"action": current_plan_decision.action_name})
-
-                        # Capture the report id as a plain string NOW, while self.db is
-                        # still open. The background task can outlive the request, and
-                        # reading self.report.id after the session closes raises
-                        # "Instance is not bound to a Session" (the bug that silently
-                        # skipped title generation, esp. on Postgres).
-                        report_id_for_title = str(self.report.id)
-
-                        # Run title generation in background
-                        asyncio.create_task(self._generate_title_background(messages_context, plan_info, report_id_for_title))
+                    # Live-update the UI (report header + sidebar list item) with the
+                    # new title, over the existing completion SSE channel — no reload.
+                    if new_title:
+                        try:
+                            await self._emit_sse_event(SSEEvent(
+                                event="report:updated",
+                                completion_id=str(self.system_completion.id) if self.system_completion else None,
+                                data={"report_id": report_id_for_title, "title": new_title},
+                            ))
+                        except Exception as _title_sse_exc:
+                            logger.warning(f"[agent] report:updated emit failed: {_title_sse_exc!r}")
             except Exception as e:
                 # Don't fail the entire execution if title generation fails
                 import logging
                 _fallback_logger = logging.getLogger(__name__)
-                _fallback_logger.warning(f"Failed to start title generation: {e}")
+                _fallback_logger.warning(f"Failed to generate title: {e}")
             
             # Late scoring (non-blocking): capture context string and observation snapshot, then run in isolated session
             try:
@@ -4362,6 +4411,8 @@ class AgentV2:
             except Exception:
                 pass
 
+            # Drop the ambient LLM usage attribution set at run start.
+            reset_usage_attribution(_attribution_token)
             # Single-writer mode: drop the self._writes alias. self.db's
             # lifecycle is owned by the caller (FastAPI dependency); we
             # only ever aliased to it, never opened/owned a separate
@@ -5186,8 +5237,12 @@ class AgentV2:
                                 # Preserve existing type; only set if missing
                                 if not merged.get("type") and data_model_from_tool.get("type"):
                                     merged["type"] = data_model_from_tool.get("type")
-                                # Merge series/grouping fields
-                                for key in ("series", "group_by", "sort", "limit"):
+                                # Merge series/grouping fields. `filters` MUST be
+                                # included: it carries the default filter that
+                                # narrows a melted/long KPI table to the asked-for
+                                # row for single-value cards — dropping it makes
+                                # count/metric_card render row 0 (the date/label).
+                                for key in ("series", "group_by", "sort", "limit", "filters"):
                                     if data_model_from_tool.get(key) is not None:
                                         merged[key] = data_model_from_tool.get(key)
                                 await self.project_manager.update_step_with_data_model(fresh_db, step_obj, merged)

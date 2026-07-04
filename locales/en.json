@@ -2237,7 +2237,8 @@
       "byScope": "By feature",
       "byUser": "By user",
       "byAgent": "By agent",
-      "empty": "No LLM usage yet"
+      "empty": "No LLM usage yet",
+      "unattributed": "Unattributed"
     },
     "cards": {
       "messages": "Messages",

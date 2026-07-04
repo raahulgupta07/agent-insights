@@ -1200,17 +1200,40 @@ class ConsoleService:
         )).all()
         by_scope = [{"scope": r.scope, "cost": float(r.cost or 0)} for r in scope_rows]
 
-        # --- By agent (scope_ref_id is a Report id => Report.studio_id => Studio) ---
-        # scope_ref_id holds str(report.id) at every labeled call site; join to
-        # the report's studio to get a human agent name. Records whose
-        # scope_ref_id isn't a report (or NULL) simply don't join => omitted.
-        agent_rows = (await db.execute(
-            _join(select(Studio.name.label("agent_name"), cost_expr.label("cost")))
-            .join(Report, Report.id == LLMUsageRecord.scope_ref_id)
-            .join(Studio, Studio.id == Report.studio_id)
-            .group_by(Studio.name).order_by(cost_expr.desc()).limit(20)
+        # --- By user (attribution column) -----------------------------------
+        # Group on the indexed user_id stamped at record time by AgentV2. Rows
+        # with a NULL user_id (pre-attribution rows, background jobs) aggregate
+        # into a single label=None "Unattributed" bucket. Left-join User for a
+        # human name; the FE renders `label` (null => "—").
+        user_rows = (await db.execute(
+            _join(select(
+                LLMUsageRecord.user_id.label("user_id"),
+                User.name.label("label"),
+                cost_expr.label("cost"),
+            ))
+            .outerjoin(User, User.id == LLMUsageRecord.user_id)
+            .group_by(LLMUsageRecord.user_id, User.name)
+            .order_by(cost_expr.desc()).limit(20)
         )).all()
-        by_agent = [{"agent_name": r.agent_name, "cost": float(r.cost or 0)} for r in agent_rows]
+        by_user = [{"label": r.label, "cost": float(r.cost or 0)} for r in user_rows]
+
+        # --- By agent (data source attribution column) ----------------------
+        # Repointed to the indexed data_source_id stamped at record time (was a
+        # scope_ref_id->Report->Studio join). NULL data_source_id (multi-source
+        # or unattributed rows) aggregates into the label=None "Unattributed"
+        # bucket. Left-join DataSource for the agent name.
+        from app.models.data_source import DataSource  # local: keep top-of-file imports untouched
+        agent_rows = (await db.execute(
+            _join(select(
+                LLMUsageRecord.data_source_id.label("data_source_id"),
+                DataSource.name.label("label"),
+                cost_expr.label("cost"),
+            ))
+            .outerjoin(DataSource, DataSource.id == LLMUsageRecord.data_source_id)
+            .group_by(LLMUsageRecord.data_source_id, DataSource.name)
+            .order_by(cost_expr.desc()).limit(20)
+        )).all()
+        by_agent = [{"label": r.label, "cost": float(r.cost or 0)} for r in agent_rows]
 
         return {
             "kpis": kpis,
@@ -1218,7 +1241,7 @@ class ConsoleService:
             "by_model": by_model,
             "by_provider": by_provider,
             "by_scope": by_scope,
-            "by_user": [],  # not derivable: no user id is stored in scope/scope_ref_id
+            "by_user": by_user,
             "by_agent": by_agent,
             "date_range": {"start": start_date.isoformat(), "end": end_date.isoformat()},
         }
@@ -1662,13 +1685,18 @@ class ConsoleService:
         head_prompt = None
         head_user_completion: Optional[Completion] = None
         head_snapshot: Optional[ContextSnapshot] = None
-        
+        # Origin platform this run came in through (None = web UI). Set on the
+        # system completion (agent reply) for webhook-originated runs.
+        external_platform_val: Optional[str] = None
+
         # Get the system completion for this agent execution
         if agent_execution.completion_id:
             system_completion_query = select(Completion).where(Completion.id == agent_execution.completion_id)
             system_completion_res = await db.execute(system_completion_query)
             system_completion = system_completion_res.scalar_one_or_none()
-            
+            if system_completion is not None:
+                external_platform_val = getattr(system_completion, 'external_platform', None)
+
             # Get the parent user completion (head completion) for this system completion
             if system_completion and system_completion.parent_id:
                 head_completion_query = select(Completion).where(Completion.id == system_completion.parent_id)
@@ -1756,6 +1784,11 @@ class ConsoleService:
 
         timing_breakdown = self._compute_timing_breakdown(ae_payload, block_schemas)
 
+        # Fall back to the head user completion's origin if the system completion
+        # didn't carry it (both are stamped for webhook-originated runs).
+        if not external_platform_val and head_user_completion is not None:
+            external_platform_val = getattr(head_user_completion, 'external_platform', None)
+
         return AgentExecutionTraceResponse(
             agent_execution=ae_payload,
             completion_blocks=block_schemas,
@@ -1764,6 +1797,7 @@ class ConsoleService:
             latest_feedback=latest_feedback,
             build=build,
             timing_breakdown=timing_breakdown,
+            external_platform=external_platform_val,
         )
 
     def _compute_timing_breakdown(
@@ -2098,12 +2132,22 @@ class ConsoleService:
 
         # Prompts for completions - get from parent user completion, not system completion
         prompts: dict[str, str] = {}
+        # Origin platform per (system) completion — None = web UI. Set on the
+        # system completion for webhook-originated runs; drives the origin icon.
+        platform_map: dict[str, str] = {}
         if completion_ids:
-            # Get system completions and their parent_ids
-            system_completions_q = select(Completion.id, Completion.parent_id).where(Completion.id.in_(completion_ids))
+            # Get system completions, their parent_ids, and origin platform
+            system_completions_q = select(
+                Completion.id, Completion.parent_id, Completion.external_platform
+            ).where(Completion.id.in_(completion_ids))
             system_completions_res = await db.execute(system_completions_q)
             system_completions = system_completions_res.all()
-            
+
+            for sc in system_completions:
+                plat = getattr(sc, 'external_platform', None)
+                if plat:
+                    platform_map[str(sc.id)] = plat
+
             # Collect parent completion IDs
             parent_ids = [sc.parent_id for sc in system_completions if sc.parent_id]
             
@@ -2249,7 +2293,8 @@ class ConsoleService:
                 user_email=r.user_email,
                 report_id=str(r.report_id) if r.report_id else '',
                 report_name=r.report_title or '',
-                report_link=report_link
+                report_link=report_link,
+                external_platform=platform_map.get(str(r.completion_id)) if r.completion_id else None
             ))
 
         return AgentExecutionSummariesResponse(

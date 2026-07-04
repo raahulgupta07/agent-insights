@@ -1805,6 +1805,24 @@
       "last30d": "Ultimi 30 giorni",
       "last90d": "Ultimi 90 giorni",
       "customRange": "Intervallo personalizzato"
+    },
+    "tabCost": "Costo",
+    "cost": {
+      "title": "Cost Console",
+      "subtitle": "Track LLM spend, tokens, and usage across models, providers, and features.",
+      "totalSpend": "Total spend",
+      "tokens": "Tokens (in / out)",
+      "avgPerRun": "Avg $ / run",
+      "cacheReads": "Cache reads",
+      "totalCalls": "Total calls",
+      "dailySpend": "Daily spend",
+      "byModel": "By model",
+      "byProvider": "By provider",
+      "byScope": "By feature",
+      "byUser": "By user",
+      "byAgent": "By agent",
+      "empty": "No LLM usage yet",
+      "unattributed": "Non attribuito"
     }
   },
   "mcp": {
