@@ -189,6 +189,18 @@
 
                         <!-- AI AUTO-PILOT (studio home) -->
                         <section v-else-if="activeTab === 'autopilot'">
+                            <!-- INLINE SMART UPLOAD — one card for BOTH autopilot-v2 and legacy layouts.
+                                 The "Upload file" button (either layout) drives this card's picker via
+                                 inlineUploadRef.pick(); per-file detail streams to the robot dock via @log. -->
+                            <StudioInlineUpload
+                                v-if="smartUploadEnabled && canEdit"
+                                ref="inlineUploadRef"
+                                :studio-id="studioId"
+                                :can-edit="canEdit"
+                                class="mb-4"
+                                @applied="onSmartApplied"
+                                @log="onStudioLog"
+                            />
                             <!-- Auto-pilot v2 (reordered ADD→QUEUE→TRAIN→RESULT) — flag HYBRID_AUTOPILOT_V2.
                                  When OFF the original panel below renders byte-for-byte unchanged. -->
                             <StudioAutopilotV2 v-if="autopilotV2Enabled" :studio-id="studio?.id" :sources="sources" :docs="docs" :readiness="readiness" :can-edit="canEdit" :training-all="trainingAll" :can-train="canTrain" :train-log="trainLog" :train-stages="trainStages" :train-log-lines="trainLogLines" :active-instr="activeInstr" :active-examples="activeExamples" :show-train-log-panel="showTrainLogPanel" @add="onAutopilotAdd" @train="runFullTrain" @open-tab="t => activeTab = t" />
@@ -461,19 +473,6 @@
                                          the "Upload file" path still opens it (kept as-is). -->
                                 </div>
                             </div>
-
-                            <!-- INLINE SMART UPLOAD (replaces the Smart Upload modal button): one drop
-                                 zone, auto-classify + route; heavy per-file detail streams into the robot
-                                 dock via @log. Gated HYBRID_SMART_UPLOAD. -->
-                            <StudioInlineUpload
-                                v-if="smartUploadEnabled && canEdit"
-                                ref="inlineUploadRef"
-                                :studio-id="studioId"
-                                :can-edit="canEdit"
-                                class="mb-4"
-                                @applied="onSmartApplied"
-                                @log="onStudioLog"
-                            />
 
                             <!-- PRE-TRAIN HERO (Column Intelligence) -->
                             <div v-if="canEdit && sources.length" class="rounded-2xl border border-[#E8C9B5] bg-gradient-to-br from-[#FBF3EC] to-white p-4 mb-4">
