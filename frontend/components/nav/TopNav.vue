@@ -70,6 +70,9 @@
         <!-- Install as desktop app (PWA) — only shows when installable -->
         <InstallApp />
 
+        <!-- Notifications inbox — bell (HYBRID_NOTIFICATIONS_INBOX-gated) -->
+        <NotificationBell v-if="notificationsInboxEnabled" class="hidden sm:block" />
+
         <!-- What's new (changelog) — bell before profile -->
         <WhatsNew class="hidden sm:block" />
 
@@ -80,10 +83,12 @@
           class="hidden sm:block"
         >
           <button
-            class="cag-avatar flex items-center justify-center w-[38px] h-[38px] rounded-full text-white text-[14px] font-semibold transition-transform hover:scale-105"
+            class="flex items-center justify-center w-[38px] h-[38px] rounded-full text-white text-[14px] font-semibold transition-transform hover:scale-105 overflow-hidden"
+            :class="{ 'cag-avatar': !avatarUrl }"
             :aria-label="$t('nav.loggedInAs', { name: currentUserName })"
           >
-            {{ userInitial }}
+            <img v-if="avatarUrl" :src="avatarUrl" alt="" class="w-full h-full object-cover" />
+            <template v-else>{{ userInitial }}</template>
           </button>
         </UDropdown>
 
@@ -189,8 +194,9 @@
           <!-- User actions (org switch + settings + logout) -->
           <div class="mt-2 pt-3 border-t border-gray-200/80">
             <div class="px-2.5 pb-1 flex items-center gap-2">
-              <div class="flex items-center justify-center w-6 h-6 rounded-full bg-[#5B6470] text-white text-[10px] font-bold shrink-0">
-                {{ userInitial }}
+              <div class="flex items-center justify-center w-6 h-6 rounded-full text-white text-[10px] font-bold shrink-0 overflow-hidden" :class="{ 'bg-[#5B6470]': !avatarUrl }">
+                <img v-if="avatarUrl" :src="avatarUrl" alt="" class="w-full h-full object-cover" />
+                <template v-else>{{ userInitial }}</template>
               </div>
               <span class="text-[13px] text-gray-700 truncate">{{ currentUserName }}</span>
             </div>
@@ -215,6 +221,9 @@
 
     <!-- MCP modal (ported from default.vue) -->
     <McpModal v-if="showMcpModal" v-model="showMcpModal" />
+
+    <!-- User profile / avatar modal (HYBRID_USER_AVATAR) -->
+    <UserProfileModal v-if="profileModalOpen" v-model="profileModalOpen" />
   </header>
 </template>
 
@@ -223,7 +232,9 @@
   import McpModal from '~/components/McpModal.vue'
   import AgentSelector from '~/components/AgentSelector.vue'
   import WhatsNew from '~/components/nav/WhatsNew.vue'
+  import NotificationBell from '~/components/nav/NotificationBell.vue'
   import InstallApp from '~/components/nav/InstallApp.vue'
+  import UserProfileModal from '~/components/UserProfileModal.vue'
   import { useCan } from '~/composables/usePermissions'
 
   // ---- Composables (self-contained: TopNav reads its own state, no props) ----
@@ -256,10 +267,14 @@
     firstHref,
     showMcpModal,
     loadDomainPacksFlag,
+    userAvatarEnabled,
+    notificationsInboxEnabled,
   } = useAppNav()
 
   const mobileOpen = ref(false)
   const creatingReport = ref(false)
+  // Avatar upload modal (gated by HYBRID_USER_AVATAR for the entry affordance).
+  const profileModalOpen = ref(false)
 
   // Close transient UI on navigation.
   watch(() => route.fullPath, () => {
@@ -296,6 +311,8 @@
     return user?.name || user?.email || 'User'
   })
   const userInitial = computed<string>(() => currentUserName.value.charAt(0).toUpperCase())
+  // Uploaded avatar serve path; null => render the initial-letter placeholder.
+  const avatarUrl = computed<string | null>(() => (currentUser.value as any)?.image_url || null)
 
   const userOrganizations = computed<any[]>(() =>
     ((currentUser.value as any)?.organizations || []) as any[]
@@ -310,6 +327,14 @@
 
   const userDropdownItems = computed(() => {
     const groups: any[] = []
+    // Edit profile (avatar upload) — gated by HYBRID_USER_AVATAR.
+    if (userAvatarEnabled.value) {
+      groups.push([{
+        label: t('profile.editProfile'),
+        icon: 'heroicons-user-circle',
+        click: () => { profileModalOpen.value = true },
+      }])
+    }
     const orgs = userOrganizations.value
     if (orgs.length > 1) {
       groups.push(

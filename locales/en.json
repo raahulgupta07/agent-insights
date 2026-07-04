@@ -1,4 +1,17 @@
 {
+  "profile": {
+    "title": "Profile photo",
+    "subtitle": "Upload an image that shows in the nav and chat.",
+    "editProfile": "Edit profile",
+    "uploadPhoto": "Upload photo",
+    "changePhoto": "Change photo",
+    "removePhoto": "Remove photo",
+    "avatarHint": "PNG or JPG, up to 5 MB. Cropped to a square.",
+    "avatarUpdated": "Profile photo updated",
+    "avatarRemoved": "Profile photo removed",
+    "avatarFailed": "Could not update the photo",
+    "avatarTooLarge": "Image is too large (max 5 MB)"
+  },
   "connectors": {
     "hubTitle": "Connect a Microsoft source",
     "hubSubtitle": "Sign in with your own account. Your data stays private to you.",
@@ -121,6 +134,7 @@
     "availableConnectors": "Available Connectors",
     "instructions": "Instructions",
     "queries": "Queries",
+    "prompts": "Prompts",
     "knowledge": "Knowledge",
     "settings": "Settings",
     "members": "Members",
@@ -426,6 +440,32 @@
     "rejectConfirm": "Reject all staged instruction changes from this session?",
     "clickToPublish": "click to publish",
     "saveChanges": "Save changes"
+  },
+  "prompts": {
+    "title": "Prompts",
+    "subtitle": "Reusable saved prompts your team can run",
+    "new": "New prompt",
+    "newTitle": "New prompt",
+    "editTitle": "Edit prompt",
+    "loading": "Loading prompts…",
+    "empty": "No prompts yet.",
+    "untitled": "Untitled prompt",
+    "edit": "Edit",
+    "delete": "Delete",
+    "starter": "Starter",
+    "fieldTitle": "Title",
+    "fieldTitlePh": "A short name for this prompt",
+    "fieldText": "Prompt",
+    "fieldTextPh": "The instruction to run…",
+    "fieldMode": "Mode",
+    "fieldScope": "Scope",
+    "fieldStarter": "Show as a conversation starter",
+    "cancel": "Cancel",
+    "save": "Save",
+    "saving": "Saving…",
+    "saveError": "Could not save the prompt.",
+    "deleteConfirm": "Delete this prompt?",
+    "deleteError": "Could not delete the prompt."
   },
   "reports": {
     "title": "Reports",
@@ -1210,6 +1250,7 @@
     "license": "License",
     "membersTab": "Access & Members",
     "identityProviderTab": "Identity Provider",
+    "serviceAccountsTab": "Service Accounts",
     "smtpTab": "SMTP",
     "identityProvider": {
       "scimTitle": "SCIM Provisioning",
@@ -2614,5 +2655,11 @@
       "fileUploadFailed": "Failed to upload file",
       "fileRemoveFailed": "Failed to remove file"
     }
+  },
+  "notifications": {
+    "title": "Notifications",
+    "markAllRead": "Mark all read",
+    "emptyTitle": "You're all caught up",
+    "emptyBody": "New notifications will show up here."
   }
 }

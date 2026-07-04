@@ -229,6 +229,10 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_SMART_DASHBOARD": {"label": "Smart Dashboard Build", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "Outputs 'Generate dashboard' becomes a smart builder: auto-prefills the prompt from the chat turn, auto-uses the agent's own bound data sources (no picker), routes the model via Auto, and asks ONE clarifying chip ONLY when there's no usable signal. Reuses create_artifact + ambiguity-gate + sense-making. Default OFF."},
     "HYBRID_QUOTAS": {"label": "Per-Org Quotas", "role": "agent", "category": "Agents & Access", "status": "stable"},
     "HYBRID_DOMAIN_PACKS": {"label": "Domain Packs (Skills)", "role": "agent", "category": "Agents & Access", "status": "stable"},
+    "HYBRID_PROMPTS_LIBRARY": {"label": "Prompts Library", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "Reusable saved-prompt library (create / edit / delete prompts) surfaced as a 'Prompts' nav entry under Build. API is always mounted; this flag only shows/hides the nav link. Default OFF."},
+    "HYBRID_USER_AVATAR": {"label": "User Avatar Upload", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "Lets a user upload a profile image that displays in the nav / chat. The avatar serve route + column exist unconditionally; this flag only shows/hides the 'Edit profile' upload affordance in the nav. Default OFF."},
+    "HYBRID_NOTIFICATIONS_INBOX": {"label": "Notifications Inbox", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "In-app notification inbox: a bell in the nav with an unread badge + a dropdown listing recent notifications (mark-read / mark-all-read / dismiss). The API is always mounted; this flag only shows/hides the nav bell. Unrelated to outbound email. Default OFF."},
+    "HYBRID_SERVICE_ACCOUNTS": {"label": "Service Accounts", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "Machine/service accounts an org admin creates for headless / programmatic access. Each account holds one or more API keys (bow_ prefix, SHA-256 hashed, plaintext shown once at creation). Admin-only (manage_members). This flag gates the admin API + the Settings → Service Accounts page. Default OFF."},
     "HYBRID_PACK_ROUTER": {"label": "Pack Router", "role": "agent", "category": "Agents & Access", "status": "stable"},
     "HYBRID_PACK_AUTOBIND": {"label": "Pack Auto-bind", "role": "review", "category": "Agents & Access", "status": "experimental", "note": "Adds pending rows to review on every train."},
     "HYBRID_TEACH_BOX": {"label": "Teach Box (paste→skill)", "role": "review", "category": "Agents & Access", "status": "stable"},
@@ -1009,6 +1013,36 @@ class HybridFlags:
         return _bool("HYBRID_DOMAIN_PACKS", True)
 
     @property
+    def PROMPTS_LIBRARY(self) -> bool:
+        # Prompts Library: a reusable saved-prompt subsystem (CRUD over the
+        # `prompts` table). The API router is always mounted; this flag only
+        # gates the "Prompts" nav entry on the frontend. When OFF the page/route
+        # still exist but are unlinked from the nav. Default OFF.
+        return _bool("HYBRID_PROMPTS_LIBRARY", False)
+
+    @property
+    def USER_AVATAR(self) -> bool:
+        # User avatar upload: gates only the FE "Edit profile" upload affordance.
+        # The avatar serve route + users.image_url column exist unconditionally so
+        # an already-uploaded avatar keeps rendering if the flag is later OFF.
+        return _bool("HYBRID_USER_AVATAR", False)
+
+    @property
+    def NOTIFICATIONS_INBOX(self) -> bool:
+        # In-app notification inbox: gates only the FE nav bell. The API router +
+        # notifications table exist unconditionally; when OFF the bell is hidden.
+        # Default OFF.
+        return _bool("HYBRID_NOTIFICATIONS_INBOX", False)
+
+    @property
+    def SERVICE_ACCOUNTS(self) -> bool:
+        # Service Accounts: machine/service principals an org admin creates,
+        # each holding one or more API keys (bow_ prefix, SHA-256 hashed) for
+        # headless/programmatic access. Gates the admin routes + settings page.
+        # When OFF the routes 404 and the settings nav entry is hidden. Default OFF.
+        return _bool("HYBRID_SERVICE_ACCOUNTS", False)
+
+    @property
     def PACK_AUTOBIND(self) -> bool:
         # Sub-flag: during studio train, auto-try binding every library pack to
         # the agent's profiled columns and write PENDING studio_bound_packs rows
@@ -1504,6 +1538,10 @@ class HybridFlags:
             "SCOPE_GATE": self.SCOPE_GATE,
             "DASH_VERSIONS": self.DASH_VERSIONS,
             "DOMAIN_PACKS": self.DOMAIN_PACKS,
+            "PROMPTS_LIBRARY": self.PROMPTS_LIBRARY,
+            "USER_AVATAR": self.USER_AVATAR,
+            "NOTIFICATIONS_INBOX": self.NOTIFICATIONS_INBOX,
+            "SERVICE_ACCOUNTS": self.SERVICE_ACCOUNTS,
             "PACK_AUTOBIND": self.PACK_AUTOBIND,
             "PACK_ROUTER": self.PACK_ROUTER,
             "TEACH_BOX": self.TEACH_BOX,

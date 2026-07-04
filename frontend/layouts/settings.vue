@@ -42,6 +42,7 @@ const allTabs = [
     { name: 'kb-sources', label: 'Knowledge Sources', requiredPermission: "manage_settings", description: 'Sync Notion pages and Slack channels into the knowledge base. Synced docs land in Knowledge → Review for approval before they ground answers.' },
     { name: 'audit', label: 'settings.auditLogs', requiredPermission: "view_audit_logs", description: 'Review activity and security events across the workspace.' },
     { name: 'identity-provider', label: 'settings.identityProviderTab', requiredPermission: "manage_identity_providers", description: 'Configure SSO, SCIM provisioning, and LDAP.' },
+    { name: 'service-accounts', label: 'settings.serviceAccountsTab', requiredPermission: "manage_members", description: 'Create machine/service accounts and issue API keys for headless, programmatic access.' },
     { name: 'smtp', label: 'settings.smtpTab', requiredPermission: "manage_settings", description: 'Configure outbound email delivery.' },
     { name: 'features', label: 'Feature Flags', requiredPermission: "manage_settings", description: 'Toggle hybrid feature flags and experimental capabilities.' },
     { name: 'pack-analytics', label: 'Pack Analytics', requiredPermission: "manage_settings", description: 'Org-wide observability for Domain Packs (Skills) — binding, fires, and win-rate.' },

@@ -88,12 +88,14 @@ from app.models.user_connection_overlay import UserConnectionTable, UserConnecti
 from app.models.entity import Entity
 from app.models.eval import TestSuite
 from app.models.eval import TestCase
+from app.models.notification import Notification  # in-app notification inbox
 from app.models.eval import TestRun
 from app.models.eval import TestResult
 from app.models.instruction_label import InstructionLabel
 from app.models.instruction_label import instruction_label_association
 from app.models.llm_usage_record import LLMUsageRecord
 from app.models.api_key import ApiKey
+from app.models.service_account import ServiceAccount  # service accounts (machine principals)
 from app.models.scheduled_prompt import ScheduledPrompt
 from app.models.instruction_build import InstructionBuild
 from app.models.oauth_server import OAuthClient, OAuthAuthorizationCode, OAuthAccessToken

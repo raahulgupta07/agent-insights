@@ -106,6 +106,7 @@ from app.routes import (
     me_groups,
     usage_limits,
     scheduled_prompt,
+    prompt,
     excel,
     agent_yaml,
     eval_yaml,
@@ -144,6 +145,8 @@ from app.routes import (
     smart_workbook,
     smart_dashboard,
     ingest_brain,
+    notification,
+    service_account,
 )
 from app.routes.oidc_auth import router as oidc_auth_router
 from app.ee.routes import router as enterprise_router
@@ -311,6 +314,9 @@ app.include_router(pipeline_routes.router, prefix="/api")  # Pipeline v1: verifi
 app.include_router(data_source.router, prefix="/api")
 app.include_router(report.router, prefix="/api")
 app.include_router(scheduled_prompt.router, prefix="/api")
+app.include_router(prompt.router, prefix="/api")  # Prompts Library (HYBRID_PROMPTS_LIBRARY-gated nav)
+app.include_router(notification.router, prefix="/api")  # In-app notification inbox (HYBRID_NOTIFICATIONS_INBOX-gated bell)
+app.include_router(service_account.router, prefix="/api")  # Service accounts + API keys (HYBRID_SERVICE_ACCOUNTS-gated, admin-only)
 app.include_router(test.router, prefix="/api")
 app.include_router(widget.router, prefix="/api")
 app.include_router(query.router, prefix="/api")

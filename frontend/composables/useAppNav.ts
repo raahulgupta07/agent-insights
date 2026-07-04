@@ -47,6 +47,18 @@ const railCounts = ref<Record<string, number>>({})
 // "Pack Analytics" settings tab visibility — fetched once, fail-soft.
 const domainPacksEnabled = ref(false)
 let domainPacksLoaded = false
+// "Prompts" (Build group) nav visibility — HYBRID_PROMPTS_LIBRARY, fail-soft.
+// Piggybacks the same hybrid-flags fetch as domainPacks (one HTTP call).
+const promptsLibraryEnabled = ref(false)
+// "Edit profile" avatar-upload affordance — HYBRID_USER_AVATAR, fail-soft.
+// Piggybacks the same hybrid-flags fetch as domainPacks (one HTTP call).
+const userAvatarEnabled = ref(false)
+// Notification-inbox bell visibility — HYBRID_NOTIFICATIONS_INBOX, fail-soft.
+// Piggybacks the same hybrid-flags fetch as domainPacks (one HTTP call).
+const notificationsInboxEnabled = ref(false)
+// "Service Accounts" settings tab visibility — HYBRID_SERVICE_ACCOUNTS, fail-soft.
+// Piggybacks the same hybrid-flags fetch as domainPacks (one HTTP call).
+const serviceAccountsEnabled = ref(false)
 
 export function useAppNav() {
   const route = useRoute()
@@ -61,8 +73,20 @@ export function useAppNav() {
       const rows = (data.value as any[]) || []
       const row = rows.find(r => r?.env_name === 'HYBRID_DOMAIN_PACKS')
       domainPacksEnabled.value = !!row?.effective
+      const promptsRow = rows.find(r => r?.env_name === 'HYBRID_PROMPTS_LIBRARY')
+      promptsLibraryEnabled.value = !!promptsRow?.effective
+      const avatarRow = rows.find(r => r?.env_name === 'HYBRID_USER_AVATAR')
+      userAvatarEnabled.value = !!avatarRow?.effective
+      const inboxRow = rows.find(r => r?.env_name === 'HYBRID_NOTIFICATIONS_INBOX')
+      notificationsInboxEnabled.value = !!inboxRow?.effective
+      const svcAcctRow = rows.find(r => r?.env_name === 'HYBRID_SERVICE_ACCOUNTS')
+      serviceAccountsEnabled.value = !!svcAcctRow?.effective
     } catch {
       domainPacksEnabled.value = false
+      promptsLibraryEnabled.value = false
+      userAvatarEnabled.value = false
+      notificationsInboxEnabled.value = false
+      serviceAccountsEnabled.value = false
     }
   }
 
@@ -87,7 +111,7 @@ export function useAppNav() {
     members: 'PEOPLE',
     models: 'WORKSPACE', ai_settings: 'WORKSPACE', general: 'WORKSPACE',
     integrations: 'INTEGRATIONS', connectors: 'INTEGRATIONS', 'folder-sync': 'INTEGRATIONS', smtp: 'INTEGRATIONS',
-    audit: 'SECURITY', 'identity-provider': 'SECURITY',
+    audit: 'SECURITY', 'identity-provider': 'SECURITY', 'service-accounts': 'SECURITY',
     features: 'ADVANCED', 'pack-analytics': 'ADVANCED',
   }
 
@@ -96,6 +120,10 @@ export function useAppNav() {
     const children = tabs.map(tab => ({ key: `settings-${tab.name}`, label: tab.label, href: `/settings/${tab.name}`, activePath: `/settings/${tab.name}`, icon: tab.icon, section: settingsSection[tab.name] || 'WORKSPACE' }))
     if (domainPacksEnabled.value && useCan('manage_settings')) {
       children.push({ key: 'settings-pack-analytics', label: 'Pack Analytics', href: '/settings/pack-analytics', activePath: '/settings/pack-analytics', icon: 'heroicons-chart-bar-square', section: 'ADVANCED' })
+    }
+    // Service Accounts — admin-only nav entry, gated by HYBRID_SERVICE_ACCOUNTS.
+    if (serviceAccountsEnabled.value && useCan('manage_members')) {
+      children.push({ key: 'settings-service-accounts', label: 'settings.serviceAccountsTab', href: '/settings/service-accounts', activePath: '/settings/service-accounts', icon: 'heroicons-key', section: 'SECURITY' })
     }
     return children
   })
@@ -136,6 +164,10 @@ export function useAppNav() {
         { key: 'knowledge', href: '/knowledge', activePath: '/knowledge', icon: 'heroicons-academic-cap', label: 'nav.knowledge', section: 'CONTEXT' },
         { key: 'instructions', href: '/instructions', activePath: '/instructions', icon: 'heroicons-cube', label: 'nav.instructions', section: 'CONTEXT' },
         { key: 'queries', href: '/queries', activePath: '/queries', component: LibraryIcon, label: 'nav.queries', section: 'CONTEXT' },
+        // Prompts Library — nav link gated by HYBRID_PROMPTS_LIBRARY (default OFF).
+        ...(promptsLibraryEnabled.value
+          ? [{ key: 'prompts', href: '/prompts', activePath: '/prompts', icon: 'heroicons-command-line', label: 'nav.prompts', section: 'CONTEXT' }]
+          : []),
         // 'Skills' (global /skills = HYBRID_SKILLS sandbox-exec) removed from nav —
         // known-unstable (livelocks the agent loop). Use studio Domain Packs instead.
         { key: 'memory', href: '/memory', activePath: '/memory', icon: 'heroicons-cpu-chip', label: 'Memory', section: 'CAPABILITIES' },
@@ -221,5 +253,8 @@ export function useAppNav() {
     showMcpModal,
     railCounts,
     loadDomainPacksFlag,
+    userAvatarEnabled,
+    notificationsInboxEnabled,
+    serviceAccountsEnabled,
   }
 }

@@ -130,21 +130,22 @@ class ApiKeyService:
         # Hash the provided key
         key_hash = self._hash_api_key(api_key)
         
-        # Look up the API key
+        # Look up the API key (never a revoked one)
         result = await db.execute(
             select(ApiKey)
             .where(ApiKey.key_hash == key_hash)
             .where(ApiKey.deleted_at.is_(None))
+            .where(ApiKey.revoked_at.is_(None))
         )
         api_key_obj = result.scalar_one_or_none()
-        
+
         if not api_key_obj:
             return None
-        
+
         # Check expiration
         if api_key_obj.expires_at and api_key_obj.expires_at < datetime.utcnow():
             return None
-        
+
         # Update last_used_at
         api_key_obj.last_used_at = datetime.utcnow()
         await db.commit()
@@ -170,21 +171,22 @@ class ApiKeyService:
         # Hash the provided key
         key_hash = self._hash_api_key(api_key)
         
-        # Look up the API key
+        # Look up the API key (never a revoked one)
         result = await db.execute(
             select(ApiKey)
             .where(ApiKey.key_hash == key_hash)
             .where(ApiKey.deleted_at.is_(None))
+            .where(ApiKey.revoked_at.is_(None))
         )
         api_key_obj = result.scalar_one_or_none()
-        
+
         if not api_key_obj:
             return None
-        
+
         # Check expiration
         if api_key_obj.expires_at and api_key_obj.expires_at < datetime.utcnow():
             return None
-        
+
         # Get the organization
         org_result = await db.execute(
             select(Organization).where(Organization.id == api_key_obj.organization_id)
