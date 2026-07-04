@@ -1,3 +1,4 @@
+from datetime import datetime
 from sqlalchemy import Column, String, ForeignKey, Boolean, JSON, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -30,6 +31,15 @@ class Report(BaseSchema):
     # pinned in the Outputs panel. Recomputed on demand or when turns change.
     # Column created by alembic migration `sessumm1` (was previously hand-applied DDL).
     session_summary = Column(JSON, nullable=True, default=None)
+
+    # Denormalized "last conversation activity" timestamp used to sort the report
+    # list (sidebar) by real chat activity instead of creation time. Bumped when a
+    # new message is added and when an agent turn finalizes (see completion_service
+    # / agent_v2). Distinct from `updated_at`, which bumps on any metadata edit
+    # (rename / theme / sharing) and would conflate "settings edited" with activity.
+    # Read path gated behind `flags.SIDEBAR_ACTIVITY_SORT` (column is inert when OFF).
+    # Column + backfill created by alembic migration `sidesort1`.
+    last_activity_at = Column(DateTime, nullable=True, default=datetime.utcnow, index=True)
 
     cron_schedule = Column(String, nullable=True)
     last_run_at = Column(DateTime, nullable=True, default=None)

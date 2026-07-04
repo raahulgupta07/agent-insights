@@ -4253,6 +4253,21 @@ class AgentV2:
                 agent_execution=self.current_execution,
                 status=status,
             )
+            # Bump conversation activity so the finalized turn re-floats the report
+            # to the top of the sidebar. Targeted UPDATE by id (self.report may be
+            # detached from self.db here) and best-effort so it never fails the turn.
+            try:
+                if self.report is not None:
+                    from datetime import datetime as _dt_bump
+                    from sqlalchemy import update as _sa_update
+                    await self.db.execute(
+                        _sa_update(Report)
+                        .where(Report.id == str(self.report.id))
+                        .values(last_activity_at=_dt_bump.utcnow())
+                    )
+                    await self.db.commit()
+            except Exception as e:
+                logger.warning(f"Failed to bump report last_activity_at: {e}")
             # Telemetry: agent execution completed
             try:
                 await telemetry.capture(

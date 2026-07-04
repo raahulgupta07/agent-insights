@@ -650,6 +650,14 @@ class CompletionService:
 
             try:
                 db.add(head_completion)
+                # Bump conversation activity so the report floats to the top of the
+                # sidebar on a new message. Piggybacks the essential commit below.
+                # Fail-soft: a bad assignment must never break completion creation.
+                try:
+                    report.last_activity_at = datetime.utcnow()
+                    db.add(report)
+                except Exception:
+                    pass
                 await db.commit()
                 await db.refresh(head_completion)
             except Exception as e:
@@ -2253,6 +2261,13 @@ class CompletionService:
             try:
                 # Add both completions and flush to get IDs
                 db.add(completion)
+                # Bump conversation activity (sidebar sort). Piggybacks this commit;
+                # fail-soft so it never breaks completion creation.
+                try:
+                    report.last_activity_at = datetime.utcnow()
+                    db.add(report)
+                except Exception:
+                    pass
                 await db.flush()  # Get completion.id without committing
                 system_completion.parent_id = completion.id
                 db.add(system_completion)

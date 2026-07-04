@@ -1278,6 +1278,14 @@ class ReportService:
             # loaded Report.data_sources. We don't lazyload at Report level
             # because that propagates into Report.user and breaks
             # UserSchema.external_user_mappings serialization.
+            # Sidebar secondary ordering. Flag OFF keeps the historical creation-time
+            # ordering byte-identical; ON sorts by last conversation activity, falling
+            # back to created_at (coalesce = NULLS-LAST for un-backfilled rows).
+            from app.settings.hybrid_flags import flags as _hflags
+            if _hflags.SIDEBAR_ACTIVITY_SORT:
+                _secondary_order = func.coalesce(Report.last_activity_at, Report.created_at).desc()
+            else:
+                _secondary_order = Report.created_at.desc()
             query = base_query.options(
                 selectinload(Report.user),
                 selectinload(Report.widgets),
@@ -1286,7 +1294,7 @@ class ReportService:
                     selectinload(DataSource.connections).options(lazyload("*")),
                 ),
                 selectinload(Report.artifacts)
-            ).order_by(is_starred_order.desc(), Report.created_at.desc()).offset(offset).limit(limit)
+            ).order_by(is_starred_order.desc(), _secondary_order).offset(offset).limit(limit)
 
             result = await db.execute(query)
             span.add_event("query executed")
