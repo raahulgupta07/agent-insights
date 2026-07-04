@@ -1074,6 +1074,23 @@ def tool_provider_types() -> set[str]:
     return {t for t, e in REGISTRY.items() if not e.is_connection}
 
 
+def is_tools_only_type(ds_type: Optional[str]) -> bool:
+    """True when a connection type is a tool provider (mcp / custom_api, i.e.
+    ``is_connection=False`` / ``data_shape='tools'``).
+
+    Used by the standalone-connectors feature (#467, flag
+    HYBRID_STANDALONE_CONNECTORS): such a connection is a lightweight, tools-only
+    connector and should be usable on its own WITHOUT being auto-wrapped as a
+    public data agent. Fail-soft — unknown/None type → False.
+    """
+    if not ds_type:
+        return False
+    entry = REGISTRY.get(ds_type)
+    if entry is None:
+        return False
+    return (not entry.is_connection) or entry.data_shape == "tools"
+
+
 def resolve_client_class(ds_type: str):
     """Resolve client class via configured path; fallback to dynamic naming."""
     from importlib import import_module

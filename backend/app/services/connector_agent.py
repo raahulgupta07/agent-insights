@@ -61,6 +61,16 @@ async def auto_create_agent_for_connection(
         if conn is None:
             return None
 
+        # #467 (flag HYBRID_STANDALONE_CONNECTORS): a tool-provider connection
+        # (mcp / custom_api, data_shape="tools") is a standalone tools-only
+        # connector — do NOT auto-wrap it as a public data agent. This is the
+        # single chokepoint for the CONNECTOR_AS_AGENT auto-spawn, so guarding
+        # here covers every caller. No-op / byte-identical when the flag is OFF.
+        if getattr(flags, "STANDALONE_CONNECTORS", False):
+            from app.schemas.data_source_registry import is_tools_only_type
+            if is_tools_only_type(getattr(conn, "type", None)):
+                return None
+
         # Ensure a DataSource wraps the connection with is_public=True.
         ds_list = list(conn.data_sources or [])
         if ds_list:

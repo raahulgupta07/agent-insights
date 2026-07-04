@@ -309,6 +309,15 @@ class DataSourceService:
         credentials = data_source_dict.pop("credentials", None)
         config = data_source_dict.pop("config", None)
         is_public = data_source_dict.pop("is_public", False)
+        # #467 (flag HYBRID_STANDALONE_CONNECTORS): a standalone tools-only
+        # connector is never auto-published org-wide as a data agent. Pop the
+        # field unconditionally (so it can't leak into the DataSource kwargs);
+        # only act on it when the flag is ON. No-op / byte-identical when OFF.
+        standalone = bool(data_source_dict.pop("standalone", False))
+        if standalone:
+            from app.settings.hybrid_flags import flags as _standalone_flags
+            if _standalone_flags.STANDALONE_CONNECTORS:
+                is_public = False
         use_llm_sync = data_source_dict.pop("use_llm_sync", False)
         is_user_template = bool(data_source_dict.pop("is_user_template", False))
         member_user_ids = data_source_dict.pop("member_user_ids", [])
@@ -1026,6 +1035,18 @@ class DataSourceService:
             )
             conn = d.connections[0] if d.connections else None
 
+            # #467 (flag HYBRID_STANDALONE_CONNECTORS): mark tools-only connectors
+            # (every connection is a tool provider) so /agents can render them
+            # distinctly. Gated on the flag → False (default) when OFF.
+            is_connector = False
+            from app.settings.hybrid_flags import flags as _standalone_flags
+            if _standalone_flags.STANDALONE_CONNECTORS:
+                from app.schemas.data_source_registry import is_tools_only_type
+                _conns = list(d.connections or [])
+                is_connector = bool(_conns) and all(
+                    is_tools_only_type(getattr(c, "type", None)) for c in _conns
+                )
+
             s = DataSourceListItemSchema(
                 id=str(d.id),
                 name=d.name,
@@ -1040,6 +1061,7 @@ class DataSourceService:
                 auth_policy=conn.auth_policy if conn else None,
                 user_status=connections_list[0].user_status if connections_list else None,
                 template_source_id=getattr(d, "template_source_id", None),
+                is_connector=is_connector,
                 # Flag entries surfaced only by the admin "show all" view:
                 # private and not an explicit membership of the caller.
                 admin_only=(

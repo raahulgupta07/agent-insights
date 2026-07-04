@@ -212,6 +212,12 @@ class DataSourceListItemSchema(BaseModel):
     # to avoid spawning duplicate agents. Omitting it made every tile offer Sign-in.
     template_source_id: Optional[str] = None
 
+    # #467 (flag HYBRID_STANDALONE_CONNECTORS): True when every connection is a
+    # tool provider (mcp / custom_api, data_shape="tools") — a lightweight,
+    # tools-only connector rather than an analytical data agent. Lets /agents
+    # surface it distinctly. False (default) when the flag is OFF.
+    is_connector: bool = False
+
     # True only when this private data source is visible solely because the
     # caller used the admin "show all" view (full_admin_access /
     # manage_connections) — i.e. it's not public and they hold no explicit
@@ -251,6 +257,11 @@ class DataSourceCreate(DataSourceBase):
     # Per-user connector template: admin config shell (no user creds, no data).
     # Members self-register against it → private per-user clones. Default False.
     is_user_template: bool = False
+    # #467 (flag HYBRID_STANDALONE_CONNECTORS): create this connector as a
+    # standalone tools-only data source — do NOT auto-publish it org-wide as a
+    # data agent (is_public forced False) and do NOT spawn a connector-agent.
+    # No-op when the flag is OFF. Default False = today's behavior.
+    standalone: bool = False
 
     @validator('credentials')
     def validate_credentials(cls, v, values):
