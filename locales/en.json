@@ -651,6 +651,8 @@
     "block": "Block"
   },
   "reportView": {
+    "followUpHeading": "Ask a follow-up",
+    "thinkingFollowUps": "Thinking of follow-ups…",
     "tabChat": "Chat",
     "tabSummary": "Outputs",
     "tabSlides": "Slides",

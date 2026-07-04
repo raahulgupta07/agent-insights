@@ -582,15 +582,16 @@
 									<!-- Suggested follow-up questions (under the last system message only) -->
 									<div v-if="m.id === lastSystemMessage?.id && report?.mode !== 'training'" class="mt-3">
 										<div v-if="(m as any).followups_loading && !awaitingClarify" class="flex items-center gap-2">
-											<span class="px-3 py-1.5 text-xs rounded-full border border-gray-200 bg-gray-50 text-gray-400 animate-pulse">Thinking of follow-ups…</span>
+											<span class="px-3 py-1.5 text-xs rounded-full border border-gray-200 bg-gray-50 text-gray-400 animate-pulse">{{ localizedFollowupsEnabled ? $t('reportView.thinkingFollowUps') : 'Thinking of follow-ups…' }}</span>
 										</div>
 										<div v-else-if="(m as any).followups?.length">
-											<div class="text-[11px] text-gray-400 mb-1.5">Ask a follow-up</div>
+											<div class="text-[11px] text-gray-400 mb-1.5">{{ localizedFollowupsEnabled ? $t('reportView.followUpHeading') : 'Ask a follow-up' }}</div>
 											<div class="flex flex-wrap gap-2 dock-followups">
 												<button
 													v-for="(q, qi) in (m as any).followups"
 													:key="qi"
 													:title="q"
+													:dir="localizedFollowupsEnabled ? 'auto' : undefined"
 													class="cursor-pointer px-3 py-1.5 text-xs rounded-full border border-gray-200 bg-gray-50 text-gray-700 hover:bg-[#FBEFE4] hover:border-[#C2541E] transition-colors"
 													@click="handleExampleClick(q)"
 												>
@@ -4881,6 +4882,12 @@ const dashGenError = ref<string | null>(null)
 const smartWorkbookEnabled = ref(false)
 const smartWorkbookOpen = ref(false)
 
+// ── Localized follow-ups (HYBRID_LOCALIZED_FOLLOWUPS, #521) ────────────────
+// When ON, the follow-up suggestion chips get dir="auto" so RTL/mixed-script
+// server-generated text renders correctly, and the static labels go through
+// i18n. Flag OFF = byte-identical English literals + no dir attribute.
+const localizedFollowupsEnabled = ref(false)
+
 function onExcelCta() {
 	if (smartWorkbookEnabled.value) {
 		smartWorkbookOpen.value = true
@@ -4901,11 +4908,14 @@ async function loadOneClickFlag() {
 		smartSlidesEnabled.value = !!slidesRow?.effective
 		const sd = rows.find(r => r?.env_name === 'HYBRID_SMART_DASHBOARD')
 		smartDashboardEnabled.value = !!sd?.effective
+		const lf = rows.find(r => r?.env_name === 'HYBRID_LOCALIZED_FOLLOWUPS')
+		localizedFollowupsEnabled.value = !!lf?.effective
 	} catch {
 		oneClickEnabled.value = false  // fail-soft: fall back to placeholders
 		smartWorkbookEnabled.value = false
 		smartSlidesEnabled.value = false
 		smartDashboardEnabled.value = false
+		localizedFollowupsEnabled.value = false
 	}
 }
 
