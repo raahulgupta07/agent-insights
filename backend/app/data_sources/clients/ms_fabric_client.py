@@ -34,7 +34,7 @@ def _connect_with_retry(conn_str: str, attrs_before: dict = None, attempts: int 
             #   08001/(26) handshake-before-login · HYT00 login-timeout · 08S01
             #   communication-link-failure · "server too busy".
             transient = (
-                sqlstate in ("08001", "08S01", "HYT00", "HYTC0")
+                sqlstate in ("08001", "08S01", "HYT00", "HYT01", "HYTC0")
                 or "before login" in msg
                 or "(26)" in msg
                 or "timeout expired" in msg
@@ -148,7 +148,8 @@ class MsFabricClient(DataSourceClient):
                 f"{db_clause}"
                 f"Encrypt=yes;"
                 f"TrustServerCertificate=no;"
-                f"Connection Timeout=30;"
+                f"Connection Timeout=60;"
+                f"ConnectRetryCount=4;"
             )
 
             # Get token and pass via attrs_before

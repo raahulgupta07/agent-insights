@@ -4,6 +4,8 @@ from typing import List
 from app.schemas.prompt_schema import PromptCreate, PromptUpdate, PromptResponse
 from app.services.prompt_service import PromptService
 from app.core.auth import current_user
+from app.core.permissions_decorator import requires_permission
+from app.models.prompt import Prompt
 from app.models.user import User
 from app.models.organization import Organization
 from app.dependencies import get_async_db, get_current_organization
@@ -12,6 +14,7 @@ router = APIRouter()
 prompt_service = PromptService()
 
 @router.post("/prompts", response_model=PromptResponse)
+@requires_permission('create_reports')
 async def create_prompt(
     prompt: PromptCreate,
     current_user: User = Depends(current_user),
@@ -43,6 +46,7 @@ async def read_prompt(
     return prompt
 
 @router.put("/prompts/{prompt_id}", response_model=PromptResponse)
+@requires_permission('update_reports', model=Prompt, owner_only=True)
 async def update_prompt(
     prompt_id: int,
     prompt: PromptUpdate,
@@ -56,6 +60,7 @@ async def update_prompt(
     return updated_prompt
 
 @router.delete("/prompts/{prompt_id}", response_model=PromptResponse)
+@requires_permission('delete_reports', model=Prompt, owner_only=True)
 async def delete_prompt(
     prompt_id: int,
     current_user: User = Depends(current_user),
