@@ -456,12 +456,24 @@
                                         <UIcon name="i-heroicons-arrow-up-tray" class="w-3.5 h-3.5" />
                                         Upload file
                                     </button>
-                                    <button v-if="smartUploadEnabled" type="button" class="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-[#C2541E] hover:bg-[#A8330F] px-3.5 py-1.5 border-s border-[#A8330F] transition-colors" @click="smartUploadOpen = true">
-                                        <UIcon name="i-heroicons-sparkles" class="w-3.5 h-3.5" />
-                                        Smart Upload
-                                    </button>
+                                    <!-- Smart Upload modal button replaced by the inline card below when
+                                         smartUploadEnabled — one inline flow. Modal (below) stays mounted;
+                                         the "Upload file" path still opens it (kept as-is). -->
                                 </div>
                             </div>
+
+                            <!-- INLINE SMART UPLOAD (replaces the Smart Upload modal button): one drop
+                                 zone, auto-classify + route; heavy per-file detail streams into the robot
+                                 dock via @log. Gated HYBRID_SMART_UPLOAD. -->
+                            <StudioInlineUpload
+                                v-if="smartUploadEnabled && canEdit"
+                                ref="inlineUploadRef"
+                                :studio-id="studioId"
+                                :can-edit="canEdit"
+                                class="mb-4"
+                                @applied="onSmartApplied"
+                                @log="onStudioLog"
+                            />
 
                             <!-- PRE-TRAIN HERO (Column Intelligence) -->
                             <div v-if="canEdit && sources.length" class="rounded-2xl border border-[#E8C9B5] bg-gradient-to-br from-[#FBF3EC] to-white p-4 mb-4">
@@ -1433,6 +1445,19 @@
                 :target-studio-id="studioId"
                 :target-studio-name="studio?.name || ''"
             />
+
+            <!-- Floating robot CLI dock (flag HYBRID_ROBOT_DOCK) — streams the studio's live
+                 training + inline-upload activity. position:fixed itself, so it floats. -->
+            <StudioRobotDock
+                v-if="robotDockEnabled"
+                :active="dockActive"
+                :title="studio?.name"
+                :model="trainModel"
+                :lines="dockLines"
+                :stages="dockStages"
+                :readiness="readiness.score"
+                :elapsed="dockElapsed"
+            />
     </div>
 </template>
 
@@ -1555,6 +1580,16 @@ async function loadTrainRoutingFlag() {
         const rows: any[] = Array.isArray(data.value) ? (data.value as any[]) : []
         const row = rows.find((r: any) => r?.env_name === 'HYBRID_TRAIN_ROUTING' || r?.key === 'train_routing')
         if (row && typeof row.effective === 'boolean') trainRoutingEnabled.value = row.effective
+    } catch { /* flag plumbing absent → leave OFF */ }
+}
+// Robot CLI dock (floating live-activity terminal) — gated by HYBRID_ROBOT_DOCK. Fail-soft OFF.
+const robotDockEnabled = ref(false)
+async function loadRobotDockFlag() {
+    try {
+        const { data } = await useMyFetch<any>('/api/organization/hybrid-flags')
+        const rows: any[] = Array.isArray(data.value) ? (data.value as any[]) : []
+        const row = rows.find((r: any) => r?.env_name === 'HYBRID_ROBOT_DOCK' || r?.key === 'robot_dock')
+        if (row && typeof row.effective === 'boolean') robotDockEnabled.value = row.effective
     } catch { /* flag plumbing absent → leave OFF */ }
 }
 // Auto-pilot v2 (reordered ADD→QUEUE→TRAIN→RESULT panel) — gated by HYBRID_AUTOPILOT_V2. Fail-soft OFF.
@@ -2005,6 +2040,87 @@ async function resetTrain() {
         trainLog.value = null
     } catch { /* fail-soft */ } finally { trainResetting.value = false }
 }
+
+// --- ROBOT CLI DOCK feed ----------------------------------------------------
+// The floating <StudioRobotDock> is fed entirely from existing page state — no
+// new backend calls. Two sources merge into one bounded line buffer:
+//   (i)  the inline uploader (@log → onStudioLog)
+//   (ii) the live training log (trainLogLines, watched → append only NEW lines)
+// Stages come from trainStages; active/model/readiness/elapsed from train state.
+// Real model in use — parsed from the live train log ("default analysis model: X"
+// / "route model: X") so the dock shows the org's ACTUAL model, not a guess.
+// Falls back to the train_orchestrator default only until the first log line lands.
+const trainModel = computed<string>(() => {
+    for (let i = trainLogLines.value.length - 1; i >= 0; i--) {
+        const m = String(trainLogLines.value[i]?.msg || '')
+        const hit = m.match(/(?:analysis|train)\s+model:\s*([^\s·]+)/i) || m.match(/route\s+model:\s*([^\s·]+)/i)
+        if (hit && hit[1] && hit[1] !== 'heuristic-only') return hit[1]
+    }
+    return 'z-ai/glm-5.2'
+})
+const dockLines = ref<any[]>([])                  // combined stream fed to the dock
+let dockLineKey = 0                                // monotonic key for :key stability
+const DOCK_LINES_CAP = 300
+const inlineUploadBusy = ref(false)               // inline uploader in-flight (drives dockActive)
+
+function _pushDockLine(entry: { stage: string; level: string; msg: string; meta?: string }) {
+    dockLines.value.push({ key: dockLineKey++, stage: entry.stage, level: entry.level, msg: entry.msg, ...(entry.meta ? { meta: entry.meta } : {}) })
+    if (dockLines.value.length > DOCK_LINES_CAP) dockLines.value.splice(0, dockLines.value.length - DOCK_LINES_CAP)
+}
+
+// (i) inline uploader emits { stage, level('info'|'done'|'active'|'warn'|'pending'), msg, meta? }
+function onStudioLog(entry: any) {
+    if (!entry || typeof entry !== 'object') return
+    _pushDockLine({ stage: String(entry.stage || 'upload'), level: String(entry.level || 'info'), msg: String(entry.msg || ''), meta: entry.meta })
+    // busy while an upload/classify/apply is active; clears when the apply completes.
+    if (entry.level === 'active') inlineUploadBusy.value = true
+    else if (entry.stage === 'apply' && (entry.level === 'done' || entry.level === 'warn')) inlineUploadBusy.value = false
+}
+
+// (ii) map an existing train-log line {t, msg, lvl} → dock line level.
+function _trainLineLevel(ln: any): string {
+    const lvl = String(ln?.lvl || '')
+    if (lvl === 'error' || lvl === 'warn') return 'warn'   // dock has no 'error' line level → 'warn'
+    const msg = String(ln?.msg || '')
+    if (/(^✓)|(\bdone\b)/i.test(msg)) return 'done'
+    if (msg.startsWith('▸')) return 'active'                // stage-start marker
+    return 'info'
+}
+// Append only NEW train-log lines (track last index). If the array shrinks (a new
+// train run reset trainLog → [] then repopulates), restart from 0 so the new run
+// streams without duplicating the prior run's already-appended lines.
+let _lastTrainIdx = 0
+watch(() => trainLogLines.value.length, (len) => {
+    if (len < _lastTrainIdx) _lastTrainIdx = 0
+    for (let i = _lastTrainIdx; i < len; i++) {
+        const ln = trainLogLines.value[i]
+        _pushDockLine({ stage: 'train', level: _trainLineLevel(ln), msg: String(ln?.msg ?? ''), meta: ln?.t ? String(ln.t) : undefined })
+    }
+    _lastTrainIdx = len
+})
+
+// Stages: map the existing trainStages (state ok|err|skip|pending) → dock statuses.
+const dockStages = computed(() => {
+    const runStep = (trainLog.value && trainLog.value.status === 'running') ? trainLog.value.step : null
+    const runPct = trainLog.value ? (trainLog.value.pct || 0) : 0
+    return trainStages.value.map(s => {
+        let status: 'done' | 'active' | 'pending' | 'error' = 'pending'
+        if (s.state === 'ok') status = 'done'
+        else if (s.state === 'err') status = 'error'
+        else if (s.state === 'skip') status = 'done'
+        else if (runStep && runStep === s.key) status = 'active'
+        return { key: s.key, label: s.label, status, ...(status === 'active' ? { pct: runPct } : {}) }
+    })
+})
+
+// Active when training is running or the inline uploader is busy.
+const dockActive = computed(() =>
+    trainingAll.value || (trainLog.value && trainLog.value.status === 'running') || inlineUploadBusy.value)
+// Elapsed is optional — surface it only if the train status carries one.
+const dockElapsed = computed<string | undefined>(() => {
+    const e = trainLog.value && trainLog.value.elapsed
+    return e ? String(e) : undefined
+})
 // Async, NON-BLOCKING: kick the background train job + poll status. The heavy
 // LLM work (profile/queries/evals/artifacts/joins) runs server-side; the FE only
 // polls a % and never holds the request open. You can navigate away — it keeps
@@ -2576,11 +2692,11 @@ const pinSource = async (agent: any) => {
     }
 }
 
+const inlineUploadRef = ref<any>(null)
 const openUploadSource = () => {
-  // When the Smart Upload Router is enabled, the "upload a file" entry opens the
-  // router (any file type → auto-routed) to match the ADD copy ("the router sorts
-  // each into Data / Knowledge / Skill / Rule"). Flag OFF → legacy spreadsheet modal.
-  if (smartUploadEnabled.value) { smartUploadOpen.value = true } else { showUploadSource.value = true }
+  // Smart Upload enabled → drive the INLINE card's picker (native OS file dialog,
+  // no modal popup) so uploads happen in-screen. Flag OFF → legacy spreadsheet modal.
+  if (smartUploadEnabled.value) { inlineUploadRef.value?.pick?.() } else { showUploadSource.value = true }
 }
 
 // Folder Sync setup modal (this studio pre-selected as the sync target).
@@ -3229,6 +3345,7 @@ onMounted(async () => {
             loadSmartUploadFlag(),
             loadTrainRoutingFlag(),
             loadAutopilotV2Flag(),
+            loadRobotDockFlag(),
             loadTrainStatus(),
         ])
         // after the routing flag is known, count inbox-queued files so the Train
