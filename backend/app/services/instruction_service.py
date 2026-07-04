@@ -2615,6 +2615,65 @@ class InstructionService:
         
         return InstructionSchema(**instruction_dict)
     
+    async def _can_auto_publish_build(
+        self, db: AsyncSession, build, current_user: User, user_permissions: set,
+    ) -> bool:
+        """Whether a build should auto-approve + promote to main on finalize
+        (only consulted when ``flags.AUTO_PUBLISH`` is on).
+
+        Two tiers:
+        - Org admins (`full_admin_access` / org-level `manage_instructions`)
+          publish anything, including global instructions.
+        - Agent admins (per-agent `manage`, the agent-manager tier) auto-publish
+          only when EVERY instruction in the build is attached to data source(s)
+          they hold `manage_instructions` on (via the `manage` grant) and NONE is
+          global. Authoring an org-wide global instruction stays an org-level
+          capability, so a build that touches one falls back to admin review.
+        """
+        # Org admin → always (covers global + any agent). Matches the
+        # flag-off behaviour, so turning the flag on only *adds* the
+        # agent-admin tier below.
+        if self._is_admin_permissions(user_permissions):
+            return True
+        if current_user is None:
+            return False
+
+        from app.models.build_content import BuildContent
+        from app.core.permission_resolver import resolve_permissions
+
+        instr_ids = [
+            str(iid) for (iid,) in (await db.execute(
+                select(BuildContent.instruction_id)
+                .where(BuildContent.build_id == str(build.id))
+                .distinct()
+            )).all()
+        ]
+        if not instr_ids:
+            return False
+
+        # Map each instruction in the build to its attached data source ids.
+        assoc = instruction_data_source_association
+        rows = (await db.execute(
+            select(assoc.c.instruction_id, assoc.c.data_source_id)
+            .where(assoc.c.instruction_id.in_(instr_ids))
+        )).all()
+        ds_by_instr: dict = {}
+        for iid, ds_id in rows:
+            ds_by_instr.setdefault(str(iid), set()).add(str(ds_id))
+
+        # Any global instruction (no data source) in the build → org-admin only.
+        if any(not ds_by_instr.get(iid) for iid in instr_ids):
+            return False
+
+        resolved = await resolve_permissions(
+            db, str(current_user.id), str(build.organization_id)
+        )
+        all_ds = {ds for dss in ds_by_instr.values() for ds in dss}
+        return all(
+            resolved.has_resource_permission("data_source", ds_id, "manage_instructions")
+            for ds_id in all_ds
+        )
+
     async def _auto_finalize_build(
         self,
         db: AsyncSession,
@@ -2649,10 +2708,20 @@ class InstructionService:
             # Submit the build for approval
             await self.build_service.submit_build(db, build.id)
 
-            # Check if user is admin
-            is_admin = self._is_admin_permissions(user_permissions)
+            # Publish authority. Default (flag off): only org admins auto-publish
+            # — everyone else waits for admin review. Flag on (AUTO_PUBLISH): also
+            # let agent admins (per-agent `manage`) auto-publish builds scoped
+            # entirely to data sources they manage (never global instructions),
+            # so a data agent's manager doesn't wait on an org admin.
+            from app.settings.hybrid_flags import flags
+            if flags.AUTO_PUBLISH:
+                can_publish = await self._can_auto_publish_build(
+                    db, build, current_user, user_permissions
+                )
+            else:
+                can_publish = self._is_admin_permissions(user_permissions)
 
-            if is_admin:
+            if can_publish:
                 # Admin: auto-approve and auto-promote to main
                 await self.build_service.approve_build(
                     db, build.id, approved_by_user_id=current_user.id
