@@ -35,7 +35,7 @@ async def read_prompts(
 
 @router.get("/prompts/{prompt_id}", response_model=PromptResponse)
 async def read_prompt(
-    prompt_id: int,
+    prompt_id: str,
     current_user: User = Depends(current_user),
     db: AsyncSession = Depends(get_async_db),
     organization: Organization = Depends(get_current_organization)
@@ -48,7 +48,7 @@ async def read_prompt(
 @router.put("/prompts/{prompt_id}", response_model=PromptResponse)
 @requires_permission('update_reports', model=Prompt, owner_only=True)
 async def update_prompt(
-    prompt_id: int,
+    prompt_id: str,
     prompt: PromptUpdate,
     current_user: User = Depends(current_user),
     db: AsyncSession = Depends(get_async_db),
@@ -62,7 +62,7 @@ async def update_prompt(
 @router.delete("/prompts/{prompt_id}", response_model=PromptResponse)
 @requires_permission('delete_reports', model=Prompt, owner_only=True)
 async def delete_prompt(
-    prompt_id: int,
+    prompt_id: str,
     current_user: User = Depends(current_user),
     db: AsyncSession = Depends(get_async_db),
     organization: Organization = Depends(get_current_organization)
