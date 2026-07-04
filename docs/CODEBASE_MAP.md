@@ -5,7 +5,13 @@
 > Companion: `CLAUDE.md` (rules/current state), `DEVLOG.md` (dated history), `ROADMAP.md` (forward plan),
 > `docs/INGEST_BRAIN_DESIGN.md` (F09 universal-ingest design).
 > **Keep current:** when a ship changes a load-bearing path/pattern, update this file (same habit as DEVLOG bump).
-> Last verified: 2026-07-03 · `VERSION_HYBRID` 1.90.0 · mig head **single `docacl1`**.
+> Last verified: 2026-07-04 · `VERSION_HYBRID` 1.90.0 · mig head **single `fileref1`** (chain tail `svcacct1→usdquota1→fileref1`).
+> 2026-07-04 UPSTREAM PORT WAVE 3 (RBAC depth, BAKED+committed, flag-OFF default): #489 conn-grants ·
+> #488 USD-quota(mig usdquota1) · auto-publish · #467 standalone-connectors · #497 file-refs(mig fileref1,
+> context-builder inject) · #487 MCP-gateway(on routes/mcp.py). + DEFAULT-ENABLE PASS: 60 safe flags ON via
+> DB override org b2bec83d (128/137 ON), 7 held (dep/cost), 7 env-only tagged status="risky". Detail →
+> memory project_cityagent_upstream_port + CLAUDE.md "Current state". LANDMINE: hybrid-flags API JSON has
+> control chars → parse strict=False; parallel pods must use TARGETED git add (not -A) to avoid commit-sweep race.
 > 2026-07-03 PRE-PROD HARDENING (source-only, NOT baked — see CLAUDE.md "Current state"): 11 fixes
 > incl multi-worker Redis state, per-org flag ContextVar (`OrgFlagContextMiddleware`), console cross-org
 > leak, Fernet prod-boot guard, sandbox `__builtins__`+SyntaxError, `READONLY_ENFORCE` default-ON,
@@ -196,7 +202,7 @@ inject in `agent_v2.py`. **Touches 3 CORE files** (rebase tax) — mirror the br
 ### Add a migration
 Chain off the **TRUE single head** (a revision no one lists as `down_revision`, accounting for **tuple**
 down_revisions in merge migrations — naive head-finding gives false multiples). Guard PG-only DDL with
-`op.get_bind().dialect.name == "postgresql"`. Flags need NO migration; new tables do. Current head `agentconn1`.
+`op.get_bind().dialect.name == "postgresql"`. Flags need NO migration; new tables do. Current head **`fileref1`**.
 
 ### Add a frontend studio tab
 `pages/studios/[id]/index.vue`: add nav item (group + label) + `v-else-if="activeTab==='x'"` → `<StudioX/>`.
