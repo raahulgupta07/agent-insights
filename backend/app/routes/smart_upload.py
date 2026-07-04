@@ -265,7 +265,7 @@ async def smart_upload_apply(
         items=items,
     )
 
-    if body.train:
+    if body.train or flags.AUTOTRAIN_ON_UPLOAD:
         try:
             from app.ai.knowledge import train_orchestrator
             train_orchestrator.start_training(
