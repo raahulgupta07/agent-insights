@@ -144,6 +144,7 @@
     "scheduled": "Scheduled",
     "scheduledTasks": "Scheduled Tasks",
     "evals": "Evals",
+    "globalEvals": "Global Evals",
     "documentation": "Documentation",
     "mcpServer": "MCP Server",
     "manage": "Manage",

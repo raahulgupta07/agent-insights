@@ -59,6 +59,9 @@ const notificationsInboxEnabled = ref(false)
 // "Service Accounts" settings tab visibility — HYBRID_SERVICE_ACCOUNTS, fail-soft.
 // Piggybacks the same hybrid-flags fetch as domainPacks (one HTTP call).
 const serviceAccountsEnabled = ref(false)
+// "Global Evals" node visibility — HYBRID_GLOBAL_EVALS_NODE (#478), fail-soft.
+// Piggybacks the same hybrid-flags fetch as domainPacks (one HTTP call).
+const globalEvalsNodeEnabled = ref(false)
 
 export function useAppNav() {
   const route = useRoute()
@@ -81,12 +84,15 @@ export function useAppNav() {
       notificationsInboxEnabled.value = !!inboxRow?.effective
       const svcAcctRow = rows.find(r => r?.env_name === 'HYBRID_SERVICE_ACCOUNTS')
       serviceAccountsEnabled.value = !!svcAcctRow?.effective
+      const globalEvalsRow = rows.find(r => r?.env_name === 'HYBRID_GLOBAL_EVALS_NODE')
+      globalEvalsNodeEnabled.value = !!globalEvalsRow?.effective
     } catch {
       domainPacksEnabled.value = false
       promptsLibraryEnabled.value = false
       userAvatarEnabled.value = false
       notificationsInboxEnabled.value = false
       serviceAccountsEnabled.value = false
+      globalEvalsNodeEnabled.value = false
     }
   }
 
@@ -188,6 +194,12 @@ export function useAppNav() {
         // The old /connectors/available page was a duplicate door → removed.
         { key: 'monitoring', href: '/monitoring', activePath: '/monitoring', component: ActivityIcon, label: 'nav.monitoring', adminOnly: true, section: 'OBSERVE' },
         { key: 'evals', href: '/evals', activePath: '/evals', icon: 'heroicons-check-circle', label: 'nav.evals', permission: 'manage_evals', section: 'OBSERVE' },
+        // Global Evals node (#478) — org-wide evals across all agents. Gated by
+        // HYBRID_GLOBAL_EVALS_NODE (default OFF → hidden). Links to the existing
+        // org-wide /evals surface. Faithful-minimal port of upstream's tree node.
+        ...(globalEvalsNodeEnabled.value
+          ? [{ key: 'global-evals', href: '/evals', activePath: '/evals', icon: 'heroicons-globe-alt', label: 'nav.globalEvals', permission: 'manage_evals', section: 'OBSERVE' }]
+          : []),
         { key: 'eval-health', href: '/eval-health', activePath: '/eval-health', icon: 'heroicons-heart', label: 'Eval Health', permission: 'manage_evals', section: 'OBSERVE' },
         { key: 'workflows', href: '/workflows', activePath: '/workflows', icon: 'heroicons-arrow-path', label: 'Workflows', permission: 'manage_settings', section: 'AUTOMATE' },
         {
