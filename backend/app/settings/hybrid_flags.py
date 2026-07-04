@@ -218,7 +218,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_RICH_REPORT_EMAIL": {"label": "Rich Report Emails", "role": "agent", "category": "Agents & Access", "status": "beta", "note": "Render scheduled/automated report emails from structured results (clean table + sanitized insights + dashboard image/PDF) instead of dumping the raw agent chat. OFF = legacy raw-content email."},
     "HYBRID_ONECLICK_ARTIFACTS": {"label": "One-click Dashboard / Slides / Excel", "role": "user", "category": "Agents & Access", "status": "beta", "note": "On a report's right panel, turns the empty Dashboard/Slides/Excel states into one-click builders: 'Generate dashboard' (real page artifact), 'Generate slide deck' (python-pptx deck + previews + .pptx) from the report's existing charts, and an auto-filled Excel workbook. Reuses the chat create_artifact pipeline."},
     "HYBRID_AUTO_ARTIFACT": {"label": "Auto-build Dashboard from chat", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "When a chat turn produces a dataset (the agent ran create_data → ≥1 chart) but makes NO artifact, automatically build a dashboard (page artifact) in the background so the Outputs panel isn't empty. Reuses the one-click create_artifact pipeline. Idempotent (only when the report has zero artifacts) + fully fail-soft. Default OFF."},
-    "HYBRID_CROSS_SOURCE_UNIFY": {"label": "Cross-Source Unify", "role": "agent", "category": "Intelligence", "status": "experimental", "note": "At ingest, detect same-shape sibling tables (e.g. 6 monthly files with identical columns) and register a unified UNION ALL view (+ a _period column) so the agent queries across them in one shot. Records a union group + emits an instruction. Fail-soft, no migration. Default OFF."},
+    "HYBRID_CROSS_SOURCE_UNIFY": {"label": "Cross-Source Unify", "role": "agent", "category": "Intelligence", "status": "experimental", "note": "At ingest, detect same-shape sibling tables (e.g. 6 monthly files with identical columns) and register a unified UNION ALL view (+ a _period column) so the agent queries across them in one shot. Records a union group + emits an instruction. Fail-soft, no migration. Default ON."},
     "HYBRID_DATA_QUALITY": {"label": "Data Quality Scan", "role": "user", "category": "Intelligence", "status": "experimental", "note": "At ingest, scan columns for quality issues (high null %, type-coercion risk, outliers, near-constant) and emit a data_quality guardrail instruction the agent reads. Pure pandas, fail-soft, no migration. Default OFF."},
     "HYBRID_VALUE_NORMALIZE": {"label": "Value Normalization (canonical)", "role": "agent", "category": "Intelligence", "status": "experimental", "note": "Resolve a canonical value for near-duplicate labels (e.g. 'daily_used__l' vs 'daily_used__l_') and record a value→canonical map so GROUP BY doesn't scatter one category across spellings. Detection only, no data rewrite. Default OFF."},
     "HYBRID_AGENT_PLAN": {"label": "Agent Task Plan", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "At run start the agent writes a 3-5 item high-level task plan (a Claude-style checklist) as a transient 'plan' block. The report Progress panel then shows a numbered task list that ticks over as work proceeds, instead of only low-level tool steps. One extra small-model call per run, fail-soft. Default OFF."},
@@ -266,7 +266,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_QUERY_CORRECTION": {"label": "Query Correction from Instruction", "role": "user", "category": "Knowledge", "status": "experimental", "note": "Pipeline v1 (P6): a user instruction updates a definition -> regenerates every dependent golden -> re-evals. One correction fixes all SQL. Default OFF."},
     "HYBRID_AUTO_MAP_GLOSSARY": {"label": "Auto-Map Glossary File", "role": "user", "category": "Ingest", "status": "experimental", "note": "Import v2 (P2): a standalone glossary/definitions file (uploaded on its own) is parsed term->definition and auto-mapped onto existing data sources' columns (pending SemanticColumn meanings + KnowledgeDoc). Extends Smart Header beyond in-file sheets. Fail-soft, review-gated. Default OFF."},
     "HYBRID_ROBUST_INGEST": {"label": "Robust Spreadsheet Ingest", "role": "user", "category": "Ingest", "status": "experimental", "note": "Import v2 (P3): route spreadsheet uploads through the robust readers (encoding/delimiter sniff, real-header detection, banner skip, id-safe numeric, bad-row skip) + per-file ingest feedback, instead of the naive pandas read. Fail-soft fallback. Default OFF."},
-    "HYBRID_PERSIST_WAREHOUSE": {"label": "Persist Uploads to Warehouse", "role": "admin", "category": "Ingest", "status": "experimental", "note": "Import v2 (P4, architectural): persist spreadsheet uploads into the per-org Postgres staging schema so data survives restarts, gets deep stats, and the unified cross-source VIEW can physically materialize -- instead of in-memory DuckDB. Default OFF."},
+    "HYBRID_PERSIST_WAREHOUSE": {"label": "Persist Uploads to Warehouse", "role": "admin", "category": "Ingest", "status": "experimental", "note": "Import v2 (P4, architectural): persist spreadsheet uploads into the per-org Postgres staging schema so data survives restarts, gets deep stats, and the unified cross-source VIEW can physically materialize -- instead of in-memory DuckDB. Default ON."},
     "HYBRID_INGEST_RECONCILE": {"label": "Ingest Reconcile (fail-loud merge)", "role": "admin", "category": "Ingest", "status": "experimental", "note": "Ingest-completeness guard (Phase 1): the multi-file spreadsheet merge records each file's outcome (loaded|failed + rows + error) instead of silently swallowing a bad file with 'except: continue'. Later phases flip a source DEGRADED on a row-count/file mismatch, feed coverage-context to the agent (stop fabricating missing periods), and surface 'N of M failed' in the upload UI. Mirrors the chat-upload path's full-fidelity, fail-loud behavior. Off = byte-identical to today. Default OFF."},
     "HYBRID_COLUMN_PROFILE": {"label": "Column Profiling (types + value stats)", "role": "user", "category": "Ingest", "status": "experimental", "note": "Master plan E3: on upload, profile each column (dtype num/date/category/text, null %, distinct count, min/max, top values) and persist. Fills the empty semantic_columns.type + gives validation/engineering/understanding real facts. Fail-soft. Default OFF."},
     "HYBRID_DATA_VALIDATION": {"label": "Data Validation Gate (garbage-in net)", "role": "review", "category": "Ingest", "status": "experimental", "note": "Master plan E4: using column profiles, loud checks — filter-value existence (typo 'Retentnion' vs 'Retention' -> flag not silent-0), row-count floor, null-spike/all-null, category near-duplicate, dup-file hash. Surfaces a <data_quality> block. Golden verifies LOGIC; this verifies DATA. Fail-soft. Default OFF."},
@@ -274,7 +274,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_DATA_TYPING": {"label": "Data Typing (real numbers + dates)", "role": "user", "category": "Ingest", "status": "experimental", "note": "Master plan E5: before the query engine, cast number-shaped columns ('1,234' -> 1234) and date-shaped columns (strings -> real dates) using the E3 dtype, so SUM/AVG/min-max + date range/sort work correctly. Category/text/provenance untouched (protects verified-golden filters). Conservative (>=90% must parse or keep raw), fail-soft. Default OFF."},
     "HYBRID_TRAIN_ROUTING": {"label": "Inbox → Train auto-routing", "role": "user", "category": "Ingest", "status": "experimental", "note": "Upload files into a per-agent Inbox with no per-file decision. When you Train, a first stage classifies each queued file (train model, default GLM-5.2, + larger excerpt), auto-places confident files to Database/Semantic/Instructions/Examples/Knowledge, and HOLDS uncertain ones for post-train Review. Reuses the Smart Upload classifier + sinks. Default OFF."},
     "HYBRID_AUTOPILOT_V2": {"label": "Auto-pilot v2 (queue-first)", "role": "user", "category": "Ingest", "status": "experimental", "note": "Reordered studio Auto-pilot: ADD (compact connector/upload/folder) → QUEUE (prominent, instant heuristic type-guess chips + inline re-route) → TRAIN (one button, streams a segregation receipt with reconcile 'N in → M placed' + coverage 'periods materialized' lines) → RESULT lanes. Held items show why (reason/confidence/signals) with one-click resolve. Faster: heuristic-first classify skips the LLM on obvious files, parallel apply, skip-unchanged. Reuses route_inbox/classifier/train. Off keeps the legacy 3-step UI. Fail-soft. Default OFF."},
-    "HYBRID_INGEST_BRAIN": {"label": "Universal Ingest Brain (F09)", "role": "user", "category": "Ingest", "status": "experimental", "note": "Deep file understanding (messy Excel/PDF/Word/image) → one org brain. Phased; default OFF."},
+    "HYBRID_INGEST_BRAIN": {"label": "Universal Ingest Brain (F09)", "role": "user", "category": "Ingest", "status": "experimental", "note": "Deep file understanding (messy Excel/PDF/Word/image) → one org brain. Phased; Default ON."},
 
     # --- Learning / Brain -------------------------------------------------
     "HYBRID_BRAIN_READ": {"label": "Brain Read (inject memories)", "role": "agent", "category": "Learning", "status": "stable"},
@@ -299,7 +299,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_EVAL_CANARY": {"label": "Eval Canary Health + Drift Alert", "role": "review", "category": "Learning", "status": "experimental", "note": "Turn the nightly result-set goldens into continuous canaries: compute a per-table eval pass-rate health badge and alert on regression-vs-last-green so drift is caught before a user hits it. Off = nightly evals run but health isn't surfaced. Default OFF."},
     "HYBRID_WORKFLOWS_V2": {"label": "Workflows (save & replay an analysis)", "role": "agent", "category": "Learning", "status": "experimental", "note": "Save a finished analysis as a reusable, parameterized workflow and replay it from the composer ('Use a workflow') — the same steps run consistently for every user. Encodes context + best-practice once (OpenAI data-agent workflows: weekly reports, table validations). Off = no save/replay. Default OFF."},
     "HYBRID_OFFLINE_CONTEXT": {"label": "Daily offline context pipeline", "role": "admin", "category": "Learning", "status": "experimental", "note": "A nightly job merges every context layer (table usage, annotations, code-enrich, freshness, memory) into ONE normalized per-table document and embeds it once, so retrieval is faster and consistent instead of rebuilt per request. Off = request-time assembly (today). Default OFF."},
-    "HYBRID_CODE_ENRICH_PLUS": {"label": "Codex enrichment — deeper", "role": "agent", "category": "Learning", "status": "experimental", "note": "Extends code-enrich with primary keys, downstream usage patterns (which reports/dashboards consume a table), and 'use this alternate table instead' hints when a table is stale/low-trust. Off = grain/formulas/population only. Default OFF."},
+    "HYBRID_CODE_ENRICH_PLUS": {"label": "Codex enrichment — deeper", "role": "agent", "category": "Learning", "status": "experimental", "note": "Extends code-enrich with primary keys, downstream usage patterns (which reports/dashboards consume a table), and 'use this alternate table instead' hints when a table is stale/low-trust. Off = grain/formulas/population only. Default ON."},
     "HYBRID_GOLDEN_SQL": {"label": "Golden-SQL evals", "role": "review", "category": "Learning", "status": "experimental", "note": "Store the expected SQL alongside the expected rows for a golden, and grade on both the SQL (intent) and the result set (LLM-judged for acceptable variation) — matches OpenAI's eval pipeline. Off = result-set-only grading (today). Default OFF."},
     "HYBRID_NOTION_KB": {"label": "Notion / Slack knowledge sources", "role": "admin", "category": "Learning", "status": "experimental", "note": "Ingest Notion pages and Slack threads into the institutional knowledge base so metric definitions and incident/launch context from those tools can ground answers (feeds the Institutional Knowledge layer). Off = no Notion/Slack ingest. Default OFF."},
     "HYBRID_LEAN_TOOLS": {"label": "Lean tool catalog", "role": "admin", "category": "Core", "status": "experimental", "note": "Trim the planner's tool set — hide overlapping/duplicate tools (per docs/TOOL_AUDIT.md: retire remember_this, collapse the schema-lookup trio, dedup live-vs-MCP) so the model picks the right tool more reliably (OpenAI 'less is more'). Off = full catalog. Default OFF."},
@@ -512,7 +512,7 @@ class HybridFlags:
         # a _period column) so the agent can query across them in one shot,
         # instead of UNIONing by hand. Records a union group + emits an
         # instruction. Fail-soft, no migration. Default OFF.
-        return _bool("HYBRID_CROSS_SOURCE_UNIFY", False)
+        return _bool("HYBRID_CROSS_SOURCE_UNIFY", True)
 
     @property
     def DATA_QUALITY(self) -> bool:
@@ -772,7 +772,7 @@ class HybridFlags:
     def CODE_ENRICH_PLUS(self) -> bool:
         # Part C — deepen Codex enrichment: primary keys, downstream usage,
         # alternate-table hints. Default OFF.
-        return _bool("HYBRID_CODE_ENRICH_PLUS", False)
+        return _bool("HYBRID_CODE_ENRICH_PLUS", True)
 
     @property
     def GOLDEN_SQL(self) -> bool:
@@ -1297,7 +1297,7 @@ class HybridFlags:
         # data survives restarts, gets deep stats, and the cross-source unified
         # VIEW can physically materialize -- instead of the in-memory DuckDB that
         # is lost on restart. Default OFF (proven on a copy before recommending).
-        return _bool("HYBRID_PERSIST_WAREHOUSE", False)
+        return _bool("HYBRID_PERSIST_WAREHOUSE", True)
 
     @property
     def INGEST_BRAIN(self) -> bool:
@@ -1308,7 +1308,7 @@ class HybridFlags:
         # → STORE+LEARN into one org-level brain (review-gated). Built in
         # phases; every stage fail-soft and preview-before-commit. With this
         # OFF the ingest path is byte-identical to today. Default OFF.
-        return _bool("HYBRID_INGEST_BRAIN", False)
+        return _bool("HYBRID_INGEST_BRAIN", True)
 
     @property
     def RESULT_CACHE(self) -> bool:
@@ -1443,7 +1443,7 @@ class HybridFlags:
     def FULL_PIPELINE(self) -> bool:
         # NEWPIPE master flag: run all 15 stages (quality-gate, golden/answer eval,
         # hybrid-index, brain-graph) in one train. Default OFF.
-        return _bool("HYBRID_FULL_PIPELINE", False)
+        return _bool("HYBRID_FULL_PIPELINE", True)
 
     @property
     def POWERBI_USER(self) -> bool:

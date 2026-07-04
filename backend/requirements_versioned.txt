@@ -102,6 +102,10 @@ openpyxl==3.1.5
 # still handles PDF text/tables. Add camelot-py==0.11.0 + ghostscript to Dockerfile.base
 # if lattice table-rescue is needed later.
 ebooklib==0.18
+# F09 Ingest Brain light-bake (pure-pip binary wheels, no system libs):
+pdfplumber==0.11.10
+beautifulsoup4==4.15.0
+PyMuPDF==1.28.0
 ordered-set==4.1.0
 packaging==24.0
 pathspec==1.0.4
@@ -110,7 +114,7 @@ statsmodels==0.14.2
 patsy==1.0.2
 parso==0.8.3
 partialjson==0.0.8
-pdfminer.six==20251230
+pdfminer.six==20260107
 pexpect==4.9.0
 pillow==12.2.0
 platformdirs==4.3.6
