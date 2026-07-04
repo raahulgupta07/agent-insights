@@ -276,6 +276,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_AUTOPILOT_V2": {"label": "Auto-pilot v2 (queue-first)", "role": "user", "category": "Ingest", "status": "experimental", "note": "Reordered studio Auto-pilot: ADD (compact connector/upload/folder) → QUEUE (prominent, instant heuristic type-guess chips + inline re-route) → TRAIN (one button, streams a segregation receipt with reconcile 'N in → M placed' + coverage 'periods materialized' lines) → RESULT lanes. Held items show why (reason/confidence/signals) with one-click resolve. Faster: heuristic-first classify skips the LLM on obvious files, parallel apply, skip-unchanged. Reuses route_inbox/classifier/train. Off keeps the legacy 3-step UI. Fail-soft. Default OFF."},
     "HYBRID_INGEST_BRAIN": {"label": "Universal Ingest Brain (F09)", "role": "user", "category": "Ingest", "status": "experimental", "note": "Deep file understanding (messy Excel/PDF/Word/image) → one org brain. Phased; Default ON."},
     "HYBRID_AUTOTRAIN_ON_UPLOAD": {"label": "Auto-train after Upload", "role": "user", "category": "Ingest", "status": "experimental", "note": "After Smart Upload sorts and stores dropped files, the studio auto-trains in one pass — no Train button. Bounded to the studio + just-uploaded files (NOT the warehouse-wide risky Autotrain on Connector Index). Off = upload only stores; train stays manual. Default ON."},
+    "HYBRID_ROBOT_DOCK": {"label": "Robot CLI Dock", "role": "user", "category": "Workspace", "status": "experimental", "note": "A floating robot bottom-right of the studio opens a live CLI terminal streaming upload → classify → train stages one at a time, with model, counts, tokens, spend and readiness. Off = no dock. Default ON."},
 
     # --- Learning / Brain -------------------------------------------------
     "HYBRID_BRAIN_READ": {"label": "Brain Read (inject memories)", "role": "agent", "category": "Learning", "status": "stable"},
@@ -1322,6 +1323,14 @@ class HybridFlags:
         return _bool("HYBRID_AUTOTRAIN_ON_UPLOAD", True)
 
     @property
+    def ROBOT_DOCK(self) -> bool:
+        # Floating robot mascot pinned bottom-right of the studio page; click to
+        # expand a live CLI terminal streaming upload → classify → train stages
+        # (one at a time) with model, counts, tokens, spend and readiness. When OFF
+        # the dock is not rendered and the page is unchanged. Default ON.
+        return _bool("HYBRID_ROBOT_DOCK", True)
+
+    @property
     def RESULT_CACHE(self) -> bool:
         # Task 7: deterministic result cache. Keyed by (normalized question text +
         # the report's per-source row-count watermark signature). On a HIT with an
@@ -1630,6 +1639,7 @@ class HybridFlags:
             "QUERY_CORRECTION": self.QUERY_CORRECTION,
             "INGEST_BRAIN": self.INGEST_BRAIN,
             "AUTOTRAIN_ON_UPLOAD": self.AUTOTRAIN_ON_UPLOAD,
+            "ROBOT_DOCK": self.ROBOT_DOCK,
             "CONTEXT_COMPACT": self.CONTEXT_COMPACT,
             "SKILL_OPTIMIZE": self.SKILL_OPTIMIZE,
             "SUBAGENTS": self.SUBAGENTS,
