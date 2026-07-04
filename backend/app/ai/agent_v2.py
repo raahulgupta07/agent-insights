@@ -2220,6 +2220,17 @@ class AgentV2:
             except Exception:
                 pass
 
+            # #497 File references: inject the text of uploaded files the user
+            # pinned to this report, primed by FileReferenceContextBuilder into
+            # the hub's static cache (empty when flags.FILE_REFERENCES off -> the
+            # block is "" and the context is byte-identical). Never break the loop.
+            try:
+                _fileref_block = self.context_hub.render_file_references_section()
+                if _fileref_block:
+                    instructions = (instructions + "\n\n" + _fileref_block) if instructions else _fileref_block
+            except Exception:
+                pass
+
             # Hybrid Phase 6 (join graph): inject mined relationship/join edges
             # primed by JoinGraphContextBuilder into the hub's static cache
             # (empty when flags.JOIN_GRAPH off). Append its block to the planner

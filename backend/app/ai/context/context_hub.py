@@ -68,6 +68,9 @@ from .builders.query_context_builder import QueryContextBuilder
 from .builders.instruction_context_builder import InstructionContextBuilder
 from .builders.brain_context_builder import BrainContextBuilder
 from .builders.brain_graph_context_builder import BrainGraphContextBuilder
+# #497 File references: inject user-pinned uploaded files' text. Self-gates on
+# flags.FILE_REFERENCES; empty section (no DB hit) when off.
+from .builders.file_reference_context_builder import FileReferenceContextBuilder
 from .builders.join_graph_context_builder import JoinGraphContextBuilder
 from .builders.hybrid_search_context_builder import HybridSearchContextBuilder
 from .builders.docs_context_builder import DocsContextBuilder
@@ -354,6 +357,15 @@ class ContextHub:
             self.db,
             self.organization,
             data_source_ids=[str(ds.id) for ds in self.data_sources] if self.data_sources else None,
+        )
+
+        # #497 File references: user-pinned uploaded files for THIS report. Self-
+        # gates on flags.FILE_REFERENCES; empty section (no DB hit) when off ->
+        # agent context byte-identical to flag-off.
+        self.file_reference_builder = FileReferenceContextBuilder(
+            self.db,
+            self.organization,
+            self.report,
         )
 
         # hybrid Phase 6: join-graph context (mined relationship/join edges).
@@ -769,7 +781,7 @@ class ContextHub:
 
         # Run static builders in parallel; schemas/instructions come from
         # the cache when warm.
-        schemas, instructions, resources, files, brain, brain_graph, skills, studio, semantic, metrics, code_bank, join_graph, docs, agent_memory, profile_v2, pipeline_logic, hybrid_search_sec = await asyncio.gather(
+        schemas, instructions, resources, files, brain, brain_graph, skills, studio, semantic, metrics, code_bank, join_graph, docs, agent_memory, profile_v2, pipeline_logic, hybrid_search_sec, file_references = await asyncio.gather(
             _build_or_get_schemas(),
             _build_or_get_instructions(),
             _timed("resources", self.resource_builder.build()),
@@ -787,6 +799,7 @@ class ContextHub:
             _timed("profile_v2", self.profile_v2_builder.build(query=query)),
             _timed("pipeline_logic", self.pipeline_logic_builder.build(query=query)),
             _timed("hybrid_search", self.hybrid_search_builder.build(query=query)),
+            _timed("file_references", self.file_reference_builder.build(query=query)),
             return_exceptions=True,
         )
         _hub_logger.info(f"[context_hub:prime_static] all_done +{(time.monotonic()-_t0)*1000:.0f}ms")
@@ -810,6 +823,7 @@ class ContextHub:
         self._static_cache["profile_v2"] = profile_v2 if not isinstance(profile_v2, Exception) else None
         self._static_cache["pipeline_logic"] = pipeline_logic if not isinstance(pipeline_logic, Exception) else None
         self._static_cache["hybrid_search"] = hybrid_search_sec if not isinstance(hybrid_search_sec, Exception) else None
+        self._static_cache["file_references"] = file_references if not isinstance(file_references, Exception) else None
 
     async def refresh_warm(self) -> None:
         """Rebuild warm sections each loop (messages, queries, observations, entities).
@@ -972,6 +986,21 @@ class ContextHub:
         """
         try:
             section = self._static_cache.get("brain_graph", None)
+            return section.render() if section else ""
+        except Exception:
+            return ""
+
+    def render_file_references_section(self) -> str:
+        """Render the primed #497 referenced-files block, or "".
+
+        FileReferenceContextBuilder primes a FileReferencesSection into
+        ``_static_cache['file_references']`` (empty section, no DB hit, when
+        flags.FILE_REFERENCES is OFF). Surfaced via this helper — mirrors
+        render_brain_graph_section — so agent_v2 appends it with a single call.
+        Never raises — returns "" on any error / when off.
+        """
+        try:
+            section = self._static_cache.get("file_references", None)
             return section.render() if section else ""
         except Exception:
             return ""

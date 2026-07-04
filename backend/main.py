@@ -147,6 +147,7 @@ from app.routes import (
     ingest_brain,
     notification,
     service_account,
+    file_reference,
 )
 from app.routes.oidc_auth import router as oidc_auth_router
 from app.ee.routes import router as enterprise_router
@@ -317,6 +318,7 @@ app.include_router(scheduled_prompt.router, prefix="/api")
 app.include_router(prompt.router, prefix="/api")  # Prompts Library (HYBRID_PROMPTS_LIBRARY-gated nav)
 app.include_router(notification.router, prefix="/api")  # In-app notification inbox (HYBRID_NOTIFICATIONS_INBOX-gated bell)
 app.include_router(service_account.router, prefix="/api")  # Service accounts + API keys (HYBRID_SERVICE_ACCOUNTS-gated, admin-only)
+app.include_router(file_reference.router, prefix="/api")  # #497: pin uploaded files into a report's prompt (HYBRID_FILE_REFERENCES-gated -> 404 when off)
 app.include_router(test.router, prefix="/api")
 app.include_router(widget.router, prefix="/api")
 app.include_router(query.router, prefix="/api")
