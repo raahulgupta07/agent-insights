@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
 from fastapi import HTTPException
-from sqlalchemy import delete, or_, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -13,6 +13,7 @@ from app.ee.license import has_feature
 from app.models.connection import Connection
 from app.models.group import Group
 from app.models.group_membership import GroupMembership
+from app.models.llm_usage_record import LLMUsageRecord
 from app.models.membership import Membership
 from app.models.role_assignment import RoleAssignment
 from app.models.usage_policy import (
@@ -22,6 +23,7 @@ from app.models.usage_policy import (
     UsagePolicyAssignment,
     UsagePolicyConnectionOverride,
 )
+from app.settings.hybrid_flags import flags
 from app.schemas.usage_policy_schema import (
     EffectiveUsagePolicySchema,
     UsagePolicyAssignmentSchema,
@@ -39,6 +41,9 @@ from app.schemas.usage_policy_schema import (
 METRIC_LLM_TOKENS = "llm_tokens"
 METRIC_DATA_QUERIES = "data_queries"
 METRIC_DATA_BYTES = "data_bytes"
+# #488 USD spend cap. Not stored in usage_counters — "used" is summed live from
+# llm_usage_records.total_cost_usd. This constant only labels the raised error.
+METRIC_LLM_SPEND = "llm_spend_usd"
 SCOPE_ORGANIZATION = "organization"
 SCOPE_CONNECTION = "connection"
 
@@ -61,6 +66,7 @@ class EffectiveUsageLimits:
     monthly_token_limit: Optional[int] = None
     monthly_query_limit: Optional[int] = None
     monthly_data_bytes_limit: Optional[int] = None
+    monthly_spend_limit_usd: Optional[float] = None
     policy_ids: List[str] = field(default_factory=list)
     resolution_source: str = "default"
     query_base_by_policy: Dict[str, Optional[int]] = field(default_factory=dict)
@@ -114,6 +120,7 @@ class EffectiveUsageLimits:
             monthly_token_limit=self.monthly_token_limit,
             monthly_query_limit=self.monthly_query_limit,
             monthly_data_bytes_limit=self.monthly_data_bytes_limit,
+            monthly_spend_limit_usd=self.monthly_spend_limit_usd,
             policy_ids=self.policy_ids,
             resolution_source=self.resolution_source,
         )
@@ -156,6 +163,12 @@ class UsageLimitContext:
     # uncached headroom is about to be exceeded by pending+requested.
     _cached_limit: Optional[int] = field(default=None, init=False, repr=False)
     _cached_used: int = field(default=0, init=False, repr=False)
+    # #488 USD spend cap — loaded alongside the token cache (same TTL). Spend
+    # "used" is summed live from llm_usage_records; the current run's own cost
+    # isn't recorded until end-of-run, so this lags by ~one run (acceptable for
+    # a monthly budget, mirrors the token counter's grace window).
+    _cached_spend_limit_usd: Optional[float] = field(default=None, init=False, repr=False)
+    _cached_spend_used_usd: float = field(default=0.0, init=False, repr=False)
     _cache_loaded_at: float = field(default=-1.0, init=False, repr=False)
     _CACHE_TTL_SECONDS: float = field(default=30.0, init=False, repr=False)
     _cache_lock: Optional[asyncio.Lock] = field(default=None, init=False, repr=False)
@@ -209,6 +222,23 @@ class UsageLimitContext:
                 )
             else:
                 self._cached_used = 0
+            # #488 USD spend cap (flag-gated, additive). Fail-soft: any error in
+            # the spend rollup leaves the cache as "no limit" so a hiccup in the
+            # cost query never blocks a chat.
+            self._cached_spend_limit_usd = None
+            self._cached_spend_used_usd = 0.0
+            if flags.USD_QUOTA:
+                try:
+                    self._cached_spend_limit_usd = limits.monthly_spend_limit_usd
+                    if limits.monthly_spend_limit_usd is not None:
+                        self._cached_spend_used_usd = await usage_policy_service._get_llm_spend_used(
+                            db,
+                            org_id=self.organization_id,
+                            user_id=self.user_id,
+                        )
+                except Exception:
+                    self._cached_spend_limit_usd = None
+                    self._cached_spend_used_usd = 0.0
         import time as _time
         self._cache_loaded_at = _time.monotonic()
 
@@ -258,6 +288,47 @@ class UsageLimitContext:
                 limit=self._cached_limit,
                 used=self._cached_used + self._pending_tokens,
                 requested=int(requested_tokens),
+            )
+
+    async def check_spend(self) -> None:
+        """Pre-LLM-call USD spend-cap check (#488). Flag-gated (USD_QUOTA) and
+        fail-soft: blocks a new LLM call once month-to-date spend has reached
+        the cap, but a missing/errored cost rollup never blocks (cache stays at
+        "no limit"). Shares the token cache's TTL window so a single refresh
+        loads both. Raises UsageLimitExceeded when the cap is hit.
+        """
+        if not flags.USD_QUOTA or not has_feature("usage_limits") or self.session_maker is None:
+            return
+
+        import time as _time
+        now = _time.monotonic()
+        if self._cache_loaded_at < 0 or (now - self._cache_loaded_at) >= self._CACHE_TTL_SECONDS:
+            if self._cache_lock is None:
+                self._cache_lock = asyncio.Lock()
+            async with self._cache_lock:
+                if self._cache_loaded_at < 0 or (now - self._cache_loaded_at) >= self._CACHE_TTL_SECONDS:
+                    await self._refresh_quota_cache()
+
+        if self._cached_spend_limit_usd is None:
+            return  # no spend cap configured, nothing to check
+        if self._cached_spend_used_usd < float(self._cached_spend_limit_usd):
+            return
+
+        # We might be over — force a fresh read before raising (cache could be
+        # stale-low from an earlier window).
+        if self._cache_lock is None:
+            self._cache_lock = asyncio.Lock()
+        async with self._cache_lock:
+            await self._refresh_quota_cache()
+        if self._cached_spend_limit_usd is None:
+            return
+        if self._cached_spend_used_usd >= float(self._cached_spend_limit_usd):
+            raise UsageLimitExceeded(
+                "Monthly LLM spend quota exceeded.",
+                metric=METRIC_LLM_SPEND,
+                limit=float(self._cached_spend_limit_usd),
+                used=round(float(self._cached_spend_used_usd), 6),
+                requested=0,
             )
 
     async def flush(self) -> None:
@@ -312,6 +383,7 @@ class UsagePolicyService:
             monthly_token_limit=data.monthly_token_limit,
             monthly_query_limit=data.monthly_query_limit,
             monthly_data_bytes_limit=data.monthly_data_bytes_limit,
+            monthly_spend_limit_usd=data.monthly_spend_limit_usd,
             enabled=data.enabled,
         )
         db.add(policy)
@@ -353,6 +425,8 @@ class UsagePolicyService:
             policy.monthly_query_limit = data.monthly_query_limit
         if "monthly_data_bytes_limit" in fields_set:
             policy.monthly_data_bytes_limit = data.monthly_data_bytes_limit
+        if "monthly_spend_limit_usd" in fields_set:
+            policy.monthly_spend_limit_usd = data.monthly_spend_limit_usd
         if "enabled" in fields_set:
             policy.enabled = bool(data.enabled)
         if data.assignments is not None:
@@ -787,6 +861,13 @@ class UsagePolicyService:
         token_limit = self._most_restrictive([p.monthly_token_limit for p in policies])
         query_limit = self._most_restrictive([p.monthly_query_limit for p in policies])
         data_bytes_limit = self._most_restrictive([p.monthly_data_bytes_limit for p in policies])
+        spend_limit_usd = self._most_restrictive(
+            [
+                float(p.monthly_spend_limit_usd)
+                for p in policies
+                if p.monthly_spend_limit_usd is not None
+            ]
+        )
         query_overrides: Dict[str, Dict[str, Optional[int]]] = {}
         data_bytes_overrides: Dict[str, Dict[str, Optional[int]]] = {}
         for policy in policies:
@@ -805,6 +886,7 @@ class UsagePolicyService:
             monthly_token_limit=token_limit,
             monthly_query_limit=query_limit,
             monthly_data_bytes_limit=data_bytes_limit,
+            monthly_spend_limit_usd=spend_limit_usd,
             policy_ids=[p.id for p in policies],
             resolution_source=source,
             query_base_by_policy={p.id: p.monthly_query_limit for p in policies},
@@ -1014,6 +1096,27 @@ class UsagePolicyService:
             )
         )
         return int(result.scalar_one_or_none() or 0)
+
+    async def _get_llm_spend_used(
+        self,
+        db: AsyncSession,
+        *,
+        org_id: str,
+        user_id: str,
+    ) -> float:
+        """Month-to-date LLM spend (USD) for this (org, user), summed live from
+        llm_usage_records.total_cost_usd. Per-user to match the token quota's
+        principal scope. Rows with a NULL user_id (pre-attribution) don't count.
+        """
+        window_start, _ = current_month_window()
+        result = await db.execute(
+            select(func.coalesce(func.sum(LLMUsageRecord.total_cost_usd), 0)).where(
+                LLMUsageRecord.organization_id == org_id,
+                LLMUsageRecord.user_id == user_id,
+                LLMUsageRecord.created_at >= window_start,
+            )
+        )
+        return float(result.scalar_one() or 0)
 
     async def _get_current_counters(
         self,

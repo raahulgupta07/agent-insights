@@ -32,12 +32,28 @@ async def get_permissions_registry(current_user: User = Depends(current_user)):
     from app.core.permissions_registry import (
         PERMISSION_CATEGORIES, RESOURCE_PERMISSIONS,
         MERGED_CATEGORIES, RESOURCE_SCOPED_GROUPS,
+        CONNECTION_RESOURCE_PERMISSIONS,
     )
+    from app.settings.hybrid_flags import flags
+
+    resource_permissions = RESOURCE_PERMISSIONS
+    resource_scoped_groups = RESOURCE_SCOPED_GROUPS
+    # #489 (flag CONNECTION_GRANTS): surface per-connection grant options in the
+    # role editor only when enabled. OFF → identical to the pre-#489 registry.
+    if flags.CONNECTION_GRANTS:
+        resource_permissions = {
+            **RESOURCE_PERMISSIONS,
+            "connection": list(CONNECTION_RESOURCE_PERMISSIONS),
+        }
+        resource_scoped_groups = {
+            **RESOURCE_SCOPED_GROUPS,
+            "connection": {"Permissions": list(CONNECTION_RESOURCE_PERMISSIONS)},
+        }
     return {
         "categories": PERMISSION_CATEGORIES,
-        "resource_permissions": RESOURCE_PERMISSIONS,
+        "resource_permissions": resource_permissions,
         "merged_categories": MERGED_CATEGORIES,
-        "resource_scoped_groups": RESOURCE_SCOPED_GROUPS,
+        "resource_scoped_groups": resource_scoped_groups,
     }
 
 
@@ -253,11 +269,20 @@ async def _require_resource_manage(
     resolved = await resolve_permissions(db, str(user.id), str(org_id))
     if FULL_ADMIN in resolved.org_permissions:
         return
-    if resolved.has_resource_permission(resource_type, str(resource_id), "manage"):
+    # #489: the owner-level permission differs by resource type — `manage_connection`
+    # on a connection, `manage` on an agent. Flag OFF → always `manage`
+    # (byte-identical to the pre-#489 fork).
+    from app.settings.hybrid_flags import flags
+    owner_perm = (
+        "manage_connection"
+        if (resource_type == "connection" and flags.CONNECTION_GRANTS)
+        else "manage"
+    )
+    if resolved.has_resource_permission(resource_type, str(resource_id), owner_perm):
         return
     raise HTTPException(
         status_code=403,
-        detail=f"Requires 'manage' on {resource_type} {resource_id}",
+        detail=f"Requires '{owner_perm}' on {resource_type} {resource_id}",
     )
 
 

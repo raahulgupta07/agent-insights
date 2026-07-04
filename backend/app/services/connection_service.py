@@ -30,6 +30,41 @@ from app.ee.audit.service import audit_service
 logger = logging.getLogger(__name__)
 
 
+async def grant_connection_owner(
+    db: AsyncSession, organization_id: str, connection_id: str, user_id: str,
+) -> None:
+    """Give a user full per-connection control (manage config + manage all
+    agents on it). Idempotent — skips if a grant already exists. Used when a
+    user creates a connection so non-admins can manage and build on it. (#489)
+
+    Caller gates this on flags.CONNECTION_GRANTS — when the flag is OFF no
+    connection grants are written, so the resolver stays at the pre-#489 fork
+    behavior.
+    """
+    from app.models.resource_grant import ResourceGrant
+
+    existing = await db.execute(
+        select(ResourceGrant).where(
+            ResourceGrant.resource_type == "connection",
+            ResourceGrant.resource_id == str(connection_id),
+            ResourceGrant.principal_type == "user",
+            ResourceGrant.principal_id == str(user_id),
+            ResourceGrant.deleted_at.is_(None),
+        )
+    )
+    if existing.scalar_one_or_none():
+        return
+    db.add(ResourceGrant(
+        organization_id=str(organization_id),
+        resource_type="connection",
+        resource_id=str(connection_id),
+        principal_type="user",
+        principal_id=str(user_id),
+        permissions=["manage_connection", "manage_data_sources"],
+    ))
+    await db.commit()
+
+
 # Human-readable noun for each data_shape; used in connection-test messages.
 _SHAPE_NOUNS = {
     "tables": ("table", "tables"),
@@ -223,6 +258,18 @@ class ConnectionService:
         # clones and personal connectors own their DataSource already; spawning a
         # public agent here duplicates them AND leaks a private source org-wide.
         _conn_id, _org_id, _user_id = str(connection.id), str(organization.id), str(current_user.id)
+
+        # #489 (flag CONNECTION_GRANTS): grant the creator full per-connection
+        # control (manage config + manage all agents on it, which implies create)
+        # so a non-admin who creates a connection can use and manage it — mirrors
+        # agent ownership. Fail-soft + idempotent. No-op when the flag is OFF.
+        from app.settings.hybrid_flags import flags as _hflags
+        if _hflags.CONNECTION_GRANTS:
+            try:
+                await grant_connection_owner(db, _org_id, _conn_id, _user_id)
+            except Exception:
+                logger.debug("grant_connection_owner skipped", exc_info=True)
+
         if not owner_user_id:
             try:
                 from app.services.connector_agent import auto_create_agent_for_connection

@@ -77,7 +77,11 @@ for perms in HIDDEN_PERMISSION_CATEGORIES.values():
 
 # ── Resource Permission Options ──────────────────────────────────────────
 # Available permission strings for resource_grants by resource type.
-# data_source only — connection/report grants are intentionally not supported.
+# data_source is always available. `connection` grants (#489) are flag-gated on
+# HYBRID_CONNECTION_GRANTS — they are NOT baked into the base dict below so the
+# registry stays byte-identical when the flag is OFF; the rbac registry route
+# injects `CONNECTION_RESOURCE_PERMISSIONS` only when the flag is ON. report
+# grants remain intentionally unsupported.
 
 RESOURCE_PERMISSIONS = {
     "data_source": [
@@ -88,6 +92,17 @@ RESOURCE_PERMISSIONS = {
         "manage_members",
     ],
 }
+
+# #489: per-connection resource permissions (flag HYBRID_CONNECTION_GRANTS).
+#   - manage_connection    → edit config / test / reindex / delete the connection
+#   - create_data_sources  → create agents on this connection
+#   - manage_data_sources  → manage ALL agents on this connection (implies
+#                            create_data_sources; cascades to per-agent `manage`)
+CONNECTION_RESOURCE_PERMISSIONS = [
+    "manage_connection",
+    "create_data_sources",
+    "manage_data_sources",
+]
 
 # ── Merged categories for the role editor UI ─────────────────────────────
 # Groups related categories into fewer rows for a cleaner modal.

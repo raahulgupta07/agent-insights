@@ -112,6 +112,18 @@ async def _guard_private_owner(db, connection_id, organization, current_user):
     owner_id = getattr(connection, "owner_user_id", None)
     if owner_id is not None and str(owner_id) == str(current_user.id):
         return connection  # the creator may manage their own connector
+    # #489 (flag CONNECTION_GRANTS): a principal explicitly granted
+    # `manage_connection` on this connection may manage it, even without
+    # ownership or org admin. No-op when the flag is OFF (byte-identical guard).
+    from app.settings.hybrid_flags import flags as _hflags
+    if _hflags.CONNECTION_GRANTS:
+        resolved = await resolve_permissions(
+            db, str(current_user.id), str(organization.id)
+        )
+        if resolved.has_resource_permission(
+            "connection", str(connection_id), "manage_connection"
+        ):
+            return connection
     raise HTTPException(
         status_code=403,
         detail="You can only manage connections you own; ask an admin for org connectors.",
@@ -451,6 +463,19 @@ async def get_connection(
     owner_id = getattr(connection, "owner_user_id", None)
     is_owner = owner_id is not None and str(owner_id) == str(current_user.id)
     can_see_full = is_admin or is_owner
+
+    # #489 (flag CONNECTION_GRANTS): a `manage_connection` grantee gets the full
+    # editable detail too, so the FE edit form is populated. No-op when OFF.
+    if not can_see_full:
+        from app.settings.hybrid_flags import flags as _hflags
+        if _hflags.CONNECTION_GRANTS:
+            resolved = await resolve_permissions(
+                db, str(current_user.id), str(organization.id)
+            )
+            if resolved.has_resource_permission(
+                "connection", str(connection_id), "manage_connection"
+            ):
+                can_see_full = True
 
     # Non-owner non-admin: block others' private connectors + require DS access.
     from app.services import private_connector_guard as _pcg

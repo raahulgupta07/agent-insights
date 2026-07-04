@@ -471,6 +471,19 @@ class DataSourceService:
                 detail=f"A data source named '{name}' already exists in this organization. Please choose a different name."
             )
 
+        # #489 (flag CONNECTION_GRANTS): Mode 1 created a new connection inline →
+        # grant the creator ownership of it too, so they can manage it and build
+        # further agents on it. No-op when the flag is OFF. Fail-soft.
+        from app.settings.hybrid_flags import flags as _hflags
+        if _hflags.CONNECTION_GRANTS and not connections_to_link:
+            try:
+                from app.services.connection_service import grant_connection_owner
+                await grant_connection_owner(
+                    db, str(organization.id), str(new_connection.id), str(current_user.id)
+                )
+            except Exception:
+                logger.debug("grant_connection_owner (inline) skipped", exc_info=True)
+
         # Telemetry: data source created (minimal fields only)
         try:
             await telemetry.capture(

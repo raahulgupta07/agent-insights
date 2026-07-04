@@ -233,6 +233,12 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_USER_AVATAR": {"label": "User Avatar Upload", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "Lets a user upload a profile image that displays in the nav / chat. The avatar serve route + column exist unconditionally; this flag only shows/hides the 'Edit profile' upload affordance in the nav. Default OFF."},
     "HYBRID_NOTIFICATIONS_INBOX": {"label": "Notifications Inbox", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "In-app notification inbox: a bell in the nav with an unread badge + a dropdown listing recent notifications (mark-read / mark-all-read / dismiss). The API is always mounted; this flag only shows/hides the nav bell. Unrelated to outbound email. Default OFF."},
     "HYBRID_SERVICE_ACCOUNTS": {"label": "Service Accounts", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "Machine/service accounts an org admin creates for headless / programmatic access. Each account holds one or more API keys (bow_ prefix, SHA-256 hashed, plaintext shown once at creation). Admin-only (manage_members). This flag gates the admin API + the Settings → Service Accounts page. Default OFF."},
+    "HYBRID_CONNECTION_GRANTS": {"label": "Connection Grants (RBAC)", "role": "agent", "category": "Agents & Access", "status": "experimental", "note": "#489: an admin can grant or revoke a specific member/group access to a single connection or data source (per-principal, not all-or-nothing). Off = connection grants unsupported (pre-#489 behavior). Default OFF."},
+    "HYBRID_AUTO_PUBLISH": {"label": "Auto-publish Agents", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "New data agents / instructions are published immediately on create instead of staying in draft. Off = keep the draft-until-promoted flow. Default OFF."},
+    "HYBRID_FILE_REFERENCES": {"label": "File References in Prompts", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "#497: reference an uploaded file inside a prompt so its content is injected into the agent context. Off = no file references are read; context is unchanged. Default OFF."},
+    "HYBRID_MCP_GATEWAY": {"label": "External MCP Gateway", "role": "agent", "category": "Agents & Access", "status": "experimental", "note": "#487: expose an agent's own tools out through the external MCP endpoint so other MCP clients can call them. Off = the gateway is inert. Default OFF."},
+    "HYBRID_USD_QUOTA": {"label": "USD Spend Cap", "role": "agent", "category": "Agents & Access", "status": "experimental", "note": "#488: a per-org / per-user monthly spend limit in US dollars, enforced against recorded LLM cost. Off = no dollar limit is checked. Default OFF."},
+    "HYBRID_STANDALONE_CONNECTORS": {"label": "Standalone Connectors", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "#467: use a connector on its own (tools-only) without turning it into a full data agent. Off = connectors are always agent-wrapped, as today. Default OFF."},
     "HYBRID_PACK_ROUTER": {"label": "Pack Router", "role": "agent", "category": "Agents & Access", "status": "stable"},
     "HYBRID_PACK_AUTOBIND": {"label": "Pack Auto-bind", "role": "review", "category": "Agents & Access", "status": "experimental", "note": "Adds pending rows to review on every train."},
     "HYBRID_TEACH_BOX": {"label": "Teach Box (paste→skill)", "role": "review", "category": "Agents & Access", "status": "stable"},
@@ -1043,6 +1049,45 @@ class HybridFlags:
         return _bool("HYBRID_SERVICE_ACCOUNTS", False)
 
     @property
+    def CONNECTION_GRANTS(self) -> bool:
+        # #489: per-principal grant/revoke of access to a connection / data source
+        # (the RBAC resource cascade for connections). When OFF the resolver behaves
+        # exactly as the pre-#489 fork (connection grants unsupported). Default OFF.
+        return _bool("HYBRID_CONNECTION_GRANTS", False)
+
+    @property
+    def AUTO_PUBLISH(self) -> bool:
+        # Auto-publish: newly created data agents / instructions are published on
+        # create per an org rule instead of staying draft. When OFF creation keeps
+        # the current draft-until-promoted behavior. Default OFF.
+        return _bool("HYBRID_AUTO_PUBLISH", False)
+
+    @property
+    def FILE_REFERENCES(self) -> bool:
+        # #497: reference uploaded files inside prompts / agent context. When OFF no
+        # file-reference model is read and the agent context is byte-identical.
+        # Default OFF.
+        return _bool("HYBRID_FILE_REFERENCES", False)
+
+    @property
+    def MCP_GATEWAY(self) -> bool:
+        # #487: external MCP gateway that re-exposes an agent's own tools out through
+        # the external MCP endpoint. When OFF the gateway routes are inert. Default OFF.
+        return _bool("HYBRID_MCP_GATEWAY", False)
+
+    @property
+    def USD_QUOTA(self) -> bool:
+        # #488: per-org / per-user monthly spend cap in USD, enforced against
+        # llm_usage_records cost. When OFF no USD limit is checked. Default OFF.
+        return _bool("HYBRID_USD_QUOTA", False)
+
+    @property
+    def STANDALONE_CONNECTORS(self) -> bool:
+        # #467: use a connector standalone (tools-only) without wrapping it as a data
+        # agent. When OFF connectors behave as today (agent-wrapped). Default OFF.
+        return _bool("HYBRID_STANDALONE_CONNECTORS", False)
+
+    @property
     def PACK_AUTOBIND(self) -> bool:
         # Sub-flag: during studio train, auto-try binding every library pack to
         # the agent's profiled columns and write PENDING studio_bound_packs rows
@@ -1542,6 +1587,12 @@ class HybridFlags:
             "USER_AVATAR": self.USER_AVATAR,
             "NOTIFICATIONS_INBOX": self.NOTIFICATIONS_INBOX,
             "SERVICE_ACCOUNTS": self.SERVICE_ACCOUNTS,
+            "CONNECTION_GRANTS": self.CONNECTION_GRANTS,
+            "AUTO_PUBLISH": self.AUTO_PUBLISH,
+            "FILE_REFERENCES": self.FILE_REFERENCES,
+            "MCP_GATEWAY": self.MCP_GATEWAY,
+            "USD_QUOTA": self.USD_QUOTA,
+            "STANDALONE_CONNECTORS": self.STANDALONE_CONNECTORS,
             "PACK_AUTOBIND": self.PACK_AUTOBIND,
             "PACK_ROUTER": self.PACK_ROUTER,
             "TEACH_BOX": self.TEACH_BOX,

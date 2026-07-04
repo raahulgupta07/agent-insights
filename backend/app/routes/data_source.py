@@ -308,9 +308,15 @@ async def create_data_source(
     elif data_source.connection_id:
         connection_ids = [data_source.connection_id]
     if connection_ids:
+        # #489 (flag CONNECTION_GRANTS): building an agent on an existing
+        # connection requires per-connection `create_data_sources` (connection
+        # admins & org `manage_connections` pass via implication). Flag OFF →
+        # keeps the pre-#489 `manage_data_sources` check (byte-identical).
+        from app.settings.hybrid_flags import flags as _hflags
+        _conn_perm = "create_data_sources" if _hflags.CONNECTION_GRANTS else "manage_data_sources"
         await check_resource_permissions(
             db, str(current_user.id), str(organization.id),
-            "connection", connection_ids, "manage_data_sources",
+            "connection", connection_ids, _conn_perm,
         )
     return await data_source_service.create_data_source(db, organization, current_user, data_source)
 

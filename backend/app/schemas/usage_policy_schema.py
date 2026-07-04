@@ -29,6 +29,7 @@ class UsagePolicyCreate(BaseModel):
     monthly_token_limit: Optional[int] = Field(default=None, ge=0)
     monthly_query_limit: Optional[int] = Field(default=None, ge=0)
     monthly_data_bytes_limit: Optional[int] = Field(default=None, ge=0)
+    monthly_spend_limit_usd: Optional[float] = Field(default=None, ge=0)
     enabled: bool = True
     assignments: List[UsagePolicyAssignmentInput] = []
     connection_overrides: List[UsagePolicyConnectionOverrideInput] = []
@@ -48,6 +49,7 @@ class UsagePolicyUpdate(BaseModel):
     monthly_token_limit: Optional[int] = Field(default=None, ge=0)
     monthly_query_limit: Optional[int] = Field(default=None, ge=0)
     monthly_data_bytes_limit: Optional[int] = Field(default=None, ge=0)
+    monthly_spend_limit_usd: Optional[float] = Field(default=None, ge=0)
     enabled: Optional[bool] = None
     assignments: Optional[List[UsagePolicyAssignmentInput]] = None
     connection_overrides: Optional[List[UsagePolicyConnectionOverrideInput]] = None
@@ -100,6 +102,7 @@ class UsagePolicySchema(BaseModel):
     monthly_token_limit: Optional[int] = None
     monthly_query_limit: Optional[int] = None
     monthly_data_bytes_limit: Optional[int] = None
+    monthly_spend_limit_usd: Optional[float] = None
     enabled: bool
     assignments: List[UsagePolicyAssignmentSchema] = []
     connection_overrides: List[UsagePolicyConnectionOverrideSchema] = []
@@ -115,6 +118,7 @@ class EffectiveUsagePolicySchema(BaseModel):
     monthly_token_limit: Optional[int] = None
     monthly_query_limit: Optional[int] = None
     monthly_data_bytes_limit: Optional[int] = None
+    monthly_spend_limit_usd: Optional[float] = None
     policy_ids: List[str] = []
     resolution_source: str = "default"
 

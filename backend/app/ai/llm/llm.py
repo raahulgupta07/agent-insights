@@ -22,6 +22,7 @@ from app.ai.utils.token_counter import count_tokens, estimate_tokens_fast
 from app.models.llm_model import LLMModel
 from app.services.llm_usage_recorder import LLMUsageRecorderService
 from app.services.usage_policy_service import UsageLimitContext, usage_policy_service
+from app.settings.hybrid_flags import flags
 from app.settings.logging_config import get_logger
 from app.core.otel import get_tracer
 from opentelemetry.trace import StatusCode
@@ -572,6 +573,9 @@ class LLM:
         if not should_record or context is None or context.session_maker is None:
             return
         context.run_blocking(context.check_tokens(requested_tokens))
+        # #488 USD spend cap — only when the flag is on (byte-identical no-op OFF).
+        if flags.USD_QUOTA:
+            context.run_blocking(context.check_spend())
 
     async def _check_usage_limit_async(self, requested_tokens: int, *, should_record: bool) -> None:
         """Async variant of the cache-aware quota check."""
@@ -579,6 +583,9 @@ class LLM:
         if not should_record or context is None or context.session_maker is None:
             return
         await context.check_tokens(requested_tokens)
+        # #488 USD spend cap — only when the flag is on (byte-identical no-op OFF).
+        if flags.USD_QUOTA:
+            await context.check_spend()
 
     def _record_usage_limit_sync(
         self,

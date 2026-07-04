@@ -17,6 +17,7 @@ from app.models.role_assignment import RoleAssignment
 from app.models.resource_grant import ResourceGrant
 from app.models.group import Group
 from app.models.group_membership import GroupMembership
+from app.settings.hybrid_flags import flags
 
 logger = logging.getLogger(__name__)
 
@@ -66,10 +67,33 @@ class ResolvedPermissions:
         # Implied by an org-level admin permission
         for org_perm in self.org_permissions:
             implied = ORG_PERM_IMPLIES_RESOURCE.get(org_perm, {}).get(resource_type)
+            # #489 (flag CONNECTION_GRANTS): org connection-admin implies
+            # connection-config + create-agent on every connection, but NOT
+            # `manage_data_sources` (managing OTHER people's agents stays an
+            # explicit, opt-in per-connection grant). Flag OFF → falls through to
+            # the base map, byte-identical to the pre-#489 fork.
+            if (
+                resource_type == "connection"
+                and org_perm == "manage_connections"
+                and flags.CONNECTION_GRANTS
+            ):
+                implied = {"manage_connection", "create_data_sources"}
             if implied and permission in implied:
                 return True
         # Explicit grant
-        return permission in self.resource_permissions.get(key, set())
+        granted = self.resource_permissions.get(key, set())
+        if permission in granted:
+            return True
+        # #489: a `manage_data_sources` connection grant implies the ability to
+        # create agents on that connection. Flag OFF → no implication.
+        if (
+            resource_type == "connection"
+            and permission == "create_data_sources"
+            and flags.CONNECTION_GRANTS
+            and "manage_data_sources" in granted
+        ):
+            return True
+        return False
 
     def has_resource_membership(self, resource_type: str, resource_id: str) -> bool:
         """Binary check — is user a member of this resource at all? (non-enterprise path)"""
@@ -220,11 +244,60 @@ async def _resolve_permissions_inner(
         if isinstance(perms, list):
             resource_permissions[key].update(perms)
 
+    # #489 (flag CONNECTION_GRANTS): a connection `manage_data_sources` grant
+    # cascades to `manage` on every agent FULLY backed by those connections
+    # (ALL-connections semantics — a multi-connection agent is only managed if
+    # you hold the grant on every connection it uses). Expanded here (not at
+    # check time) so the per-agent `manage` superset and list visibility both
+    # work uniformly. Only EXPLICIT per-connection grants cascade. No-op when
+    # the flag is OFF → byte-identical to the pre-#489 fork resolver.
+    if flags.CONNECTION_GRANTS:
+        managed_conn_ids = [
+            rid for (rtype, rid), perms in resource_permissions.items()
+            if rtype == "connection" and "manage_data_sources" in perms
+        ]
+        for ds_id in await _agents_fully_backed_by_connections(db, managed_conn_ids):
+            resource_permissions.setdefault(("data_source", ds_id), set()).add("manage")
+
     return ResolvedPermissions(
         org_permissions=org_permissions,
         resource_permissions=resource_permissions,
         role_names=role_names,
     )
+
+
+async def _agents_fully_backed_by_connections(
+    db: AsyncSession, connection_ids: list[str],
+) -> set[str]:
+    """Return data_source ids whose connections are ALL within ``connection_ids``.
+
+    ALL-connections semantics: an agent that draws on connections the caller
+    cannot fully manage is excluded, since it exposes data from every connection
+    it uses. Agents with no connections are excluded. (#489)
+    """
+    if not connection_ids:
+        return set()
+    from app.models.domain_connection import domain_connection
+
+    granted = set(connection_ids)
+    # Candidate agents: linked to at least one granted connection.
+    cand = await db.execute(
+        select(domain_connection.c.data_source_id)
+        .where(domain_connection.c.connection_id.in_(connection_ids))
+        .distinct()
+    )
+    candidate_ids = [r[0] for r in cand.all()]
+    if not candidate_ids:
+        return set()
+    # Pull every connection of those candidates; keep only fully-granted ones.
+    rows = await db.execute(
+        select(domain_connection.c.data_source_id, domain_connection.c.connection_id)
+        .where(domain_connection.c.data_source_id.in_(candidate_ids))
+    )
+    conns_by_ds: dict[str, set] = {}
+    for ds_id, conn_id in rows.all():
+        conns_by_ds.setdefault(ds_id, set()).add(conn_id)
+    return {ds_id for ds_id, conns in conns_by_ds.items() if conns and conns <= granted}
 
 
 async def get_accessible_data_source_ids(
