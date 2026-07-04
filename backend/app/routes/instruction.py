@@ -8,6 +8,7 @@ from app.models.user import User
 from app.models.organization import Organization
 from app.core.auth import current_user
 from app.core.permissions_decorator import requires_permission, check_resource_permissions
+from app.settings.hybrid_flags import flags
 from app.services.instruction_service import InstructionService
 from app.schemas.instruction_schema import (
     InstructionCreate,
@@ -94,6 +95,7 @@ async def get_instructions(
     search: Optional[str] = Query(None, description="Search in instruction text and title"),
     build_id: Optional[str] = Query(None, description="Load from specific build (defaults to main build)"),
     include_global: bool = Query(True, description="Include global instructions (no data sources) when filtering by data_source_ids"),
+    global_only: bool = Query(False, description="Return only global instructions (attached to no agent) — used by the lazy 'Global instructions' group (flag TREE_LAZYLOAD)"),
     current_user: User = Depends(current_user),
     db: AsyncSession = Depends(get_async_db),
     organization: Organization = Depends(get_current_organization)
@@ -150,10 +152,46 @@ async def get_instructions(
         label_ids=parsed_label_ids,
         search=search,
         build_id=build_id,
-        include_global=include_global
+        include_global=include_global,
+        # Only honor global_only when the lazy-load feature is on, so a
+        # flag-OFF deploy is byte-identical to the current eager path.
+        global_only=global_only if flags.TREE_LAZYLOAD else False,
     )
     await release_request_db(db)  # free the pooled connection before serialization (Cause A, Phase 1)
     return result
+
+
+# COUNTS — drives the /agents knowledge tree badges (per-agent count + global)
+# WITHOUT hydrating instruction rows, so the tree can lazily load counts instead
+# of eager full lists. Declared before /instructions/{instruction_id} so "counts"
+# isn't captured as an id. Flag-gated (TREE_LAZYLOAD); OFF → 404 so the FE falls
+# back to the existing eager path.
+@router.get("/instructions/counts")
+async def get_instruction_counts(
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    if not flags.TREE_LAZYLOAD:
+        raise AppError(ErrorCode.FEATURE_LOCKED, "Tree lazy-load is not enabled.", status_code=404)
+    result = await instruction_service.get_instruction_counts(db, organization, current_user)
+    await release_request_db(db)
+    return result
+
+
+# CROSS-ENTITY SEARCH for the /agents "Search everything" box — grouped shape
+# (agents + instructions), distinct from the instruction list. Flag-gated.
+@router.get("/knowledge/search")
+async def search_knowledge(
+    q: str = Query("", description="Search query (matches agent names and instruction text/title)"),
+    limit: int = Query(20, ge=1, le=50),
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    if not flags.TREE_LAZYLOAD:
+        raise AppError(ErrorCode.FEATURE_LOCKED, "Tree lazy-load is not enabled.", status_code=404)
+    return await instruction_service.search_knowledge(db, organization, current_user, q, limit=limit)
 
 
 # BULK UPDATE

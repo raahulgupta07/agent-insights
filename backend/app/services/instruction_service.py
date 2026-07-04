@@ -496,14 +496,15 @@ class InstructionService:
         label_ids: Optional[List[str]] = None,
         search: Optional[str] = None,
         build_id: Optional[str] = None,
-        include_global: bool = True
+        include_global: bool = True,
+        global_only: bool = False,
     ) -> dict:
         """Get instructions with clean permission-based filtering. Returns paginated response.
-        
+
         By default, loads instructions from the main build (is_main=True).
         Pass build_id to load from a specific build instead.
         """
-        
+
         user_permissions = await self._get_user_permissions(db, current_user, organization)
 
         # Build the query conditions cleanly
@@ -533,8 +534,104 @@ class InstructionService:
             db, organization, conditions, status, categories, skip, limit,
             data_source_ids, source_types, load_modes, label_ids, search,
             build_id=build_id, include_global=include_global,
-            current_user=current_user,
+            current_user=current_user, global_only=global_only,
         )
+
+    async def _visible_main_build_conditions(self, db, organization, current_user) -> list:
+        """Base WHERE conditions shared by the counts query and the list:
+        org-scoped, not deleted, in the main build, and visible to the caller
+        (global, or attached to a member/public data source). Mirrors
+        `_execute_instructions_query` so the tree counts never disagree with the
+        list a lazy per-agent fetch would return."""
+        from app.models.instruction_build import InstructionBuild
+        from app.models.build_content import BuildContent
+        from app.core.permission_resolver import get_member_data_source_ids
+
+        conditions = [
+            Instruction.organization_id == organization.id,
+            Instruction.deleted_at == None,  # noqa: E711
+        ]
+        main_build_id = (await db.execute(
+            select(InstructionBuild.id).where(and_(
+                InstructionBuild.organization_id == organization.id,
+                InstructionBuild.is_main == True,  # noqa: E712
+                InstructionBuild.deleted_at == None,  # noqa: E711
+            ))
+        )).scalar_one_or_none()
+        if main_build_id:
+            conditions.append(Instruction.id.in_(
+                select(BuildContent.instruction_id).where(BuildContent.build_id == main_build_id)
+            ))
+        if current_user is not None:
+            member_ds_ids = await get_member_data_source_ids(
+                db, str(current_user.id), str(organization.id)
+            )
+            public_ds_subq = select(DataSource.id).where(and_(
+                DataSource.organization_id == organization.id,
+                DataSource.is_public == True,  # noqa: E712
+            ))
+            visible_clauses = [Instruction.data_sources.any(DataSource.id.in_(public_ds_subq))]
+            if member_ds_ids:
+                visible_clauses.append(Instruction.data_sources.any(DataSource.id.in_(member_ds_ids)))
+            conditions.append(or_(~Instruction.data_sources.any(), *visible_clauses))
+        return conditions
+
+    async def get_instruction_counts(self, db, organization, current_user) -> dict:
+        """Aggregate counts that drive the /agents knowledge tree badges WITHOUT
+        hydrating instruction rows: the global group + a per-agent count. Same
+        visibility rules as the list, so the numbers match what a lazy per-agent
+        fetch would return. Single group-by (no per-agent N+1). Fail-soft."""
+        from sqlalchemy import func
+        try:
+            assoc = instruction_data_source_association
+            base = await self._visible_main_build_conditions(db, organization, current_user)
+
+            global_count = (await db.execute(
+                select(func.count()).select_from(Instruction).where(
+                    and_(*base, ~Instruction.data_sources.any())
+                )
+            )).scalar_one()
+
+            by_agent = {}
+            for ds_id, cnt in (await db.execute(
+                select(assoc.c.data_source_id, func.count(func.distinct(Instruction.id)))
+                .select_from(Instruction)
+                .join(assoc, assoc.c.instruction_id == Instruction.id)
+                .where(and_(*base))
+                .group_by(assoc.c.data_source_id)
+            )).all():
+                by_agent[str(ds_id)] = int(cnt)
+
+            return {"global": int(global_count), "by_agent": by_agent}
+        except Exception:
+            return {"global": 0, "by_agent": {}}
+
+    async def search_knowledge(self, db, organization, current_user, q: str, limit: int = 20) -> dict:
+        """Cross-entity search for the /agents 'Search everything' box. Returns a
+        grouped shape (distinct from the instruction list): matching agents
+        (data sources) AND matching instructions, each visibility-scoped."""
+        from app.services.data_source_service import DataSourceService
+
+        q = (q or "").strip()
+        if not q:
+            return {"agents": [], "instructions": []}
+
+        # Instructions: reuse the list path (server-side search + visibility).
+        inst_resp = await self.get_instructions(
+            db=db, organization=organization, current_user=current_user,
+            skip=0, limit=limit, search=q,
+            include_own=True, include_drafts=True, include_archived=True,
+        )
+        instructions = inst_resp.get("items", [])
+
+        # Agents: filter the caller's visible data sources by name (small list).
+        ql = q.lower()
+        agents_all = await DataSourceService().get_active_data_sources(
+            db, organization, current_user, include_unconnected=True
+        )
+        agents = [a for a in agents_all if ql in (getattr(a, "name", "") or "").lower()][:limit]
+
+        return {"agents": agents, "instructions": instructions}
 
     async def get_available_source_types(
         self,
@@ -1876,6 +1973,7 @@ class InstructionService:
         build_id: Optional[str] = None,
         include_global: bool = True,
         current_user: Optional[User] = None,
+        global_only: bool = False,
     ) -> dict:
         """Execute the instructions query with given conditions. Returns paginated response.
 
@@ -1964,7 +2062,12 @@ class InstructionService:
 
         # Build filter conditions list
         filter_conditions = []
-        
+
+        # Lazy 'Global instructions' group: restrict to instructions attached to
+        # no data source (agent). Default False → byte-identical to the old path.
+        if global_only:
+            filter_conditions.append(~Instruction.data_sources.any())
+
         if status:
             filter_conditions.append(Instruction.status == status)
         if categories:
