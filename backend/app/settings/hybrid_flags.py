@@ -239,6 +239,12 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_MCP_GATEWAY": {"label": "External MCP Gateway", "role": "agent", "category": "Agents & Access", "status": "experimental", "note": "#487: expose an agent's own tools out through the external MCP endpoint so other MCP clients can call them. Off = the gateway is inert. Default OFF."},
     "HYBRID_USD_QUOTA": {"label": "USD Spend Cap", "role": "agent", "category": "Agents & Access", "status": "experimental", "note": "#488: a per-org / per-user monthly spend limit in US dollars, enforced against recorded LLM cost. Off = no dollar limit is checked. Default OFF."},
     "HYBRID_STANDALONE_CONNECTORS": {"label": "Standalone Connectors", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "#467: use a connector on its own (tools-only) without turning it into a full data agent. Off = connectors are always agent-wrapped, as today. Default OFF."},
+    "HYBRID_TREE_LAZYLOAD": {"label": "Lazy Tree Load", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "#494/430: the /agents knowledge tree loads counts and search lazily instead of eager full loads, so large agents open faster. Off = existing eager load. Default OFF."},
+    "HYBRID_SIDEBAR_ACTIVITY_SORT": {"label": "Sort Sidebar by Activity", "role": "user", "category": "Workspace", "status": "experimental", "note": "#479: order the reports sidebar by most-recent activity instead of creation date. Off = sort by created date, as today. Default OFF."},
+    "HYBRID_GLOBAL_EVALS_NODE": {"label": "Global Evals Node", "role": "review", "category": "Workspace", "status": "experimental", "note": "#478: show a global Evals node in the knowledge explorer tree. Off = node hidden. Default OFF."},
+    "HYBRID_LOCALIZED_FOLLOWUPS": {"label": "Localized Follow-ups", "role": "user", "category": "Workspace", "status": "experimental", "note": "#521: translate follow-up suggestions and render them direction-aware (RTL-safe). Off = follow-ups render as today. Default OFF."},
+    "HYBRID_WEEK_START": {"label": "Configurable Week Start", "role": "user", "category": "Workspace", "status": "experimental", "note": "430: choose the first day of the week for prompt scheduling and date grouping. Off = existing default week start. Default OFF."},
+    "HYBRID_PDF_HYDRATION": {"label": "PDF Export Hydration", "role": "user", "category": "Workspace", "status": "experimental", "note": "#527: hydrate report numbers and chart data into PDF exports so they aren't blank. Off = existing PDF path. Default OFF."},
     "HYBRID_PACK_ROUTER": {"label": "Pack Router", "role": "agent", "category": "Agents & Access", "status": "stable"},
     "HYBRID_PACK_AUTOBIND": {"label": "Pack Auto-bind", "role": "review", "category": "Agents & Access", "status": "experimental", "note": "Adds pending rows to review on every train."},
     "HYBRID_TEACH_BOX": {"label": "Teach Box (paste→skill)", "role": "review", "category": "Agents & Access", "status": "stable"},
@@ -1088,6 +1094,43 @@ class HybridFlags:
         return _bool("HYBRID_STANDALONE_CONNECTORS", False)
 
     @property
+    def TREE_LAZYLOAD(self) -> bool:
+        # #494/430: /agents knowledge tree loads instruction/knowledge counts and
+        # global search lazily via dedicated endpoints instead of eager full loads.
+        # When OFF the tree uses the existing eager path. Default OFF.
+        return _bool("HYBRID_TREE_LAZYLOAD", False)
+
+    @property
+    def SIDEBAR_ACTIVITY_SORT(self) -> bool:
+        # #479: order the reports sidebar by last activity (message / turn-finalize)
+        # instead of created_at. When OFF ordering is unchanged (created_at). Default OFF.
+        return _bool("HYBRID_SIDEBAR_ACTIVITY_SORT", False)
+
+    @property
+    def GLOBAL_EVALS_NODE(self) -> bool:
+        # #478: show a global Evals node in the knowledge explorer tree.
+        # When OFF the node is hidden. FE-only. Default OFF.
+        return _bool("HYBRID_GLOBAL_EVALS_NODE", False)
+
+    @property
+    def LOCALIZED_FOLLOWUPS(self) -> bool:
+        # #521: localize follow-up suggestions and render direction-aware (dir="auto",
+        # RTL). When OFF follow-ups render as today. FE-only. Default OFF.
+        return _bool("HYBRID_LOCALIZED_FOLLOWUPS", False)
+
+    @property
+    def WEEK_START(self) -> bool:
+        # 430: configurable week-start day for prompt scheduling / date grouping.
+        # When OFF the existing default week start is used. Default OFF.
+        return _bool("HYBRID_WEEK_START", False)
+
+    @property
+    def PDF_HYDRATION(self) -> bool:
+        # #527: hydrate report data into the PDF render path so exported PDFs include
+        # numbers and chart data. When OFF the existing PDF path is used. Default OFF.
+        return _bool("HYBRID_PDF_HYDRATION", False)
+
+    @property
     def PACK_AUTOBIND(self) -> bool:
         # Sub-flag: during studio train, auto-try binding every library pack to
         # the agent's profiled columns and write PENDING studio_bound_packs rows
@@ -1593,6 +1636,12 @@ class HybridFlags:
             "MCP_GATEWAY": self.MCP_GATEWAY,
             "USD_QUOTA": self.USD_QUOTA,
             "STANDALONE_CONNECTORS": self.STANDALONE_CONNECTORS,
+            "TREE_LAZYLOAD": self.TREE_LAZYLOAD,
+            "SIDEBAR_ACTIVITY_SORT": self.SIDEBAR_ACTIVITY_SORT,
+            "GLOBAL_EVALS_NODE": self.GLOBAL_EVALS_NODE,
+            "LOCALIZED_FOLLOWUPS": self.LOCALIZED_FOLLOWUPS,
+            "WEEK_START": self.WEEK_START,
+            "PDF_HYDRATION": self.PDF_HYDRATION,
             "PACK_AUTOBIND": self.PACK_AUTOBIND,
             "PACK_ROUTER": self.PACK_ROUTER,
             "TEACH_BOX": self.TEACH_BOX,
