@@ -19,6 +19,7 @@ class User(SQLAlchemyBaseUserTable[str], Base):
     scim_external_id = Column(String(255), nullable=True, index=True)  # IdP external identifier for SCIM provisioning
     ldap_dn = Column(String(512), nullable=True, index=True)  # LDAP distinguished name
     last_seen_changelog = Column(String, nullable=True)  # semver of the last "What's new" entry this user dismissed
+    image_url = Column(String, nullable=True)  # uploaded avatar; NULL = initial placeholder
 
     reports = relationship("Report", back_populates="user")
     completions = relationship("Completion", back_populates="user")

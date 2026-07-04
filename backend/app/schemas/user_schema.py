@@ -29,6 +29,9 @@ class UserUpdate(schemas.BaseUserUpdate):
 
 class UserRead(schemas.BaseUser[uuid.UUID]):
     name: str
+    # Uploaded avatar serve path; NULL/None => render the initial-letter
+    # placeholder. Nullable + defaulted so pre-avatar users serialize fine.
+    image_url: Optional[str] = None
 
     # class Config:
       #  orm_mode = True  # Allows the output model to be compatible with ORM objects
