@@ -33,5 +33,9 @@ class AgentExecutionTraceResponse(BaseModel):
     latest_feedback: Optional[CompletionFeedbackSchema] = None
     build: Optional[InstructionBuildSchema] = None
     timing_breakdown: Optional[TimingBreakdownSchema] = None
+    # Origin platform this run came in through: 'slack', 'teams', 'whatsapp',
+    # 'mcp', 'email', etc. None = web UI. Surfaced as an origin badge in the
+    # trace header. Populated from the completion in console_service.
+    external_platform: Optional[str] = None
 
 

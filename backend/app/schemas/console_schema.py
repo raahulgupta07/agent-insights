@@ -300,6 +300,10 @@ class AgentExecutionSummaryItem(BaseModel):
     report_id: str
     report_name: Optional[str] = None
     report_link: Optional[str] = None
+    # Origin platform this run came in through: 'slack', 'teams', 'whatsapp',
+    # 'mcp', 'email', etc. None = web UI. Drives the origin icon in the
+    # diagnosis table next to the prompt. Populated from the completion.
+    external_platform: Optional[str] = None
 
 class AgentExecutionSummariesResponse(BaseModel):
     items: List[AgentExecutionSummaryItem]

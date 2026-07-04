@@ -15,6 +15,14 @@
                 <div class="flex items-start justify-between mt-1">
                     <div class="flex items-center gap-3 text-sm text-gray-500">
                         <span>{{ $t('traceModal.reportId', { id: reportId }) }}</span>
+                        <!-- Origin badge: where this run came in through (web UI = hidden) -->
+                        <span
+                            v-if="traceData?.external_platform"
+                            class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-xs text-gray-600"
+                        >
+                            <OriginIcon :platform="traceData.external_platform" size="w-3.5 h-3.5" />
+                            <span class="capitalize">{{ originLabel }}</span>
+                        </span>
                         <!-- Timing summary pills -->
                         <template v-if="traceData?.timing_breakdown">
                             <span v-if="traceData.timing_breakdown.total_duration_ms != null"
@@ -444,6 +452,10 @@ import SendEmailTool from '../tools/SendEmailTool.vue'
 import ListAgentExecutionsTool from '../tools/ListAgentExecutionsTool.vue'
 import DataSourceIcon from '../DataSourceIcon.vue'
 import Spinner from '../Spinner.vue'
+// Explicit import: components/console/OriginIcon.vue auto-imports as
+// <ConsoleOriginIcon> and would be tree-shaken from `nuxt generate` if used
+// bare — import it directly so the origin badge renders.
+import OriginIcon from './OriginIcon.vue'
 const { isJudgeEnabled } = useOrgSettings()
 const { t } = useI18n()
 
@@ -541,6 +553,7 @@ interface AgentExecutionTraceResponse {
     latest_feedback?: CompletionFeedbackUI | null
     build?: InstructionBuild
     timing_breakdown?: TimingBreakdown | null
+    external_platform?: string | null
 }
 
 interface TraceCompletionData {
@@ -604,6 +617,13 @@ const emit = defineEmits<{
 // State
 const isLoading = ref(false)
 const traceData = ref<AgentExecutionTraceResponse | null>(null)
+// Human label for the origin badge (e.g. 'slack' -> 'Slack', 'teams' -> 'Teams').
+const originLabel = computed(() => {
+    const p = (traceData.value?.external_platform || '').trim()
+    if (!p) return ''
+    const map: Record<string, string> = { slack: 'Slack', teams: 'Teams', whatsapp: 'WhatsApp', email: 'Email', mcp: 'MCP', telegram: 'Telegram' }
+    return map[p.toLowerCase()] || (p.charAt(0).toUpperCase() + p.slice(1))
+})
 const selectedItem = ref<any>(null)
 const selectedItemType = ref<'block'>('block')
 const blocks = computed(() => traceData.value?.completion_blocks || [])

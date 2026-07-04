@@ -115,12 +115,12 @@
                     <thead class="bg-gray-50">
                         <tr>
                             <th class="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[320px] w-[320px]">{{ $t('monitoring.diagnosis.colPrompt') }}</th>
+                            <th class="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase tracking-wider">{{ $t('monitoring.diagnosis.colUser') }}</th>
                             <th class="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase tracking-wider">{{ $t('monitoring.diagnosis.colStatus') }}</th>
                             <th class="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase tracking-wider">{{ $t('monitoring.diagnosis.colData') }}</th>
                             <th class="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase tracking-wider">{{ $t('monitoring.diagnosis.colTools') }}</th>
                             <th class="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase tracking-wider">{{ $t('monitoring.diagnosis.colFeedback') }}</th>
                             <th class="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase tracking-wider">{{ $t('monitoring.diagnosis.colReport') }}</th>
-                            <th class="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase tracking-wider">{{ $t('monitoring.diagnosis.colUser') }}</th>
                             <th class="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase tracking-wider">{{ $t('monitoring.diagnosis.colDate') }}</th>
                         </tr>
                     </thead>
@@ -129,12 +129,18 @@
                             <td class="px-6 py-4">
                                 <div class="text-xs text-gray-900">
                                     <div class="relative group max-w-[320px] w-[320px]">
-                                        <p class="truncate">{{ truncate(item.prompt || '', 40) }}</p>
+                                        <p class="truncate flex items-center gap-1.5">
+                                            <OriginIcon :platform="item.external_platform" />
+                                            <span class="truncate">{{ truncate(item.prompt || '', 40) }}</span>
+                                        </p>
                                         <div class="pointer-events-none absolute start-0 top-full mt-1 z-10 hidden group-hover:block bg-white border border-gray-200 rounded-md shadow-sm p-2 text-xs whitespace-pre-wrap max-w-[520px] max-h-56 overflow-auto">
                                             {{ item.prompt || '—' }}
                                         </div>
                                     </div>
                                 </div>
+                            </td>
+                            <td class="px-2 py-1">
+                                <div class="text-xs text-gray-900">{{ item.user_name || '—' }}</div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="relative inline-block group">
@@ -188,11 +194,8 @@
                                 </NuxtLink>
                                 <span v-else>{{ item.report_name || item.report_id }}</span>
                             </td>
-                            <td class="px-2 py-1">
-                                <div class="text-xs text-gray-900">{{ item.user_name || '—' }}</div>
-                            </td>
                             <td class="px-3 py-1">
-                                <span class="text-xs text-gray-500">{{ formatDate(item.created_at as any) }}</span>
+                                <span class="text-xs text-gray-500">{{ formatDateTime(item.created_at as any) }}</span>
                             </td>
                         </tr>
                     </tbody>
@@ -271,7 +274,12 @@ import DateRangePicker from '~/components/console/DateRangePicker.vue'
 import TraceModal from '~/components/console/TraceModal.vue'
 import AgentSelector from '~/components/AgentSelector.vue'
 import DiagnosisActivityChart from '~/components/console/DiagnosisActivityChart.vue'
-const { isJudgeEnabled } = useOrgSettings()
+// Explicit import: new mid-session components auto-import as lazy chunks that
+// get tree-shaken out of `nuxt generate` (blank render) — import directly.
+import OriginIcon from '~/components/console/OriginIcon.vue'
+const { isJudgeEnabled, settings } = useOrgSettings()
+// Optional org timezone (config.general.timezone). Absent → viewer-local tz.
+const orgTimezone = computed<string | undefined>(() => (settings.value?.config as any)?.general?.timezone || undefined)
 const { selectedAgents, initAgent } = useAgent()
 const { t } = useI18n()
 
@@ -518,6 +526,19 @@ const formatDate = (dateString: string) => {
     if (!dateString) return ''
     const date = new Date(dateString)
     return date.toLocaleDateString()
+}
+
+// Date + time in the org timezone (falls back to viewer-local when the org has
+// no configured timezone or the value is invalid). Used by the Date column.
+const formatDateTime = (dateString: string) => {
+    if (!dateString) return ''
+    const date = new Date(dateString)
+    const opts: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }
+    const tz = orgTimezone.value
+    if (tz) {
+        try { return date.toLocaleString(undefined, { ...opts, timeZone: tz }) } catch (e) { /* invalid tz → local */ }
+    }
+    return date.toLocaleString(undefined, opts)
 }
 
 // Add these methods to the existing script section
