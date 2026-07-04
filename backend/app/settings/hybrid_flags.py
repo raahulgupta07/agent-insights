@@ -275,6 +275,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_TRAIN_ROUTING": {"label": "Inbox → Train auto-routing", "role": "user", "category": "Ingest", "status": "experimental", "note": "Upload files into a per-agent Inbox with no per-file decision. When you Train, a first stage classifies each queued file (train model, default GLM-5.2, + larger excerpt), auto-places confident files to Database/Semantic/Instructions/Examples/Knowledge, and HOLDS uncertain ones for post-train Review. Reuses the Smart Upload classifier + sinks. Default OFF."},
     "HYBRID_AUTOPILOT_V2": {"label": "Auto-pilot v2 (queue-first)", "role": "user", "category": "Ingest", "status": "experimental", "note": "Reordered studio Auto-pilot: ADD (compact connector/upload/folder) → QUEUE (prominent, instant heuristic type-guess chips + inline re-route) → TRAIN (one button, streams a segregation receipt with reconcile 'N in → M placed' + coverage 'periods materialized' lines) → RESULT lanes. Held items show why (reason/confidence/signals) with one-click resolve. Faster: heuristic-first classify skips the LLM on obvious files, parallel apply, skip-unchanged. Reuses route_inbox/classifier/train. Off keeps the legacy 3-step UI. Fail-soft. Default OFF."},
     "HYBRID_INGEST_BRAIN": {"label": "Universal Ingest Brain (F09)", "role": "user", "category": "Ingest", "status": "experimental", "note": "Deep file understanding (messy Excel/PDF/Word/image) → one org brain. Phased; Default ON."},
+    "HYBRID_AUTOTRAIN_ON_UPLOAD": {"label": "Auto-train after Upload", "role": "user", "category": "Ingest", "status": "experimental", "note": "After Smart Upload sorts and stores dropped files, the studio auto-trains in one pass — no Train button. Bounded to the studio + just-uploaded files (NOT the warehouse-wide risky Autotrain on Connector Index). Off = upload only stores; train stays manual. Default ON."},
 
     # --- Learning / Brain -------------------------------------------------
     "HYBRID_BRAIN_READ": {"label": "Brain Read (inject memories)", "role": "agent", "category": "Learning", "status": "stable"},
@@ -1311,6 +1312,16 @@ class HybridFlags:
         return _bool("HYBRID_INGEST_BRAIN", True)
 
     @property
+    def AUTOTRAIN_ON_UPLOAD(self) -> bool:
+        # After a user drops files via Smart Upload and they are placed into their
+        # lanes, automatically kick the studio's one-pass training (the same
+        # train_orchestrator.start_training the Auto-train button runs). Bounded to
+        # the studio + just-uploaded files — NOT the risky warehouse-wide
+        # HYBRID_AUTOTRAIN_ON_INDEX. When OFF, upload only stores; training stays a
+        # manual step. Default ON.
+        return _bool("HYBRID_AUTOTRAIN_ON_UPLOAD", True)
+
+    @property
     def RESULT_CACHE(self) -> bool:
         # Task 7: deterministic result cache. Keyed by (normalized question text +
         # the report's per-source row-count watermark signature). On a HIT with an
@@ -1618,6 +1629,7 @@ class HybridFlags:
             "VERIFIED_GOLDENS": self.VERIFIED_GOLDENS,
             "QUERY_CORRECTION": self.QUERY_CORRECTION,
             "INGEST_BRAIN": self.INGEST_BRAIN,
+            "AUTOTRAIN_ON_UPLOAD": self.AUTOTRAIN_ON_UPLOAD,
             "CONTEXT_COMPACT": self.CONTEXT_COMPACT,
             "SKILL_OPTIMIZE": self.SKILL_OPTIMIZE,
             "SUBAGENTS": self.SUBAGENTS,
