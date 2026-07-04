@@ -5,7 +5,7 @@
 > Companion: `CLAUDE.md` (rules/current state), `DEVLOG.md` (dated history), `ROADMAP.md` (forward plan),
 > `docs/INGEST_BRAIN_DESIGN.md` (F09 universal-ingest design).
 > **Keep current:** when a ship changes a load-bearing path/pattern, update this file (same habit as DEVLOG bump).
-> Last verified: 2026-07-04 · `VERSION_HYBRID` 1.90.0 · mig head **single `fileref1`** (chain tail `svcacct1→usdquota1→fileref1`).
+> Last verified: 2026-07-04 · `VERSION_HYBRID` 1.90.0 · mig head **single `sidesort1`** (chain tail `usdquota1→fileref1→sidesort1`).
 > 2026-07-04 UPSTREAM PORT WAVE 3 (RBAC depth, BAKED+committed, flag-OFF default): #489 conn-grants ·
 > #488 USD-quota(mig usdquota1) · auto-publish · #467 standalone-connectors · #497 file-refs(mig fileref1,
 > context-builder inject) · #487 MCP-gateway(on routes/mcp.py). + DEFAULT-ENABLE PASS: 60 safe flags ON via
@@ -202,7 +202,7 @@ inject in `agent_v2.py`. **Touches 3 CORE files** (rebase tax) — mirror the br
 ### Add a migration
 Chain off the **TRUE single head** (a revision no one lists as `down_revision`, accounting for **tuple**
 down_revisions in merge migrations — naive head-finding gives false multiples). Guard PG-only DDL with
-`op.get_bind().dialect.name == "postgresql"`. Flags need NO migration; new tables do. Current head **`fileref1`**.
+`op.get_bind().dialect.name == "postgresql"`. Flags need NO migration; new tables do. Current head **`sidesort1`**.
 
 ### Add a frontend studio tab
 `pages/studios/[id]/index.vue`: add nav item (group + label) + `v-else-if="activeTab==='x'"` → `<StudioX/>`.
