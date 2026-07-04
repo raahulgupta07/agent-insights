@@ -57,6 +57,10 @@
                             class="mt-2 text-[12px] font-semibold text-[#b45309] hover:underline"
                             @click="reviewOpen = true"
                         >&#9888; {{ unsureCount }} we weren&rsquo;t sure about &mdash; review</button>
+                        <div v-if="result.train_started" class="mt-2 flex items-center gap-1.5 text-[12px] text-[#C2541E]">
+                            <span class="animate-spin">&#128260;</span>
+                            <span>Training your agent now &mdash; you can close this.</span>
+                        </div>
                     </div>
 
                     <!-- banner + rows (review only) -->
