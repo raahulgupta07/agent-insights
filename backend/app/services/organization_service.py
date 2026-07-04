@@ -81,8 +81,32 @@ class OrganizationService:
 
         return OrganizationSchema.from_orm(organization)
 
+    # Permission sets for the global system roles. Mirrors the rbac_mvp seed /
+    # permissions_registry; used to self-heal a role wiped by a DB TRUNCATE.
+    _SYSTEM_ROLE_SEED = {
+        "admin": ("Full administrator access", ["full_admin_access"]),
+        "member": (
+            "Standard member access",
+            [
+                "view_reports",
+                "create_reports",
+                "update_reports",
+                "delete_reports",
+                "publish_reports",
+                "manage_files",
+                "view_members",
+            ],
+        ),
+    }
+
     async def _assign_system_role(self, db: AsyncSession, org_id: str, user_id: str, role_name: str) -> None:
-        """Assign a system role to a user via role_assignments (RBAC path)."""
+        """Assign a system role to a user via role_assignments (RBAC path).
+
+        Self-heals: if the global system role is missing (e.g. wiped by a DB
+        TRUNCATE), it is re-created in-line with the same shape as the migration
+        seed instead of silently returning — otherwise a freshly registered admin
+        would get NO permissions and 403 on onboarding.
+        """
         from app.models.role import Role
         from app.models.role_assignment import RoleAssignment
 
@@ -97,7 +121,20 @@ class OrganizationService:
             )
             system_role = result.scalar_one_or_none()
             if not system_role:
-                return
+                seed = self._SYSTEM_ROLE_SEED.get(role_name)
+                if seed is None:
+                    # Unknown role name — nothing safe to create.
+                    return
+                description, permissions = seed
+                system_role = Role(
+                    organization_id=None,
+                    name=role_name,
+                    description=description,
+                    permissions=permissions,
+                    is_system=True,
+                )
+                db.add(system_role)
+                await db.flush()  # populate system_role.id without ending the txn
             # Check if assignment already exists
             existing = await db.execute(
                 select(RoleAssignment).where(
