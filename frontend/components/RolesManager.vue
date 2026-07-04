@@ -470,6 +470,22 @@ async function loadResources() {
                 })
             }
         }
+        // #489: per-connection grants — offered only when the backend registry
+        // exposes the `connection` resource type (flag HYBRID_CONNECTION_GRANTS
+        // is ON). Flag OFF → the key is absent, so no connections are listed.
+        if (resourceScopedGroups.value['connection']) {
+            const connResult = await useMyFetch(`/connections`)
+            if (connResult.data.value) {
+                for (const c of connResult.data.value as any[]) {
+                    resources.push({
+                        label: `Connection: ${c.name}`,
+                        value: `connection:${c.id}`,
+                        type: 'connection',
+                        id: c.id,
+                    })
+                }
+            }
+        }
         availableResources.value = resources
     } catch (e) {
         console.error('Failed to load resources', e)
