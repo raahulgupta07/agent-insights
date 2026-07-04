@@ -12,6 +12,34 @@
             </p>
         </div>
 
+        <!-- Active / Legacy tabs -->
+        <div v-if="!loading && !error" class="mb-4 flex items-center gap-1 p-0.5 rounded-lg bg-[#F4EEE5] w-fit">
+            <button
+                type="button"
+                @click="activeMainTab = 'active'"
+                class="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition"
+                :class="activeMainTab === 'active' ? 'bg-[#A8330F] text-white font-medium' : 'text-[#6b6b6b] hover:text-[#1f2328]'"
+            >Active</button>
+            <button
+                v-if="legacyCount > 0"
+                type="button"
+                @click="activeMainTab = 'legacy'"
+                class="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition"
+                :class="activeMainTab === 'legacy' ? 'bg-[#A8330F] text-white font-medium' : 'text-[#6b6b6b] hover:text-[#1f2328]'"
+            >
+                Legacy
+                <span
+                    class="rounded-full px-1.5 py-0.5 text-[11px]"
+                    :class="activeMainTab === 'legacy' ? 'bg-white/20 text-white' : 'bg-[#ECEAE1] text-[#9a958c]'"
+                >{{ legacyCount }}</span>
+            </button>
+        </div>
+
+        <!-- Legacy tab hint -->
+        <p v-if="!loading && !error && activeMainTab === 'legacy'" class="mb-4 text-xs text-[#9a958c]">
+            Superseded by newer features — no need to touch these unless you know why.
+        </p>
+
         <!-- Controls -->
         <div v-if="!loading && !error" class="mb-5 flex flex-col sm:flex-row sm:items-center gap-3">
             <div class="relative flex-1 max-w-sm">
@@ -57,7 +85,7 @@
 
         <!-- Grouped flag list -->
         <div v-else class="space-y-6">
-            <section v-for="group in groupedFlags" :key="group.category">
+            <section v-for="group in groupedFlags" :key="group.category" :class="{ 'opacity-70': activeMainTab === 'legacy' }">
                 <div class="flex items-center gap-2 mb-2">
                     <h2 class="text-[11px] font-semibold text-[#9a958c] uppercase tracking-wider">{{ group.category }}</h2>
                     <span class="text-[11px] text-[#bcb8b0]">{{ group.rows.filter(r => r.effective).length }}/{{ group.rows.length }}</span>
@@ -91,6 +119,16 @@
                             </div>
                             <p v-if="row.note" class="mt-1 text-xs text-[#6b6b6b]">{{ row.note }}</p>
                             <p class="mt-0.5 text-xs font-mono text-[#bcb8b0] truncate">{{ row.env_name }}</p>
+
+                            <!-- Superseded-by: what replaced this legacy flag -->
+                            <div v-if="row.superseded_by && row.superseded_by.length" class="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                                <span class="text-[11px] text-[#9a958c]">↳ replaced by</span>
+                                <span
+                                    v-for="entry in row.superseded_by"
+                                    :key="entry"
+                                    class="inline-flex items-center rounded-full bg-[#F4EEE5] text-[#6b6b6b] px-2 py-0.5 text-[11px] font-medium"
+                                >{{ supersededLabel(entry) }}</span>
+                            </div>
 
                             <!-- Hybrid Search: index controls (only this row, only when on) -->
                             <div v-if="row.env_name === 'HYBRID_SEMANTIC_SEARCH' && row.effective" class="mt-2 flex items-center gap-3">
@@ -147,6 +185,7 @@ interface FlagRow {
     category: string
     status: 'stable' | 'experimental' | 'needs_dep' | 'unstable' | 'daemon'
     note: string
+    superseded_by?: string[]
     default_env: boolean
     override: boolean | null
     effective: boolean
@@ -170,10 +209,30 @@ const statusFilterOptions = [
 
 const onCount = computed(() => flags.value.filter(f => f.effective).length)
 
+// --- Active / Legacy tabs (superseded_by-driven) ---
+const activeMainTab = ref<'active' | 'legacy'>('active')
+const isLegacy = (f: FlagRow): boolean => Array.isArray(f.superseded_by) && f.superseded_by.length > 0
+const legacyCount = computed(() => flags.value.filter(isLegacy).length)
+
+// env_name -> human label, so superseded_by chips can show a friendly name.
+const labelByEnv = computed<Record<string, string>>(() => {
+    const m: Record<string, string> = {}
+    for (const f of flags.value) m[f.env_name] = f.label
+    return m
+})
+// An entry is a flag ref if it resolves to a known flag OR looks like an env name.
+const supersededLabel = (entry: string): string => {
+    if (labelByEnv.value[entry]) return labelByEnv.value[entry]
+    if (/^HYBRID_/.test(entry) || /^[A-Z0-9_]+$/.test(entry)) return entry
+    return entry
+}
+
 // Filter by search + on/off, then group by category preserving API order.
 const groupedFlags = computed(() => {
     const q = search.value.trim().toLowerCase()
     const filtered = flags.value.filter(f => {
+        // Tab partition: a superseded flag lives ONLY in Legacy; all others ONLY in Active.
+        if (activeMainTab.value === 'legacy' ? !isLegacy(f) : isLegacy(f)) return false
         if (statusFilter.value === 'on' && !f.effective) return false
         if (statusFilter.value === 'off' && f.effective) return false
         if (!q) return true

@@ -333,6 +333,7 @@ def _flag_row(env_name: str, meta: dict, override) -> dict:
         "category": meta.get("category", "Advanced"),
         "status": meta.get("status", "stable"),
         "note": meta.get("note", ""),
+        "superseded_by": meta.get("superseded_by", []),
         "default_env": _env_default(env_name),
         "override": (bool(override) if override is not None else None),
         "effective": _effective(env_name),
