@@ -1,9 +1,15 @@
 <template>
     <!-- INLINE card — no Teleport, no overlay. Embeds in a page; heavy detail streams out via @log. -->
-    <div class="rounded-2xl border border-[#ECECEC] bg-[#FAF9F8] overflow-hidden">
+    <div>
+        <!-- hidden file input — ALWAYS present so pick() works even when the visible
+             card is collapsed (hideDropzone: the page's Upload button drives pick()). -->
+        <input ref="fileInput" type="file" multiple class="hidden" accept=".csv,.xlsx,.xls,.pdf,.docx,.pptx,.txt,.tsv,.md" :disabled="canEdit === false" @change="onPick" />
+        <!-- card body: shown when the dropzone is visible, or once an upload is in flight / done -->
+        <div v-if="!hideDropzone || busy || result || error" class="rounded-2xl border border-[#ECECEC] bg-[#FAF9F8] overflow-hidden">
         <div class="px-4 py-4">
-            <!-- drop zone -->
+            <!-- drop zone (hidden when hideDropzone — the page's Upload button drives pick()) -->
             <div
+                v-if="!hideDropzone"
                 class="border-[1.6px] border-dashed border-[#EAD8CD] bg-[#FFF6F1] rounded-2xl px-5 py-6 text-center transition-colors"
                 :class="[
                     dragging ? 'bg-[#FCEBE0] border-[#C2541E]' : '',
@@ -17,7 +23,6 @@
                 <div class="text-[24px]">&#128229;</div>
                 <div class="font-semibold text-[#C2541E] mt-1.5 text-[14px]">Click or drop files &mdash; we sort + train for you</div>
                 <div class="text-[11.5px] text-[#6b7280] mt-1">.csv .xlsx .pdf .docx .pptx .txt &middot; data, definitions, logic, references &mdash; mixed is fine</div>
-                <input ref="fileInput" type="file" multiple class="hidden" accept=".csv,.xlsx,.xls,.pdf,.docx,.pptx,.txt,.tsv,.md" :disabled="canEdit === false" @change="onPick" />
             </div>
 
             <!-- error -->
@@ -128,6 +133,7 @@
                 </div>
             </template>
         </div>
+        </div>
     </div>
 </template>
 
@@ -144,7 +150,7 @@ interface SmartItem {
 }
 
 const props = withDefaults(
-    defineProps<{ studioId: string; dataSourceId?: string; canEdit?: boolean }>(),
+    defineProps<{ studioId: string; dataSourceId?: string; canEdit?: boolean; hideDropzone?: boolean }>(),
     { canEdit: true },
 )
 // log entry shape (dock pod matches this exactly):

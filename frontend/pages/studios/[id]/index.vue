@@ -197,6 +197,7 @@
                                 ref="inlineUploadRef"
                                 :studio-id="studioId"
                                 :can-edit="canEdit"
+                                :hide-dropzone="true"
                                 class="mb-4"
                                 @applied="onSmartApplied"
                                 @log="onStudioLog"
@@ -1602,9 +1603,12 @@ async function loadAutopilotV2Flag() {
     } catch { /* flag plumbing absent → leave OFF */ }
 }
 // Auto-pilot v2 "ADD" lane → reuse the existing add entry points.
-function onAutopilotAdd(kind: 'connector' | 'upload' | 'folder') {
-    if (kind === 'connector') openAddPicker()
-    else if (kind === 'upload') openUploadSource()
+function onAutopilotAdd(kind: 'connector' | 'database' | 'upload' | 'onedrive' | 'sharepoint' | 'folder') {
+    if (kind === 'connector') openAddPicker()                 // legacy: org-library picker
+    else if (kind === 'database') openConnect(undefined)      // AddConnectionModal grid → pick a DB
+    else if (kind === 'onedrive') openConnect('onedrive')     // MS connector, type preselected
+    else if (kind === 'sharepoint') openConnect('sharepoint')
+    else if (kind === 'upload') { inlineUploadRef.value?.pick?.() }  // inline picker → OS dialog
     else if (kind === 'folder') openFolderSync()
 }
 

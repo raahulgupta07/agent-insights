@@ -23,18 +23,28 @@
     <!-- 1 · ADD (compact) -->
     <div class="relative mt-4 border border-[#E9E0D3] rounded-2xl bg-white p-3">
       <span class="absolute -top-2.5 left-4 bg-[#2B2A26] text-white text-[9.5px] font-semibold px-2.5 py-0.5 rounded-full tracking-wide">1 &middot; ADD</span>
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-1.5">
-        <button type="button" :disabled="!canEdit" class="flex items-center gap-2 text-left border border-[#E9E0D3] rounded-xl px-3 py-2.5 bg-gradient-to-b from-white to-[#fdfcf9] hover:border-[#2F6F4F] transition-colors disabled:opacity-50" @click="$emit('add','connector')">
+      <!-- One row of source buttons: Database · Upload · OneDrive · SharePoint · Folder.
+           Each opens its existing connect flow via @add. Scrolls horizontally if narrow. -->
+      <div class="flex gap-2 mt-1.5 overflow-x-auto pb-1">
+        <button type="button" :disabled="!canEdit" class="flex-1 min-w-[150px] flex items-center gap-2 text-left border border-[#E9E0D3] rounded-xl px-3 py-2.5 bg-gradient-to-b from-white to-[#fdfcf9] hover:border-[#2F6F4F] transition-colors disabled:opacity-50" @click="$emit('add','database')">
           <span class="w-7 h-7 rounded-lg bg-[#E7F1EB] flex items-center justify-center shrink-0"><UIcon name="i-heroicons-circle-stack" class="w-4 h-4 text-[#2F6F4F]" /></span>
-          <span class="min-w-0"><span class="block text-[12.5px] font-semibold text-[#1f2328] truncate">Add a connector</span><span class="block text-[10.5px] text-[#9a958c] truncate">org library or new</span></span>
+          <span class="min-w-0"><span class="block text-[12.5px] font-semibold text-[#1f2328] truncate">Database</span><span class="block text-[10.5px] text-[#9a958c] truncate">Postgres · MySQL · Snowflake</span></span>
         </button>
-        <button type="button" :disabled="!canEdit" class="flex items-center gap-2 text-left border border-[#E9E0D3] rounded-xl px-3 py-2.5 bg-gradient-to-b from-white to-[#fdfcf9] hover:border-[#C2541E] transition-colors disabled:opacity-50" @click="$emit('add','upload')">
+        <button type="button" :disabled="!canEdit" class="flex-1 min-w-[150px] flex items-center gap-2 text-left border border-[#E9E0D3] rounded-xl px-3 py-2.5 bg-gradient-to-b from-white to-[#fdfcf9] hover:border-[#C2541E] transition-colors disabled:opacity-50" @click="$emit('add','upload')">
           <span class="w-7 h-7 rounded-lg bg-[#F6EBE3] flex items-center justify-center shrink-0"><UIcon name="i-heroicons-arrow-up-tray" class="w-4 h-4 text-[#C2541E]" /></span>
-          <span class="min-w-0"><span class="block text-[12.5px] font-semibold text-[#1f2328] truncate">Upload file</span><span class="block text-[10.5px] text-[#9a958c] truncate">.xlsx .csv .pdf .docx</span></span>
+          <span class="min-w-0"><span class="block text-[12.5px] font-semibold text-[#1f2328] truncate">Upload file</span><span class="block text-[10.5px] text-[#9a958c] truncate">.csv .xlsx .pdf .docx</span></span>
         </button>
-        <button type="button" :disabled="!canEdit" class="flex items-center gap-2 text-left border border-[#E9E0D3] rounded-xl px-3 py-2.5 bg-gradient-to-b from-white to-[#fdfcf9] hover:border-[#C2541E] transition-colors disabled:opacity-50" @click="$emit('add','folder')">
+        <button type="button" :disabled="!canEdit" class="flex-1 min-w-[150px] flex items-center gap-2 text-left border border-[#E9E0D3] rounded-xl px-3 py-2.5 bg-gradient-to-b from-white to-[#fdfcf9] hover:border-[#2C6EB5] transition-colors disabled:opacity-50" @click="$emit('add','onedrive')">
+          <span class="w-7 h-7 rounded-lg bg-[#E6F0FA] flex items-center justify-center shrink-0"><UIcon name="i-heroicons-cloud" class="w-4 h-4 text-[#2C6EB5]" /></span>
+          <span class="min-w-0"><span class="block text-[12.5px] font-semibold text-[#1f2328] truncate">OneDrive</span><span class="block text-[10.5px] text-[#9a958c] truncate">personal files</span></span>
+        </button>
+        <button type="button" :disabled="!canEdit" class="flex-1 min-w-[150px] flex items-center gap-2 text-left border border-[#E9E0D3] rounded-xl px-3 py-2.5 bg-gradient-to-b from-white to-[#fdfcf9] hover:border-[#2C6EB5] transition-colors disabled:opacity-50" @click="$emit('add','sharepoint')">
+          <span class="w-7 h-7 rounded-lg bg-[#E6F0FA] flex items-center justify-center shrink-0"><UIcon name="i-heroicons-building-office-2" class="w-4 h-4 text-[#2C6EB5]" /></span>
+          <span class="min-w-0"><span class="block text-[12.5px] font-semibold text-[#1f2328] truncate">SharePoint</span><span class="block text-[10.5px] text-[#9a958c] truncate">team library</span></span>
+        </button>
+        <button type="button" :disabled="!canEdit" class="flex-1 min-w-[150px] flex items-center gap-2 text-left border border-[#E9E0D3] rounded-xl px-3 py-2.5 bg-gradient-to-b from-white to-[#fdfcf9] hover:border-[#C2541E] transition-colors disabled:opacity-50" @click="$emit('add','folder')">
           <span class="w-7 h-7 rounded-lg bg-[#F4E5DA] flex items-center justify-center shrink-0 text-[#C2541E] text-base">⟳</span>
-          <span class="min-w-0"><span class="block text-[12.5px] font-semibold text-[#1f2328] truncate">Sync a folder <span class="text-[#C2541E]">⟳</span></span><span class="block text-[10.5px] text-[#9a958c] truncate">desktop auto-ingest</span></span>
+          <span class="min-w-0"><span class="block text-[12.5px] font-semibold text-[#1f2328] truncate">Folder</span><span class="block text-[10.5px] text-[#9a958c] truncate">desktop auto-sync</span></span>
         </button>
       </div>
     </div>
@@ -178,7 +188,7 @@ const props = defineProps<{
 }>()
 
 defineEmits<{
-  (e: 'add', payload: 'connector' | 'upload' | 'folder'): void
+  (e: 'add', payload: 'connector' | 'database' | 'upload' | 'onedrive' | 'sharepoint' | 'folder'): void
   (e: 'train'): void
   (e: 'openTab', payload: string): void
 }>()
