@@ -74,6 +74,19 @@
                 <div class="text-xs text-[#9a958c]">{{ $t('settings.language.description') }}</div>
             </div>
 
+            <!-- First day of the week (430) — shown only when the feature is enabled -->
+            <div v-if="weekStartEnabled" class="md:w-2/3 space-y-2">
+                <div class="text-sm font-medium text-[#1f2328]">{{ $t('settings.weekStart.label') }}</div>
+                <USelect
+                    v-model="form.week_start"
+                    :options="weekStartOptions"
+                    option-attribute="label"
+                    value-attribute="value"
+                    :ui="{ rounded: 'rounded-lg', color: { white: { outline: 'bg-white border border-[#E9E0D3] focus:border-[#C2541E] focus:ring-0' } } }"
+                />
+                <div class="text-xs text-[#9a958c]">{{ $t('settings.weekStart.description') }}</div>
+            </div>
+
             <div class="border-t border-[#E9E0D3] md:w-2/3"></div>
 
             <div class="md:w-2/3 pt-1">
@@ -112,6 +125,11 @@ interface LocaleResponse {
     effective_locale: string
 }
 
+interface WeekStartResponse {
+    week_start: string | null
+    options: string[]
+}
+
 // Language labels rendered in their own language so a user can find
 // their locale even while the UI is still in another language.
 const LOCALE_NATIVE_LABELS: Record<string, string> = {
@@ -132,14 +150,20 @@ definePageMeta({ auth: true, permissions: ['manage_settings'], layout: 'settings
 const loading = ref(true)
 const error = ref('')
 const general = ref<GeneralConfig>({ ai_analyst_name: 'City Agent Insights', dash_credit: true })
-const form = ref<{ organization_name?: string; locale: string } & GeneralConfig>({
+const form = ref<{ organization_name?: string; locale: string; week_start: string } & GeneralConfig>({
     ai_analyst_name: 'City Agent Insights',
     dash_credit: true,
     locale: '',
+    week_start: '',
 })
 // Empty string represents "no org override" (system default). Tracking the
 // initial value lets saveAll skip the PUT when the user hasn't touched it.
 const initialLocale = ref<string>('')
+// Same empty-string-as-default convention for week start (430).
+const initialWeekStart = ref<string>('')
+// FE control is hidden unless the WEEK_START feature flag is effective for the
+// org, so an OFF org's settings page is byte-identical to before.
+const weekStartEnabled = ref<boolean>(false)
 const enabledLocales = ref<string[]>([])
 const systemDefaultLocale = ref<string>('en')
 const pendingIconFile = ref<File | null>(null)
@@ -159,13 +183,23 @@ const localeOptions = computed(() => {
     return opts
 })
 
+// 430 — first day of the week. Empty value = default (Monday / ISO).
+const weekStartOptions = computed(() => [
+    { label: t('settings.weekStart.auto'), value: '' },
+    { label: t('settings.weekStart.monday'), value: 'monday' },
+    { label: t('settings.weekStart.sunday'), value: 'sunday' },
+    { label: t('settings.weekStart.saturday'), value: 'saturday' },
+])
+
 const fetchSettings = async () => {
     loading.value = true
     error.value = ''
     try {
-        const [settingsResp, localeResp] = await Promise.all([
+        const [settingsResp, localeResp, weekStartResp, flagsResp] = await Promise.all([
             useMyFetch('/api/organization/settings'),
             useMyFetch('/api/organization/locale'),
+            useMyFetch('/api/organization/week_start'),
+            useMyFetch('/api/organization/hybrid-flags'),
         ])
         if (settingsResp.status.value !== 'success') throw new Error(settingsResp.error?.value?.data?.message || t('settings.failedToFetch'))
         const cfg = (settingsResp.data.value as SettingsResponse)?.config
@@ -177,9 +211,16 @@ const fetchSettings = async () => {
         systemDefaultLocale.value = loc?.default_locale ?? 'en'
         initialLocale.value = orgLocale
 
+        const ws = weekStartResp.data.value as WeekStartResponse | null
+        const orgWeekStart = ws?.week_start ?? ''
+        initialWeekStart.value = orgWeekStart
+
+        const flagRows = (flagsResp.data.value as Array<{ env_name?: string; effective?: boolean }> | null) || []
+        weekStartEnabled.value = flagRows.some(r => r?.env_name === 'HYBRID_WEEK_START' && !!r?.effective)
+
         // Fetch current organization name from session if available
         const { organization } = useOrganization()
-        form.value = { organization_name: organization.value?.name, locale: orgLocale, ...general.value }
+        form.value = { organization_name: organization.value?.name, locale: orgLocale, week_start: orgWeekStart, ...general.value }
     } catch (e: any) {
         error.value = e.message || t('settings.failedToLoad')
         toast.add({ title: t('common.error'), description: error.value, color: 'red' })
@@ -232,6 +273,14 @@ const saveAll = async () => {
             const setLocale = (useNuxtApp() as any).$setLocale as ((c: string) => void) | undefined
             if (resolved && typeof setLocale === 'function') setLocale(resolved)
             initialLocale.value = form.value.locale
+        }
+
+        // 5) Save org first-day-of-week override (430; empty clears to default).
+        if (form.value.week_start !== initialWeekStart.value) {
+            const wsBody = JSON.stringify({ week_start: form.value.week_start || null })
+            const wsResp = await useMyFetch('/api/organization/week_start', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: wsBody })
+            if (wsResp.status.value !== 'success') throw new Error(wsResp.error?.value?.data?.detail || t('settings.weekStart.saveError'))
+            initialWeekStart.value = form.value.week_start
         }
 
         toast.add({ title: t('settings.saved'), color: 'green' })

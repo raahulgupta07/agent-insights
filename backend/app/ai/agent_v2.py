@@ -188,6 +188,9 @@ class AgentV2:
         self.training_build_id = None  # Track build ID for training mode instruction creation
 
         self.ai_analyst_name = organization_settings.config.get('general', {}).get('ai_analyst_name', "City Agent Insights")
+        # 430 — org first-day-of-week ("monday"|"sunday"|"saturday"|None). Passed
+        # to the planner; only consumed when flags.WEEK_START is on.
+        self.org_week_start = organization_settings.config.get('week_start') if organization_settings else None
 
         self.report = report
         self.report_type = getattr(report, 'report_type', 'regular')
@@ -858,6 +861,7 @@ class AgentV2:
                 planner_input = PlannerInput(
                     organization_name=self.organization.name,
                     organization_ai_analyst_name=self.ai_analyst_name,
+                    week_start=self.org_week_start,
                     instructions=instructions_text,
                     user_message=self.head_completion.prompt.get("content", "") if self.head_completion and self.head_completion.prompt else "",
                     schemas_combined=schemas_text,
@@ -2702,6 +2706,7 @@ class AgentV2:
                     planner_input = PlannerInput(
                         organization_name=self.organization.name,
                         organization_ai_analyst_name=self.ai_analyst_name,
+                        week_start=self.org_week_start,
                         instructions=instructions,
                         user_message=self.head_completion.prompt["content"],
                         schemas_excerpt=None,
@@ -4508,6 +4513,7 @@ class AgentV2:
         planner_input = PlannerInput(
             organization_name=self.organization.name,
             organization_ai_analyst_name=self.ai_analyst_name,
+            week_start=self.org_week_start,
             instructions=instructions,
             user_message=user_message,
             schemas_excerpt=None,

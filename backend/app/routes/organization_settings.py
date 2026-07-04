@@ -103,6 +103,29 @@ async def update_organization_locale(
     return await settings_service.update_locale(db, organization, current_user, locale)
 
 
+@router.get("/organization/week_start")
+async def get_organization_week_start(
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """The org's first day of the week (None = default Monday) + valid options."""
+    return await settings_service.get_week_start(db, organization, current_user)
+
+
+@router.put("/organization/week_start")
+@requires_permission('manage_settings')
+async def update_organization_week_start(
+    payload: dict,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Set the org first day of week. Pass {"week_start": "sunday"} or {"week_start": null} for default."""
+    week_start = payload.get("week_start")
+    return await settings_service.update_week_start(db, organization, current_user, week_start)
+
+
 @router.get("/organization/signup-policy", response_model=SignupPolicySchema)
 @requires_permission('full_admin_access')
 async def get_signup_policy(

@@ -109,6 +109,9 @@ class PlannerInput(BaseModel):
     # Identity
     organization_name: Optional[str] = None
     organization_ai_analyst_name: Optional[str] = None
+    # Org first-day-of-week ("monday"|"sunday"|"saturday" or None). 430 —
+    # consumed only when flags.WEEK_START is on (see PromptBuilderV3 time block).
+    week_start: Optional[str] = None
     # End-user (asker) identity — surfaced to the model as <user_profile>.
     # ``user_note`` is admin-managed per-org context about the asker (e.g.
     # "CFO, focuses on monthly close metrics"). Both are optional.

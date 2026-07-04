@@ -760,6 +760,68 @@ class OrganizationSettingsService:
         }
 
     # ------------------------------------------------------------------
+    # Week start (430, org-scoped) — first day of the work week
+    # ------------------------------------------------------------------
+    _WEEK_START_OPTIONS = ("monday", "sunday", "saturday")
+
+    async def get_week_start(
+        self,
+        db: AsyncSession,
+        organization: Organization,
+        current_user: User,
+    ) -> dict:
+        """Return the org's first-day-of-week override (None = default Monday)."""
+        settings = await self.get_settings(db, organization, current_user)
+        raw = (settings.config or {}).get("week_start")
+        raw = raw if raw in self._WEEK_START_OPTIONS else None
+        return {"week_start": raw, "options": list(self._WEEK_START_OPTIONS)}
+
+    async def update_week_start(
+        self,
+        db: AsyncSession,
+        organization: Organization,
+        current_user: User,
+        week_start: str | None,
+    ) -> dict:
+        """Set or clear the org first-day-of-week. None/""/"auto" clears to default."""
+        new_week_start: str | None
+        if week_start in (None, "", "auto"):
+            new_week_start = None
+        elif isinstance(week_start, str) and week_start.lower() in self._WEEK_START_OPTIONS:
+            new_week_start = week_start.lower()
+        else:
+            raise HTTPException(
+                status_code=422,
+                detail=f"week_start must be one of {list(self._WEEK_START_OPTIONS)}, 'auto', or null.",
+            )
+
+        settings = await self.get_settings(db, organization, current_user)
+        current_config = dict(settings.config or {})
+        if current_config.get("week_start") != new_week_start:
+            current_config["week_start"] = new_week_start
+            settings.config = current_config
+            settings.updated_at = datetime.utcnow()
+            flag_modified(settings, "config")
+            db.add(settings)
+            await db.commit()
+            await db.refresh(settings)
+
+            try:
+                await audit_service.log(
+                    db=db,
+                    organization_id=str(organization.id),
+                    action="settings.week_start_updated",
+                    user_id=str(current_user.id),
+                    resource_type="organization_settings",
+                    resource_id=str(settings.id),
+                    details={"week_start": new_week_start},
+                )
+            except Exception:
+                pass
+
+        return {"week_start": new_week_start, "options": list(self._WEEK_START_OPTIONS)}
+
+    # ------------------------------------------------------------------
     # LDAP (org-scoped)
     # ------------------------------------------------------------------
 

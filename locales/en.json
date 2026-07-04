@@ -1409,6 +1409,16 @@
       "saved": "Language updated",
       "saveError": "Could not update language"
     },
+    "weekStart": {
+      "label": "First day of the week",
+      "description": "Sets which day the week starts on when the AI interprets weekly and scheduled prompts (e.g. \"this week\", \"last week\"). Takes effect when the Configurable Week Start feature is enabled.",
+      "auto": "Default (Monday)",
+      "monday": "Monday",
+      "sunday": "Sunday",
+      "saturday": "Saturday",
+      "saved": "Week start updated",
+      "saveError": "Could not update week start"
+    },
     "workspacePlaceholder": "Workspace name",
     "changeIcon": "Change Icon",
     "uploadIconButton": "Upload Icon",

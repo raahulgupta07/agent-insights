@@ -22,6 +22,33 @@ from app.schemas.ai.planner import PlannerInput, PlannerInputV3, ToolDescriptor
 from .prompt_builder import PromptBuilder
 
 
+# 430 — first-day-of-week convention. Maps the org's week_start setting to
+# Python's date.weekday() index (Monday == 0). Consumed only when
+# flags.WEEK_START is on; an unrecognised/absent value yields no note (the time
+# block then stays byte-identical to the default).
+_WEEK_START_TO_WEEKDAY = {"monday": 0, "saturday": 5, "sunday": 6}
+_WEEKDAY_NAMES = [
+    "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+]
+
+
+def _week_convention_note(today, week_start: Optional[str]) -> str:
+    """'week starts on <Day>; this week: <start>..<end>' for the org's first day
+    of the week, so the model resolves "this week"/"last week" against the right
+    boundary. Returns "" when ``week_start`` is unset/unrecognised."""
+    first_weekday = _WEEK_START_TO_WEEKDAY.get((week_start or "").strip().lower())
+    if first_weekday is None:
+        return ""
+    from datetime import timedelta
+    offset = (today.weekday() - first_weekday) % 7
+    start = today - timedelta(days=offset)
+    end = start + timedelta(days=6)
+    return (
+        f"week starts on {_WEEKDAY_NAMES[first_weekday]}; "
+        f"this week: {start.isoformat()} to {end.isoformat()}"
+    )
+
+
 def _tool_specs_from_catalog(catalog: Optional[List[ToolDescriptor]]) -> List[ToolSpec]:
     """Translate the planner's tool catalog into provider-agnostic ToolSpec list."""
     out: List[ToolSpec] = []
@@ -456,6 +483,19 @@ Examples of good behavior:
         now = datetime.now()
         tz = now.astimezone().tzinfo
         time_block = f"<time>{now.strftime('%Y-%m-%d %H:%M:%S')} ({tz})</time>"
+
+        # 430 (flag-gated, additive) — when the org configured a first day of the
+        # week, spell out the week convention so the model resolves "this week"/
+        # "last week" against the right boundary. Flag OFF or setting unset =
+        # time block unchanged. Fail-soft: never break the planner.
+        try:
+            from app.settings.hybrid_flags import flags as _hybrid_flags
+            if _hybrid_flags.WEEK_START:
+                _wc = _week_convention_note(now.date(), getattr(planner_input, "week_start", None))
+                if _wc:
+                    time_block = f"<time>{now.strftime('%Y-%m-%d %H:%M:%S')} ({tz}); {_wc}</time>"
+        except Exception:
+            pass
 
         parts: List[str] = [time_block]
         user_profile_block = PromptBuilderV3._format_user_profile(planner_input)

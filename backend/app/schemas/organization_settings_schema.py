@@ -129,6 +129,12 @@ class OrganizationSettingsConfig(BaseModel):
     # avoid coupling the schema to runtime config).
     locale: Optional[str] = None
 
+    # First day of the work week, governing how the AI interprets "this week" /
+    # "last week" in weekly/scheduled prompts. One of "sunday" | "monday" |
+    # "saturday", or None for the default (Monday / ISO). Consumption is gated by
+    # flags.WEEK_START (430); storage here is always allowed. Presentation only.
+    week_start: Optional[str] = None
+
     # Signup policy (domain allowlist). Gate: full_admin_access.
     class SignupPolicy(BaseModel):
         enabled: bool = False
