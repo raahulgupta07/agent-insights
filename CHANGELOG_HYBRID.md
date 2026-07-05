@@ -3,6 +3,10 @@
 Hybrid feature changelog (our additions on top of the bagofwords/Dash base). Newest first.
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` then bullets.
 
+## v1.125.1 — Fix: clicking a report no longer bounces to a blank page  (2026-07-05)
+- Opening a saved report (one with a conversation) sometimes flipped straight to an empty "untitled report". Fixed.
+  - Root cause: v1.122's `onAgentPickerChange` was bound to the composer picker's `@update:selectedDataSources`, which emits the GLOBAL selection during report load — different from the opened report's own `data_sources`. With history + `!sameSet` it ran `navigateTo('/reports/new')`. Fix: `pages/reports/[id]/index.vue` new `agentSwitchArmed` ref (armed 1.5s after the report's data_sources settle); while unarmed `onAgentPickerChange` only syncs the local header selection and never navigates/persists — so only genuine user agent switches branch to a new report.
+
 ## v1.125.0 — Stop saving blank "untitled report" drafts  (2026-07-05)
 - The sidebar was filling with empty "untitled report" chats you never wrote in. Now only reports that actually have a conversation are saved and listed — blank drafts are hidden, and switching agents no longer spawns a new empty one each time. Cleaned up the 22 blanks that had piled up.
   - Root cause: `/reports/new` eagerly creates a row on mount (the "lazy" comments lied), the sidebar `GET /reports` had no empty-filter, and v1.122's `isReusable` (require draft sources == picked agent) minted a fresh orphan on every agent switch. Fixes: (a) `report_service.get_reports` now excludes placeholder-title reports with 0 completions (`title NOT IN placeholders OR EXISTS(completion)`) — still openable by id; (b) `reports/new.vue` `isReusable` relaxed to reuse the one scratch draft + new `rescopeDraft` PUTs its `data_sources` to the picked agent (keeps the v1.122 lock, kills the multiplier); (c) one-time archive of the 22 existing blanks via the DELETE API.

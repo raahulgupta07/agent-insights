@@ -2213,9 +2213,19 @@ const currentAgents = ref<any[]>([])
 // blank the entire report page. Do not move this below the watch.
 const groundingScope = ref({ tables_total: 0, tables_injected: 0, metrics_total: 0, metrics_injected: 0 })
 
+// Guard: the composer's agent picker emits its (global) selection during report
+// load, which usually differs from THIS report's persisted data_sources. Without
+// this, that spurious init emit is mistaken for a user agent-switch and bounces a
+// report-with-history to /reports/new (blank page). Arm the switch handler only
+// AFTER the report has settled, so only genuine user picks branch to a new report.
+const agentSwitchArmed = ref(false)
+let _armTimer: any = null
 watch(() => report.value?.data_sources, (val) => {
     if (val && currentAgents.value.length === 0) currentAgents.value = [...val]
     loadGroundingScope()
+    if (val && !agentSwitchArmed.value && !_armTimer) {
+        _armTimer = setTimeout(() => { agentSwitchArmed.value = true }, 1500)
+    }
 }, { immediate: true })
 async function loadGroundingScope() {
     const ids = (report.value?.data_sources || []).map((d: any) => d?.id).filter(Boolean)
@@ -2245,6 +2255,13 @@ async function onAgentPickerChange(val: any[]) {
     const newIds = (val || []).map((a: any) => a?.id).filter(Boolean)
     const curIds = (report.value?.data_sources || []).map((d: any) => d?.id).filter(Boolean)
     const sameSet = newIds.length === curIds.length && newIds.every((id: string) => curIds.includes(id))
+
+    // Not yet armed = this is the picker initializing during report load, NOT a user
+    // switch. Just sync the local header selection; never navigate or persist here.
+    if (!agentSwitchArmed.value) {
+        currentAgents.value = val
+        return
+    }
 
     // Report has a conversation AND the pick actually differs -> branch to a NEW
     // report scoped to the new agent (do NOT mutate this report's grounding). Seed
