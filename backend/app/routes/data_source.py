@@ -509,6 +509,64 @@ async def register_connector(
     return await data_source_service.get_data_source(db, str(clone.id), organization, current_user)
 
 
+class _TestTemplateRequest(_BaseModel):
+    tenant_id: str
+    server_hostname: Optional[str] = None
+
+
+@router.post("/connectors/{key}/test-template", response_model=dict)
+async def test_connector_template(
+    key: str,
+    payload: _TestTemplateRequest,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Lightweight "test before save" for a Microsoft connector TEMPLATE (no
+    credentials — only tenant_id + optional Fabric SQL endpoint). Validates
+    GUID format + (for Fabric) endpoint format & DNS reachability. Fail-soft:
+    ALWAYS returns 200 with {ok, reason}, never raises."""
+    import re as _re
+    import socket as _socket
+    import asyncio as _asyncio
+
+    _GUID_RE = _re.compile(r"^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$")
+    try:
+        tenant_id = (payload.tenant_id or "").strip()
+        if not _GUID_RE.match(tenant_id):
+            return {"ok": False, "reason": "Tenant ID must be a valid GUID"}
+
+        if key == "ms_fabric":
+            raw = (payload.server_hostname or "").strip()
+            if not raw:
+                return {"ok": False, "reason": "Endpoint should be a *.fabric.microsoft.com hostname"}
+            # Strip any scheme, path, and port the user may have pasted → host only.
+            host = raw
+            if "://" in host:
+                host = host.split("://", 1)[1]
+            host = host.split("/", 1)[0].split("\\", 1)[0]
+            if host.startswith("[") and "]" in host:  # bracketed IPv6
+                host = host[1:host.index("]")]
+            else:
+                host = host.split(":", 1)[0]
+            host = host.strip().rstrip(".")
+            if not host:
+                return {"ok": False, "reason": "Endpoint should be a *.fabric.microsoft.com hostname"}
+            well_formed = host.endswith(".datawarehouse.fabric.microsoft.com") or host.endswith(".fabric.microsoft.com")
+            try:
+                await _asyncio.to_thread(_socket.getaddrinfo, host, 1433)
+            except Exception:
+                return {"ok": False, "reason": "Endpoint hostname does not resolve"}
+            if not well_formed:
+                return {"ok": True, "reason": "Endpoint reachable · expected a *.fabric.microsoft.com hostname"}
+            return {"ok": True, "reason": "Tenant ID valid · endpoint reachable"}
+
+        # powerbi_user / sharepoint / onedrive — no endpoint, GUID check only.
+        return {"ok": True, "reason": "Tenant ID looks valid"}
+    except Exception as e:
+        return {"ok": False, "reason": f"Could not validate: {str(e)[:120]}"}
+
+
 class _DeviceCodePollRequest(_BaseModel):
     device_code: str
     # Unified Microsoft sign-in (HYBRID_MS_UNIFIED_SIGNIN): also build a Fabric

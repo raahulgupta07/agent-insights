@@ -222,10 +222,25 @@ const baseCatalog = [
 // HYBRID_MS_UNIFIED_SIGNIN joint "Microsoft (Fabric + Power BI)" tile was removed.)
 const catalog = computed(() => baseCatalog)
 
+// Admin-controlled hide list (org_settings.config.connectors_hidden). Same GET the
+// Settings › Connectors page writes. A hidden connector is dropped for EVERYONE
+// (incl. admins) — the admin re-shows it from Settings.
+const hiddenKeys = ref<string[]>([])
+async function loadHidden() {
+    try {
+        const { data } = await useMyFetch('/organization/settings', { method: 'GET' })
+        const cfg = (data.value as any)?.config || {}
+        hiddenKeys.value = Array.isArray(cfg.connectors_hidden) ? cfg.connectors_hidden : []
+    } catch { hiddenKeys.value = [] }
+}
+
 // Tile visibility: a LIVE connector shows only when it's configured (a non-disabled
 // template exists) OR the viewer is an admin (who can still click "Set up →").
 // Coming-soon connectors (SharePoint/OneDrive, !c.live) ALWAYS show.
-const visibleCatalog = computed(() => catalog.value.filter((c: any) => !c.live || isConfigured(c) || canManage.value))
+// AND a connector in the org hide list is dropped regardless of role.
+const visibleCatalog = computed(() => catalog.value.filter((c: any) =>
+    (!c.live || isConfigured(c) || canManage.value) && !hiddenKeys.value.includes(c.key)
+))
 
 function templateFor(key: string) {
     const type = catalog.value.find(c => c.key === key)?.type
@@ -420,6 +435,7 @@ onBeforeUnmount(() => { if (pollHandle) clearTimeout(pollHandle) })
 
 onMounted(async () => {
     await loadFlag()
+    await loadHidden()
     if (enabled.value) await loadTemplates()
 })
 </script>

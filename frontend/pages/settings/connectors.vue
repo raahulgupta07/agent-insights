@@ -18,37 +18,43 @@
                     :key="c.key"
                     class="flex items-center gap-3 p-3.5 rounded-xl border border-[#E9E0D3] bg-white"
                 >
-                    <div class="w-9 h-9 rounded-lg bg-white border border-[#E9E0D3] flex items-center justify-center p-1.5 shrink-0" :class="isDisabled(c.key) ? 'opacity-45' : ''">
+                    <div class="w-9 h-9 rounded-lg bg-white border border-[#E9E0D3] flex items-center justify-center p-1.5 shrink-0" :class="isHidden(c.key) ? 'opacity-45' : ''">
                         <img :src="c.icon" :alt="c.name" class="w-full h-full object-contain" />
                     </div>
-                    <div class="min-w-0" :class="isDisabled(c.key) ? 'opacity-55' : ''">
+                    <div class="min-w-0" :class="isHidden(c.key) ? 'opacity-55' : ''">
                         <div class="text-[13.5px] font-semibold text-[#1f2328] leading-tight">{{ c.name }}</div>
                         <div class="text-[11px] text-[#9a958c] mt-0.5">{{ c.desc }}</div>
                     </div>
 
                     <div class="ms-auto flex items-center gap-3">
+                        <!-- Setup-state chip (independent of visibility). -->
                         <span v-if="!c.live" class="text-[11px] font-medium text-[#B9AE9C]">{{ $t('connectors.comingSoon') }}</span>
-                        <template v-else>
-                            <span
-                                v-if="templateFor(c.key) && isDisabled(c.key)"
-                                class="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded text-[#8a857c] bg-[#EDE7DC]"
-                            >{{ $t('connectors.disabledChip') || 'Disabled' }}</span>
-                            <span
-                                v-else
-                                class="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded"
-                                :class="templateFor(c.key) ? 'text-[#3f9e6a] bg-[#eef6f0]' : 'text-[#9a958c] bg-[#F4EEE5]'"
-                            >{{ templateFor(c.key) ? $t('connectors.configured') : $t('connectors.draft') }}</span>
-                            <button
-                                v-if="templateFor(c.key)"
-                                @click="toggleTemplate(c.key)"
-                                class="text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-colors"
-                                :class="isDisabled(c.key) ? 'border-[#cdb9a0] text-[#3f9e6a] hover:bg-[#eef6f0]' : 'border-[#E9E0D3] text-[#8a857c] hover:bg-[#F4EEE5]'"
-                            >{{ isDisabled(c.key) ? ($t('connectors.enable') || 'Enable') : ($t('connectors.disable') || 'Disable') }}</button>
-                            <button
-                                @click="openAdminConfig(c.key)"
-                                class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#C2541E] text-white hover:bg-[#A8330F] transition-colors"
-                            >{{ templateFor(c.key) ? $t('common.edit') || 'Edit' : $t('connectors.configure') }}</button>
-                        </template>
+                        <span
+                            v-else
+                            class="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded"
+                            :class="templateFor(c.key) ? 'text-[#3f9e6a] bg-[#eef6f0]' : 'text-[#9a958c] bg-[#F4EEE5]'"
+                        >{{ templateFor(c.key) ? $t('connectors.configured') : $t('connectors.draft') }}</span>
+
+                        <!-- Hidden badge when toggled off. -->
+                        <span
+                            v-if="isHidden(c.key)"
+                            class="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded text-[#8a857c] bg-[#EDE7DC]"
+                        >Hidden</span>
+
+                        <!-- Show/Hide on Data Agents — present on EVERY row. -->
+                        <UToggle
+                            :model-value="!isHidden(c.key)"
+                            @update:model-value="setHidden(c.key, !$event)"
+                            aria-label="Show on Data Agents"
+                            title="Show on Data Agents"
+                        />
+
+                        <!-- Configure / Edit — live connectors only. -->
+                        <button
+                            v-if="c.live"
+                            @click="openAdminConfig(c.key)"
+                            class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#C2541E] text-white hover:bg-[#A8330F] transition-colors"
+                        >{{ templateFor(c.key) ? $t('common.edit') || 'Edit' : $t('connectors.configure') }}</button>
                     </div>
                 </div>
             </div>
@@ -61,20 +67,36 @@
                 <p class="text-xs text-[#6b6b6b] mb-4">{{ $t('connectors.configureHint') }}</p>
                 <template v-if="editingConn.fields.includes('server_hostname')">
                     <label class="block text-xs font-semibold text-[#6b6b6b] mb-1">{{ $t('connectors.sqlEndpoint') }}</label>
-                    <input v-model="cfg.server_hostname" placeholder="xxxxx.datawarehouse.fabric.microsoft.com" class="w-full border border-[#E9E0D3] rounded-lg px-3 py-2 text-sm bg-[#FCFAF6] focus:outline-none focus:border-[#C2541E] mb-3" />
+                    <input v-model="cfg.server_hostname" @input="testResult = null" placeholder="xxxxx.datawarehouse.fabric.microsoft.com" class="w-full border border-[#E9E0D3] rounded-lg px-3 py-2 text-sm bg-[#FCFAF6] focus:outline-none focus:border-[#C2541E] mb-3" />
                 </template>
                 <label class="block text-xs font-semibold text-[#6b6b6b] mb-1">{{ $t('connectors.tenantId') }}</label>
-                <input v-model="cfg.tenant_id" placeholder="00000000-0000-0000-0000-000000000000" class="w-full border border-[#E9E0D3] rounded-lg px-3 py-2 text-sm bg-[#FCFAF6] focus:outline-none focus:border-[#C2541E] mb-3" />
+                <input v-model="cfg.tenant_id" @input="testResult = null" placeholder="00000000-0000-0000-0000-000000000000" class="w-full border border-[#E9E0D3] rounded-lg px-3 py-2 text-sm bg-[#FCFAF6] focus:outline-none focus:border-[#C2541E] mb-3" />
                 <p class="text-[11px] text-[#9a958c] bg-[#FCFAF6] border border-[#E9E0D3] rounded-lg p-2.5 leading-relaxed">{{ $t('connectors.autoDbNote') }}</p>
+                <!-- Test-template result banner. -->
+                <div
+                    v-if="testResult"
+                    class="text-xs rounded-lg p-2.5 mt-2"
+                    :class="testResult.ok ? 'text-[#3f9e6a] bg-[#eef6f0]' : 'text-[#B4432B] bg-[#F7E7E2]'"
+                >{{ testResult.ok ? '✓' : '✕' }} {{ testResult.reason }}</div>
                 <div v-if="adminError" class="text-xs text-[#B4432B] bg-[#F7E7E2] rounded-lg p-2.5 mt-2">{{ adminError }}</div>
                 <div class="flex items-center gap-2 mt-4">
                     <!-- Only an already-configured connector can be deleted. -->
                     <button v-if="templateFor(editingKey)" @click="deleteTemplate" :disabled="deleting || publishing" class="text-xs font-medium text-[#a13d3d] hover:bg-[#fdf6f6] px-2.5 py-2 rounded-lg disabled:opacity-50">
                         <Spinner v-if="deleting" class="w-3.5 h-3.5 inline" /> {{ $t('common.delete') || 'Delete' }}
                     </button>
-                    <div class="ms-auto flex gap-2">
+                    <div class="ms-auto flex gap-2 items-center">
+                        <button @click="testTemplate" :disabled="testing || publishing" class="text-sm px-3 py-2 rounded-lg bg-white border border-[#E9E0D3] disabled:opacity-50">
+                            <span v-if="testing">⟳ Testing…</span>
+                            <span v-else>Test</span>
+                        </button>
                         <button @click="showAdmin = false" class="text-sm px-3 py-2 rounded-lg bg-white border border-[#E9E0D3]">{{ $t('common.cancel') }}</button>
-                        <button @click="publishTemplate" :disabled="publishing" class="text-sm px-4 py-2 rounded-lg bg-[#C2541E] text-white hover:bg-[#A8330F] disabled:opacity-50">
+                        <button
+                            v-if="testResult?.ok !== true"
+                            @click="publishTemplate"
+                            :disabled="publishing"
+                            class="text-[11px] text-[#9a958c] hover:text-[#C2541E] underline px-1 disabled:opacity-50"
+                        >Save anyway</button>
+                        <button @click="publishTemplate" :disabled="publishing || testResult?.ok !== true" class="text-sm px-4 py-2 rounded-lg bg-[#C2541E] text-white hover:bg-[#A8330F] disabled:opacity-50">
                             <Spinner v-if="publishing" class="w-3.5 h-3.5 inline" /> {{ templateFor(editingKey) ? ($t('common.save') || 'Save') : $t('connectors.publish') }}
                         </button>
                     </div>
@@ -109,29 +131,44 @@ function templateFor(key: string) {
     return templates.value.find(tp => tp.type === type) || null
 }
 
-function isDisabled(key: string) {
-    return templateFor(key)?.publish_status === 'disabled'
+// ---- Show/Hide on Data Agents (per-org key list) ---------------------------
+// Visibility is independent of setup state (publish_status). Stored as an array
+// of connector keys in organization_settings.config.connectors_hidden — works for
+// keyless coming-soon connectors too. GET/PUT the SAME endpoint the general/
+// ai-settings pages use; backend MERGES per top-level config key so other config
+// (general, ai_features, hybrid_overrides…) is preserved.
+const hiddenKeys = ref<string[]>([])
+
+function isHidden(key: string) {
+    return hiddenKeys.value.includes(key)
 }
 
-// Enable/disable a CONFIGURED connector: stays configured but hidden from /agents
-// and un-signable. Flips DataSource.publish_status via PUT /data_sources/{id}.
-async function toggleTemplate(key: string) {
-    const tpl = templateFor(key)
-    if (!tpl) return
-    const nextDisabled = !isDisabled(key)
+async function loadHidden() {
     try {
-        const { error } = await useMyFetch(`/data_sources/${tpl.id}`, {
+        const { data } = await useMyFetch('/organization/settings', { method: 'GET' })
+        const cfg = (data.value as any)?.config || {}
+        hiddenKeys.value = Array.isArray(cfg.connectors_hidden) ? cfg.connectors_hidden : []
+    } catch { hiddenKeys.value = [] }
+}
+
+async function setHidden(key: string, hidden: boolean) {
+    const prev = [...hiddenKeys.value]
+    const next = hidden ? [...new Set([...prev, key])] : prev.filter(k => k !== key)
+    hiddenKeys.value = next // optimistic
+    try {
+        const { error } = await useMyFetch('/organization/settings', {
             method: 'PUT',
-            body: { publish_status: nextDisabled ? 'disabled' : 'published' },
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ config: { connectors_hidden: next } }),
         })
         if (error.value) throw error.value
-        await loadTemplates()
         toast.add({
-            title: nextDisabled ? (t('connectors.disabled') || 'Connector disabled') : (t('connectors.enabled') || 'Connector enabled'),
-            color: nextDisabled ? 'orange' : 'green',
+            title: hidden ? 'Hidden from Data Agents' : 'Shown on Data Agents',
+            color: hidden ? 'orange' : 'green',
             icon: 'i-heroicons-check-circle',
         })
     } catch (e: any) {
+        hiddenKeys.value = prev // revert
         toast.add({ title: e?.data?.detail || e?.message || 'Update failed', color: 'red', icon: 'i-heroicons-exclamation-triangle' })
     }
 }
@@ -147,6 +184,8 @@ const showAdmin = ref(false)
 const publishing = ref(false)
 const deleting = ref(false)
 const adminError = ref('')
+const testing = ref(false)
+const testResult = ref<{ ok: boolean; reason: string } | null>(null)
 const cfg = reactive<{ server_hostname: string; tenant_id: string }>({ server_hostname: '', tenant_id: '' })
 const editingKey = ref('fabric')
 const editingConn = computed(() => catalog.find(c => c.key === editingKey.value) || catalog[0])
@@ -157,7 +196,30 @@ function openAdminConfig(key: string) {
     cfg.server_hostname = tpl?.config?.server_hostname || ''
     cfg.tenant_id = tpl?.config?.tenant_id || ''
     adminError.value = ''
+    testResult.value = null
+    testing.value = false
     showAdmin.value = true
+}
+
+// Validate the connector template (tenant / SQL endpoint) before saving. Endpoint
+// is provided by a parallel agent; call it by contract. Gates Save on ok===true.
+async function testTemplate() {
+    testing.value = true
+    testResult.value = null
+    try {
+        const { data, error } = await useMyFetch(`/connectors/${editingKey.value}/test-template`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tenant_id: cfg.tenant_id, server_hostname: cfg.server_hostname || null }),
+        })
+        if (error.value) throw error.value
+        const r = (data.value as any) || {}
+        testResult.value = { ok: !!r.ok, reason: r.reason || (r.ok ? 'Connection looks good.' : 'Test failed.') }
+    } catch (e: any) {
+        testResult.value = { ok: false, reason: 'Could not reach test endpoint' }
+    } finally {
+        testing.value = false
+    }
 }
 
 async function publishTemplate() {
@@ -221,5 +283,5 @@ async function deleteTemplate() {
     }
 }
 
-onMounted(loadTemplates)
+onMounted(() => { loadTemplates(); loadHidden() })
 </script>

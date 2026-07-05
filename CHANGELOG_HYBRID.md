@@ -3,7 +3,11 @@
 Hybrid feature changelog (our additions on top of the bagofwords/Dash base). Newest first.
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` then bullets.
 
-## v1.122.0 — Connector Disable/Enable label + each report stays on its own agent's data  (2026-07-05)
+## v1.123.0 — Connector Show/Hide toggle on every row + Test before save  (2026-07-05)
+- Settings › Connectors: every connector row (Fabric, Power BI, SharePoint, OneDrive) now has a **Show / Hide toggle**. Turn one off and its card disappears from the Data Agents page — including the "coming soon" ones. Turn it back on to show it again.
+- The Configure box now has a **Test** button — check the Tenant ID (and Fabric SQL endpoint) are valid and reachable **before** you Save. Save waits for a passing test, with a "Save anyway" escape.
+  - Toggle drives a per-org `organization_settings.config.connectors_hidden` list (works for keyless coming-soon connectors, no migration). `settings/connectors.vue` `UToggle` + optimistic PUT `/organization/settings`; `ConnectorsMsHub.visibleCatalog` drops hidden keys for everyone. Removed the old `publish_status` Disable button + orphaned `isDisabled`/`toggleTemplate`.
+  - Test: `POST /connectors/{key}/test-template` (backend `routes/data_source.py`, fail-soft, always 200 `{ok,reason}`) — GUID check + Fabric hostname `*.fabric.microsoft.com` DNS-resolve via `asyncio.to_thread`. FE gates Save on `testResult.ok`, resets on field edit. Note: toggle PUT needs `manage_settings` (super-admin has it). — Connector Disable/Enable label + each report stays on its own agent's data  (2026-07-05)
 - The connector **Enable / Disable** button now reads properly (it was showing a raw code label). Disabling a connector hides it from the Data Agents page; enabling brings it back.
 - **A report now stays locked to the agent's own data.** Before, opening a report and switching the agent in the picker changed the title to the new agent but the working folders + "Grounded on…" still showed the old agent's data. Now: switch agent in a fresh report → its data follows; switch in a report that already has a conversation → it opens a **new report** on the new agent instead of quietly re-grounding the old chat.
   - Bug 1: five `connectors.*` i18n keys were missing (`disable/enable/disabledChip/disabled/enabled`); vue-i18n returns the raw key (truthy) so the `$t()||'x'` fallback never fired. Added to `locales/en.json`.
