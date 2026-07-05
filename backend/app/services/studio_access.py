@@ -158,3 +158,46 @@ async def resolve_studio_access(
 
     # 4. No access.
     return None
+
+
+async def studio_chat_gate(db: AsyncSession, studio_id: str, user) -> bool:
+    """Chat-time access gate for a report that carries a ``studio_id``.
+
+    Returns True = allow chat, False = deny (403). Unlike ``resolve_studio_access``
+    this tolerates a *stale* ``studio_id``: a report can outlive its Studio (soft-
+    deleted), in which case chat must fall back to plain data-agent behaviour rather
+    than 403 the org owner/admin.
+
+    Logic:
+        1. Raw Studio lookup (NO ``deleted_at`` filter). Missing OR soft-deleted
+           studio -> the report has outlived its studio -> allow (do not gate).
+        2. Org full-admin (or superuser) -> allow.
+        3. Otherwise defer to ``resolve_studio_access`` (role is not None).
+    """
+    if user is None:
+        return False
+
+    # 1. Raw lookup — bypass the deleted_at filter used by resolve_studio_access.
+    result = await db.execute(select(Studio).where(Studio.id == studio_id))
+    studio = result.scalar_one_or_none()
+    if studio is None or getattr(studio, "deleted_at", None) is not None:
+        # Report outlived its studio -> treat as plain data-agent chat, do not gate.
+        return True
+
+    # 2. Full-admin / superuser always allowed.
+    if getattr(user, "is_superuser", False):
+        return True
+    try:
+        from app.core.permission_resolver import resolve_permissions, FULL_ADMIN
+
+        resolved = await resolve_permissions(
+            db, str(user.id), str(getattr(user, "organization_id", "") or "")
+        )
+        if FULL_ADMIN in resolved.org_permissions:
+            return True
+    except Exception:
+        pass
+
+    # 3. Fall back to the normal role resolver.
+    role = await resolve_studio_access(db, studio_id, user)
+    return role is not None

@@ -67,7 +67,7 @@ def discover_fabric_endpoint(tenant_id: str, refresh_token: str) -> Optional[dic
         return None
 
     total = 0
-    first: Optional[dict] = None
+    candidates: list[dict] = []
     for w in workspaces:
         wid = w.get("id")
         wname = w.get("displayName")
@@ -88,13 +88,41 @@ def discover_fabric_endpoint(tenant_id: str, refresh_token: str) -> Optional[dic
                 if not host:
                     continue
                 total += 1
-                if first is None:
-                    first = {
-                        "server_hostname": host,
-                        "database": it.get("displayName"),
-                        "workspace": wname,
-                    }
-    if not first:
+                candidates.append({
+                    "server_hostname": host,
+                    "database": it.get("displayName"),
+                    "workspace": wname,
+                    "kind": kind,
+                })
+    if not candidates:
         return None
-    first["n_warehouses"] = total
-    return first
+
+    def _is_staging(name: Optional[str]) -> bool:
+        """True for Fabric auto-generated staging / system warehouses that hold no
+        real user tables (e.g. StagingWarehouseForDataflows_20250626041334)."""
+        n = (name or "").strip().lower()
+        if not n:
+            return False
+        return (
+            "stagingwarehousefordataflows" in n
+            or "fordataflows" in n
+            or n.startswith("staging")
+            or n.endswith("_staging")
+        )
+
+    warehouses = [c for c in candidates if c["kind"] == "warehouses"]
+    lakehouses = [c for c in candidates if c["kind"] == "lakehouses"]
+    n_staging = sum(1 for c in candidates if _is_staging(c["database"]))
+
+    chosen = (
+        next((c for c in warehouses if not _is_staging(c["database"])), None)
+        or next((c for c in lakehouses if not _is_staging(c["database"])), None)
+        or candidates[0]  # last resort: all were staging (honest empty rather than break)
+    )
+    logger.info(
+        "fabric discovery: chose %s '%s' (workspace '%s') from %d candidate(s), %d skipped as staging",
+        chosen.get("kind"), chosen.get("database"), chosen.get("workspace"), total, n_staging,
+    )
+    chosen.pop("kind", None)
+    chosen["n_warehouses"] = total
+    return chosen

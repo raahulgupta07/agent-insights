@@ -1102,10 +1102,14 @@ class DataSourceService:
             )
             .where(
                 DataSource.organization_id == organization.id,
-                DataSource.is_active == True
+                DataSource.is_active == True,
+                # Connector config-shell templates are not chattable agents — the
+                # per-user clone is. Exclude them here as get_data_sources does,
+                # else the picker shows a phantom "Service account" entry.
+                DataSource.is_user_template.isnot(True),
             )
         )
-        
+
         # Apply access control if user is provided (same logic as get_data_sources)
         if current_user:
             from app.core.permission_resolver import get_member_data_source_ids

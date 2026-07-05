@@ -552,9 +552,8 @@ class CompletionService:
 
             # HYBRID_AGENT_ACL: enforce per-agent access at chat time (flag-gated, default OFF)
             if flags.AGENT_ACL and getattr(report, "studio_id", None):
-                from app.services.studio_access import resolve_studio_access
-                _role = await resolve_studio_access(db, str(report.studio_id), current_user)
-                if _role is None:
+                from app.services.studio_access import studio_chat_gate
+                if not await studio_chat_gate(db, str(report.studio_id), current_user):
                     raise HTTPException(status_code=403, detail="You do not have access to this agent.")
 
             # Validate widget if provided
@@ -2129,9 +2128,8 @@ class CompletionService:
 
             # HYBRID_AGENT_ACL: enforce per-agent access at chat time (flag-gated, default OFF)
             if flags.AGENT_ACL and getattr(report, "studio_id", None):
-                from app.services.studio_access import resolve_studio_access
-                _role = await resolve_studio_access(db, str(report.studio_id), current_user)
-                if _role is None:
+                from app.services.studio_access import studio_chat_gate
+                if not await studio_chat_gate(db, str(report.studio_id), current_user):
                     raise HTTPException(status_code=403, detail="You do not have access to this agent.")
 
             # Validate widget if provided

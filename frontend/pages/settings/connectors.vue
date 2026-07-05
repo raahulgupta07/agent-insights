@@ -56,11 +56,17 @@
                 <input v-model="cfg.tenant_id" placeholder="00000000-0000-0000-0000-000000000000" class="w-full border border-[#E9E0D3] rounded-lg px-3 py-2 text-sm bg-[#FCFAF6] focus:outline-none focus:border-[#C2541E] mb-3" />
                 <p class="text-[11px] text-[#9a958c] bg-[#FCFAF6] border border-[#E9E0D3] rounded-lg p-2.5 leading-relaxed">{{ $t('connectors.autoDbNote') }}</p>
                 <div v-if="adminError" class="text-xs text-[#B4432B] bg-[#F7E7E2] rounded-lg p-2.5 mt-2">{{ adminError }}</div>
-                <div class="flex justify-end gap-2 mt-4">
-                    <button @click="showAdmin = false" class="text-sm px-3 py-2 rounded-lg bg-white border border-[#E9E0D3]">{{ $t('common.cancel') }}</button>
-                    <button @click="publishTemplate" :disabled="publishing" class="text-sm px-4 py-2 rounded-lg bg-[#C2541E] text-white hover:bg-[#A8330F] disabled:opacity-50">
-                        <Spinner v-if="publishing" class="w-3.5 h-3.5 inline" /> {{ $t('connectors.publish') }}
+                <div class="flex items-center gap-2 mt-4">
+                    <!-- Only an already-configured connector can be deleted. -->
+                    <button v-if="templateFor(editingKey)" @click="deleteTemplate" :disabled="deleting || publishing" class="text-xs font-medium text-[#a13d3d] hover:bg-[#fdf6f6] px-2.5 py-2 rounded-lg disabled:opacity-50">
+                        <Spinner v-if="deleting" class="w-3.5 h-3.5 inline" /> {{ $t('common.delete') || 'Delete' }}
                     </button>
+                    <div class="ms-auto flex gap-2">
+                        <button @click="showAdmin = false" class="text-sm px-3 py-2 rounded-lg bg-white border border-[#E9E0D3]">{{ $t('common.cancel') }}</button>
+                        <button @click="publishTemplate" :disabled="publishing" class="text-sm px-4 py-2 rounded-lg bg-[#C2541E] text-white hover:bg-[#A8330F] disabled:opacity-50">
+                            <Spinner v-if="publishing" class="w-3.5 h-3.5 inline" /> {{ templateFor(editingKey) ? ($t('common.save') || 'Save') : $t('connectors.publish') }}
+                        </button>
+                    </div>
                 </div>
             </div>
         </UModal>
@@ -101,6 +107,7 @@ async function loadTemplates() {
 
 const showAdmin = ref(false)
 const publishing = ref(false)
+const deleting = ref(false)
 const adminError = ref('')
 const cfg = reactive<{ server_hostname: string; tenant_id: string }>({ server_hostname: '', tenant_id: '' })
 const editingKey = ref('fabric')
@@ -125,16 +132,28 @@ async function publishTemplate() {
         const config: any = {}
         if (c.fields.includes('server_hostname')) config.server_hostname = cfg.server_hostname.trim()
         config.tenant_id = cfg.tenant_id.trim() || null
-        const body = {
-            name: c.name,
-            type: c.type,
-            config,
-            auth_policy: 'user_required',
-            allowed_user_auth_modes: ['device_code'],
-            is_user_template: true,
+        // Editing an already-configured connector → PATCH the existing data source
+        // (PUT /data_sources/{id} propagates config to the backing connection).
+        // POSTing again would trip the unique-name-per-org guard ("already exists").
+        const existing = templateFor(c.key)
+        if (existing) {
+            const { error } = await useMyFetch(`/data_sources/${existing.id}`, {
+                method: 'PUT',
+                body: { config, auth_policy: 'user_required' },
+            })
+            if (error.value) throw error.value
+        } else {
+            const body = {
+                name: c.name,
+                type: c.type,
+                config,
+                auth_policy: 'user_required',
+                allowed_user_auth_modes: ['device_code'],
+                is_user_template: true,
+            }
+            const { error } = await useMyFetch('/data_sources', { method: 'POST', body })
+            if (error.value) throw error.value
         }
-        const { error } = await useMyFetch('/data_sources', { method: 'POST', body })
-        if (error.value) throw error.value
         toast.add({ title: t('connectors.published'), color: 'green', icon: 'i-heroicons-check-circle' })
         showAdmin.value = false
         await loadTemplates()
@@ -142,6 +161,25 @@ async function publishTemplate() {
         adminError.value = e?.data?.detail || e?.message || t('connectors.publishFailed')
     } finally {
         publishing.value = false
+    }
+}
+
+async function deleteTemplate() {
+    const tpl = templateFor(editingKey.value)
+    if (!tpl) return
+    if (!confirm(`Delete the ${editingConn.value.name} connector? Members will no longer be able to sign in until it is configured again.`)) return
+    deleting.value = true
+    adminError.value = ''
+    try {
+        const { error } = await useMyFetch(`/data_sources/${tpl.id}`, { method: 'DELETE' })
+        if (error.value) throw error.value
+        toast.add({ title: t('connectors.deleted') || 'Connector deleted', color: 'green', icon: 'i-heroicons-check-circle' })
+        showAdmin.value = false
+        await loadTemplates()
+    } catch (e: any) {
+        adminError.value = e?.data?.detail || e?.message || 'Delete failed'
+    } finally {
+        deleting.value = false
     }
 }
 
