@@ -242,6 +242,22 @@ class LDAPGroupSyncService:
         rows = (await db.execute(stmt)).all()
         return {email.lower(): uid for email, uid in rows}
 
+    async def _get_org_user_map(self, db: AsyncSession, organization_id: str) -> Dict[str, str]:
+        """Build email→user_id map for users who are members of this org.
+
+        Used by preview_sync to scope membership-change counts to the org's
+        current members (a full sync auto-provisions non-members, but the
+        dry-run only reports changes against people already in the org).
+        """
+        stmt = (
+            select(User.email, User.id)
+            .join(Membership, Membership.user_id == User.id)
+            .where(Membership.organization_id == organization_id)
+            .where(Membership.deleted_at.is_(None))
+        )
+        rows = (await db.execute(stmt)).all()
+        return {email.lower(): uid for email, uid in rows}
+
     async def _ensure_org_memberships(
         self,
         db: AsyncSession,

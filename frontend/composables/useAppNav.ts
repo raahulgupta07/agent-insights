@@ -35,6 +35,10 @@ export interface NavGroup {
   // When set (alongside sectioned items), the rail renders a studio-style
   // header card (icon + title + badge + subtitle) on a rounded #FBFAF6 panel.
   railHeader?: { subtitle?: string; badge?: string; icon?: string }
+  // When true, the WHOLE group is hidden unless the user is a super-admin
+  // (full_admin_access). Used to lock Manage + Settings to super-admins only,
+  // regardless of any individual item being otherwise open to members.
+  superAdminOnly?: boolean
 }
 
 // ---- Module-level shared state (singletons across all consumers) ----
@@ -183,6 +187,7 @@ export function useAppNav() {
     },
     {
       title: 'nav.manage',
+      superAdminOnly: true,
       railHeader: { subtitle: 'Connect, observe, and automate', badge: 'ORG', icon: 'heroicons-adjustments-horizontal' },
       items: [
         // Open to ALL org members: each user sees connectors they created + shared
@@ -214,6 +219,7 @@ export function useAppNav() {
     },
     {
       title: 'nav.settings',
+      superAdminOnly: true,
       railHeader: { subtitle: 'Workspace configuration', badge: 'ADMIN', icon: 'heroicons-cog-6-tooth' },
       items: settingsChildren.value,
     },
@@ -229,6 +235,9 @@ export function useAppNav() {
 
   const visibleGroups = computed<NavGroup[]>(() =>
     allGroups.value
+      // Super-admin-only groups (Manage, Settings) vanish entirely for non-admins,
+      // even if a child item is otherwise open to members (e.g. Connectors).
+      .filter(g => !g.superAdminOnly || isAdmin.value)
       .map(g => ({ title: g.title, direct: g.direct, railHeader: g.railHeader, items: g.items.filter(itemVisible) }))
       .filter(g => g.items.length > 0)
   )

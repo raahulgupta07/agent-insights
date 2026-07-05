@@ -3,6 +3,14 @@
 Hybrid feature changelog (our additions on top of the bagofwords/Dash base). Newest first.
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` then bullets.
 
+## v1.126.1 — Fix: LDAP "preview sync" no longer errors  (2026-07-06)
+- The LDAP directory **Preview sync** (dry-run) button was broken and would error out. Fixed — it now correctly shows how many groups/members a sync would add or change, without writing anything. Found while running a full end-to-end LDAP test suite (connect, search users/groups, look up by email + username, sign-in bind with right/wrong password, preview + full group sync) against a live directory — all 9 checks pass; LDAP is working.
+  - Root cause: `LDAPGroupSyncService.preview_sync` called `self._get_org_user_map(db, organization_id)`, a method that never existed (only `_get_all_user_map(db)` did) → `AttributeError` → `GET /api/enterprise/ldap/sync/preview` 500. Fix: added `_get_org_user_map` (`backend/app/ee/ldap/sync_service.py`) — email→user_id scoped to the org's active `Membership` rows, which is the correct set for a dry-run (preview reports changes against current org members; a full sync separately auto-provisions non-members). No migration.
+
+## v1.126.0 — Non-admins no longer see Manage & Settings  (2026-07-05)
+- Regular (non-admin) members now see a simpler top nav: **Agent Studios, Data Agents, Workspace, and Build** only. The **Manage** and **Settings** areas are hidden for them — only a super-admin (full admin access) sees those. Members still reach everything they own (their reports, dashboards, connectors under Data Agents, knowledge under Build); they just don't see the org-admin surfaces.
+  - `frontend/composables/useAppNav.ts`: new `superAdminOnly?: boolean` on `NavGroup`, set on the `nav.manage` + `nav.settings` groups; `visibleGroups` drops any `superAdminOnly` group unless `isAdmin` (`useCan('full_admin_access')`). This closes the gap where **Manage** showed to everyone because its `connectors` item had no per-item permission gate. FE nav visibility only — backend per-route permissions are unchanged and still enforce access.
+
 ## v1.125.1 — Fix: clicking a report no longer bounces to a blank page  (2026-07-05)
 - Opening a saved report (one with a conversation) sometimes flipped straight to an empty "untitled report". Fixed.
   - Root cause: v1.122's `onAgentPickerChange` was bound to the composer picker's `@update:selectedDataSources`, which emits the GLOBAL selection during report load — different from the opened report's own `data_sources`. With history + `!sameSet` it ran `navigateTo('/reports/new')`. Fix: `pages/reports/[id]/index.vue` new `agentSwitchArmed` ref (armed 1.5s after the report's data_sources settle); while unarmed `onAgentPickerChange` only syncs the local header selection and never navigates/persists — so only genuine user agent switches branch to a new report.
