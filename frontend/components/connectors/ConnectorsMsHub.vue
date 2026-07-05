@@ -210,21 +210,10 @@ const baseCatalog = [
     { key: 'onedrive', type: 'onedrive', name: 'OneDrive', icon: '/data_sources_icons/onedrive.png', desc: 'Your personal files.', live: false, fields: ['tenant_id'] },
 ]
 
-// Unified Microsoft sign-in (HYBRID_MS_UNIFIED_SIGNIN, super-admin toggle in
-// Settings › Features): a single tile that signs in once and provisions BOTH a
-// Power BI agent and a Fabric agent (shared token). It reuses the Power BI
-// template for sign-in (type powerbi_user) and carries `unified:true` so the
-// connect flow fans out to Fabric. When ON it REPLACES the two individual
-// Microsoft Fabric + Power BI (User Sign-in) tiles (SharePoint/OneDrive stay);
-// when OFF the individual tiles show and the combined tile is hidden.
-const unifiedEnabled = ref(false)
-const combinedTile = { key: 'ms_combined', type: 'powerbi_user', name: 'Microsoft (Fabric + Power BI)', icon: '/data_sources_icons/powerbi.png', desc: 'One sign-in → Power BI + Fabric agents.', live: true, fields: ['tenant_id'], unified: true }
-const catalog = computed(() => {
-    if (!unifiedEnabled.value) return baseCatalog
-    // Replace the two per-service MS tiles with the single combined tile.
-    const rest = baseCatalog.filter(c => c.key !== 'fabric' && c.key !== 'powerbi')
-    return [combinedTile, ...rest]
-})
+// Power BI and Microsoft Fabric are ALWAYS two separate tiles — connect Fabric →
+// Fabric agent, connect Power BI → Power BI agent. (The old unified
+// HYBRID_MS_UNIFIED_SIGNIN joint "Microsoft (Fabric + Power BI)" tile was removed.)
+const catalog = computed(() => baseCatalog)
 
 function templateFor(key: string) {
     const type = catalog.value.find(c => c.key === key)?.type
@@ -259,8 +248,6 @@ async function loadFlag() {
         const rows = (data.value as any[]) || []
         const row = rows.find(r => r.key === 'PER_USER_CONNECTOR' || r.env_name === 'HYBRID_PER_USER_CONNECTOR')
         enabled.value = !!row?.effective
-        const urow = rows.find(r => r.key === 'MS_UNIFIED_SIGNIN' || r.env_name === 'HYBRID_MS_UNIFIED_SIGNIN')
-        unifiedEnabled.value = !!urow?.effective
     } catch { enabled.value = false }
 }
 async function loadTemplates() {
@@ -362,21 +349,13 @@ function startConnect(key: string) {
     const tpl = templateFor(key)
     if (!tpl) return
     const c = catalog.value.find(cc => cc.key === key)
-    // unified: carry the flag so the connect flow fans out to a Fabric agent too.
-    registerTemplate.value = { ...tpl, name: c?.name || tpl.name, unified: (c as any)?.unified === true }
+    registerTemplate.value = { ...tpl, name: c?.name || tpl.name }
     showRegister.value = true
 }
 function onRegistered(ds: any) {
-    const wasUnified = (registerTemplate.value as any)?.unified === true
     showRegister.value = false
     emit('refresh')
     const id = ds?.id
-    // Unified sign-in makes TWO agents — stay on /agents so both cards are visible
-    // rather than diving into just the Power BI one.
-    if (wasUnified) {
-        toast.add({ title: 'Connected — Power BI + Fabric agents are being built', color: 'green', icon: 'i-heroicons-check-circle' })
-        return
-    }
     if (id) navigateTo(`/agents/${id}?sync=live`)
 }
 function schedulePoll() {
