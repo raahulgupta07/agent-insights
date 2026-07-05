@@ -107,13 +107,28 @@
 
       <!-- RECEIPT (only once a train status exists) -->
       <div v-if="hasTrainStatus" class="mt-3 border-t border-[#E9E0D3] pt-3">
-        <!-- stage lines -->
-        <div class="flex flex-wrap gap-1.5 mb-2.5">
-          <span v-for="st in receiptStages" :key="st.key"
-            class="inline-flex items-center gap-1 text-[10.5px] font-medium rounded-md px-2 py-0.5"
-            :class="st.done ? 'bg-[#EAF1FA] text-[#2f6fb0]' : 'bg-[#F4F1EA] text-[#9a958c]'">
-            <span class="text-[#7f9fd0]">▸</span>{{ st.label }}
-          </span>
+        <!-- LIVE PROCESS FLOW — 6 phases → arrows → live sub-stage nodes -->
+        <div class="flow mb-2.5">
+          <div class="flow-bar-row">
+            <div class="flow-bar"><div class="flow-bar-fill" :style="{ width: flowPct + '%' }"></div></div>
+            <span v-if="trainingAll" class="flow-status flow-status-run">running &middot; {{ flowPct }}%</span>
+            <span v-else-if="flowAllDone" class="flow-status flow-status-done">✓ agent ready &middot; 100%</span>
+            <span v-else class="flow-status">{{ flowPct }}%</span>
+          </div>
+          <div class="flow-phases">
+            <template v-for="(ph, pi) in trainFlow" :key="ph.id">
+              <div class="flow-phase" :class="{ 'flow-phase-active': ph.nodes.some(n => n.state === 'running') }">
+                <div class="flow-phase-head">{{ ph.label }}</div>
+                <div class="flow-nodes">
+                  <div v-for="n in ph.nodes" :key="n.key" class="flow-node" :class="'st-' + n.state">
+                    <span class="flow-glyph">{{ n.state === 'done' ? '✓' : n.state === 'running' ? '⟳' : n.state === 'held' ? '◌' : '·' }}</span>
+                    <span class="flow-node-label">{{ n.label }}</span>
+                  </div>
+                </div>
+              </div>
+              <div v-if="pi < trainFlow.length - 1" class="flow-arrow" aria-hidden="true">›</div>
+            </template>
+          </div>
         </div>
 
         <!-- RECONCILE + COVERAGE pills -->
@@ -343,6 +358,121 @@ const receiptStages = computed(() => {
   })
 })
 
+// ─── LIVE PROCESS FLOW ──────────────────────────────────────────────────────
+// 6 phases, each with real sub-stage nodes. State derived fail-soft from the
+// same signals in scope: receiptStages done-flags (classify/segregate/ingest/
+// goldens/reconcile/coverage), the train-status detail map (other nodes, via
+// aliases), coverage=0 → held, and the newest `▸ <stage>` train-log marker →
+// running. Missing data → 'queued'. Never throws.
+const FLOW_PHASES: { id: string; label: string; keys: string[] }[] = [
+  { id: 'route',   label: '① ROUTE',   keys: ['classify', 'segregate'] },
+  { id: 'land',    label: '② LAND',    keys: ['ingest', 'self-heal'] },
+  { id: 'profile', label: '③ PROFILE', keys: ['profile', 'deep-profile', 'index'] },
+  { id: 'enrich',  label: '④ ENRICH',  keys: ['code-enrich', 'domain-packs', 'brain-graph'] },
+  { id: 'learn',   label: '⑤ LEARN',   keys: ['auto-eda', 'agent-kpis', 'agent-overview'] },
+  { id: 'verify',  label: '⑥ VERIFY',  keys: ['goldens', 'reconcile', 'coverage'] },
+]
+// keys that map straight onto receiptStages done-flags
+const RECEIPT_NODE_KEYS = new Set(['classify', 'segregate', 'ingest', 'goldens', 'reconcile', 'coverage'])
+// detail-map + log-marker aliases for every node
+const NODE_ALIASES: Record<string, string[]> = {
+  classify: ['classify'],
+  segregate: ['segregate', 'segregation'],
+  ingest: ['ingest', 'ingestion', 'load'],
+  'self-heal': ['self-heal', 'selfheal', 'self_heal', 'heal'],
+  profile: ['profile', 'profiling', 'column_profile', 'column-profile'],
+  'deep-profile': ['deep-profile', 'deep_profile', 'profile_v2', 'profilev2', 'deepprofile'],
+  index: ['index', 'hybrid_index', 'hybridindex', 'indexer', 'indexing'],
+  'code-enrich': ['code-enrich', 'code_enrich', 'codeenrich', 'enrich'],
+  'domain-packs': ['domain-packs', 'domain_packs', 'domainpacks', 'packs'],
+  'brain-graph': ['brain-graph', 'brain_graph', 'braingraph', 'graph'],
+  'auto-eda': ['auto-eda', 'auto_eda', 'autoeda', 'eda'],
+  'agent-kpis': ['agent-kpis', 'agent_kpis', 'agentkpis', 'kpis', 'kpi'],
+  'agent-overview': ['agent-overview', 'agent_overview', 'agentoverview', 'overview'],
+  goldens: ['goldens', 'golden', 'golden_queries', 'goldenqueries', 'goldensql', 'golden_sql'],
+  reconcile: ['reconcile', 'reconciliation'],
+  coverage: ['coverage'],
+}
+const _norm = (s: string) => s.trim().toLowerCase().replace(/[ _]+/g, '-')
+
+// Which node (if any) the newest `▸ <stage>` train-log line names. Only used
+// while training. Returns a node key or null (never throws).
+function runningNodeKey(): string | null {
+  try {
+    const raw = (props.trainLogLines && props.trainLogLines.length)
+      ? props.trainLogLines
+      : ((props.trainLog && Array.isArray((props.trainLog as any).log)) ? (props.trainLog as any).log : [])
+    if (!Array.isArray(raw) || !raw.length) return null
+    for (let i = raw.length - 1; i >= 0; i--) {
+      const li = raw[i]
+      const text = String((li && (li.text ?? li.message ?? li.line)) ?? li ?? '')
+      const m = text.match(/▸\s*([a-z0-9 _-]+)/i)
+      if (!m) continue
+      const tok = _norm(m[1])
+      for (const [k, aliases] of Object.entries(NODE_ALIASES)) {
+        if (aliases.some(a => { const na = _norm(a); return na === tok || tok.startsWith(na) })) return k
+      }
+      return null   // a marker we don't map → no running node
+    }
+  } catch { /* fail-soft */ }
+  return null
+}
+
+const trainFlow = computed(() => {
+  const phases = FLOW_PHASES.map(p => ({ id: p.id, label: p.label, nodes: [] as { key: string; label: string; state: string }[] }))
+  try {
+    const rs: Record<string, boolean> = {}
+    for (const s of receiptStages.value) rs[s.key] = s.done
+    const detail = (status.value && status.value.detail) || (props.trainLog && (props.trainLog as any).detail) || {}
+    const running = props.trainingAll ? runningNodeKey() : null
+    const cov = coverageTotalPeriods.value
+
+    const stateFor = (key: string): string => {
+      if (running && running === key) return 'running'
+      if (RECEIPT_NODE_KEYS.has(key)) {
+        if (rs[key]) return 'done'
+        if (key === 'coverage' && cov === 0) return 'held'
+        return 'queued'
+      }
+      for (const a of (NODE_ALIASES[key] || [key])) {
+        const entry = (detail as any)[a]
+        if (entry == null) continue
+        if (typeof entry === 'object') {
+          const st = String(entry.state || entry.status || '').toLowerCase()
+          if (['ok', 'done', 'complete', 'completed', 'success'].includes(st)) return 'done'
+          if (['err', 'error', 'failed', 'skip', 'skipped', 'held'].includes(st)) return 'held'
+          if (['running', 'active', 'in_progress', 'in-progress'].includes(st)) return 'running'
+          return 'done'   // recorded object, no recognizable state → treat as done
+        }
+        if (entry) return 'done'
+      }
+      return 'queued'
+    }
+
+    for (const p of phases) {
+      const src = FLOW_PHASES.find(x => x.id === p.id)!
+      p.nodes = src.keys.map(k => ({ key: k, label: k, state: stateFor(k) }))
+    }
+  } catch {
+    for (const p of phases) {
+      const src = FLOW_PHASES.find(x => x.id === p.id)
+      p.nodes = (src ? src.keys : []).map(k => ({ key: k, label: k, state: 'queued' }))
+    }
+  }
+  return phases
+})
+
+const _flowNodes = computed(() => trainFlow.value.flatMap(p => p.nodes))
+const flowPct = computed(() => {
+  const nodes = _flowNodes.value
+  if (!nodes.length) return 0
+  return Math.round(100 * nodes.filter(n => n.state === 'done').length / nodes.length)
+})
+const flowAllDone = computed(() => {
+  const nodes = _flowNodes.value
+  return nodes.length > 0 && nodes.every(n => n.state === 'done')
+})
+
 const byDestEntries = computed<[string, number][]>(() => {
   const bd = (routeInbox.value && routeInbox.value.by_dest) || {}
   return Object.entries(bd).filter(([, n]) => Number(n) > 0) as [string, number][]
@@ -407,3 +537,48 @@ onBeforeUnmount(() => {
   if (savedTimer) { clearTimeout(savedTimer); savedTimer = null }
 })
 </script>
+
+<style scoped>
+/* LIVE PROCESS FLOW — warm clay/cream palette to match the TRAIN card */
+.flow-bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.flow-bar { flex: 1; height: 5px; border-radius: 999px; background: #EDE5D8; overflow: hidden; }
+.flow-bar-fill { height: 100%; background: #C2541E; border-radius: 999px; transition: width .4s ease; }
+.flow-status { font-size: 10.5px; font-weight: 600; color: #9a958c; white-space: nowrap; }
+.flow-status-run { color: #C2541E; }
+.flow-status-done { color: #3f9e6a; }
+
+.flow-phases { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px; }
+.flow-phase {
+  display: flex; flex-direction: column; gap: 4px; min-width: 96px;
+  padding: 6px 8px; border: 1px solid #ECE3D6; border-radius: 10px; background: #FBF8F3;
+}
+.flow-phase-active { border-color: #E7C79E; background: #FBF3E7; }
+.flow-phase-head {
+  font-size: 9.5px; font-weight: 700; letter-spacing: .04em;
+  color: #9a958c; text-transform: uppercase;
+}
+.flow-phase-active .flow-phase-head { color: #C2541E; }
+
+.flow-nodes { display: flex; flex-direction: column; gap: 2px; }
+.flow-node { display: flex; align-items: center; gap: 5px; font-size: 10.5px; line-height: 1.3; }
+.flow-glyph { width: 11px; flex-shrink: 0; text-align: center; font-size: 10px; }
+
+.flow-node.st-done { color: #3f9e6a; }
+.flow-node.st-done .flow-glyph { color: #3f9e6a; }
+.flow-node.st-running { color: #c98a2e; font-weight: 600; }
+.flow-node.st-running .flow-glyph { color: #c98a2e; display: inline-block; animation: flow-spin 1s linear infinite; }
+.flow-node.st-held { color: #9a958c; }
+.flow-node.st-held .flow-glyph { color: #b7b0a4; }
+.flow-node.st-queued { color: #b7b0a4; }
+.flow-node.st-queued .flow-glyph { color: #cfc8bb; }
+
+.flow-arrow {
+  align-self: center; padding: 0 1px;
+  color: #cbb9a3; font-size: 15px; font-weight: 400; user-select: none;
+}
+
+@keyframes flow-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .flow-node.st-running .flow-glyph { animation: none; }
+}
+</style>
