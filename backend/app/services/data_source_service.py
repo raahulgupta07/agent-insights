@@ -49,6 +49,38 @@ from app.schemas.instruction_schema import InstructionCreate
 from app.core.telemetry import telemetry
 from app.ee.audit.service import audit_service
 
+
+async def count_active_tables_by_source(db: AsyncSession, source_ids) -> Dict[str, int]:
+    """Grouped count of active/usable synced tables per data source.
+
+    ONE query keyed by datasource_id for all given source ids (avoids N+1).
+    Returns {source_id: count}; source ids with no active tables are absent
+    (callers default to 0). Fail-soft: any error → empty map (ready=False).
+    """
+    ids = [str(sid) for sid in (source_ids or [])]
+    if not ids:
+        return {}
+    try:
+        rows = await db.execute(
+            select(DataSourceTable.datasource_id, func.count(DataSourceTable.id))
+            .where(
+                DataSourceTable.datasource_id.in_(ids),
+                DataSourceTable.is_active == True,
+            )
+            .group_by(DataSourceTable.datasource_id)
+        )
+        return {str(dsid): int(cnt) for dsid, cnt in rows.all()}
+    except Exception:
+        logger.exception("count_active_tables_by_source failed")
+        return {}
+
+
+async def count_active_tables(db: AsyncSession, data_source_id) -> int:
+    """Count of active/usable synced tables for a single data source (0 on error)."""
+    counts = await count_active_tables_by_source(db, [data_source_id])
+    return counts.get(str(data_source_id), 0)
+
+
 class DataSourceService:
 
     def __init__(self):
@@ -1021,6 +1053,10 @@ class DataSourceService:
             query = query.filter(or_(*clauses))
         result = await db.execute(query)
         data_sources = result.scalars().all()
+        # Data-readiness: one grouped table-count query for all listed sources.
+        table_counts = await count_active_tables_by_source(
+            db, [d.id for d in data_sources]
+        )
         # Non-published agents (draft/disabled) are only visible to managers.
         is_gov, manage_ids = await self._publish_visibility(db, current_user, organization)
         # Build list with connection info (no live test for list to keep it fast)
@@ -1085,6 +1121,8 @@ class DataSourceService:
                     and not bool(d.is_public)
                     and str(d.id) not in member_id_set
                 ),
+                table_count=table_counts.get(str(d.id), 0),
+                ready=table_counts.get(str(d.id), 0) > 0,
             )
             schemas.append(s)
         return schemas
@@ -1123,7 +1161,12 @@ class DataSourceService:
             
         result = await db.execute(stmt)
         data_sources = result.scalars().all()
-        
+
+        # Data-readiness: one grouped table-count query for all listed sources.
+        table_counts = await count_active_tables_by_source(
+            db, [d.id for d in data_sources]
+        )
+
         # Compute once whether the current user has admin-level access to data sources
         # (full_admin_access or org-level create_data_source).
         has_update_perm = False
@@ -1187,6 +1230,8 @@ class DataSourceService:
                 auth_policy=conn.auth_policy if conn else None,
                 user_status=connections_list[0].user_status if connections_list else None,
                 template_source_id=getattr(d, "template_source_id", None),
+                table_count=table_counts.get(str(d.id), 0),
+                ready=table_counts.get(str(d.id), 0) > 0,
             )
 
             # Exclude user_required data sources lacking user credentials,

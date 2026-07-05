@@ -141,6 +141,21 @@
                                         >Service account</span>
                                     </div>
                                     <div class="flex items-center gap-1.5 flex-shrink-0">
+                                        <!-- Readiness pill: green = synced tables, red = connected but empty -->
+                                        <span
+                                            v-if="readyState(ds).kind !== 'unknown'"
+                                            :class="[
+                                                'inline-flex items-center gap-1 text-[10px] rounded-full px-1.5 py-0.5 flex-shrink-0',
+                                                readyState(ds).kind === 'ready'
+                                                    ? 'bg-[#EBF6EF] text-[#3f9e6a]'
+                                                    : 'bg-[#FBEAE5] text-[#C2541E]'
+                                            ]"
+                                        >
+                                            <span
+                                                :class="['w-1.5 h-1.5 rounded-full', readyState(ds).kind === 'ready' ? 'bg-[#3f9e6a]' : 'bg-[#C2541E]']"
+                                            />
+                                            {{ readyState(ds).label }}
+                                        </span>
                                         <span
                                             class="w-4 h-4 rounded-full bg-gray-100 text-[9px] font-semibold text-gray-500 flex items-center justify-center"
                                             :title="dsEmail(ds)"
@@ -161,9 +176,14 @@
                                     class="px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer flex items-center justify-between gap-2"
                                     @click="openCredentialsModal(ds)"
                                 >
-                                    <div class="flex items-center min-w-0 opacity-50">
-                                        <DataSourceIcon :type="ds.type" class="h-4 flex-shrink-0" />
-                                        <span class="ms-2 text-[13px] truncate">{{ ds.name }}</span>
+                                    <div class="flex items-center min-w-0">
+                                        <DataSourceIcon :type="ds.type" class="h-4 flex-shrink-0 opacity-50" />
+                                        <span class="ms-2 text-[13px] truncate opacity-50">{{ ds.name }}</span>
+                                        <!-- Amber pill: connected source needs a personal sign-in first -->
+                                        <span class="ms-2 inline-flex items-center gap-1 text-[10px] rounded-full px-1.5 py-0.5 bg-[#FBF0E1] text-[#B26A16] flex-shrink-0">
+                                            <span class="w-1.5 h-1.5 rounded-full bg-[#E0A93B]" />
+                                            sign in
+                                        </span>
                                     </div>
                                     <button
                                         type="button"
@@ -234,6 +254,10 @@ const {
     selectStudio: selectStudioGlobal,
     clearStudio: clearStudioGlobal,
     initStudios,
+    // Mirror the raw data-source pick into the shared store so the top-bar
+    // AgentSelector reflects it (and vice-versa via the watcher below).
+    selectAgents: selectAgentsGlobal,
+    selectedAgents: globalSelectedAgents,
 } = useAgent()
 
 type DataSource = { id: string; name: string; type?: string; auth_policy?: string; publish_status?: string; connections?: any[]; user_status?: { effective_auth?: string; has_user_credentials?: boolean; uses_fallback?: boolean } }
@@ -514,6 +538,11 @@ async function getDataSources() {
             internalSelectedDataSources.value = [...visibleDataSources.value]
             handleSelectionChange()
         }
+        // Reflect any sticky selection made in the top-bar AgentSelector (landing
+        // page only) now that the concrete source objects are loaded.
+        if (!props.reportId && globalSelectedAgents.value?.length) {
+            applyGlobalSelection([...globalSelectedAgents.value])
+        }
     } finally {
         isLoading.value = false
     }
@@ -604,6 +633,7 @@ function selectAuto() {
     autoActive.value = true
     internalSelectedDataSources.value = [...visibleDataSources.value]
     handleSelectionChange()
+    mirrorSelectionToGlobal()
     persistSelectionIfReport()
 }
 
@@ -640,8 +670,61 @@ function toggleDataSource(ds: DataSource) {
         }
     }
     handleSelectionChange()
+    // Mirror the pick into the shared store so the top-bar AgentSelector highlights it.
+    mirrorSelectionToGlobal()
     // If we are in a report context, persist selection at report level immediately
     persistSelectionIfReport()
+}
+
+// Write the current logical selection into the shared useAgent store so the
+// top-bar AgentSelector mirrors it. Auto (all sources) → empty selection (the
+// store's "Auto"); an explicit pin → those ids. Single-write only; the watcher
+// below reads back but skips when the id set already matches (no feedback loop).
+function mirrorSelectionToGlobal() {
+    if (autoActive.value) {
+        selectAgentsGlobal([])
+    } else {
+        selectAgentsGlobal(internalSelectedDataSources.value.map((x: any) => x.id))
+    }
+}
+
+// Apply a selection coming FROM the shared store (a pick made in the top-bar
+// AgentSelector) into this composer picker. Guarded by an id-set diff so it
+// never fights the local write above.
+function applyGlobalSelection(ids: string[]) {
+    const globalIds = [...(ids || [])]
+    const internalIds = internalSelectedDataSources.value.map((x: any) => x.id)
+    // Empty global selection = Auto. Only react if we're not already in Auto.
+    if (globalIds.length === 0) {
+        if (!autoActive.value) {
+            autoActive.value = true
+            internalSelectedDataSources.value = [...visibleDataSources.value]
+            handleSelectionChange()
+        }
+        return
+    }
+    const sameSet = globalIds.length === internalIds.length
+        && globalIds.every((id) => internalIds.includes(id))
+    if (sameSet && !autoActive.value) return
+    const picked = dataSources.value.filter((ds: any) => globalIds.includes(ds.id))
+    if (picked.length === 0) return  // ids not in our list yet (still loading)
+    autoActive.value = false
+    internalSelectedDataSources.value = picked
+    handleSelectionChange()
+}
+
+// A specific source is "ready" when it has synced tables (table_count > 0).
+// ready===true is the backend's authoritative flag; table_count is the fallback.
+// When neither field is present yet (backend contract not deployed) → 'unknown'
+// so we render no pill and never falsely flag a source as empty.
+function readyState(ds: any): { kind: 'ready' | 'blocked' | 'unknown'; label: string } {
+    const hasReady = typeof ds?.ready === 'boolean'
+    const hasCount = ds?.table_count !== undefined && ds?.table_count !== null
+    if (!hasReady && !hasCount) return { kind: 'unknown', label: '' }
+    const tc = Number(ds?.table_count ?? 0)
+    const ready = ds?.ready === true || tc > 0
+    if (ready) return { kind: 'ready', label: `ready · ${tc} table${tc === 1 ? '' : 's'}` }
+    return { kind: 'blocked', label: 'no data' }
 }
 
 onMounted(() => {
@@ -756,6 +839,16 @@ watch(globalStudioId, (v) => {
         internalSelectedStudioId.value = v || ''
     }
 })
+
+// Mirror a data-source pick made in the top-bar AgentSelector into this composer
+// picker. Landing page only — on a live report the report owns its bound sources,
+// so we don't let the sticky top-bar selection rewrite them. The guarded id-set
+// diff inside applyGlobalSelection prevents any feedback loop with mirrorSelectionToGlobal.
+watch(globalSelectedAgents, (ids) => {
+    if (props.reportId) return
+    applyGlobalSelection([...(ids || [])])
+}, { deep: true })
+
 const dataTooltip = computed<string>(() => {
     if (internalSelectedDataSources.value.length <= 1) return ''
     const rest = internalSelectedDataSources.value.slice(1).map(s => s.name).join(', ')

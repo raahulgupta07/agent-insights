@@ -272,6 +272,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_INGEST_RECONCILE": {"label": "Ingest Reconcile (fail-loud merge)", "role": "admin", "category": "Ingest", "status": "stable", "note": "Ingest-completeness guard: the multi-file spreadsheet merge records each file's outcome (loaded|failed + rows + error) instead of silently swallowing a bad file with 'except: continue', flips a source DEGRADED on a row-count/file mismatch, feeds coverage-context to the agent (stop fabricating missing periods), and surfaces 'N of M failed' in the upload UI. Off = byte-identical to today. Default ON."},
     "HYBRID_INGEST_SELFHEAL": {"label": "Self-heal split data", "role": "user", "category": "Ingest", "status": "stable", "note": "Detect an agent's orphaned same-schema tables (files uploaded across separate sessions that never merged into its one bound table) and auto-stitch them back in. Runs on train + a 'Repair data' action. Backup + transaction-safe + idempotent; generic for any dataset partition. Default ON."},
     "HYBRID_AUTOEDA_AUTOAPPROVE": {"label": "Auto-approve first-party docs", "role": "user", "category": "Knowledge", "status": "stable", "note": "Insight/Auto-EDA docs generated from the user's own uploaded data land approved (agent-visible) instead of pending/invisible. Learned/AI-proposed memories still go through review. Default ON."},
+    "HYBRID_SOURCE_SYNC_GATE": {"label": "Refuse when source has no synced data", "role": "user", "category": "reliability", "status": "stable", "note": "If the chat's bound data source(s) have NO synced/active tables, refuse to answer with a clear 'sync it first' message instead of silently answering from some other source's data. Only refuses when EVERY bound source is empty; if any has tables, proceeds normally. Off = legacy (may answer from whatever is reachable). Default ON."},
     "HYBRID_COLUMN_PROFILE": {"label": "Column Profiling (types + value stats)", "role": "user", "category": "Ingest", "status": "experimental", "note": "Master plan E3: on upload, profile each column (dtype num/date/category/text, null %, distinct count, min/max, top values) and persist. Fills the empty semantic_columns.type + gives validation/engineering/understanding real facts. Fail-soft. Default OFF."},
     "HYBRID_DATA_VALIDATION": {"label": "Data Validation Gate (garbage-in net)", "role": "review", "category": "Ingest", "status": "experimental", "note": "Master plan E4: using column profiles, loud checks — filter-value existence (typo 'Retentnion' vs 'Retention' -> flag not silent-0), row-count floor, null-spike/all-null, category near-duplicate, dup-file hash. Surfaces a <data_quality> block. Golden verifies LOGIC; this verifies DATA. Fail-soft. Default OFF."},
     "HYBRID_RATIO_METRICS": {"label": "Ratio Metrics (num ÷ den goldens)", "role": "review", "category": "Knowledge", "status": "experimental", "note": "Master plan A2+A3: parse Numerator/Denominator logic into a kind='ratio' definition (num_predicate + den_predicate + group_by), generate two COUNT queries, eval verifies BOTH counts vs ground truth -> approve rate golden. Unblocks recruitment/retention/drop-off rates (Q8/Q9/Q11). Needs migration ratiodef1. Default OFF."},
@@ -1400,6 +1401,16 @@ class HybridFlags:
         return _bool("HYBRID_AUTOEDA_AUTOAPPROVE", True)
 
     @property
+    def SOURCE_SYNC_GATE(self) -> bool:
+        # Refuse-when-empty gate: if the bound data source(s) for a chat have NO
+        # synced/active tables, refuse to answer instead of silently falling back
+        # to some other source's data. The agent surfaces a clear "sync it first"
+        # message. Only refuses when EVERY bound source is empty; if any source
+        # has tables, proceeds normally. Off = legacy behaviour (may answer from
+        # whatever data is reachable). Default ON (reliability / no-wrong-source).
+        return _bool("HYBRID_SOURCE_SYNC_GATE", True)
+
+    @property
     def PERSIST_WAREHOUSE(self) -> bool:
         # Import v2 (P4, architectural/risky): persist spreadsheet uploads into the
         # per-org Postgres staging schema (tenant_schema.loader_write_engine) so
@@ -1745,6 +1756,7 @@ class HybridFlags:
             "INGEST_RECONCILE": self.INGEST_RECONCILE,
             "INGEST_SELFHEAL": self.INGEST_SELFHEAL,
             "AUTOEDA_AUTOAPPROVE": self.AUTOEDA_AUTOAPPROVE,
+            "SOURCE_SYNC_GATE": self.SOURCE_SYNC_GATE,
             "PERSIST_WAREHOUSE": self.PERSIST_WAREHOUSE,
             "ONE_TABLE_MERGE": self.ONE_TABLE_MERGE,
             "SMART_SOURCE_NAME": self.SMART_SOURCE_NAME,

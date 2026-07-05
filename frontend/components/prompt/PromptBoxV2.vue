@@ -169,6 +169,33 @@
             </button>
         </div>
 
+        <!-- Sync-gate refuse banner: the picked source has no synced data. Block send
+             and offer to sync it or switch source, rather than silently using another. -->
+        <div
+            v-if="!selectedSourceReady && unreadySource"
+            class="mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-[#E8C9B5] bg-[#FBEFE4] px-3 py-2 text-xs text-[#A8330F]"
+        >
+            <Icon name="heroicons-exclamation-triangle" class="w-4 h-4 flex-shrink-0" />
+            <span class="flex-1 min-w-0">
+                <span class="font-medium">{{ unreadySource.name }}</span> isn&rsquo;t ready — no synced data. I won&rsquo;t use another source.
+            </span>
+            <button
+                type="button"
+                class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-[#E8C9B5] text-[#C2541E] hover:bg-[#F4E5DA] transition-colors"
+                @click="syncUnreadySource"
+            >
+                <Icon name="heroicons-arrow-path" class="w-3.5 h-3.5" />
+                Sync {{ unreadySource.name }}
+            </button>
+            <button
+                type="button"
+                class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[#A8330F] hover:bg-white/60 transition-colors"
+                @click="reopenSourcePicker"
+            >
+                Switch source
+            </button>
+        </div>
+
         <!-- Minimalist prompt container -->
         <div
             class="border rounded-2xl bg-white shadow-sm transition-colors relative"
@@ -284,7 +311,7 @@
             >
                 <div class="flex items-center space-x-1 relative">
                     <!-- Data source selector -->
-                    <DataSourceSelector v-model:selectedDataSources="selectedDataSources" v-model:selectedStudioId="selectedStudioId" :reportId="report_id" />
+                    <DataSourceSelector ref="dataSourceSelectorRef" v-model:selectedDataSources="selectedDataSources" v-model:selectedStudioId="selectedStudioId" :reportId="report_id" />
 
                     <!-- Use a workflow (HYBRID_WORKFLOWS_V2) -->
                     <button
@@ -1297,6 +1324,29 @@ const hasDataSourceOrFile = computed(() => {
         || !!selectedStudioId.value
 })
 
+// Sync-gate: a specific data source that has no synced data (ready===false /
+// table_count===0) must not be queried — the agent would silently fall back to
+// another source. Allowed (true) when: a studio is selected, nothing specific is
+// picked (Auto), or at least one picked source is ready. False only when every
+// picked data source is unready.
+function isSourceReady(ds: any): boolean {
+    const hasReady = typeof ds?.ready === 'boolean'
+    const hasCount = ds?.table_count !== undefined && ds?.table_count !== null
+    // Readiness fields not present yet (backend contract undeployed) → fail-open.
+    if (!hasReady && !hasCount) return true
+    return ds?.ready === true || Number(ds?.table_count ?? 0) > 0
+}
+const selectedSourceReady = computed(() => {
+    if (selectedStudioId.value) return true
+    const list = selectedDataSources.value || []
+    if (list.length === 0) return true  // Auto / nothing specific → unchanged behaviour
+    return list.some(isSourceReady)
+})
+// The first unready source in the current pick — names the refuse banner.
+const unreadySource = computed<any | null>(() =>
+    (selectedDataSources.value || []).find(ds => !isSourceReady(ds)) || null
+)
+
 const canSubmit = computed(() => {
     return text.value.trim().length > 0
         && !props.latestInProgressCompletion
@@ -1305,7 +1355,21 @@ const canSubmit = computed(() => {
         && !hasFilesUploading.value  // Don't allow submit while files are uploading
         && !!selectedModel.value
         && hasDataSourceOrFile.value
+        && selectedSourceReady.value  // sync-gate: block unready specific source
 })
+
+// Re-open the composer data-source picker (the "Switch source" banner action).
+const dataSourceSelectorRef = ref<any | null>(null)
+function reopenSourcePicker() {
+    const el = dataSourceSelectorRef.value?.$el as HTMLElement | undefined
+    el?.querySelector('button')?.click()
+}
+// "Sync" banner action → send the user to the source's sign-in / sync surface.
+// The Data Agents hub (/agents/{id}) owns each source's connect/sync flow.
+function syncUnreadySource() {
+    const ds = unreadySource.value
+    navigateTo(ds?.id ? `/agents/${ds.id}` : '/agents')
+}
 
 const submitTooltip = computed(() => {
     if (!selectedModel.value && !hasDataSourceOrFile.value) {
@@ -1365,6 +1429,9 @@ async function resolveSkillInvocation(name: string, args: string): Promise<strin
 
 async function submit() {
     if (!canSubmit.value || isSubmitting.value) return
+    // Sync-gate: never send when the picked source has no synced data (the banner
+    // above is showing). canSubmit already covers this; guard again for safety.
+    if (!selectedSourceReady.value) return
     isSubmitting.value = true
 
     // Slash-command skill invocation: `/skill-name args` -> replace the composer
@@ -1660,6 +1727,11 @@ const router = useRouter()
 async function createReport() {
     try {
         if (!text.value.trim()) {
+            isSubmitting.value = false
+            return
+        }
+        // Sync-gate: refuse to create a report on an unready specific source.
+        if (!selectedSourceReady.value) {
             isSubmitting.value = false
             return
         }

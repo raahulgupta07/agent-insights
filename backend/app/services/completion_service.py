@@ -741,6 +741,42 @@ class CompletionService:
             span.set_attribute("completion.system_id", str(system_completion.id))
             span.add_event("system_completion_saved")
 
+            # HYBRID_SOURCE_SYNC_GATE: refuse to answer when EVERY bound data
+            # source has zero synced/active tables — never silently fall back to
+            # another source's data. Surfaced as the assistant answer (not a 500),
+            # so the agent (and LLM) is never invoked. Runs after the AGENT_ACL
+            # gate above. If ANY bound source has tables, proceed normally.
+            if flags.SOURCE_SYNC_GATE:
+                _bound_sources = list(report.data_sources or [])
+                if _bound_sources:
+                    from app.services.data_source_service import count_active_tables_by_source
+                    _counts = await count_active_tables_by_source(db, [s.id for s in _bound_sources])
+                    if all(_counts.get(str(s.id), 0) == 0 for s in _bound_sources):
+                        _names = ", ".join((s.name or "this source") for s in _bound_sources)
+                        _refusal = (
+                            f"I can't answer from **{_names}** yet — it has no synced data. "
+                            f"I won't use another source instead. Sync it first, then ask again."
+                        )
+                        system_completion.completion = {"content": _refusal}
+                        system_completion.status = "success"
+                        try:
+                            db.add(system_completion)
+                            await db.commit()
+                            await db.refresh(system_completion)
+                        except Exception:
+                            await db.rollback()
+                        v2_list = await self._assemble_v2_for_completion_ids(db, [head_completion.id, system_completion.id])
+                        return CompletionsV2Response(
+                            report_id=report.id,
+                            completions=v2_list,
+                            total_completions=len(v2_list),
+                            total_blocks=sum(len(c.completion_blocks or []) for c in v2_list),
+                            total_widgets_created=0,
+                            total_steps_created=0,
+                            earliest_completion=min((c.created_at for c in v2_list), default=None),
+                            latest_completion=max((c.updated_at for c in v2_list), default=None),
+                        )
+
             org_settings = await organization.get_settings(db)
             resolved_build_id = await self._resolve_build_id(db, organization, build_id)
 
@@ -2401,6 +2437,49 @@ class CompletionService:
                                 )
                                 await event_queue.put(error_event)
                                 return
+
+                            # HYBRID_SOURCE_SYNC_GATE: refuse to answer when EVERY
+                            # bound data source has zero synced/active tables — never
+                            # silently fall back to another source's data. Runs after
+                            # the AGENT_ACL gate (checked before the stream started).
+                            # Surfaced as the assistant answer (live block + persisted
+                            # content), then the stream ends cleanly (finally → finish()).
+                            # If ANY bound source has tables, proceed normally.
+                            if flags.SOURCE_SYNC_GATE:
+                                _bound_sources = list(report_obj.data_sources or [])
+                                if _bound_sources:
+                                    from app.services.data_source_service import count_active_tables_by_source
+                                    _counts = await count_active_tables_by_source(session, [s.id for s in _bound_sources])
+                                    if all(_counts.get(str(s.id), 0) == 0 for s in _bound_sources):
+                                        _names = ", ".join((s.name or "this source") for s in _bound_sources)
+                                        _refusal = (
+                                            f"I can't answer from **{_names}** yet — it has no synced data. "
+                                            f"I won't use another source instead. Sync it first, then ask again."
+                                        )
+                                        try:
+                                            await session.execute(
+                                                update(Completion)
+                                                .where(Completion.id == system_completion_obj.id)
+                                                .values(status='success', completion={"content": _refusal})
+                                            )
+                                            await session.commit()
+                                        except Exception:
+                                            await session.rollback()
+                                        try:
+                                            await event_queue.put(SSEEvent(
+                                                event="block.upsert",
+                                                completion_id=str(system_completion_obj.id),
+                                                data={"block": {
+                                                    "id": f"refusal-{system_completion_obj.id}",
+                                                    "block_index": 0,
+                                                    "seq": 0,
+                                                    "status": "success",
+                                                    "content": _refusal,
+                                                }},
+                                            ))
+                                        except Exception:
+                                            pass
+                                        return
 
                             with tracer.start_as_current_span("completion.construct_clients") as clients_span:
                                 clients = {}

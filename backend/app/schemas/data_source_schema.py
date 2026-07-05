@@ -252,6 +252,13 @@ class DataSourceListItemSchema(BaseModel):
     # membership. Lets the UI flag it as an admin-only/governance entry.
     admin_only: bool = False
 
+    # Data-readiness signal: number of active/usable tables synced for this
+    # source, and whether it has any usable data at all. Lets the UI show a
+    # "not ready — no synced data" state and lets chat refuse to answer from an
+    # empty source. Populated by get_data_sources / get_active_data_sources.
+    table_count: int = 0
+    ready: bool = False
+
     class Config:
         from_attributes = True
 
