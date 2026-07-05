@@ -32,7 +32,8 @@ from typing import Any, Dict, List, Optional
 # 1. CLASSIFY — one LLM call, pasted text -> tagged spans
 # ---------------------------------------------------------------------------
 
-_SPAN_TYPES = {"SKILL", "INSTRUCTION", "DATA_RULE", "KNOWLEDGE"}
+_SPAN_TYPES = {"SKILL", "INSTRUCTION", "DATA_RULE", "KNOWLEDGE",
+               "METRIC", "QUERY", "EXAMPLE"}
 
 _CLASSIFY_PROMPT = """You convert a pasted business analysis / SOP into structured \
 "teach" spans for an analytics agent. Split the input into the smallest useful \
@@ -50,12 +51,19 @@ Tags:
   inclusion/exclusion filters, how a metric is defined).
 - "KNOWLEDGE": reference facts / glossary / context the agent should be able to
   look up. Not a method and not a rule.
+- "METRIC": a named business metric with a definition and (if stated) a verified
+  value (e.g. "Total leads = 1544, Logic: count rows where …"). For a METRIC also
+  emit a "metric" object (see schema).
+- "QUERY": a reusable / verified SQL query worth saving under a name. For a QUERY
+  also emit a "query" object (see schema).
+- "EXAMPLE": a verified question -> answer pair (a Q/A note), optionally with the
+  SQL that proves it. For an EXAMPLE also emit an "example" object (see schema).
 
 JSON schema:
 {
   "spans": [
     {
-      "type": "SKILL|INSTRUCTION|DATA_RULE|KNOWLEDGE",
+      "type": "SKILL|INSTRUCTION|DATA_RULE|KNOWLEDGE|METRIC|QUERY|EXAMPLE",
       "title": "short label",
       "content": "the text of this span (for INSTRUCTION/DATA_RULE/KNOWLEDGE)",
       "skill": {                          // ONLY when type == SKILL
@@ -67,10 +75,29 @@ JSON schema:
         },
         "output_spec": {"type": "slide|dashboard|report", "sections": ["..."]},
         "format": {"font": "...", "percentages": "..."}
+      },
+      "metric": {                         // ONLY when type == METRIC
+        "name": "human name of the metric",
+        "value": 1544,                    // the verified number, or null if none stated
+        "definition": "the logic / filter text that defines the metric",
+        "sql": "optional SQL that computes it"
+      },
+      "query": {                          // ONLY when type == QUERY
+        "name": "human name of the query",
+        "sql": "the SQL text"
+      },
+      "example": {                        // ONLY when type == EXAMPLE
+        "question": "the asked question",
+        "answer": "the verified answer",
+        "sql": "optional SQL that proves the answer"
       }
     }
   ]
 }
+
+Choosing between the value-bearing types: prefer METRIC when the input gives a
+metric NAME + a VALUE + its LOGIC (e.g. "Total leads = 1544, Logic: …"); prefer
+EXAMPLE for a question/answer note; prefer QUERY for a named SQL snippet.
 
 Rules: required_inputs keys are LOGICAL names (snake_case), not the user's exact
 column names — list those as synonyms. Mark an input optional:true if the method
@@ -153,8 +180,63 @@ def _normalise_spans(parsed: Optional[dict]) -> List[dict]:
         if t == "SKILL":
             skill = sp.get("skill") if isinstance(sp.get("skill"), dict) else {}
             span["skill"] = _clean_skill(skill, fallback_name=span["title"], fallback_method=span["content"])
+        elif t == "METRIC":
+            metric = sp.get("metric") if isinstance(sp.get("metric"), dict) else {}
+            span["metric"] = _clean_metric(metric, fallback_name=span["title"], fallback_def=span["content"])
+        elif t == "QUERY":
+            query = sp.get("query") if isinstance(sp.get("query"), dict) else {}
+            span["query"] = _clean_query(query, fallback_name=span["title"], fallback_sql=span["content"])
+        elif t == "EXAMPLE":
+            example = sp.get("example") if isinstance(sp.get("example"), dict) else {}
+            span["example"] = _clean_example(example, fallback_question=span["title"], fallback_answer=span["content"])
         out.append(span)
     return out
+
+
+def _coerce_float(v: Any) -> Optional[float]:
+    """Coerce a metric value to float, tolerating strings like '1,544'. None on fail."""
+    if v is None or isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    s = str(v).strip().replace(",", "")
+    if not s:
+        return None
+    m = re.search(r"-?\d+(?:\.\d+)?", s)
+    if not m:
+        return None
+    try:
+        return float(m.group(0))
+    except Exception:
+        return None
+
+
+def _clean_metric(metric: dict, *, fallback_name: str, fallback_def: str) -> dict:
+    metric = metric if isinstance(metric, dict) else {}
+    name = str(metric.get("name") or fallback_name or "Untitled metric").strip()[:200]
+    definition = str(metric.get("definition") or fallback_def or "").strip()
+    sql = str(metric.get("sql") or "").strip()
+    return {
+        "name": name,
+        "value": _coerce_float(metric.get("value")),
+        "definition": definition,
+        "sql": sql,
+    }
+
+
+def _clean_query(query: dict, *, fallback_name: str, fallback_sql: str) -> dict:
+    query = query if isinstance(query, dict) else {}
+    name = str(query.get("name") or fallback_name or "Untitled query").strip()[:200]
+    sql = str(query.get("sql") or fallback_sql or "").strip()
+    return {"name": name, "sql": sql}
+
+
+def _clean_example(example: dict, *, fallback_question: str, fallback_answer: str) -> dict:
+    example = example if isinstance(example, dict) else {}
+    question = str(example.get("question") or fallback_question or "").strip()
+    answer = str(example.get("answer") or fallback_answer or "").strip()
+    sql = str(example.get("sql") or "").strip()
+    return {"question": question, "answer": answer, "sql": sql}
 
 
 def _clean_skill(skill: dict, *, fallback_name: str, fallback_method: str) -> dict:
@@ -247,6 +329,26 @@ def build_skill_pack(skill: dict, *, studio_id: str) -> dict:
 # 3. Studio columns (for binding a SKILL span at teach/approve time)
 # ---------------------------------------------------------------------------
 
+async def _studio_primary_ds(db, studio_id: str) -> Optional[str]:
+    """The first data source bound to a studio (metrics/queries need a
+    data_source_id). None if the studio has no pinned source. Never raises."""
+    try:
+        from sqlalchemy import select
+        from app.models.studio import StudioDataSource
+
+        ds_id = (
+            await db.execute(
+                select(StudioDataSource.agent_id).where(
+                    StudioDataSource.studio_id == str(studio_id),
+                    StudioDataSource.deleted_at.is_(None),
+                ).limit(1)
+            )
+        ).scalars().first()
+        return str(ds_id) if ds_id else None
+    except Exception:
+        return None
+
+
 async def studio_columns(db, studio_id: str) -> List[dict]:
     """Flatten the profiled columns of every active table of a studio's pinned
     sources into the binder's flat shape [{name, dtype, role, values}]. The
@@ -326,6 +428,19 @@ async def preview_spans(db, studio_id: str, spans: List[dict]) -> List[dict]:
         elif t == "KNOWLEDGE":
             item["target"] = "knowledge_doc"
             item["will_be"] = "pending knowledge doc"
+        elif t == "METRIC":
+            item["metric"] = sp.get("metric") or {}
+            item["target"] = "metric_definition"
+            _v = item["metric"].get("value")
+            item["will_be"] = "verified metric" if _v is not None else "draft metric"
+        elif t == "QUERY":
+            item["query"] = sp.get("query") or {}
+            item["target"] = "query_library"
+            item["will_be"] = "golden query"
+        elif t == "EXAMPLE":
+            item["example"] = sp.get("example") or {}
+            item["target"] = "studio_example"
+            item["will_be"] = "pending example (Q→A)"
         else:  # INSTRUCTION | DATA_RULE
             item["target"] = "studio_instruction"
             item["will_be"] = "pending instruction"
@@ -337,13 +452,18 @@ async def apply_spans(db, organization, studio_id: str, spans: List[dict],
                       *, default_status: str = "pending") -> dict:
     """Persist spans to their surfaces. Everything born pending (review gate).
     Returns a per-surface summary. Commits once at the end."""
-    from app.models.studio import StudioInstruction, StudioBoundPack
+    from app.models.studio import StudioInstruction, StudioBoundPack, StudioExample
+    from app.models.metric_definition import MetricDefinition
+    from app.models.query_library import QueryLibraryItem
     from app.ai.packs import binder
     from app.ai.knowledge.docs_index import ingest_doc
 
     created = {"instructions": 0, "data_rules": 0, "knowledge": 0,
-               "skills_active": 0, "skills_dormant": 0, "errors": []}
+               "skills_active": 0, "skills_dormant": 0,
+               "metrics": 0, "queries": 0, "examples": 0, "errors": []}
     cols = None
+    org_id = str(organization.id)
+    primary_ds = await _studio_primary_ds(db, studio_id)
 
     for sp in spans:
         t = sp.get("type")
@@ -389,6 +509,72 @@ async def apply_spans(db, organization, studio_id: str, spans: List[dict],
                     pack_body=pack,
                 ))
                 created["skills_active" if bound else "skills_dormant"] += 1
+            elif t == "METRIC":
+                metric = sp.get("metric") or {}
+                name = (metric.get("name") or sp.get("title") or "").strip()
+                if not name:
+                    continue
+                if not primary_ds:
+                    created["errors"].append("METRIC: no data source bound to studio")
+                    continue
+                try:
+                    value = metric.get("value")
+                    row = MetricDefinition(
+                        organization_id=org_id,
+                        data_source_id=primary_ds,
+                        name=name,
+                        definition=(metric.get("definition") or "").strip(),
+                        table_ref="",
+                        sql_calc=(metric.get("sql") or "").strip(),
+                        status=("approved" if value is not None else "draft"),
+                    )
+                    if value is not None:
+                        row.is_locked = True
+                        row.last_value = value
+                    db.add(row)
+                    created["metrics"] += 1
+                except Exception as e:
+                    created["errors"].append(f"METRIC: {e}")
+            elif t == "QUERY":
+                query = sp.get("query") or {}
+                name = (query.get("name") or sp.get("title") or "").strip()
+                sql_text = (query.get("sql") or "").strip()
+                if not name or not sql_text:
+                    continue
+                if not primary_ds:
+                    created["errors"].append("QUERY: no data source bound to studio")
+                    continue
+                try:
+                    db.add(QueryLibraryItem(
+                        organization_id=org_id,
+                        data_source_id=primary_ds,
+                        name=name,
+                        sql_text=sql_text,
+                        source="teach",
+                        status="active",
+                        is_golden=True,
+                    ))
+                    created["queries"] += 1
+                except Exception as e:
+                    created["errors"].append(f"QUERY: {e}")
+            elif t == "EXAMPLE":
+                example = sp.get("example") or {}
+                question = (example.get("question") or sp.get("title") or "").strip()
+                answer = (example.get("answer") or sp.get("content") or "").strip()
+                if not question or not answer:
+                    continue
+                try:
+                    db.add(StudioExample(
+                        studio_id=str(studio_id),
+                        question=question,
+                        answer=answer,
+                        sql=((example.get("sql") or "").strip() or None),
+                        source="auto",
+                        status="pending",
+                    ))
+                    created["examples"] += 1
+                except Exception as e:
+                    created["errors"].append(f"EXAMPLE: {e}")
         except Exception as e:  # one bad span never sinks the batch
             created["errors"].append(f"{t}: {e}")
 

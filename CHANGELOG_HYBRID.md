@@ -2,6 +2,13 @@
 
 Hybrid feature changelog (our additions on top of the bagofwords/Dash base). Newest first.
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` then bullets.
+
+## v1.121.0 — Teach the agent: metrics, queries & a downloadable template  (2026-07-05)
+- Teach the agent now creates **Metrics, Queries and verified Q&A examples** too — not just rules and skills. Paste "Total leads = 1,544, Logic: …" and it becomes a real locked Metric; a named SQL becomes a golden Query; a Q/A becomes an Example.
+- **Three ways to teach:** type one rule at a time, paste many at once, or **download a template, fill it offline, and upload it** — the agent reads the file and proposes everything to review before saving.
+- Download the template as **Markdown or Excel** (Metrics / Queries / Examples / Data rules / Skills / Instructions / Knowledge sections). A "Load template into box" helper drops a starter snippet in for quick one-off teaching.
+  - Backend: `_SPAN_TYPES` + `_CLASSIFY_PROMPT` gained `METRIC`/`QUERY`/`EXAMPLE`; `apply_spans` persists to `metric_definitions` (locked/last_value when a value is given), `query_library_items` (`source=teach`, `is_golden`), `studio_examples` (pending), each fail-soft. `preview_spans` passes the sub-objects + `will_be` through so the review cards render them.
+  - New `app/ai/packs/teach_template.py` (`build_template_md`/`build_template_xlsx`/`parse_upload`, openpyxl). Two routes on `studio_teach.py`: `GET /studios/{id}/teach/template?fmt=md|xlsx` (download) + `POST /studios/{id}/teach/upload` (multipart → parse → same classify+preview pipeline, ≤2MB). FE `StudioTeach.vue`: download dropdown, upload button, METRIC/QUERY/EXAMPLE badges + card enrichment. Reuses flag `TEACH_BOX`.
 Bullet rules (this is the user-facing "What's new" feed):
   - **Top-level** `- ` bullets are USER-FACING — plain language, no file paths / jargon / markdown.
     These show in the in-app "What's new" popover.

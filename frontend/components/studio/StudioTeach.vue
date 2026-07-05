@@ -14,6 +14,37 @@
             </div>
         </div>
 
+        <!-- Action row: download template + upload filled file -->
+        <div v-if="canEdit" class="flex items-center gap-2 flex-wrap mb-3">
+            <UDropdown :items="downloadItems" :popper="{ placement: 'bottom-start' }">
+                <button
+                    type="button"
+                    class="inline-flex items-center gap-1.5 text-xs font-medium text-[#6b6b6b] border border-[#E9E0D3] bg-white hover:bg-[#F6F1EA] rounded-lg px-3 py-1.5 transition-colors"
+                >
+                    <UIcon name="i-heroicons-arrow-down-tray" class="w-3.5 h-3.5" />
+                    ⬇ Download template
+                    <UIcon name="i-heroicons-chevron-down" class="w-3 h-3" />
+                </button>
+            </UDropdown>
+            <button
+                type="button"
+                :disabled="uploading"
+                class="inline-flex items-center gap-1.5 text-xs font-medium text-[#6b6b6b] border border-[#E9E0D3] bg-white hover:bg-[#F6F1EA] rounded-lg px-3 py-1.5 transition-colors disabled:opacity-50"
+                @click="pickUpload"
+            >
+                <Spinner v-if="uploading" class="h-3.5 w-3.5" />
+                <UIcon v-else name="i-heroicons-arrow-up-tray" class="w-3.5 h-3.5" />
+                {{ uploading ? 'Uploading…' : '⬆ Upload filled file' }}
+            </button>
+            <input
+                ref="uploadInput"
+                type="file"
+                accept=".md,.markdown,.txt,.csv,.xlsx"
+                class="hidden"
+                @change="onUploadFile"
+            />
+        </div>
+
         <!-- Paste box -->
         <div class="rounded-2xl border border-[#E9E0D3] bg-white p-4 mb-4">
             <UTextarea
@@ -26,17 +57,27 @@
             />
             <div class="mt-3 flex items-center justify-between">
                 <span class="text-[11px] text-[#9a958c] tabular-nums">{{ pasteText.length }} / 20000 chars</span>
-                <button
-                    v-if="canEdit"
-                    type="button"
-                    :disabled="classifying || pasteText.trim().length < 12"
-                    class="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-lg px-3.5 py-1.5 transition-colors disabled:opacity-50"
-                    @click="teach"
-                >
-                    <Spinner v-if="classifying" class="h-3.5 w-3.5" />
-                    <UIcon v-else name="i-heroicons-sparkles" class="w-3.5 h-3.5" />
-                    {{ classifying ? 'Reading…' : '✦ Teach AI' }}
-                </button>
+                <div v-if="canEdit" class="flex items-center gap-2">
+                    <UDropdown :items="starterItems" :popper="{ placement: 'top-end' }">
+                        <button
+                            type="button"
+                            class="inline-flex items-center gap-1 text-xs font-medium text-[#6b6b6b] border border-[#E9E0D3] bg-white hover:bg-[#F6F1EA] rounded-lg px-2.5 py-1.5 transition-colors"
+                        >
+                            Load template into box
+                            <UIcon name="i-heroicons-chevron-down" class="w-3 h-3" />
+                        </button>
+                    </UDropdown>
+                    <button
+                        type="button"
+                        :disabled="classifying || pasteText.trim().length < 12"
+                        class="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-lg px-3.5 py-1.5 transition-colors disabled:opacity-50"
+                        @click="teach"
+                    >
+                        <Spinner v-if="classifying" class="h-3.5 w-3.5" />
+                        <UIcon v-else name="i-heroicons-sparkles" class="w-3.5 h-3.5" />
+                        {{ classifying ? 'Reading…' : '✦ Teach AI' }}
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -99,6 +140,15 @@
                             class="w-full text-sm font-medium text-[#1f2328] bg-transparent border-0 border-b border-transparent focus:border-[#E9E0D3] focus:ring-0 px-0 py-0.5 mb-1.5"
                             placeholder="Title"
                         />
+                        <!-- METRIC locked value -->
+                        <div
+                            v-if="sp.type === 'METRIC' && sp.metric && sp.metric.value !== undefined && sp.metric.value !== null && sp.metric.value !== ''"
+                            class="mb-1.5"
+                        >
+                            <span class="inline-flex items-center gap-1 text-[11px] font-semibold text-[#5B3FA0] bg-[#F1EBFB] border border-[#C9B8E0] rounded-full px-2 py-0.5">
+                                = {{ fmtNum(sp.metric.value) }}
+                            </span>
+                        </div>
                         <!-- editable content -->
                         <UTextarea
                             v-model="sp.content"
@@ -107,6 +157,19 @@
                             :disabled="!canEdit"
                             :ui="{ base: 'text-[12px] leading-relaxed' }"
                         />
+
+                        <!-- QUERY sql -->
+                        <pre
+                            v-if="sp.type === 'QUERY' && sp.query && sp.query.sql"
+                            class="mt-2 text-[11px] leading-relaxed text-[#37618A] bg-[#F6F4EF] border border-[#E9E0D3] rounded-lg p-2 overflow-x-auto font-mono whitespace-pre-wrap"
+                        >{{ sp.query.sql }}</pre>
+
+                        <!-- EXAMPLE q / a / sql -->
+                        <div v-if="sp.type === 'EXAMPLE' && sp.example" class="mt-2 space-y-0.5 text-[11px] text-[#6b6b6b]">
+                            <div v-if="sp.example.question || sp.example.q"><span class="text-[#9a958c] font-semibold">Q</span> · {{ sp.example.question || sp.example.q }}</div>
+                            <div v-if="sp.example.answer || sp.example.a"><span class="text-[#9a958c] font-semibold">A</span> · {{ sp.example.answer || sp.example.a }}</div>
+                            <div v-if="sp.example.sql" class="font-mono text-[#37618A]"><span class="text-[#9a958c] font-semibold">SQL</span> · {{ sp.example.sql }}</div>
+                        </div>
 
                         <!-- skill bind detail -->
                         <div v-if="sp.type === 'SKILL' && sp.bind" class="mt-2 text-[11px] text-[#6b6b6b]">
@@ -157,8 +220,100 @@ const approving = ref(false)
 const ran = ref(false)
 const trainAfter = ref(false)
 const spans = ref<any[]>([])
+const uploading = ref(false)
+const uploadInput = ref<HTMLInputElement | null>(null)
 
 const includedCount = computed(() => spans.value.filter(s => s._include !== false).length)
+
+// Download-template dropdown (Markdown / Excel)
+const downloadItems = [[
+    { label: 'Markdown (.md)', icon: 'i-heroicons-document-text', click: () => downloadTemplate('md') },
+    { label: 'Excel (.xlsx)', icon: 'i-heroicons-table-cells', click: () => downloadTemplate('xlsx') },
+]]
+
+// One-at-a-time starter snippets inserted into the paste box
+const STARTERS: Record<string, string> = {
+    metric: 'METRIC: <name, e.g. Total Leads>\nValue: <locked number, e.g. 1544>\nDefinition: <how it is computed — filters, source table & columns>',
+    qa: 'VERIFIED Q&A\nQ: <a question users ask>\nA: <the correct answer>\nSQL: <the SQL that produces it — optional>',
+    rule: 'DATA RULE: <short title>\nWhen <condition>, always <do this>. E.g. exclude test accounts where email like \'%@test%\'.',
+    skill: 'SKILL / SOP: <name>\nSteps:\n1. <first step>\n2. <second step>\n3. <how to present the result>',
+}
+const starterItems = [[
+    { label: 'Metric', icon: 'i-heroicons-variable', click: () => loadStarter('metric') },
+    { label: 'Verified Q&A', icon: 'i-heroicons-check-badge', click: () => loadStarter('qa') },
+    { label: 'Data rule', icon: 'i-heroicons-adjustments-horizontal', click: () => loadStarter('rule') },
+    { label: 'SOP/Skill', icon: 'i-heroicons-sparkles', click: () => loadStarter('skill') },
+]]
+
+function loadStarter(kind: string) {
+    const stub = STARTERS[kind]
+    if (!stub) return
+    pasteText.value = pasteText.value.trim() ? `${pasteText.value.trimEnd()}\n\n${stub}` : stub
+}
+
+function fmtNum(v: any) {
+    if (v === null || v === undefined) return ''
+    const n = Number(v)
+    return Number.isFinite(n) ? n.toLocaleString() : String(v)
+}
+
+async function downloadTemplate(fmt: 'md' | 'xlsx') {
+    try {
+        const { data, error } = await useMyFetch<any>(`/studios/${props.studioId}/teach/template?fmt=${fmt}`, {
+            responseType: 'blob',
+        })
+        if (error.value) throw error.value
+        const blob = data.value as Blob
+        if (!blob) throw new Error('No file received')
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.style.display = 'none'
+        a.href = url
+        a.download = `teach-template.${fmt === 'xlsx' ? 'xlsx' : 'md'}`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        a.remove()
+    } catch (e: any) {
+        toast.add({ title: 'Download failed', description: String(e?.data?.detail || e?.message || e), color: 'red', icon: 'i-heroicons-exclamation-triangle' })
+    }
+}
+
+function pickUpload() {
+    uploadInput.value?.click()
+}
+
+async function onUploadFile(e: Event) {
+    const input = e.target as HTMLInputElement
+    const file = input?.files?.[0]
+    if (!file) return
+    uploading.value = true
+    spans.value = []
+    ran.value = false
+    try {
+        const form = new FormData()
+        form.append('file', file)
+        const { data, error } = await useMyFetch<any>(`/studios/${props.studioId}/teach/upload`, {
+            method: 'POST',
+            body: form,
+        })
+        if (error.value) throw error.value
+        const list: any[] = ((data.value as any)?.spans) || []
+        spans.value = list.map(s => ({ ...s, _include: true }))
+        ran.value = true
+        toast.add({
+            title: file.name,
+            description: `${spans.value.length} detected`,
+            color: spans.value.length ? 'green' : 'orange',
+            icon: spans.value.length ? 'i-heroicons-check-circle' : 'i-heroicons-light-bulb',
+        })
+    } catch (e: any) {
+        toast.add({ title: 'Upload failed', description: String(e?.data?.detail || e?.message || e), color: 'red', icon: 'i-heroicons-exclamation-triangle' })
+    } finally {
+        uploading.value = false
+        if (input) input.value = ''
+    }
+}
 
 function textRows(s?: string) {
     const n = String(s || '').length
@@ -175,6 +330,12 @@ function badge(type: string) {
             return { label: 'Data rule', icon: 'i-heroicons-variable', cls: 'border-[#D8CDE8] bg-[#F2EEFA] text-[#6A4FA8]' }
         case 'KNOWLEDGE':
             return { label: 'Knowledge', icon: 'i-heroicons-book-open', cls: 'border-[#CFE0CF] bg-[#EEF5EE] text-[#3f7d53]' }
+        case 'METRIC':
+            return { label: 'Metric', icon: 'i-heroicons-variable', cls: 'border-[#C9B8E0] bg-[#F1EBFB] text-[#5B3FA0]' }
+        case 'QUERY':
+            return { label: 'Query', icon: 'i-heroicons-code-bracket', cls: 'border-[#BFE0E8] bg-[#EAF6FA] text-[#2C7A8C]' }
+        case 'EXAMPLE':
+            return { label: 'Example', icon: 'i-heroicons-light-bulb', cls: 'border-[#CFE0CF] bg-[#EEF5EE] text-[#3f7d53]' }
         default:
             return { label: type, icon: 'i-heroicons-tag', cls: 'border-[#E9E0D3] bg-[#F4EEE5] text-[#6b6b6b]' }
     }
