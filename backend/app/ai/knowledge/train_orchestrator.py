@@ -628,7 +628,21 @@ async def run_training(studio_id, organization_id, user_id) -> None:
                 from app.models.llm_model import LLMModel as _LLMModelTM
                 from app.services.llm_service import LLMService as _LLMSvc0
                 _cfg0 = studio.config if isinstance(studio.config, dict) else {}
-                _want = _cfg0.get("train_model_id")
+                _want = _cfg0.get("model_id") or _cfg0.get("train_model_id")
+                if not _want:
+                    # Org-level TRAINING default (Settings → LLM → Agent Defaults),
+                    # inserted between the studio config and the generic org
+                    # (analysis) default. Fail-soft: never break the run.
+                    try:
+                        from app.services.organization_settings_service import (
+                            OrganizationSettingsService,
+                        )
+                        _os0 = await OrganizationSettingsService().get_settings(
+                            db, organization, user)
+                        _oc0 = _os0.config if isinstance(_os0.config, dict) else {}
+                        _want = _oc0.get("default_train_model_id") or _want
+                    except Exception:  # noqa: BLE001
+                        pass
                 if _want:
                     train_model = (await db.execute(
                         select(_LLMModelTM)

@@ -107,27 +107,81 @@
 
       <!-- RECEIPT (only once a train status exists) -->
       <div v-if="hasTrainStatus" class="mt-3 border-t border-[#E9E0D3] pt-3">
-        <!-- LIVE PROCESS FLOW — 6 phases → arrows → live sub-stage nodes -->
-        <div class="flow mb-2.5">
+        <!-- LIVE PROCESS DIAGRAM — BPMN spine: ROUTE group → decision diamond
+             (held branch) → every train stage left→right → ✓ agent-ready.
+             Driven by the same trainFlow node states; scrolls horizontally. -->
+        <div class="bpmn mb-2.5">
+          <!-- thin clay progress bar -->
           <div class="flow-bar-row">
             <div class="flow-bar"><div class="flow-bar-fill" :style="{ width: flowPct + '%' }"></div></div>
             <span v-if="trainingAll" class="flow-status flow-status-run">running &middot; {{ flowPct }}%</span>
             <span v-else-if="flowAllDone" class="flow-status flow-status-done">✓ agent ready &middot; 100%</span>
             <span v-else class="flow-status">{{ flowPct }}%</span>
           </div>
-          <div class="flow-phases">
-            <template v-for="(ph, pi) in trainFlow" :key="ph.id">
-              <div class="flow-phase" :class="{ 'flow-phase-active': ph.nodes.some(n => n.state === 'running') }">
-                <div class="flow-phase-head">{{ ph.label }}</div>
-                <div class="flow-nodes">
-                  <div v-for="n in ph.nodes" :key="n.key" class="flow-node" :class="'st-' + n.state">
-                    <span class="flow-glyph">{{ n.state === 'done' ? '✓' : n.state === 'running' ? '⟳' : n.state === 'held' ? '◌' : '·' }}</span>
-                    <span class="flow-node-label">{{ n.label }}</span>
+
+          <div class="bpmn-canvas">
+            <div class="bpmn-spine">
+              <!-- ROUTE group (pre-diamond) -->
+              <template v-for="(n, i) in routeNodes" :key="'r-' + n.key">
+                <div v-if="i > 0" class="bpmn-arrow" :class="{ done: routeNodes[i - 1].state === 'done' }" aria-hidden="true">
+                  <svg viewBox="0 0 34 16"><path d="M1 8h28M24 3l6 5-6 5" /></svg>
+                </div>
+                <div class="bpmn-node" :class="'st-' + n.state">
+                  <div class="bpmn-box">
+                    <svg class="bpmn-icon" viewBox="0 0 24 24" v-html="iconFor(n.key)" />
+                    <svg class="ring" viewBox="0 0 70 70"><circle class="track" cx="35" cy="35" r="32" /><circle class="fill" cx="35" cy="35" r="32" stroke-dasharray="201" :stroke-dashoffset="n.state === 'running' ? 110 : 201" /></svg>
+                    <span class="bpmn-badge">{{ n.state === 'done' ? '✓' : n.state === 'held' ? '◌' : '' }}</span>
+                  </div>
+                  <span class="bpmn-lbl">{{ nodeLabel(n.key) }}</span>
+                </div>
+              </template>
+
+              <!-- arrow → DECISION diamond (+ held branch) → arrow -->
+              <div class="bpmn-arrow" :class="{ done: routerDone }" aria-hidden="true"><svg viewBox="0 0 34 16"><path d="M1 8h28M24 3l6 5-6 5" /></svg></div>
+              <div class="bpmn-diamond-wrap">
+                <div class="bpmn-diamond" :class="{ done: routerDone }">
+                  <svg viewBox="0 0 24 24" v-html="iconFor('__router')" />
+                </div>
+                <span class="bpmn-dlbl">router sure?</span>
+                <div class="bpmn-branch" :class="{ faint: heldCount === 0 }">
+                  <span class="bpmn-drop" />
+                  <div class="bpmn-terminal">
+                    <div class="tcircle held">◌</div>
+                    <span class="tlbl">Held &middot; review<br><span class="tsub">{{ heldCount }} item{{ heldCount === 1 ? '' : 's' }}</span></span>
                   </div>
                 </div>
               </div>
-              <div v-if="pi < trainFlow.length - 1" class="flow-arrow" aria-hidden="true">›</div>
-            </template>
+              <div class="bpmn-arrow" :class="{ done: routerDone }" aria-hidden="true"><svg viewBox="0 0 34 16"><path d="M1 8h28M24 3l6 5-6 5" /></svg></div>
+
+              <!-- main spine — every remaining stage -->
+              <template v-for="(n, i) in spineNodes" :key="'s-' + n.key">
+                <div v-if="i > 0" class="bpmn-arrow" :class="{ done: spineNodes[i - 1].state === 'done' }" aria-hidden="true">
+                  <svg viewBox="0 0 34 16"><path d="M1 8h28M24 3l6 5-6 5" /></svg>
+                </div>
+                <div class="bpmn-node" :class="'st-' + n.state">
+                  <div class="bpmn-box">
+                    <svg class="bpmn-icon" viewBox="0 0 24 24" v-html="iconFor(n.key)" />
+                    <svg class="ring" viewBox="0 0 70 70"><circle class="track" cx="35" cy="35" r="32" /><circle class="fill" cx="35" cy="35" r="32" stroke-dasharray="201" :stroke-dashoffset="n.state === 'running' ? 110 : 201" /></svg>
+                    <span class="bpmn-badge">{{ n.state === 'done' ? '✓' : n.state === 'held' ? '◌' : '' }}</span>
+                  </div>
+                  <span class="bpmn-lbl">{{ nodeLabel(n.key) }}</span>
+                </div>
+              </template>
+
+              <!-- final arrow → terminal ✓ -->
+              <div class="bpmn-arrow" :class="{ done: flowAllDone }" aria-hidden="true"><svg viewBox="0 0 34 16"><path d="M1 8h28M24 3l6 5-6 5" /></svg></div>
+              <div class="bpmn-terminal-final">
+                <div class="tcircle" :class="{ ok: flowAllDone }">✓</div>
+                <span class="tlbl">Agent ready</span>
+              </div>
+            </div>
+
+            <div class="bpmn-legend">
+              <span><i class="dot d" />done</span>
+              <span><i class="dot r" />working</span>
+              <span><i class="dot q" />queued</span>
+              <span><i class="dot h" />held</span>
+            </div>
           </div>
         </div>
 
@@ -364,13 +418,18 @@ const receiptStages = computed(() => {
 // goldens/reconcile/coverage), the train-status detail map (other nodes, via
 // aliases), coverage=0 → held, and the newest `▸ <stage>` train-log marker →
 // running. Missing data → 'queued'. Never throws.
+// Ordered to mirror the LIVE pipeline log. The 'route' phase is the pre-diamond
+// group (classify → segregate → ingest); every other phase flows the BPMN spine
+// left→right, one icon box per stage. flowPct/flowAllDone flatten ALL of these.
 const FLOW_PHASES: { id: string; label: string; keys: string[] }[] = [
-  { id: 'route',   label: '① ROUTE',   keys: ['classify', 'segregate'] },
-  { id: 'land',    label: '② LAND',    keys: ['ingest', 'self-heal'] },
-  { id: 'profile', label: '③ PROFILE', keys: ['profile', 'deep-profile', 'index'] },
-  { id: 'enrich',  label: '④ ENRICH',  keys: ['code-enrich', 'domain-packs', 'brain-graph'] },
-  { id: 'learn',   label: '⑤ LEARN',   keys: ['auto-eda', 'agent-kpis', 'agent-overview'] },
-  { id: 'verify',  label: '⑥ VERIFY',  keys: ['goldens', 'reconcile', 'coverage'] },
+  { id: 'route',   label: 'ROUTE',   keys: ['classify', 'segregate', 'ingest'] },
+  { id: 'prep',    label: 'PREP',    keys: ['self-heal', 'reconcile'] },
+  { id: 'profile', label: 'PROFILE', keys: ['profile', 'deep-profile'] },
+  { id: 'enrich',  label: 'ENRICH',  keys: ['code-enrich', 'domain-packs'] },
+  { id: 'build',   label: 'BUILD',   keys: ['queries', 'goldens', 'artifacts', 'semantic', 'mine-joins', 'verified-goldens'] },
+  { id: 'index',   label: 'INDEX',   keys: ['docs', 'index', 'brain-graph'] },
+  { id: 'learn',   label: 'LEARN',   keys: ['auto-eda', 'agent-kpis', 'agent-overview'] },
+  { id: 'verify',  label: 'VERIFY',  keys: ['coverage'] },
 ]
 // keys that map straight onto receiptStages done-flags
 const RECEIPT_NODE_KEYS = new Set(['classify', 'segregate', 'ingest', 'goldens', 'reconcile', 'coverage'])
@@ -392,6 +451,13 @@ const NODE_ALIASES: Record<string, string[]> = {
   goldens: ['goldens', 'golden', 'golden_queries', 'goldenqueries', 'goldensql', 'golden_sql'],
   reconcile: ['reconcile', 'reconciliation'],
   coverage: ['coverage'],
+  // stages added for the full BPMN spine — unknown → 'queued' (fail-soft, never forced green)
+  queries: ['queries', 'example_queries', 'example-queries', 'examplequeries', 'query'],
+  artifacts: ['artifacts', 'generate_artifacts', 'generate-artifacts', 'generateartifacts', 'artifact'],
+  semantic: ['semantic', 'semantic_metrics', 'semantic-metrics', 'semanticmetrics', 'metrics'],
+  'mine-joins': ['mine-joins', 'mine_joins', 'minejoins', 'joins', 'join'],
+  'verified-goldens': ['verified-goldens', 'verified_goldens', 'verifiedgoldens', 'eval_gate', 'eval-gate', 'evalgate', 'verified'],
+  docs: ['docs', 'ingest_docs', 'ingest-docs', 'ingestdocs', 'attached_docs', 'attached-docs', 'attacheddocs', 'doc'],
 }
 const _norm = (s: string) => s.trim().toLowerCase().replace(/[ _]+/g, '-')
 
@@ -473,6 +539,56 @@ const flowAllDone = computed(() => {
   return nodes.length > 0 && nodes.every(n => n.state === 'done')
 })
 
+// ─── BPMN spine derivation (reuses trainFlow above — no new state) ───────────
+// Split the same node set into the pre-diamond ROUTE group and the main spine.
+const routeNodes = computed(() => {
+  const p = trainFlow.value.find(x => x.id === 'route')
+  return p ? p.nodes : []
+})
+const spineNodes = computed(() => trainFlow.value.filter(x => x.id !== 'route').flatMap(x => x.nodes))
+const routerDone = computed(() => routeNodes.value.length > 0 && routeNodes.value.every(n => n.state === 'done'))
+const heldCount = computed(() => Number((routeInbox.value && routeInbox.value.held) || 0))
+
+// Inline SVG icons (stroke=currentColor, CSP-safe, no emoji) — one per stage.
+const ICON_PATHS: Record<string, string> = {
+  classify: '<path d="M3 5h18M6 12h12M10 19h4"/>',
+  segregate: '<path d="M12 3v5M12 8L7 13M12 8l5 5M4 16a3 3 0 106 0 3 3 0 10-6 0M14 16a3 3 0 106 0 3 3 0 10-6 0"/>',
+  ingest: '<path d="M12 3v10M8 9l4 4 4-4M5 20h14"/>',
+  'self-heal': '<path d="M12 3v18M5 8l7-5 7 5M5 8v8l7 5 7-5V8"/>',
+  reconcile: '<path d="M4 8h12M4 8l3-3M4 8l3 3M20 16H8M20 16l-3-3M20 16l-3 3"/>',
+  profile: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  'deep-profile': '<path d="M4 20V12M9 20V7M14 20v-5M19 20V4M22 20H2"/>',
+  'code-enrich': '<path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/>',
+  'domain-packs': '<path d="M12 3l8 4-8 4-8-4 8-4zM4 12l8 4 8-4M4 17l8 4 8-4"/>',
+  queries: '<path d="M4 6h16M4 12h10M4 18h7"/>',
+  goldens: '<path d="M12 3l2.5 6H21l-5 4 2 7-6-4-6 4 2-7-5-4h6.5z"/>',
+  artifacts: '<path d="M4 4h16v12H4zM4 20h16"/>',
+  semantic: '<path d="M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18"/>',
+  'mine-joins': '<path d="M8 12a4 4 0 108 0 4 4 0 10-8 0M2 12h6M16 12h6"/>',
+  'verified-goldens': '<path d="M12 3l2.5 6H21l-5 4 2 7-6-4-6 4 2-7-5-4h6.5zM9 9l2 2 4-4"/>',
+  docs: '<path d="M6 3h9l3 3v15H6zM9 12h6M9 16h6"/>',
+  index: '<path d="M4 6h16M4 12h16M4 18h16M8 3v18"/>',
+  'brain-graph': '<path d="M6 6a2 2 0 104 0 2 2 0 10-4 0M14 18a2 2 0 104 0 2 2 0 10-4 0M9 8l6 8"/>',
+  'auto-eda': '<path d="M12 2a7 7 0 00-4 13v3h8v-3a7 7 0 00-4-13z"/>',
+  'agent-kpis': '<path d="M4 20V4M4 20h16M8 16l3-4 3 2 4-6"/>',
+  'agent-overview': '<path d="M4 5h16v10H4zM8 19h8"/>',
+  coverage: '<path d="M12 3a9 9 0 100 18 9 9 0 000-18zM12 7v5l4 2"/>',
+  __router: '<path d="M4 6h16M4 12h10M4 18h7"/>',
+}
+const NODE_LABELS: Record<string, string> = {
+  classify: 'classify', segregate: 'segregate', ingest: 'ingest',
+  'self-heal': 'self-heal', reconcile: 'reconcile',
+  profile: 'profile', 'deep-profile': 'deep profile',
+  'code-enrich': 'code enrich', 'domain-packs': 'domain packs',
+  queries: 'queries', goldens: 'goldens', artifacts: 'artifacts', semantic: 'semantic',
+  'mine-joins': 'mine joins', 'verified-goldens': 'verified goldens',
+  docs: 'docs', index: 'index', 'brain-graph': 'brain graph',
+  'auto-eda': 'auto EDA', 'agent-kpis': 'agent KPIs', 'agent-overview': 'overview',
+  coverage: 'coverage',
+}
+const iconFor = (key: string): string => ICON_PATHS[key] || ICON_PATHS.classify
+const nodeLabel = (key: string): string => NODE_LABELS[key] || key
+
 const byDestEntries = computed<[string, number][]>(() => {
   const bd = (routeInbox.value && routeInbox.value.by_dest) || {}
   return Object.entries(bd).filter(([, n]) => Number(n) > 0) as [string, number][]
@@ -539,7 +655,7 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-/* LIVE PROCESS FLOW — warm clay/cream palette to match the TRAIN card */
+/* LIVE PROCESS DIAGRAM — warm clay/cream BPMN spine (matches the TRAIN card) */
 .flow-bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .flow-bar { flex: 1; height: 5px; border-radius: 999px; background: #EDE5D8; overflow: hidden; }
 .flow-bar-fill { height: 100%; background: #C2541E; border-radius: 999px; transition: width .4s ease; }
@@ -547,38 +663,76 @@ onBeforeUnmount(() => {
 .flow-status-run { color: #C2541E; }
 .flow-status-done { color: #3f9e6a; }
 
-.flow-phases { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px; }
-.flow-phase {
-  display: flex; flex-direction: column; gap: 4px; min-width: 96px;
-  padding: 6px 8px; border: 1px solid #ECE3D6; border-radius: 10px; background: #FBF8F3;
-}
-.flow-phase-active { border-color: #E7C79E; background: #FBF3E7; }
-.flow-phase-head {
-  font-size: 9.5px; font-weight: 700; letter-spacing: .04em;
-  color: #9a958c; text-transform: uppercase;
-}
-.flow-phase-active .flow-phase-head { color: #C2541E; }
+/* scroll spine — ~20 boxes overflow horizontally, never the page body */
+.bpmn-canvas { border: 1px solid #ECE3D6; border-radius: 14px; background: #FBF8F3; padding: 16px 14px 12px; overflow-x: auto; }
+.bpmn-spine { display: flex; align-items: flex-start; gap: 0; min-width: min-content; }
 
-.flow-nodes { display: flex; flex-direction: column; gap: 2px; }
-.flow-node { display: flex; align-items: center; gap: 5px; font-size: 10.5px; line-height: 1.3; }
-.flow-glyph { width: 11px; flex-shrink: 0; text-align: center; font-size: 10px; }
+/* icon box */
+.bpmn-node { width: 78px; display: flex; flex-direction: column; align-items: center; text-align: center; flex: 0 0 auto; }
+.bpmn-box { width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center; position: relative; background: #F3EFE8; border: 1.5px solid #eae3d7; color: #b7b0a4; transition: .3s; }
+.bpmn-icon { width: 24px; height: 24px; stroke-width: 1.9; fill: none; stroke: currentColor; }
+.bpmn-lbl { font-size: 9.5px; margin-top: 6px; line-height: 1.2; color: #9a958c; font-weight: 600; max-width: 76px; }
 
-.flow-node.st-done { color: #3f9e6a; }
-.flow-node.st-done .flow-glyph { color: #3f9e6a; }
-.flow-node.st-running { color: #c98a2e; font-weight: 600; }
-.flow-node.st-running .flow-glyph { color: #c98a2e; display: inline-block; animation: flow-spin 1s linear infinite; }
-.flow-node.st-held { color: #9a958c; }
-.flow-node.st-held .flow-glyph { color: #b7b0a4; }
-.flow-node.st-queued { color: #b7b0a4; }
-.flow-node.st-queued .flow-glyph { color: #cfc8bb; }
+/* states */
+.bpmn-node.st-done .bpmn-box { background: #e4f6f3; color: #1f8878; border-color: #bde9e2; }
+.bpmn-node.st-done .bpmn-lbl { color: #1f8878; }
+.bpmn-node.st-running .bpmn-box { background: #fbeedd; color: #e0912f; border-color: #e0912f; animation: bpmn-pulse 1.2s ease-in-out infinite; }
+.bpmn-node.st-running .bpmn-lbl { color: #c98a2e; font-weight: 700; }
+.bpmn-node.st-held .bpmn-box { background: #f3efe8; color: #a89f90; border: 1.5px dashed #c9bfae; }
+.bpmn-node.st-held .bpmn-lbl { color: #9a958c; }
+.bpmn-node.st-queued .bpmn-box { background: #f3efe8; color: #cfc8bb; border-color: #eae3d7; }
 
-.flow-arrow {
-  align-self: center; padding: 0 1px;
-  color: #cbb9a3; font-size: 15px; font-weight: 400; user-select: none;
-}
+/* running progress ring */
+.ring { position: absolute; top: -5px; left: -5px; width: 62px; height: 62px; pointer-events: none; display: none; }
+.bpmn-node.st-running .ring { display: block; }
+.ring circle { fill: none; stroke-width: 3; }
+.ring .track { stroke: #f0dcc0; }
+.ring .fill { stroke: #e0912f; stroke-linecap: round; transform-origin: 50% 50%; transform: rotate(-90deg); animation: bpmn-ring 1.1s linear infinite; }
 
-@keyframes flow-spin { to { transform: rotate(360deg); } }
+/* done / held badge */
+.bpmn-badge { position: absolute; right: -4px; bottom: -4px; min-width: 17px; height: 17px; padding: 0 2px; border-radius: 50%; display: grid; place-items: center; font-size: 10px; color: #fff; background: #2fb8a6; border: 2px solid #FBF8F3; line-height: 1; }
+.bpmn-badge:empty { display: none; }
+.bpmn-node.st-held .bpmn-badge { background: #a89f90; }
+
+/* connector arrow */
+.bpmn-arrow { width: 26px; height: 52px; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.bpmn-arrow svg { width: 26px; height: 14px; stroke: #cbbda0; stroke-width: 1.6; fill: none; }
+.bpmn-arrow.done svg { stroke: #2fb8a6; }
+
+/* decision diamond */
+.bpmn-diamond-wrap { display: flex; flex-direction: column; align-items: center; flex: 0 0 auto; width: 96px; }
+.bpmn-diamond { width: 50px; height: 50px; background: #eaf0fb; border: 1.5px solid #cdd8f0; transform: rotate(45deg); border-radius: 9px; display: grid; place-items: center; color: #4f74c8; }
+.bpmn-diamond svg { width: 20px; height: 20px; transform: rotate(-45deg); stroke: currentColor; fill: none; stroke-width: 1.9; }
+.bpmn-diamond.done { background: #e4f6f3; border-color: #bde9e2; color: #1f8878; }
+.bpmn-dlbl { font-size: 9.5px; font-weight: 600; color: #9a958c; margin-top: 8px; }
+
+/* held branch (hangs below the diamond) */
+.bpmn-branch { display: flex; flex-direction: column; align-items: center; margin-top: 8px; transition: opacity .3s; }
+.bpmn-branch.faint { opacity: .35; }
+.bpmn-drop { width: 2px; height: 16px; background: #cbbda0; }
+
+/* terminal circles */
+.bpmn-terminal, .bpmn-terminal-final { display: flex; flex-direction: column; align-items: center; text-align: center; flex: 0 0 auto; }
+.bpmn-terminal-final { width: 86px; }
+.tcircle { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-size: 22px; background: #d8cfc0; }
+.tcircle.ok { background: #2fb8a6; }
+.tcircle.held { background: #c3bcae; }
+.tlbl { font-size: 9.5px; font-weight: 600; margin-top: 6px; color: #211B14; line-height: 1.25; }
+.tsub { color: #b3a48f; font-size: 8.5px; font-weight: 600; }
+
+/* legend */
+.bpmn-legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 12px; font-size: 10px; color: #9a958c; }
+.bpmn-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.bpmn-legend .dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.bpmn-legend .dot.d { background: #2fb8a6; }
+.bpmn-legend .dot.r { background: #e0912f; }
+.bpmn-legend .dot.q { background: #d8cfc0; }
+.bpmn-legend .dot.h { background: #b8afa0; }
+
+@keyframes bpmn-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(224, 145, 47, .35); } 50% { box-shadow: 0 0 0 6px rgba(224, 145, 47, 0); } }
+@keyframes bpmn-ring { to { transform: rotate(270deg); } }
 @media (prefers-reduced-motion: reduce) {
-  .flow-node.st-running .flow-glyph { animation: none; }
+  .bpmn-node.st-running .bpmn-box { animation: none; }
+  .ring .fill { animation: none; }
 }
 </style>
