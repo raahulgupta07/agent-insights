@@ -105,9 +105,13 @@ async def list_available_templates(db, organization: Organization) -> list[dict]
 
     out: list[dict] = []
     for ds in rows:
-        if (getattr(ds, "publish_status", "published") or "published") == "disabled":
-            continue
         conn = ds.connections[0] if ds.connections else None
+        try:
+            conn_config = conn.config if conn is not None else None
+            if not isinstance(conn_config, dict):
+                conn_config = {} if conn_config is None else conn_config
+        except Exception:  # noqa: BLE001
+            conn_config = {}
         out.append({
             "id": str(ds.id),
             "name": ds.name,
@@ -115,6 +119,8 @@ async def list_available_templates(db, organization: Organization) -> list[dict]
             "type": conn.type if conn else None,
             "auth_policy": conn.auth_policy if conn else None,
             "allowed_user_auth_modes": (conn.allowed_user_auth_modes if conn else None) or [],
+            "publish_status": getattr(ds, "publish_status", "published") or "published",
+            "config": conn_config,
         })
     return out
 

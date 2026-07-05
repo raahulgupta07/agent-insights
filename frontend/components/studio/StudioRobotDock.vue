@@ -56,7 +56,7 @@
                             <div v-else class="srd-ln">
                                 <span class="srd-time">{{ lineTime(row.ln, row.i) }}</span>
                                 <span class="srd-stage">{{ row.ln.stage }}</span>
-                                <span class="srd-msg" :class="'srd-lvl-' + row.ln.level">{{ row.ln.msg }}</span>
+                                <span class="srd-msg" :class="lineClass(row.ln)" v-html="renderMsg(row.ln)"></span>
                             </div>
                         </template>
                     </div>
@@ -194,6 +194,38 @@ const renderRows = computed<RenderRow[]>(() => {
 function stageGlyph(status: string) {
     return ({ done: '✓', active: '◐', pending: '·', error: '✕' } as Record<string, string>)[status] || '·'
 }
+
+// Semantic class per log line, by level + content. Priority: error > held > success > stage > model > default
+// (so a failed stage reads red, not clay). Returns a `.srd-msg` modifier class.
+function lineClass(ln: StreamLine) {
+    const msg = ln && ln.msg != null ? String(ln.msg) : ''
+    const m = msg.toLowerCase()
+    const isStage = !!(ln && ln.stage) || /^\s*▸/.test(msg)
+    if ((ln && ln.level === 'error') || /(failed|error|exception|does not exist)/.test(m)) return 'lvl-err'
+    if (/(⏸|held|skip|paused)/.test(m)) return 'lvl-held'
+    if (/(✓|all stages complete| done|complete|ready|\bok\b|passed|persisted)/.test(m)) return 'lvl-ok'
+    if (isStage) return 'lvl-stage'
+    if (/model:/.test(m)) return 'lvl-model'
+    return 'lvl-info'
+}
+
+// Safe-HTML message: escape first (& < >), THEN inline-highlight count numbers (cyan) and id/org/path
+// tokens (dim grey). Ordered alternation so each char is wrapped at most once (id tokens win over numbers).
+const COUNT_WORDS = 'files?|agents?|rows?|tables?|docs?|chunks?|columns?|sources?|periods?|months?|records?'
+const HL_RE = new RegExp(
+    '(org=[\\w.-]+|\\b(?:t|staging)_\\w+|[A-Za-z0-9_]+=\\d+|=\\d+|\\b\\d+(?=\\s+(?:' + COUNT_WORDS + ')\\b))',
+    'g',
+)
+function renderMsg(ln: StreamLine) {
+    const raw = ln && ln.msg != null ? String(ln.msg) : ''
+    const esc = raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    return esc.replace(HL_RE, (tok) => {
+        if (/^org=|^t_|^staging_/.test(tok)) return `<span class="hl-id">${tok}</span>`
+        const eq = tok.indexOf('=')
+        if (eq >= 0) return `${tok.slice(0, eq + 1)}<span class="hl-num">${tok.slice(eq + 1)}</span>`
+        return `<span class="hl-num">${tok}</span>`
+    })
+}
 function clampPct(n: number) { return Math.max(0, Math.min(100, Math.round(n || 0))) }
 function fmt(n?: number) {
     const v = n || 0
@@ -231,7 +263,7 @@ watch(open, async (o) => {
 .srd-fab-dot { position: absolute; top: 6px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: #3FA86B; box-shadow: 0 0 0 3px #FBFAF6; animation: srd-pulse 1.6s ease-in-out infinite; }
 @keyframes srd-pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
 
-.srd-panel { width: 420px; max-width: calc(100vw - 40px); background: #fff; border: 1px solid #E9E0D3; border-radius: 16px; box-shadow: 0 30px 70px -24px rgba(40,25,10,.5); overflow: hidden; }
+.srd-panel { width: min(92vw, 620px); max-width: calc(100vw - 40px); background: #fff; border: 1px solid #E9E0D3; border-radius: 16px; box-shadow: 0 30px 70px -24px rgba(40,25,10,.5); overflow: hidden; }
 .srd-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid #EFE7DA; }
 .srd-bot-sm { width: 38px; height: 30px; flex: none; }
 .srd-ttl { flex: 1; min-width: 0; }
@@ -264,11 +296,14 @@ watch(open, async (o) => {
 .srd-time { flex: none; color: #6b6156; font-size: 10.5px; font-variant-numeric: tabular-nums; }
 .srd-stage { flex: none; width: 62px; text-align: right; font-weight: 700; font-size: 9.5px; color: #8b7d6b; text-transform: uppercase; letter-spacing: .3px; overflow: hidden; text-overflow: ellipsis; }
 .srd-msg { color: #cfc4b3; flex: 1; min-width: 0; }
-.srd-lvl-info { color: #b0a593; }
-.srd-lvl-pending { color: #8b7d6b; }
-.srd-lvl-active { color: #C2541E; }
-.srd-lvl-done { color: #4fae7c; }
-.srd-lvl-warn { color: #cf9a3d; }
+.srd-msg.lvl-stage { color: #e08a52; }
+.srd-msg.lvl-ok { color: #6bd18f; }
+.srd-msg.lvl-err { color: #e88a7a; }
+.srd-msg.lvl-held { color: #e0b64f; }
+.srd-msg.lvl-model { color: #b79ae8; }
+.srd-msg.lvl-info { color: #d8cdbb; }
+.hl-num { color: #5fc8d8; }
+.hl-id { color: #8a8073; font-variant-numeric: tabular-nums; }
 .srd-daybreak { display: flex; align-items: center; gap: 10px; padding: 5px 0; color: #b59a6f; font-size: 9.5px; text-transform: uppercase; letter-spacing: 1px; font-variant-numeric: tabular-nums; }
 .srd-daybreak::before, .srd-daybreak::after { content: ''; flex: 1; height: 1px; background: #2b2119; }
 

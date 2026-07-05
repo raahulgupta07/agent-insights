@@ -22,7 +22,7 @@
              Config is gated on manage_connections — members' DOM never has it. -->
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <div
-                v-for="c in catalog"
+                v-for="c in visibleCatalog"
                 :key="c.key"
                 class="group relative p-4 rounded-2xl border bg-white transition-all duration-200"
                 :class="isReady(c) ? 'border-[#E9E0D3] hover:-translate-y-0.5 hover:shadow-md hover:border-[#C2541E]/30' : 'border-[#EFE7DA] opacity-80'"
@@ -58,12 +58,12 @@
                 <!-- CONNECTED — already signed in; do NOT offer a fresh "Sign in"
                      (that spawned duplicate agents). Open / Re-sync the existing one;
                      a new agent only via the explicit "another account" path. -->
-                <template v-if="cloneFor(c.key)">
+                <template v-if="readyCloneFor(c.key)">
                     <div class="text-[11px] flex items-center gap-1.5 font-semibold text-[#3f9e6a] mb-3">
-                        <span class="w-1.5 h-1.5 rounded-full bg-[#3f9e6a]"></span>{{ $t('connectors.connected') }} · {{ ownerLabel(cloneFor(c.key)) }}<span v-if="clonesFor(c.key).length > 1" class="text-[#9a958c] font-normal"> +{{ clonesFor(c.key).length - 1 }}</span>
+                        <span class="w-1.5 h-1.5 rounded-full bg-[#3f9e6a]"></span>{{ $t('connectors.connected') }} · {{ ownerLabel(readyCloneFor(c.key)) }}<span v-if="clonesFor(c.key).length > 1" class="text-[#9a958c] font-normal"> +{{ clonesFor(c.key).length - 1 }}</span>
                     </div>
                     <div class="flex gap-1.5 items-center flex-wrap">
-                        <NuxtLink :to="`/agents/${cloneFor(c.key).id}`" class="inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#3f9e6a] text-white hover:bg-[#348659]" :title="$t('connectors.open')">✓ {{ $t('connectors.connected') }}</NuxtLink>
+                        <NuxtLink :to="`/agents/${readyCloneFor(c.key).id}`" class="inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#3f9e6a] text-white hover:bg-[#348659]" :title="$t('connectors.open')">✓ {{ $t('connectors.connected') }}</NuxtLink>
                         <button @click="startConnect(c.key)" class="text-xs font-medium text-[#9a958c] hover:text-[#C2541E]">{{ $t('connectors.resync') }}</button>
                         <button @click="startConnect(c.key)" :disabled="!llmConfigured" class="text-xs font-medium text-[#9a958c] hover:text-[#C2541E]" :class="{ 'opacity-50 cursor-not-allowed': !llmConfigured }" :title="'Sign in with a different Microsoft account to add a separate agent'">＋ Another account</button>
                     </div>
@@ -199,6 +199,13 @@ function isReady(c: any) {
     return !!c.live && !!templateFor(c.key)
 }
 
+// A connector is "configured" when a super-admin has published a template for it
+// AND that template isn't disabled. Drives tile VISIBILITY for non-admins.
+function isConfigured(c: any) {
+    const tpl = templateFor(c.key)
+    return !!tpl && tpl?.publish_status !== 'disabled'
+}
+
 // Static catalog. `fields` = what the admin sets ONCE (no per-user data / passwords).
 // Fabric: server host + tenant; database is auto-discovered from what each user can
 // access at sign-in. Power BI (User Sign-in): tenant only — datasets a user can see
@@ -214,6 +221,11 @@ const baseCatalog = [
 // Fabric agent, connect Power BI → Power BI agent. (The old unified
 // HYBRID_MS_UNIFIED_SIGNIN joint "Microsoft (Fabric + Power BI)" tile was removed.)
 const catalog = computed(() => baseCatalog)
+
+// Tile visibility: a LIVE connector shows only when it's configured (a non-disabled
+// template exists) OR the viewer is an admin (who can still click "Set up →").
+// Coming-soon connectors (SharePoint/OneDrive, !c.live) ALWAYS show.
+const visibleCatalog = computed(() => catalog.value.filter((c: any) => !c.live || isConfigured(c) || canManage.value))
 
 function templateFor(key: string) {
     const type = catalog.value.find(c => c.key === key)?.type
@@ -237,6 +249,11 @@ function clonesFor(key: string) {
 }
 function cloneFor(key: string) {
     return clonesFor(key)[0] || null
+}
+// Only a clone that actually has tables is USABLE → the tile may say "Connected".
+// A leftover 0-table clone (e.g. a Fabric clone with no warehouse) must NOT.
+function readyCloneFor(key: string) {
+    return clonesFor(key).find((a: any) => a && (a.ready === true || (a.table_count || 0) > 0)) || null
 }
 function ownerLabel(clone: any) {
     return (clone?.name || '').split('·').pop()?.trim() || t('connectors.you')

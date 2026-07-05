@@ -18,10 +18,10 @@
                     :key="c.key"
                     class="flex items-center gap-3 p-3.5 rounded-xl border border-[#E9E0D3] bg-white"
                 >
-                    <div class="w-9 h-9 rounded-lg bg-white border border-[#E9E0D3] flex items-center justify-center p-1.5 shrink-0">
+                    <div class="w-9 h-9 rounded-lg bg-white border border-[#E9E0D3] flex items-center justify-center p-1.5 shrink-0" :class="isDisabled(c.key) ? 'opacity-45' : ''">
                         <img :src="c.icon" :alt="c.name" class="w-full h-full object-contain" />
                     </div>
-                    <div class="min-w-0">
+                    <div class="min-w-0" :class="isDisabled(c.key) ? 'opacity-55' : ''">
                         <div class="text-[13.5px] font-semibold text-[#1f2328] leading-tight">{{ c.name }}</div>
                         <div class="text-[11px] text-[#9a958c] mt-0.5">{{ c.desc }}</div>
                     </div>
@@ -30,9 +30,20 @@
                         <span v-if="!c.live" class="text-[11px] font-medium text-[#B9AE9C]">{{ $t('connectors.comingSoon') }}</span>
                         <template v-else>
                             <span
+                                v-if="templateFor(c.key) && isDisabled(c.key)"
+                                class="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded text-[#8a857c] bg-[#EDE7DC]"
+                            >{{ $t('connectors.disabledChip') || 'Disabled' }}</span>
+                            <span
+                                v-else
                                 class="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded"
                                 :class="templateFor(c.key) ? 'text-[#3f9e6a] bg-[#eef6f0]' : 'text-[#9a958c] bg-[#F4EEE5]'"
                             >{{ templateFor(c.key) ? $t('connectors.configured') : $t('connectors.draft') }}</span>
+                            <button
+                                v-if="templateFor(c.key)"
+                                @click="toggleTemplate(c.key)"
+                                class="text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-colors"
+                                :class="isDisabled(c.key) ? 'border-[#cdb9a0] text-[#3f9e6a] hover:bg-[#eef6f0]' : 'border-[#E9E0D3] text-[#8a857c] hover:bg-[#F4EEE5]'"
+                            >{{ isDisabled(c.key) ? ($t('connectors.enable') || 'Enable') : ($t('connectors.disable') || 'Disable') }}</button>
                             <button
                                 @click="openAdminConfig(c.key)"
                                 class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#C2541E] text-white hover:bg-[#A8330F] transition-colors"
@@ -96,6 +107,33 @@ const catalog = [
 function templateFor(key: string) {
     const type = catalog.find(c => c.key === key)?.type
     return templates.value.find(tp => tp.type === type) || null
+}
+
+function isDisabled(key: string) {
+    return templateFor(key)?.publish_status === 'disabled'
+}
+
+// Enable/disable a CONFIGURED connector: stays configured but hidden from /agents
+// and un-signable. Flips DataSource.publish_status via PUT /data_sources/{id}.
+async function toggleTemplate(key: string) {
+    const tpl = templateFor(key)
+    if (!tpl) return
+    const nextDisabled = !isDisabled(key)
+    try {
+        const { error } = await useMyFetch(`/data_sources/${tpl.id}`, {
+            method: 'PUT',
+            body: { publish_status: nextDisabled ? 'disabled' : 'published' },
+        })
+        if (error.value) throw error.value
+        await loadTemplates()
+        toast.add({
+            title: nextDisabled ? (t('connectors.disabled') || 'Connector disabled') : (t('connectors.enabled') || 'Connector enabled'),
+            color: nextDisabled ? 'orange' : 'green',
+            icon: 'i-heroicons-check-circle',
+        })
+    } catch (e: any) {
+        toast.add({ title: e?.data?.detail || e?.message || 'Update failed', color: 'red', icon: 'i-heroicons-exclamation-triangle' })
+    }
 }
 
 async function loadTemplates() {
