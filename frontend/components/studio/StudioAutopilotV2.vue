@@ -137,16 +137,6 @@
           </span>
         </div>
 
-        <!-- CLI TERMINAL (live train log) -->
-        <div ref="termEl" class="rounded-lg border border-[#2f2b24] bg-[#1b1813] px-3 py-2.5 max-h-[300px] overflow-y-auto font-mono text-[11px] leading-[1.55]" style="font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace">
-          <div v-if="!(trainLogLines || []).length" class="text-[#6f685c]">No log lines yet — run Auto-train to stream live.</div>
-          <div v-for="(ln, i) in (trainLogLines || [])" :key="i" class="flex gap-2 whitespace-pre-wrap break-words">
-            <span class="shrink-0 text-[#6f685c] tabular-nums select-none">{{ ln.t }}</span>
-            <span class="flex-1 min-w-0"
-                  :class="ln.lvl === 'error' ? 'text-[#ff8f7a]' : ln.lvl === 'warn' ? 'text-[#e6c06a]' : (String(ln.msg).startsWith('▸') ? 'text-[#7fc8ff] font-semibold' : 'text-[#d6cfc2]')">{{ ln.msg }}</span>
-          </div>
-          <div v-if="trainLog && trainLog.status === 'running'" class="text-[#7fc8ff] animate-pulse mt-0.5">▍</div>
-        </div>
       </div>
     </div>
 
@@ -231,7 +221,6 @@ defineEmits<{
 }>()
 
 const inboxRef = ref<any>(null)
-const termEl = ref<HTMLElement | null>(null)
 
 // Repair data: stitch same-schema orphan tables (files uploaded in separate
 // sessions) back into each pinned source's ONE bound table. POSTs the generic
@@ -391,11 +380,6 @@ async function loadStatus() {
     if (st && (st.status || st.step || st.detail)) status.value = st
   } catch { /* fail-soft */ }
 }
-
-function scrollTermBottom() {
-  nextTick(() => { try { if (termEl.value) termEl.value.scrollTop = termEl.value.scrollHeight } catch { /* */ } })
-}
-watch(() => (props.trainLogLines || []).length, scrollTermBottom)
 
 // Poll train status every 2s while training; refresh coverage when training ends.
 let timer: any = null

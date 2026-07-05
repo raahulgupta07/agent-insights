@@ -23,7 +23,7 @@
                     </svg>
                     <div class="srd-ttl">
                         <div class="t">{{ active ? 'Working…' : 'Idle' }}</div>
-                        <div class="s">model <b>{{ model || '—' }}</b></div>
+                        <div v-if="active" class="s">model <b>{{ model || '—' }}</b></div>
                     </div>
                     <button class="srd-x" @click="close" aria-label="Close">✕</button>
                 </div>
@@ -51,12 +51,14 @@
                     </div>
                     <div ref="scrollEl" class="srd-term-body">
                         <div v-if="!lines.length" class="srd-boot">waiting for activity…</div>
-                        <div v-for="(ln, i) in lines" :key="ln.key != null ? ln.key : i" class="srd-ln">
-                            <span class="srd-time">{{ lineTime(ln, i) }}</span>
-                            <span class="srd-stage">{{ ln.stage }}</span>
-                            <span class="srd-msg" :class="'srd-lvl-' + ln.level">{{ ln.msg }}</span>
-                            <span v-if="ln.meta" class="srd-meta">{{ ln.meta }}</span>
-                        </div>
+                        <template v-for="(row, ri) in renderRows" :key="row.__breaker ? 'brk-' + ri : (row.ln.key != null ? row.ln.key : row.i)">
+                            <div v-if="row.__breaker" class="srd-daybreak">{{ row.label }}</div>
+                            <div v-else class="srd-ln">
+                                <span class="srd-time">{{ lineTime(row.ln, row.i) }}</span>
+                                <span class="srd-stage">{{ row.ln.stage }}</span>
+                                <span class="srd-msg" :class="'srd-lvl-' + row.ln.level">{{ row.ln.msg }}</span>
+                            </div>
+                        </template>
                     </div>
                 </div>
 
@@ -147,14 +149,47 @@ function close() { open.value = false; emit('close') }
 
 // Per-line timestamps: prefer a time the entry already carries; otherwise stamp it once when
 // the line first appears (captured in the watcher below → stable, never re-derived on re-render).
-const lineStamps = reactive<Record<string | number, string>>({})
+// Each stamp stores a full {date, time} so day-breakers know which calendar day a line belongs to.
+interface LineStamp { date: string; time: string }
+const lineStamps = reactive<Record<string | number, LineStamp>>({})
 function lineKey(ln: StreamLine, i: number) { return ln.key != null ? ln.key : i }
-function lineTime(ln: StreamLine, i: number) { return ln.time || lineStamps[lineKey(ln, i)] || '' }
-function nowClock() {
+function lineTime(ln: StreamLine, i: number) {
+    const s = lineStamps[lineKey(ln, i)]
+    return ln.time || (s ? s.time : '') || ''
+}
+function nowStamp(): LineStamp {
     const d = new Date()
     const p = (n: number) => String(n).padStart(2, '0')
-    return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+    return {
+        date: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`,
+        time: `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`,
+    }
 }
+
+// Day-breaker formatting: YYYY-MM-DD → "Mon D, YYYY" (no external lib).
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+function formatDay(iso: string) {
+    const [y, m, d] = iso.split('-').map(Number)
+    return `${MONTHS_SHORT[m - 1]} ${d}, ${y}`
+}
+
+// Walk lines in order; emit a breaker marker whenever the captured date changes between
+// consecutive rendered lines (including the first). Lines without a captured date yet are skipped.
+type RenderRow = { __breaker: true; label: string } | { __breaker: false; ln: StreamLine; i: number }
+const renderRows = computed<RenderRow[]>(() => {
+    const out: RenderRow[] = []
+    let prevDate: string | null = null
+    lines.value.forEach((ln, i) => {
+        const stamp = lineStamps[lineKey(ln, i)]
+        const date = stamp ? stamp.date : null
+        if (date && date !== prevDate) {
+            out.push({ __breaker: true, label: formatDay(date) })
+            prevDate = date
+        }
+        out.push({ __breaker: false, ln, i })
+    })
+    return out
+})
 
 function stageGlyph(status: string) {
     return ({ done: '✓', active: '◐', pending: '·', error: '✕' } as Record<string, string>)[status] || '·'
@@ -169,10 +204,10 @@ function fmt(n?: number) {
 
 // Stamp new lines + auto-scroll the terminal to the newest line when lines change (only while open).
 watch(() => lines.value.length, async () => {
-    const stamp = nowClock()
+    const stamp = nowStamp()
     lines.value.forEach((ln, i) => {
         const k = lineKey(ln, i)
-        if (lineStamps[k] == null) lineStamps[k] = ln.time || stamp
+        if (lineStamps[k] == null) lineStamps[k] = { date: stamp.date, time: ln.time || stamp.time }
     })
     if (!open.value) return
     await nextTick()
@@ -234,7 +269,8 @@ watch(open, async (o) => {
 .srd-lvl-active { color: #C2541E; }
 .srd-lvl-done { color: #4fae7c; }
 .srd-lvl-warn { color: #cf9a3d; }
-.srd-meta { flex: none; color: #8b7d6b; font-size: 10.5px; margin-left: auto; padding-left: 8px; }
+.srd-daybreak { display: flex; align-items: center; gap: 10px; padding: 5px 0; color: #b59a6f; font-size: 9.5px; text-transform: uppercase; letter-spacing: 1px; font-variant-numeric: tabular-nums; }
+.srd-daybreak::before, .srd-daybreak::after { content: ''; flex: 1; height: 1px; background: #2b2119; }
 
 /* stages checklist */
 .srd-stages-panel { padding: 12px 14px; max-height: 380px; overflow-y: auto; display: flex; flex-direction: column; gap: 7px; }
