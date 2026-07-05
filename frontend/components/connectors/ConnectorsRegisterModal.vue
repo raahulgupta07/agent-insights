@@ -108,13 +108,24 @@
         </div>
         <div>
           <label class="mb-1 block text-xs font-medium text-gray-700">Password</label>
-          <input
-            v-model="password"
-            type="password"
-            autocomplete="current-password"
-            placeholder="••••••••"
-            class="block w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-[#C2541E] focus:outline-none"
-          />
+          <div class="relative">
+            <input
+              v-model="password"
+              :type="showPassword ? 'text' : 'password'"
+              autocomplete="current-password"
+              placeholder="••••••••"
+              class="block w-full rounded-md border border-gray-300 px-3 py-1.5 pe-9 text-sm focus:border-[#C2541E] focus:outline-none"
+            />
+            <button
+              type="button"
+              @click="showPassword = !showPassword"
+              :aria-label="showPassword ? 'Hide password' : 'Show password'"
+              :title="showPassword ? 'Hide password' : 'Show password'"
+              class="absolute inset-y-0 end-0 flex items-center pe-2.5 text-gray-400 hover:text-[#C2541E] focus:outline-none"
+            >
+              <UIcon :name="showPassword ? 'i-heroicons-eye-slash' : 'i-heroicons-eye'" class="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
         <p v-if="isPowerBiUser" class="text-[11px] text-[#8a6d3b] bg-[#FBF3E2] border border-[#ECDCBB] rounded-md px-2.5 py-2 leading-relaxed">
@@ -222,6 +233,7 @@ const emit = defineEmits<{
 
 const email = ref('')
 const password = ref('')
+const showPassword = ref(false)
 const submitting = ref(false)
 const errorMessage = ref('')
 

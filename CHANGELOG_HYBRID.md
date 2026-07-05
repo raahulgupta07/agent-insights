@@ -3,6 +3,10 @@
 Hybrid feature changelog (our additions on top of the bagofwords/Dash base). Newest first.
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` then bullets.
 
+## v1.123.3 — Show-password eye toggle on connector sign-in  (2026-07-05)
+- The connector Connect box now has an eye button to show/hide the password while typing.
+  - `ConnectorsRegisterModal.vue`: `showPassword` ref toggles the input `type` between password/text; heroicons eye / eye-slash button inside the field.
+
 ## v1.123.2 — Remove "New agent" button from Data Agents page  (2026-07-05)
 - Data Agents are created automatically when you sign into a connector, so the manual "+ New agent" button was redundant — removed it from both the header and the empty state. The connector hub above is the only way in.
   - `pages/agents/index.vue`: dropped both `/agents/new` NuxtLink buttons. Route left intact (dead link, harmless).
