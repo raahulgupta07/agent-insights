@@ -246,6 +246,10 @@ import { usePermissions, usePermissionsLoaded, useResourcePermissions } from '~/
 import { publishStatusBadgeClass, publishStatusLabel } from '~/composables/useDataSourcePublishStatus'
 import { useAgent } from '~/composables/useAgent'
 
+// Real connector agents only (matches pages/agents/index.vue). Uploaded/studio-
+// bound spreadsheet sources have no connector_kind → excluded from Data Agents.
+const CONNECTOR_KINDS = new Set(['powerbi_user', 'powerbi', 'ms_fabric', 'ms_fabric_user', 'sharepoint', 'onedrive'])
+
 // Global studio state — shared with AgentSelector (top-bar picker).
 // Aliased to avoid clashing with the local prop/ref names used below.
 const {
@@ -520,7 +524,7 @@ async function getDataSources() {
             // source they can already query.
             return status?.effective_auth === 'system'
         }
-        dataSources.value = allSources.filter(isUsable)
+        dataSources.value = allSources.filter((ds: any) => isUsable(ds) && CONNECTOR_KINDS.has(ds.connector_kind))
         // Everything else returned is a user_required source the user can connect.
         connectableDataSources.value = allSources.filter((ds: any) => !isUsable(ds))
         // Initialize selection from prop if provided, otherwise leave empty for parent to decide

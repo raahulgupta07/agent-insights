@@ -301,6 +301,10 @@ import DataSourceIcon from '~/components/DataSourceIcon.vue'
 import AgentIcon from '~/components/icons/AgentIcon.vue'
 import UserDataSourceCredentialsModal from '~/components/UserDataSourceCredentialsModal.vue'
 
+// Real connector agents only (matches pages/agents/index.vue). Uploaded/studio-
+// bound spreadsheet sources have no connector_kind → excluded from Data Agents.
+const CONNECTOR_KINDS = new Set(['powerbi_user', 'powerbi', 'ms_fabric', 'ms_fabric_user', 'sharepoint', 'onedrive'])
+
 const props = withDefaults(defineProps<{
   collapsed?: boolean
   showText?: boolean
@@ -381,7 +385,7 @@ const contextLabel = computed(() => {
 // is_user_template shell isn't a chattable agent) so only usable per-user
 // sources (e.g. the Power BI clone) are listed.
 const dataAgents = computed(() =>
-  (agents.value as any[]).filter(a => !a.is_user_template)
+  (agents.value as any[]).filter(a => !a.is_user_template && CONNECTOR_KINDS.has(a.connector_kind))
 )
 
 // Per-connector short product names — mirrors CONNECTOR_META in the agents

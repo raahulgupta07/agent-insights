@@ -1216,6 +1216,18 @@ class DataSourceService:
             )
             conn = d.connections[0] if d.connections else None
 
+            # connector_kind: backing connection type IFF it's one of the 4 real
+            # connectors → lets the hub list ONLY connector-backed agents (file/
+            # spreadsheet uploads resolve to None). Fail-soft: any error → None.
+            connector_kind = None
+            try:
+                _CONNECTOR_KINDS = {"powerbi_user", "ms_fabric", "sharepoint", "onedrive"}
+                _ct = conn.type if conn else None
+                if _ct in _CONNECTOR_KINDS:
+                    connector_kind = _ct
+            except Exception:
+                connector_kind = None
+
             s = DataSourceListItemSchema(
                 id=str(d.id),
                 name=d.name,
@@ -1230,6 +1242,7 @@ class DataSourceService:
                 auth_policy=conn.auth_policy if conn else None,
                 user_status=connections_list[0].user_status if connections_list else None,
                 template_source_id=getattr(d, "template_source_id", None),
+                connector_kind=connector_kind,
                 table_count=table_counts.get(str(d.id), 0),
                 ready=table_counts.get(str(d.id), 0) > 0,
             )
