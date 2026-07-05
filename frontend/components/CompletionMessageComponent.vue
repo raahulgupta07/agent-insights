@@ -645,16 +645,35 @@ ul {
         @apply border-l-4 border-gray-200 pl-4 italic my-4;
     }
 
-    /* Tables */
+    /* Tables — scroll sideways instead of crushing columns into letter-wrap.
+       Markdown emits a bare <table> (no wrapper), so the table itself is the
+       scroll box: display:block + width:max-content (grow to content) capped at
+       100% (never exceed the chat column) + overflow-x:auto. Cells get a real
+       min-width so words wrap on spaces, not mid-word; the first (label) column
+       never wraps. */
     table {
-        @apply w-full border-collapse mb-4;
+        @apply border-collapse mb-4;
+        display: block;
+        width: max-content;
+        max-width: 100%;
+        overflow-x: auto;
 
         th,
         td {
-            @apply border border-gray-200 p-2;
+            @apply border border-gray-200;
             @apply text-xs;
             @apply p-1.5;
             @apply bg-white;
+            min-width: 6rem;
+            white-space: normal;
+            word-break: normal;
+            overflow-wrap: normal;
+            vertical-align: top;
+        }
+
+        th:first-child,
+        td:first-child {
+            white-space: nowrap;
         }
 
         th {

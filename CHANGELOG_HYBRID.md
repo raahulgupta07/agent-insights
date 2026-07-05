@@ -9,6 +9,10 @@ Bullet rules (this is the user-facing "What's new" feed):
     Hidden from the popover; shown collapsed on the full /changelog page only.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.110.0 — Chat tables scroll instead of shredding into letter-by-letter columns  (2026-07-05)
+- Wide tables in a chat answer no longer crush every column so words break mid-letter — the table now scrolls sideways and each column gets real width, so text wraps on spaces and stays readable.
+  - `components/CompletionMessageComponent.vue` `:deep(.markdown-content) table`: markdown emits a bare `<table>` (no wrapper), so the table itself is the scroll box — `display:block; width:max-content; max-width:100%; overflow-x:auto` (grow to content, capped at the chat column width, scroll when wider) replacing the old `w-full`. Cells gain `min-width:6rem; white-space:normal; word-break:normal; overflow-wrap:normal; vertical-align:top`; first (label) column `white-space:nowrap`. CSS-only, no template/JS change.
+
 ## v1.109.0 — Source-lock: the answer comes ONLY from the source you picked, and empty sources refuse instead of guessing  (2026-07-05)
 - Both source pickers (the top bar and the one in the chat box) now stay in sync — pick a source in one, it's selected in the other. No more picking Power BI in one place and getting an answer from a different file.
 - Every source now shows whether it has data: a green "ready" dot with the table count, a red "no data" dot, or an amber "sign in" dot.
