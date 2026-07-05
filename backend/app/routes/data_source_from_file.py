@@ -321,6 +321,7 @@ async def _try_merge_same_schema(
         # main new-source path persists, but this append branch returns BEFORE
         # reaching that block — so without this, appended months live only in
         # in-memory DuckDB and vanish on restart. Fail-soft.
+        _append_persisted = False
         try:
             from app.settings.hybrid_flags import flags as _pw_flags
 
@@ -331,19 +332,23 @@ async def _try_merge_same_schema(
                     select(DataSource).options(selectinload(DataSource.connections)).filter(DataSource.id == ds.id)
                 )
                 ds_persist = ds_pq.scalar_one()
-                await upload_persist.persist_upload_to_warehouse(
+                _append_wh = await upload_persist.persist_upload_to_warehouse(
                     db, organization=organization, data_source=ds_persist, file=file,
                 )
+                _append_persisted = bool(_append_wh and _append_wh.get("tables"))
         except Exception:  # noqa: BLE001
             logger.warning("from-file: warehouse persist on same-schema append failed", exc_info=True)
 
         # NEWPIPE P2/P3 (HYBRID_DLT_INGEST): durable, idempotent dlt merge into the
         # per-org DuckDB file warehouse (by _source_period + content-hash). Additive
         # to the legacy path; never raises. OFF -> skipped entirely.
+        # REDUNDANT once the direct loader persisted (see new-source branch note):
+        # skip it to avoid the DuckDB single-writer lock error + the stale
+        # quality_gate "table does not exist". Reconcile below is the real check.
         try:
             from app.settings.hybrid_flags import flags as _dlt_flags
 
-            if _dlt_flags.DLT_INGEST or _dlt_flags.FULL_PIPELINE:
+            if (_dlt_flags.DLT_INGEST or _dlt_flags.FULL_PIPELINE) and not _append_persisted:
                 from app.services.ingest import dlt_ingest as _dlt
                 _tbl = _dlt_table_name(ds)
                 _res = _dlt.ingest_file(
@@ -674,10 +679,18 @@ async def create_data_source_from_file(
         logger.warning("from-file: warehouse persist failed", exc_info=True)
 
     # ── 4c2b. NEWPIPE P2/P3 (HYBRID_DLT_INGEST): durable dlt merge ───────
+    # The direct loader (4c2 above) already wrote + registered the table to
+    # Postgres staging, so the dlt DuckDB re-ingest is REDUNDANT — it only
+    # re-opens the per-org DuckDB file with a different config (→ "same database
+    # file with a different config" lock error + delay) and then quality_gate
+    # reads a DuckDB table that isn't there (→ "table t_<id> does not exist").
+    # Skip it whenever the loader already persisted rows; reconcile (4c3) is the
+    # real validation. dlt still runs as a fallback when persist didn't write.
+    _loader_persisted = bool(warehouse and warehouse.get("tables"))
     try:
         from app.settings.hybrid_flags import flags as _dlt_flags
 
-        if _dlt_flags.DLT_INGEST or _dlt_flags.FULL_PIPELINE:
+        if (_dlt_flags.DLT_INGEST or _dlt_flags.FULL_PIPELINE) and not _loader_persisted:
             from app.services.ingest import dlt_ingest as _dlt
             _tbl = _dlt_table_name(data_source)
             _res = _dlt.ingest_file(
