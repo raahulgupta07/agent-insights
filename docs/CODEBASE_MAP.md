@@ -5,7 +5,32 @@
 > Companion: `CLAUDE.md` (rules/current state), `DEVLOG.md` (dated history), `ROADMAP.md` (forward plan),
 > `docs/INGEST_BRAIN_DESIGN.md` (F09 universal-ingest design).
 > **Keep current:** when a ship changes a load-bearing path/pattern, update this file (same habit as DEVLOG bump).
-> Last verified: 2026-07-04 · `VERSION_HYBRID` 1.90.0 · mig head **single `sidesort1`** (chain tail `usdquota1→fileref1→sidesort1`).
+> Last verified: 2026-07-05 · `VERSION_HYBRID` **1.105.0** · mig head **single `sidesort1`** (no new mig) · durable-baked.
+> 2026-07-05 v1.105 SELF-HEALING INGEST (BAKED, not committed, org b2bec83d): kills the recurring "only April" partial
+> ingest for ANY dataset. 4 flags (`hybrid_flags.py`): `HYBRID_ONE_TABLE_MERGE`+`HYBRID_INGEST_RECONCILE` flipped ON,
+> NEW `HYBRID_INGEST_SELFHEAL`+`HYBRID_AUTOEDA_AUTOAPPROVE` (default ON). P1 cross-session merge — `_try_merge_same_schema`
+> (`routes/data_source_from_file.py`) matches by TOLERANT column-signature (`_same_template`, ±10% drift) + prefers the
+> studio's bound source (new `studio_id` on from-file req); `spreadsheet_client._load_frames` groups same-template→ONE
+> table + `_source_period`. P2 fail-loud — `services/ingest/reconcile.py` flips source DEGRADED on shortfall + injects
+> "do NOT fabricate missing periods" (`tables_schema_section._render_coverage_note`). P3 self-heal — NEW
+> `services/ingest/selfheal.py::selfheal_data_source` (find unclaimed same-sig orphan staging tables → backup →
+> idempotent `INSERT…SELECT…WHERE NOT EXISTS` on `_row_key`/`_content_hash`); wired train Stage 0b
+> (`train_orchestrator.py`) + `POST /api/data_sources/{id}/repair` (`data_source.py`) + "Repair data" btn
+> (`StudioAutopilotV2.vue`). P4 — `ai/knowledge/docs_index.py::ingest_doc` `_resolve_ingest_status` first-party
+> (`source='upload'`) → approved; learned proposals keep review gate. v1.104 no-dup-agents: `connector_kind` on DS list
+> (`services/data_source_service.py`) + `/agents` `allAgents` filter = connectors-only; create-agent-first
+> (`pages/agents/new`). v1.103: metrics UnboundLocalError fix (`routes/intelligence.py`), merged Insights&Forecasts tab,
+> dashboard/slides Generate→chat. Detail → CLAUDE.md "Current state".
+> 2026-07-05 TIMELESS NAMING + DOC→KNOWLEDGE (BAKED, not committed, org b2bec83d): (1) **timeless table
+> names** — `data_sources/clients/spreadsheet_client.py::_load_frames` now strips the month/year token at
+> table CREATION (new `_timeless_name` = slug→`post_ingest.derive_period_and_stem`; `_canon` slug-before-strip),
+> gated `ONE_TABLE_MERGE`. `jan_25`/`aug_25`/`2025_08`→`…_mm_conso_data_report` (Aug-proof; kills the old
+> `_apr_25` misnomer). Agents re-derive names LIVE → existing agents self-heal. (2) **any-type doc→Knowledge** —
+> NEW `services/knowledge/file_ingest.py` (`ingest_file_to_knowledge`/`backfill_data_source_docs`): extract text
+> from any attached doc (pdf/docx/pptx via ingest_brain extractors, xlsx digest, txt/md/html/json) →
+> `ai/knowledge/docs_index.ingest_doc` → KnowledgeDoc+chunks, approved+idempotent. Flag `HYBRID_DOC_KNOWLEDGE`
+> (default ON). Hooks: `services/file_service.upload_file` (on attach) + `train_orchestrator` `ingest_docs` stage
+> (before hybrid_index). Detail → memory project_cityagent_timeless_naming_doc_knowledge.
 > 2026-07-04 UPSTREAM PORT WAVE 3 (RBAC depth, BAKED+committed, flag-OFF default): #489 conn-grants ·
 > #488 USD-quota(mig usdquota1) · auto-publish · #467 standalone-connectors · #497 file-refs(mig fileref1,
 > context-builder inject) · #487 MCP-gateway(on routes/mcp.py). + DEFAULT-ENABLE PASS: 60 safe flags ON via

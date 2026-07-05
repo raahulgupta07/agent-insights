@@ -118,6 +118,20 @@ class FileService:
             await db.commit()
             await db.refresh(data_source)
 
+            # Any attached DOCUMENT (PDF/Word/PPT/text/reference-xlsx) -> searchable
+            # Knowledge the agent can cite. Generic (any type), fail-soft, flag-gated
+            # (HYBRID_DOC_KNOWLEDGE) — never blocks the upload. Tabular CSVs are
+            # skipped here (they become queryable tables via the from-file path).
+            try:
+                from app.services.knowledge.file_ingest import ingest_file_to_knowledge
+                await ingest_file_to_knowledge(
+                    db, organization=organization, file=db_file,
+                    data_source_id=str(data_source.id), approve=True,
+                )
+            except Exception as _dk_e:  # noqa: BLE001
+                logger.warning("upload_file: doc->knowledge ingest failed for %s: %s",
+                               getattr(db_file, "filename", "?"), _dk_e)
+
         # Generate raw preview (no LLM) - fast, instant
         try:
             db_file.preview = generate_file_preview(db_file)

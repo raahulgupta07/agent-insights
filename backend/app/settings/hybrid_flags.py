@@ -217,6 +217,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_AGENT_REPORTS": {"label": "Scheduled Reports (per-agent)", "role": "user", "category": "Agents & Access", "status": "beta", "note": "Per-agent 'Reports' tab: schedule a prompt/dashboard to run on a cadence and email the result to subscribers, sent from the agent's own SMTP identity. UI only; gates the Studio → Reports tab."},
     "HYBRID_RICH_REPORT_EMAIL": {"label": "Rich Report Emails", "role": "agent", "category": "Agents & Access", "status": "beta", "note": "Render scheduled/automated report emails from structured results (clean table + sanitized insights + dashboard image/PDF) instead of dumping the raw agent chat. OFF = legacy raw-content email."},
     "HYBRID_ONECLICK_ARTIFACTS": {"label": "One-click Dashboard / Slides / Excel", "role": "user", "category": "Agents & Access", "status": "beta", "note": "On a report's right panel, turns the empty Dashboard/Slides/Excel states into one-click builders: 'Generate dashboard' (real page artifact), 'Generate slide deck' (python-pptx deck + previews + .pptx) from the report's existing charts, and an auto-filled Excel workbook. Reuses the chat create_artifact pipeline."},
+    "HYBRID_OUTPUT_CUSTOMIZE": {"label": "Output Customize Dialogs (NotebookLM-style)", "role": "user", "category": "Agents & Access", "status": "beta", "note": "Tap a report output tile (Dashboard/Report/Slides/Excel) -> a customize modal (Format/Length/Depth/Focus/Model/Language) -> Generate passes those options into the build. OFF = tiles keep instant-generate. Default ON."},
     "HYBRID_AUTO_ARTIFACT": {"label": "Auto-build Dashboard from chat", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "When a chat turn produces a dataset (the agent ran create_data → ≥1 chart) but makes NO artifact, automatically build a dashboard (page artifact) in the background so the Outputs panel isn't empty. Reuses the one-click create_artifact pipeline. Idempotent (only when the report has zero artifacts) + fully fail-soft. Default OFF."},
     "HYBRID_CROSS_SOURCE_UNIFY": {"label": "Cross-Source Unify", "role": "agent", "category": "Intelligence", "status": "experimental", "note": "At ingest, detect same-shape sibling tables (e.g. 6 monthly files with identical columns) and register a unified UNION ALL view (+ a _period column) so the agent queries across them in one shot. Records a union group + emits an instruction. Fail-soft, no migration. Default ON."},
     "HYBRID_DATA_QUALITY": {"label": "Data Quality Scan", "role": "user", "category": "Intelligence", "status": "experimental", "note": "At ingest, scan columns for quality issues (high null %, type-coercion risk, outliers, near-constant) and emit a data_quality guardrail instruction the agent reads. Pure pandas, fail-soft, no migration. Default OFF."},
@@ -260,6 +261,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_SMART_HEADER": {"label": "Smart Header + Glossary", "role": "user", "category": "Ingest", "status": "stable"},
     "HYBRID_TOTAL_ROW": {"label": "Pre-Aggregated Total-Row Detection", "role": "user", "category": "Ingest", "status": "experimental", "note": "At file ingest, flag likely total/subtotal rows (e.g. site='ALL Total') so the agent excludes them and stops double-counting SUM()."},
     "HYBRID_ONE_TABLE_MERGE": {"label": "One-Table Merge (kill UNION ALL)", "role": "user", "category": "Ingest", "status": "experimental", "note": "Pipeline v1 (P1): same-schema monthly uploads stack into ONE table + _source_period column instead of N stem-keyed tables that forced UNION ALL. Fail-soft. Default OFF."},
+    "HYBRID_SMART_SOURCE_NAME": {"label": "Smart Source Name (month->range)", "role": "user", "category": "Ingest", "status": "stable", "note": "When merged monthly uploads span multiple periods but the source name still says a single month (e.g. 'Apr'25'), rename the display name to the real range ('Jan-Jun'25'). Renames DataSource.name only; fail-soft. Default ON."},
     "HYBRID_LOGIC_PARSER": {"label": "Logic / Q&A Doc Parser", "role": "user", "category": "Ingest", "status": "experimental", "note": "Pipeline v1 (P2): parse a logic/Q&A doc into (question, answer, logic) triples + expected answers; route logic docs to Instructions. Feeds the Definition Registry. Default OFF."},
     "HYBRID_DEF_REGISTRY": {"label": "Definition Registry", "role": "review", "category": "Knowledge", "status": "experimental", "note": "Pipeline v1 (P3): single source of truth for business metrics (Lead/New User/Status rule) + expected answers; goldens/instructions reference a def so one fix propagates. Needs migration defreg1. Default OFF."},
     "HYBRID_VERIFIED_GOLDENS": {"label": "Verified Goldens (eval gate)", "role": "review", "category": "Knowledge", "status": "experimental", "note": "Pipeline v1 (P4+P5): logic-aware golden generation + eval gate — approve a query only when it matches the doc's expected number; mismatch/unknown -> held with a diff. Default OFF."},
@@ -267,7 +269,9 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_AUTO_MAP_GLOSSARY": {"label": "Auto-Map Glossary File", "role": "user", "category": "Ingest", "status": "experimental", "note": "Import v2 (P2): a standalone glossary/definitions file (uploaded on its own) is parsed term->definition and auto-mapped onto existing data sources' columns (pending SemanticColumn meanings + KnowledgeDoc). Extends Smart Header beyond in-file sheets. Fail-soft, review-gated. Default OFF."},
     "HYBRID_ROBUST_INGEST": {"label": "Robust Spreadsheet Ingest", "role": "user", "category": "Ingest", "status": "experimental", "note": "Import v2 (P3): route spreadsheet uploads through the robust readers (encoding/delimiter sniff, real-header detection, banner skip, id-safe numeric, bad-row skip) + per-file ingest feedback, instead of the naive pandas read. Fail-soft fallback. Default OFF."},
     "HYBRID_PERSIST_WAREHOUSE": {"label": "Persist Uploads to Warehouse", "role": "admin", "category": "Ingest", "status": "experimental", "note": "Import v2 (P4, architectural): persist spreadsheet uploads into the per-org Postgres staging schema so data survives restarts, gets deep stats, and the unified cross-source VIEW can physically materialize -- instead of in-memory DuckDB. Default ON."},
-    "HYBRID_INGEST_RECONCILE": {"label": "Ingest Reconcile (fail-loud merge)", "role": "admin", "category": "Ingest", "status": "experimental", "note": "Ingest-completeness guard (Phase 1): the multi-file spreadsheet merge records each file's outcome (loaded|failed + rows + error) instead of silently swallowing a bad file with 'except: continue'. Later phases flip a source DEGRADED on a row-count/file mismatch, feed coverage-context to the agent (stop fabricating missing periods), and surface 'N of M failed' in the upload UI. Mirrors the chat-upload path's full-fidelity, fail-loud behavior. Off = byte-identical to today. Default OFF."},
+    "HYBRID_INGEST_RECONCILE": {"label": "Ingest Reconcile (fail-loud merge)", "role": "admin", "category": "Ingest", "status": "stable", "note": "Ingest-completeness guard: the multi-file spreadsheet merge records each file's outcome (loaded|failed + rows + error) instead of silently swallowing a bad file with 'except: continue', flips a source DEGRADED on a row-count/file mismatch, feeds coverage-context to the agent (stop fabricating missing periods), and surfaces 'N of M failed' in the upload UI. Off = byte-identical to today. Default ON."},
+    "HYBRID_INGEST_SELFHEAL": {"label": "Self-heal split data", "role": "user", "category": "Ingest", "status": "stable", "note": "Detect an agent's orphaned same-schema tables (files uploaded across separate sessions that never merged into its one bound table) and auto-stitch them back in. Runs on train + a 'Repair data' action. Backup + transaction-safe + idempotent; generic for any dataset partition. Default ON."},
+    "HYBRID_AUTOEDA_AUTOAPPROVE": {"label": "Auto-approve first-party docs", "role": "user", "category": "Knowledge", "status": "stable", "note": "Insight/Auto-EDA docs generated from the user's own uploaded data land approved (agent-visible) instead of pending/invisible. Learned/AI-proposed memories still go through review. Default ON."},
     "HYBRID_COLUMN_PROFILE": {"label": "Column Profiling (types + value stats)", "role": "user", "category": "Ingest", "status": "experimental", "note": "Master plan E3: on upload, profile each column (dtype num/date/category/text, null %, distinct count, min/max, top values) and persist. Fills the empty semantic_columns.type + gives validation/engineering/understanding real facts. Fail-soft. Default OFF."},
     "HYBRID_DATA_VALIDATION": {"label": "Data Validation Gate (garbage-in net)", "role": "review", "category": "Ingest", "status": "experimental", "note": "Master plan E4: using column profiles, loud checks — filter-value existence (typo 'Retentnion' vs 'Retention' -> flag not silent-0), row-count floor, null-spike/all-null, category near-duplicate, dup-file hash. Surfaces a <data_quality> block. Golden verifies LOGIC; this verifies DATA. Fail-soft. Default OFF."},
     "HYBRID_RATIO_METRICS": {"label": "Ratio Metrics (num ÷ den goldens)", "role": "review", "category": "Knowledge", "status": "experimental", "note": "Master plan A2+A3: parse Numerator/Denominator logic into a kind='ratio' definition (num_predicate + den_predicate + group_by), generate two COUNT queries, eval verifies BOTH counts vs ground truth -> approve rate golden. Unblocks recruitment/retention/drop-off rates (Q8/Q9/Q11). Needs migration ratiodef1. Default OFF."},
@@ -306,7 +310,18 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_NOTION_KB": {"label": "Notion / Slack knowledge sources", "role": "admin", "category": "Learning", "status": "experimental", "note": "Ingest Notion pages and Slack threads into the institutional knowledge base so metric definitions and incident/launch context from those tools can ground answers (feeds the Institutional Knowledge layer). Off = no Notion/Slack ingest. Default OFF."},
     "HYBRID_LEAN_TOOLS": {"label": "Lean tool catalog", "role": "admin", "category": "Core", "status": "experimental", "note": "Trim the planner's tool set — hide overlapping/duplicate tools (per docs/TOOL_AUDIT.md: retire remember_this, collapse the schema-lookup trio, dedup live-vs-MCP) so the model picks the right tool more reliably (OpenAI 'less is more'). Off = full catalog. Default OFF."},
     "HYBRID_DOC_ACL": {"label": "Per-document access control", "role": "admin", "category": "Core", "status": "experimental", "note": "Restrict institutional knowledge docs to an explicit viewer allow-list (beyond org + approved), so a sensitive doc grounds answers only for authorized users. Off = org-granularity (every approved doc visible org-wide). Default OFF."},
+    "HYBRID_DOC_KNOWLEDGE": {"label": "Attached files → searchable Knowledge", "role": "agent", "category": "Core", "status": "stable", "note": "Turn any attached document (PDF, Word, PowerPoint, text, Markdown, HTML, JSON, or a reference spreadsheet) into searchable Knowledge the agent can cite — extract its text, chunk it, and index it. Runs on upload and again on train (idempotent). First-party uploads land approved. Off = attached docs stay non-searchable. Default ON."},
+    "HYBRID_AUTOFILL_AGENT_OVERVIEW": {"label": "Auto-fill agent Overview on train", "role": "agent", "category": "Core", "status": "stable", "note": "When an agent finishes training, pre-fill its Overview panel if empty — pin a primary instruction (an existing high-level one, else a clean synthesized one) and seed a few conversation starters — so a fresh agent isn't blank ('No primary instruction / No conversation starters'). Only fills what's MISSING; never overrides your own choices. Off = Overview stays blank until set by hand. Default ON."},
     "HYBRID_SAFETY_EVALS": {"label": "Safety & Reliability Evals", "role": "review", "category": "Learning", "status": "experimental", "note": "Beyond accuracy, run LLM-as-judge binary checks on answers/changes: SECURITY (no secret/credential/PII leak), GOVERNANCE (refuses destructive SQL/DDL), BOUNDARIES (agent stayed inside its own data scope — verifies the Shared-Memory isolation), ROUTING (right tool picked). Fail → held with reason. Runs on train + on demand. Dash-style AgentAsJudge. Default OFF."},
+
+    # --- BI Uplift (analyst-grade dashboards; the 'bi learning' framework set) --
+    "HYBRID_CHART_GUARDRAIL": {"label": "Chart-selection guardrail", "role": "agent", "category": "Core", "status": "experimental", "note": "Enforce the right chart for the message: compare→bar, over-time→line, part-to-whole (≤5 cats)→pie/donut, correlation→scatter, ranking→horizontal bar, spread→histogram. Post-render lint caps series, requires axis titles, one accent colour, and colour+text labels (never colour-only). Kills kitchen-sink dual-axis charts. Off = the model picks freely. Default OFF."},
+    "HYBRID_INSIGHT_ENGINE": {"label": "Insight engine (Data→Insight→Decision)", "role": "agent", "category": "Core", "status": "experimental", "note": "After an answer, sweep the result for the dominant signal (trend / outlier / seasonality / relationship — computed, not guessed), then have the model wrap it as a Context→Conflict→Resolution decision and, on any drop, enumerate candidate drivers and check each against the data (facts before conclusions). Every output ends in a recommended action, not just a number. Off = raw answer only. Default OFF."},
+    "HYBRID_KPI_LAYER": {"label": "KPI intelligence (leading/lagging + thresholds)", "role": "agent", "category": "Advanced", "status": "experimental", "note": "Treat KPIs as governed objects per agent: prefer outcome ratios over activity counts, model leading→lagging dependency chains so an upstream breach alerts BEFORE revenue moves, and attach target/owner/action-on-breach. Off = KPIs are just free-form metrics. Default OFF."},
+    "HYBRID_DASHBOARD_COMPOSER": {"label": "Dashboard composer (hero + F-pattern)", "role": "agent", "category": "Advanced", "status": "experimental", "note": "When building a page artifact, promote one hero metric (biggest deviation) top-left, mute supporting KPIs, cascade charts along the reading path, hold to one accent colour, and run a 5-second QA gate before publish — instead of dumping the top-N visuals. Off = today's top-N selection. Default OFF."},
+    "HYBRID_DATA_PREP_GATE": {"label": "Data-prep gate (Fill / Investigate / Remove)", "role": "agent", "category": "Core", "status": "experimental", "note": "At ingest, classify missing data and act: FILL non-critical dimensions (impute), REMOVE rows missing a critical measure (revenue/qty/id), and FLAG missing-value spikes for investigation — then show a data-quality banner so a dashboard can't silently mislead. Off = today's ingest. Default OFF."},
+    "HYBRID_AUTO_EDA": {"label": "Per-agent Auto-EDA on the agent screen", "role": "agent", "category": "Core", "status": "experimental", "note": "On train, profile each agent's data (row/column counts, category shares, time range + peak, top-N ranking, distribution + outliers — all computed) and have the model narrate a few insights plus suggested first questions. Saved PER AGENT and shown only on that agent's Overview (not the workspace). Refreshable on demand. Off = agents don't auto-profile. Default OFF."},
+    "HYBRID_ADV_METHODS": {"label": "Advanced methods (LLM-driven ML + mining)", "role": "agent", "category": "Advanced", "status": "experimental", "note": "Live analytics tools: market-basket (apriori → cross-sell bundles with lift), statistical rigour (correlation + significance, auto 'correlation ≠ causation' caveat), and LLM-driven prediction (churn risk / forecast / segmentation) where SQL computes the aggregates and the model reasons over them — labelled 'AI estimate', never a trained model. Off = descriptive only. Default OFF."},
     "HYBRID_READONLY_ENFORCE": {"label": "Structural Read-Only Enforcement", "role": "agent", "category": "Core", "status": "experimental", "note": "Enforce read-only at the CONNECTION/engine level (not just a prompt or SQL-string check) so a prompt-injection can't DROP/DELETE/ALTER source data. Writes allowed only on the agent's own staging schema. Off = today's string-based guard. Default OFF."},
     "HYBRID_ASSET_MATERIALIZE": {"label": "Materialize Hot Metrics (reusable assets)", "role": "agent", "category": "Advanced", "status": "experimental", "note": "When a Shared-Memory query template is reused enough (verified_count >= threshold), offer to MATERIALIZE it as a persistent computed asset (a view/table) so the hot metric is computed once and served instantly instead of re-running a heavy query every time. Builds on Engineer Assets. Default OFF."},
     "HYBRID_GOTCHA_MEMORY": {"label": "Data Gotchas → Global Memory", "role": "review", "category": "Learning", "status": "experimental", "note": "Route data-quality gotchas found at ingest/profile (wrong type, total/subtotal rows, near-duplicate categories) into the GLOBAL tier of Shared Memory so EVERY agent avoids the same trap (don't SUM total rows, cast this column first). Reuses column profiles + the global memory tier. Needs Shared Memory ON. Default OFF."},
@@ -495,6 +510,15 @@ class HybridFlags:
         # Gates POST /api/reports/{id}/{dashboard,slides}/generate + the FE
         # buttons only; no agent-loop effect. Default OFF.
         return _bool("HYBRID_ONECLICK_ARTIFACTS", True)
+
+    @property
+    def OUTPUT_CUSTOMIZE(self) -> bool:
+        # NotebookLM-style customize dialog on the report output tiles
+        # (Dashboard/Report/Slides/Excel): tap a tile -> a modal with
+        # Format/Length/Depth/Focus/Model/Language -> Generate passes those
+        # options into the generate endpoint. Flag OFF = tiles keep today's
+        # instant-generate/chat-prompt handlers. Default ON.
+        return _bool("HYBRID_OUTPUT_CUSTOMIZE", True)
 
     @property
     def AUTO_ARTIFACT(self) -> bool:
@@ -800,6 +824,61 @@ class HybridFlags:
         # F3 — per-document access control on institutional knowledge (viewer
         # allow-list beyond org+approved). Default OFF = org-granularity (today).
         return _bool("HYBRID_DOC_ACL", False)
+
+    @property
+    def DOC_KNOWLEDGE(self) -> bool:
+        # Any attached document (any type) -> extracted + chunked + indexed as
+        # searchable Knowledge the agent can cite. Default ON.
+        return _bool("HYBRID_DOC_KNOWLEDGE", True)
+
+    @property
+    def AUTOFILL_AGENT_OVERVIEW(self) -> bool:
+        # On train, pin a primary instruction + seed conversation starters when
+        # the agent's Overview is empty (fills only what's missing). Default ON.
+        return _bool("HYBRID_AUTOFILL_AGENT_OVERVIEW", True)
+
+    # --- BI Uplift ---------------------------------------------------------
+    @property
+    def CHART_GUARDRAIL(self) -> bool:
+        # Enforce intent→chart matrix + post-render lint (one accent, labelled,
+        # capped series). Default OFF.
+        return _bool("HYBRID_CHART_GUARDRAIL", False)
+
+    @property
+    def INSIGHT_ENGINE(self) -> bool:
+        # Computed signal sweep → Context/Conflict/Resolution decision + driver
+        # enumeration on a drop. Default OFF.
+        return _bool("HYBRID_INSIGHT_ENGINE", False)
+
+    @property
+    def KPI_LAYER(self) -> bool:
+        # Per-agent governed KPIs: outcome ratios, leading/lagging chains,
+        # target/owner/action-on-breach. Default OFF.
+        return _bool("HYBRID_KPI_LAYER", False)
+
+    @property
+    def DASHBOARD_COMPOSER(self) -> bool:
+        # Hero-metric + F-pattern layout + 5-second QA gate for page artifacts.
+        # Default OFF.
+        return _bool("HYBRID_DASHBOARD_COMPOSER", False)
+
+    @property
+    def DATA_PREP_GATE(self) -> bool:
+        # Fill/Investigate/Remove missing-data tree + data-quality banner.
+        # Default OFF.
+        return _bool("HYBRID_DATA_PREP_GATE", False)
+
+    @property
+    def AUTO_EDA(self) -> bool:
+        # Per-agent computed EDA profile + LLM narration, saved on the agent's
+        # Overview only. Default OFF.
+        return _bool("HYBRID_AUTO_EDA", False)
+
+    @property
+    def ADV_METHODS(self) -> bool:
+        # Market-basket + stat-rigour (computed) + LLM-driven churn/forecast/
+        # segmentation (labelled AI estimate). Default OFF.
+        return _bool("HYBRID_ADV_METHODS", False)
 
     @property
     def SAFETY_EVALS(self) -> bool:
@@ -1205,7 +1284,15 @@ class HybridFlags:
         # Pipeline v1 (P1): same-schema spreadsheet uploads stack into ONE
         # canonical table + a _source_period column, instead of N tables keyed by
         # filename stem (which forced UNION ALL across monthly files). Fail-soft.
-        return _bool("HYBRID_ONE_TABLE_MERGE", False)
+        return _bool("HYBRID_ONE_TABLE_MERGE", True)
+
+    @property
+    def SMART_SOURCE_NAME(self) -> bool:
+        # After profiling, if a data source's display name carries a single-month
+        # token (e.g. "(Apr'25)") but its _source_period column spans multiple
+        # months, rewrite the display name to the real range ("(Jan-Jun'25)").
+        # Renames DataSource.name ONLY (never the table id/slug). Fail-soft.
+        return _bool("HYBRID_SMART_SOURCE_NAME", True)
 
     @property
     def COLUMN_PROFILE(self) -> bool:
@@ -1289,8 +1376,28 @@ class HybridFlags:
         # file with `except: continue`. Later phases use this record to flip a
         # source DEGRADED, feed coverage-context to the agent, and surface the
         # gap in the upload UI. Flag OFF -> byte-identical to today (no capture,
-        # silent-skip preserved). Default OFF.
-        return _bool("HYBRID_INGEST_RECONCILE", False)
+        # silent-skip preserved). Default ON (production ingest-completeness).
+        return _bool("HYBRID_INGEST_RECONCILE", True)
+
+    @property
+    def INGEST_SELFHEAL(self) -> bool:
+        # Self-heal repair: detect orphaned same-schema physical tables that
+        # belong to an agent's data source but never got merged into its ONE
+        # bound table (e.g. files uploaded across separate sessions), and
+        # auto-stitch them back in. Runs fail-soft as a train stage AND on
+        # demand via a "Repair data" action. Backup + transaction-safe +
+        # idempotent. Generic: keys off column-signature, works for ANY dataset
+        # partition (not just months). Off = no repair. Default ON.
+        return _bool("HYBRID_INGEST_SELFHEAL", True)
+
+    @property
+    def AUTOEDA_AUTOAPPROVE(self) -> bool:
+        # First-party knowledge auto-approve: insight/Auto-EDA docs and other
+        # docs generated FROM the user's own uploaded data land status='approved'
+        # (agent-visible) instead of 'pending' (silent + invisible). Learned/
+        # AI-proposed memories still go through the review gate. Off = docs stay
+        # pending until manual approval. Default ON.
+        return _bool("HYBRID_AUTOEDA_AUTOAPPROVE", True)
 
     @property
     def PERSIST_WAREHOUSE(self) -> bool:
@@ -1606,6 +1713,15 @@ class HybridFlags:
             "NOTION_KB": self.NOTION_KB,
             "LEAN_TOOLS": self.LEAN_TOOLS,
             "DOC_ACL": self.DOC_ACL,
+            "DOC_KNOWLEDGE": self.DOC_KNOWLEDGE,
+            "AUTOFILL_AGENT_OVERVIEW": self.AUTOFILL_AGENT_OVERVIEW,
+            "CHART_GUARDRAIL": self.CHART_GUARDRAIL,
+            "INSIGHT_ENGINE": self.INSIGHT_ENGINE,
+            "KPI_LAYER": self.KPI_LAYER,
+            "DASHBOARD_COMPOSER": self.DASHBOARD_COMPOSER,
+            "DATA_PREP_GATE": self.DATA_PREP_GATE,
+            "AUTO_EDA": self.AUTO_EDA,
+            "ADV_METHODS": self.ADV_METHODS,
             "SAFETY_EVALS": self.SAFETY_EVALS,
             "READONLY_ENFORCE": self.READONLY_ENFORCE,
             "ASSET_MATERIALIZE": self.ASSET_MATERIALIZE,
@@ -1627,8 +1743,11 @@ class HybridFlags:
             "AUTO_MAP_GLOSSARY": self.AUTO_MAP_GLOSSARY,
             "ROBUST_INGEST": self.ROBUST_INGEST,
             "INGEST_RECONCILE": self.INGEST_RECONCILE,
+            "INGEST_SELFHEAL": self.INGEST_SELFHEAL,
+            "AUTOEDA_AUTOAPPROVE": self.AUTOEDA_AUTOAPPROVE,
             "PERSIST_WAREHOUSE": self.PERSIST_WAREHOUSE,
             "ONE_TABLE_MERGE": self.ONE_TABLE_MERGE,
+            "SMART_SOURCE_NAME": self.SMART_SOURCE_NAME,
             "COLUMN_PROFILE": self.COLUMN_PROFILE,
             "DATA_VALIDATION": self.DATA_VALIDATION,
             "DATA_TYPING": self.DATA_TYPING,
@@ -1695,6 +1814,7 @@ class HybridFlags:
             "AGENT_REPORTS": self.AGENT_REPORTS,
             "RICH_REPORT_EMAIL": self.RICH_REPORT_EMAIL,
             "ONECLICK_ARTIFACTS": self.ONECLICK_ARTIFACTS,
+            "OUTPUT_CUSTOMIZE": self.OUTPUT_CUSTOMIZE,
             "AUTO_ARTIFACT": self.AUTO_ARTIFACT,
             "CROSS_SOURCE_UNIFY": self.CROSS_SOURCE_UNIFY,
             "DATA_QUALITY": self.DATA_QUALITY,

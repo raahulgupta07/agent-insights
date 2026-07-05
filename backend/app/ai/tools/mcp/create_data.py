@@ -382,6 +382,23 @@ class CreateDataMCPTool(MCPTool):
                 if inferred_dm.get(key) is not None:
                     data_model[key] = inferred_dm[key]
 
+        # BI-uplift Phase 1: chart-selection guardrail (flag HYBRID_CHART_GUARDRAIL).
+        # Correct a clearly-wrong chart choice against the deck's intent->chart
+        # matrix (pie with >5 cats -> bar, time-series shown as bar -> line, etc.)
+        # BEFORE the view is built. Additive + fail-soft: off or on error, the
+        # data_model is untouched.
+        try:
+            from app.settings.hybrid_flags import flags as _hf
+            if _hf.CHART_GUARDRAIL:
+                from app.services.analytics.chart_guardrail import guardrail_data_model
+                data_model, _chart_notes = guardrail_data_model(
+                    input_data.prompt, formatted, data_model
+                )
+                if _chart_notes:
+                    _logger.info("[chart_guardrail] %s", "; ".join(_chart_notes))
+        except Exception as _cg_err:
+            _logger.debug("chart_guardrail skipped: %s", _cg_err)
+
         # Build view from data_model
         palette_theme = _infer_palette_theme({"settings": rich_ctx.org_settings}) or "default"
         available_columns = [c.get("field") for c in formatted.get("columns", []) if c.get("field")]

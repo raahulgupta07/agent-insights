@@ -293,7 +293,7 @@ async def propose_knowledge_from_completion(
                 from app.ai.llm.llm import LLM
                 from app.dependencies import async_session_maker
 
-                return LLM(model, usage_session_maker=async_session_maker).inference(p)
+                return LLM(model, usage_session_maker=async_session_maker).inference(p, usage_scope="distill_propose")
 
         prompt = build_propose_prompt(ctx["question"], ctx["bad_answer"], ctx.get("correction"))
         raw = (infer(prompt) or "").strip()
@@ -748,7 +748,7 @@ async def propose_knowledge_from_schema(
                 from app.ai.llm.llm import LLM
                 from app.dependencies import async_session_maker
 
-                return LLM(model, usage_session_maker=async_session_maker).inference(p)
+                return LLM(model, usage_session_maker=async_session_maker).inference(p, usage_scope="train_semantic")
 
         prompt = build_schema_suggest_prompt(schema_text, focus)
         raw = (infer(prompt) or "").strip()
@@ -862,7 +862,7 @@ async def propose_column_meanings(
                 from app.ai.llm.llm import LLM
                 from app.dependencies import async_session_maker
 
-                return LLM(model, usage_session_maker=async_session_maker).inference(p)
+                return LLM(model, usage_session_maker=async_session_maker).inference(p, usage_scope="train_column_meanings")
 
         changed = False
         for st in list(sem_tables)[:_MAX_SCHEMA_TABLES]:

@@ -80,7 +80,7 @@
 			</button>
 		</header>
 		<ReportHeader
-			v-else-if="report"
+			v-else
 			:report="report"
 			:isSplitScreen="isSplitScreen"
 			:isStreaming="isStreaming"
@@ -175,7 +175,7 @@
 
 		<!-- Messages -->
 		<div class="flex-1 overflow-y-auto mt-4 pb-4" :class="{ 'compact-messages': isExcel }" ref="scrollContainer">
-			<div class="ps-4 pe-2 pb-[3px] max-w-2xl w-full mx-auto">
+			<div class="ps-3 pe-3 sm:ps-4 sm:pe-2 pb-[3px] max-w-2xl w-full mx-auto">
 
 				<!-- Forked queries panel (shown for forked reports) -->
 				<ForkedQueriesPanel
@@ -326,7 +326,7 @@
 									<div class="h-7 w-7 flex font-bold items-center justify-center text-xs rounded-lg inline-block bg-contain bg-center bg-no-repeat" style="background-image: url('/assets/logo-128.png')">
 									</div>
 								</div>
-								<div class="w-full ms-4 max-w-2xl min-w-0">
+								<div class="w-full ms-0 md:ms-4 max-w-2xl min-w-0">
 									<!-- System message -->
 									<div>
 										<!-- Claude-style "thought process" summary header (steps derived from blocks) -->
@@ -573,7 +573,7 @@
 									</div>
 									<div v-if="m.status === 'stopped'" class="text-xs text-gray-500 mt-2 italic">
 										<Icon name="heroicons-stop-circle" class="w-4 h-4 inline me-1" />
-										Generation stopped
+										Stopped by you
 									</div>
 									<div v-else-if="m.status === 'error'" class="text-xs text-red-500 mt-2">
 										{{ getMessageError(m) || 'An error occurred' }}
@@ -629,7 +629,7 @@
 				<template v-else>
 					<div class="flex flex-col items-center text-center min-h-[58vh] justify-center">
 						<div class="text-[11px] tracking-wide uppercase text-[#A8A294] mb-2">New report · no messages yet</div>
-							<h1 class="text-lg font-semibold" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ $t('reports.emptyTitle') }}</h1>
+							<h1 class="text-lg font-semibold" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ currentAgents[0]?.name ? `Ask ${currentAgents[0].name} a question` : $t('reports.emptyTitle') }}</h1>
 						<div v-if="agentConversationStarters.length > 0" class="mt-5 flex flex-wrap justify-center gap-2">
 							<button
 								v-for="s in agentConversationStarters"
@@ -716,7 +716,7 @@
 					<span class="ml-auto flex-none text-[11px] text-[#9A8678]">auto · one-click</span>
 				</div>
 			</div>
-			<div :class="['mx-auto w-full', isExcel ? 'px-0' : 'px-4 max-w-2xl']">
+			<div :class="['mx-auto w-full', isExcel ? 'px-0' : 'px-0 max-w-none sm:px-4 sm:max-w-2xl']">
 				<!-- Slide-workspace composer framing: PromptBoxV2 owns its own placeholder
 				     (i18n, internal), so we surface the slide-scoped intent as a hint chip
 				     above the same composer — the agent can already edit/analyze the deck. -->
@@ -900,22 +900,22 @@
 								<span class="text-[9px] text-gray-400">tap &rarr; generate</span>
 							</div>
 							<div class="grid grid-cols-3 gap-1.5">
-								<button @click="handleExampleClick('Build a dashboard for: ' + (lastUserQuestion || report?.title || 'this data'))" class="relative text-left rounded-lg border border-gray-200 p-2 bg-[#F4F7FF] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
+								<button @click="openOutputModal('dashboard', () => handleExampleClick('Build a dashboard for: ' + (lastUserQuestion || report?.title || 'this data')))" class="relative text-left rounded-lg border border-gray-200 p-2 bg-[#F4F7FF] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
 									<span class="absolute top-1.5 right-1.5 text-[8px] font-bold leading-none px-1 py-0.5 rounded bg-blue-100 text-blue-700">AI</span>
 									<svg width="15" height="15" fill="none" stroke="#3B6FE0" stroke-width="1.9" viewBox="0 0 24 24"><rect x="3" y="11" width="4" height="9"/><rect x="10" y="6" width="4" height="14"/><rect x="17" y="3" width="4" height="17"/></svg>
 									<div class="mt-1.5 text-[10.5px] font-semibold text-[#2C53A8] leading-tight">Dashboard</div>
 								</button>
-								<button @click="handleExampleClick('Write a narrative report with key findings for: ' + (lastUserQuestion || report?.title || 'this data'))" class="relative text-left rounded-lg border border-gray-200 p-2 bg-[#F6F4FF] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
+								<button @click="openOutputModal('report', () => handleExampleClick('Write a narrative report with key findings for: ' + (lastUserQuestion || report?.title || 'this data')))" class="relative text-left rounded-lg border border-gray-200 p-2 bg-[#F6F4FF] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
 									<span class="absolute top-1.5 right-1.5 text-[8px] font-bold leading-none px-1 py-0.5 rounded bg-violet-100 text-violet-700">AI</span>
 									<svg width="15" height="15" fill="none" stroke="#7A5CD0" stroke-width="1.8" viewBox="0 0 24 24"><path d="M6 3h9l5 5v13H6z"/><path d="M15 3v5h5"/></svg>
 									<div class="mt-1.5 text-[10.5px] font-semibold text-[#5A41A8] leading-tight">Report</div>
 								</button>
-								<button @click="setPanelView('slides', true)" class="relative text-left rounded-lg border border-gray-200 p-2 bg-[#FFF4EF] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
+								<button @click="openOutputModal('slides', () => setPanelView('slides', true))" class="relative text-left rounded-lg border border-gray-200 p-2 bg-[#FFF4EF] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
 									<span class="absolute top-1.5 right-1.5 text-[8px] font-bold leading-none px-1 py-0.5 rounded bg-[#FEE9DF] text-[#C2541E]">PPT</span>
 									<svg width="15" height="15" fill="none" stroke="#D2603A" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="1.5"/><path d="M8 21h8M12 17v4"/></svg>
 									<div class="mt-1.5 text-[10.5px] font-semibold text-[#C2541E] leading-tight">Slides</div>
 								</button>
-								<button @click="setPanelView('excel', true)" class="relative text-left rounded-lg border border-gray-200 p-2 bg-[#EEFAF1] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
+								<button @click="openOutputModal('excel', () => setPanelView('excel', true))" class="relative text-left rounded-lg border border-gray-200 p-2 bg-[#EEFAF1] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
 									<span class="absolute top-1.5 right-1.5 text-[8px] font-bold leading-none px-1 py-0.5 rounded bg-[#D8F3E1] text-[#157A43]">XLS</span>
 									<svg width="15" height="15" fill="none" stroke="#1E9E57" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 8l8 8M16 8l-8 8"/></svg>
 									<div class="mt-1.5 text-[10.5px] font-semibold text-[#157A43] leading-tight">Excel</div>
@@ -1005,7 +1005,7 @@
 											<span v-else-if="step.status === 'done'" class="ms-auto text-green-500 flex-none">&#10003;</span>
 										</div>
 									</div>
-									<div v-else class="text-[12px] text-gray-400 py-1">No steps yet for this run.</div>
+									<div v-else class="text-[12px] text-gray-400 py-1">{{ (lastSystemMessage && lastSystemMessage.status === 'stopped') ? 'Run stopped — no steps ran.' : 'No steps yet for this run.' }}</div>
 								</div>
 								<div class="h-1.5 bg-[#f0eeec] rounded-full overflow-hidden mt-2.5">
 									<div class="h-full bg-[#C2541E] transition-all" :style="{ width: coworkProgressPct + '%' }"></div>
@@ -1104,17 +1104,17 @@
 					<!-- 3-col compact tiles: icon + absolute badge + label.
 					     Forecast + Anomaly render as dimmed "SOON" cards in-grid. -->
 					<div class="grid grid-cols-3 gap-1.5">
-						<button @click="handleExampleClick('Build a dashboard for: ' + (lastUserQuestion || report?.title || 'this data'))" class="relative text-left rounded-lg border border-gray-200 p-2 bg-[#F4F7FF] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
+						<button @click="openOutputModal('dashboard', () => handleExampleClick('Build a dashboard for: ' + (lastUserQuestion || report?.title || 'this data')))" class="relative text-left rounded-lg border border-gray-200 p-2 bg-[#F4F7FF] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
 							<span class="absolute top-1.5 right-1.5 text-[8px] font-bold leading-none px-1 py-0.5 rounded bg-blue-100 text-blue-700">AI</span>
 							<svg width="15" height="15" fill="none" stroke="#3B6FE0" stroke-width="1.9" viewBox="0 0 24 24"><rect x="3" y="11" width="4" height="9"/><rect x="10" y="6" width="4" height="14"/><rect x="17" y="3" width="4" height="17"/></svg>
 							<div class="mt-1.5 text-[10.5px] font-semibold text-[#2C53A8] leading-tight">Dashboard</div>
 						</button>
-						<button @click="onSlidesCta()" class="relative text-left rounded-lg border border-gray-200 p-2 bg-[#FFF4EF] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
+						<button @click="openOutputModal('slides', onSlidesCta)" class="relative text-left rounded-lg border border-gray-200 p-2 bg-[#FFF4EF] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
 							<span class="absolute top-1.5 right-1.5 text-[8px] font-bold leading-none px-1 py-0.5 rounded bg-[#FEE9DF] text-[#C2541E]">PPT</span>
 							<svg width="15" height="15" fill="none" stroke="#D2603A" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="1.5"/><path d="M8 21h8M12 17v4"/></svg>
 							<div class="mt-1.5 text-[10.5px] font-semibold text-[#C2541E] leading-tight">Slides</div>
 						</button>
-						<button @click="onExcelCta()" class="relative text-left rounded-lg border border-gray-200 p-2 bg-[#EEFAF1] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
+						<button @click="openOutputModal('excel', onExcelCta)" class="relative text-left rounded-lg border border-gray-200 p-2 bg-[#EEFAF1] transition cursor-pointer hover:-translate-y-px hover:shadow-md hover:border-[#d9c4b6]">
 							<span class="absolute top-1.5 right-1.5 text-[8px] font-bold leading-none px-1 py-0.5 rounded bg-[#D8F3E1] text-[#157A43]">XLS</span>
 							<svg width="15" height="15" fill="none" stroke="#1E9E57" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 8l8 8M16 8l-8 8"/></svg>
 							<div class="mt-1.5 text-[10.5px] font-semibold text-[#157A43] leading-tight">Excel</div>
@@ -1177,7 +1177,7 @@
 								<span v-else-if="step.status === 'err'" class="ms-auto text-red-500 flex-none">&#9888;</span>
 							</div>
 						</div>
-						<div v-else class="text-[12px] text-gray-400 py-1">No steps yet for this run.</div>
+						<div v-else class="text-[12px] text-gray-400 py-1">{{ (lastSystemMessage && lastSystemMessage.status === 'stopped') ? 'Run stopped — no steps ran.' : 'No steps yet for this run.' }}</div>
 						<div class="h-1.5 bg-gray-100 rounded-full overflow-hidden mt-2.5">
 							<div class="h-full bg-[#C2541E] transition-all" :style="{ width: activityProgressPct + '%' }"></div>
 						</div>
@@ -1390,7 +1390,7 @@
 							</div>
 						</div>
 					</div>
-					<div v-else class="text-[13px] text-[#7A7066] py-1">No steps yet for this run.</div>
+					<div v-else class="text-[13px] text-[#7A7066] py-1">{{ (lastSystemMessage && lastSystemMessage.status === 'stopped') ? 'Run stopped — no steps ran.' : 'No steps yet for this run.' }}</div>
 					<!-- progress bar (pinned to the bottom of the reserved card) -->
 					<div class="h-[5px] bg-[#F4E5DA] rounded mt-auto overflow-hidden">
 						<div class="h-full bg-[#C2541E] transition-all" :style="{ width: activityProgressPct + '%' }"></div>
@@ -1671,6 +1671,13 @@
 			@close="smartSheetOpen = false"
 			@skip="smartSheetOpen = false; generateDashboard()"
 			@built="onSmartBuilt"
+		/>
+		<DashboardOutputCustomizeModal
+			:open="outputModalOpen"
+			:variant="outputModalVariant"
+			:prefill="outputModalPrefill"
+			@close="outputModalOpen = false"
+			@generate="onOutputGenerate"
 		/>
 	</Teleport>
 
@@ -1965,6 +1972,9 @@ const reportLoaded = ref(false)
 const reportNotFound = ref(false)
 const completionsLoaded = ref(false)
 const report = ref<any | null>(null)
+// Browser tab / shortcut name — otherwise it falls back to the report UUID in
+// the URL. Falls back to a friendly default while the report loads.
+useHead(() => ({ title: report.value?.title || 'Report' }))
 const visualizations = ref<any[]>([])
 const dashboardRef = ref<any | null>(null)
 
@@ -2225,18 +2235,31 @@ async function handleAgentConnected() {
     if (report.value?.data_sources) currentAgents.value = [...report.value.data_sources]
 }
 
-// Flat, deduplicated conversation starters from all selected agents (max 3)
-// Each stored starter is "Title\nDetailed prompt" — split into { title, prompt }
-const agentConversationStarters = computed(() =>
-    [...new Set<string>(currentAgents.value.flatMap((a: any) => a.conversation_starters || []))]
-        .slice(0, 3)
+// Suggested questions for the empty-chat center — keyed to the CURRENTLY SELECTED
+// agent(s) (currentAgents follows the composer picker). Prefer the agent's own
+// trained conversation_starters; if it has none, fall back to a small agent-scoped
+// set so the center is never blank. Each stored starter = "Title\nPrompt".
+const agentConversationStarters = computed(() => {
+    const own = [...new Set<string>(currentAgents.value.flatMap((a: any) => a.conversation_starters || []))]
+        .slice(0, 5)
         .map((s: string) => {
             const nl = s.indexOf('\n')
             return nl === -1
                 ? { title: s, prompt: s }
                 : { title: s.slice(0, nl).trim(), prompt: s.slice(nl + 1).trim() }
         })
-)
+    if (own.length) return own
+    // Fallback — no trained starters on the selected agent: derive generic-but-useful
+    // asks scoped to this agent's data (grounded on its tables at run time).
+    const name = currentAgents.value[0]?.name
+    if (!name) return []
+    return [
+        'Summarize this dataset: row count, date range, and key dimensions',
+        'Show the main metrics and how they trend over time',
+        'What stands out or looks unusual in this data?',
+        'Break down the primary measure by its top category',
+    ].map((t) => ({ title: t, prompt: t }))
+})
 
 async function openInstructionById(instructionId: string, opts?: { initialVersionNumber?: number | null }) {
 	// Immediately switch to agent panel with loading state
@@ -2564,11 +2587,29 @@ function toggleAutoPilot() {
 	autoPilotPanel.value = !autoPilotPanel.value
 	try { localStorage.setItem('dash_autopanel', autoPilotPanel.value ? '1' : '0') } catch (e) { /* ignore */ }
 }
-// Per-tab panel width (left/chat px). Activity = narrow sidebar (wide chat);
-// Dashboard = wide panel for charts. Mirrors the toggleSplitScreen widths.
+// Per-view left-panel width overrides — a user's manual drag persists per output
+// view (studio keeps its own width, dashboard keeps its own). localStorage-backed.
+const PANEL_WIDTH_KEY = 'dash.panelWidths'
+const panelWidthOverrides = ref<Record<string, number>>({})
+if (import.meta.client) {
+	try {
+		const saved = JSON.parse(localStorage.getItem(PANEL_WIDTH_KEY) || '{}')
+		if (saved && typeof saved === 'object') panelWidthOverrides.value = saved
+	} catch (e) { /* ignore */ }
+}
+function savePanelWidth(view: string, w: number) {
+	panelWidthOverrides.value = { ...panelWidthOverrides.value, [view]: Math.round(w) }
+	try { localStorage.setItem(PANEL_WIDTH_KEY, JSON.stringify(panelWidthOverrides.value)) } catch (e) { /* ignore */ }
+}
+// Per-tab panel width (left/chat px). A saved override wins; else per-view default.
+// Studio = WIDE right output panel (left/chat ~42%). Clamp so chat never collapses
+// below 360px nor the output panel below 280px.
 function panelLeftWidthFor(view: string): number {
 	const w = window.innerWidth
-	if (view === 'studio') return Math.round(w * 0.55)     // launcher = wide right like Outputs
+	const override = panelWidthOverrides.value[view]
+	if (override) return Math.min(Math.max(override, 360), w - 280)
+	// Studio launcher = NARROW fixed dock (~380px right panel); chat gets the rest.
+	if (view === 'studio') return Math.min(Math.max(w - 380, 340), w - 340)
 	if (view === 'activity') return Math.round(w * 0.55)   // match Outputs width
 	if (view === 'summary') return Math.round(w * 0.55)
 	if (view === 'agent') return Math.round(w * 0.48)
@@ -2647,6 +2688,18 @@ if (import.meta.client) {
 	checkMobile()
 	window.addEventListener('resize', checkMobile)
 }
+
+// Open the output panel (studio view: MAKE AN OUTPUT tiles + tabs) BY DEFAULT on
+// a report, instead of waiting for the first run. Non-mobile only; userClosedPanel
+// still wins (if the user closes it, it stays closed for the run).
+onMounted(() => {
+	if (!isMobile.value && !userClosedPanel.value) {
+		isSplitScreen.value = true
+		if (rightPanelView.value !== 'studio') rightPanelView.value = 'studio'
+		// Open the studio output panel NARROW (~380px dock), chat gets the rest.
+		leftPanelWidth.value = panelLeftWidthFor('studio')
+	}
+})
 
 // Completion id currently wired up to forward Office.js results back to the backend.
 const currentOfficeJsCompletionId = ref<string | null>(null)
@@ -3139,7 +3192,20 @@ async function loadCoworkFlag() {
 const activityPlan = computed<any[]>(() => {
 	try {
 		const msg = lastSystemMessage.value as any
-		return extractPlanTasks(msg?.completion_blocks || [])
+		const tasks = extractPlanTasks(msg?.completion_blocks || [])
+		if (!tasks.length) return tasks
+		// The backend emits the plan ONCE with every task 'pending' and never
+		// updates it, so derive done-ness from the run's real progress instead.
+		const terminal = ['success', 'error', 'stopped', 'failed']
+			.includes(String(msg?.status || '').toLowerCase())
+		if (terminal) {
+			// Run finished -> all planned tasks complete: N/total, spinner stops.
+			return tasks.map((t: any) => ({ ...t, status: 'done' }))
+		}
+		// Still running -> mark tasks done in order up to the number of completed
+		// sub-steps so the counter + active-task spinner advance live.
+		const done = Math.min(activityDoneCount.value || 0, tasks.length)
+		return tasks.map((t: any, i: number) => (i < done ? { ...t, status: 'done' } : t))
 	} catch {
 		return []
 	}
@@ -4910,12 +4976,57 @@ async function loadOneClickFlag() {
 		smartDashboardEnabled.value = !!sd?.effective
 		const lf = rows.find(r => r?.env_name === 'HYBRID_LOCALIZED_FOLLOWUPS')
 		localizedFollowupsEnabled.value = !!lf?.effective
+		const oc = rows.find(r => r?.env_name === 'HYBRID_OUTPUT_CUSTOMIZE')
+		outputCustomizeEnabled.value = !!oc?.effective
 	} catch {
 		oneClickEnabled.value = false  // fail-soft: fall back to placeholders
 		smartWorkbookEnabled.value = false
 		smartSlidesEnabled.value = false
 		smartDashboardEnabled.value = false
 		localizedFollowupsEnabled.value = false
+		outputCustomizeEnabled.value = false
+	}
+}
+
+// ---- Output Customize dialogs (NotebookLM-style) ----
+const outputCustomizeEnabled = ref(false)
+const outputModalOpen = ref(false)
+const outputModalVariant = ref<'dashboard' | 'report' | 'slides' | 'excel'>('dashboard')
+const outputModalPrefill = computed(() => (lastUserQuestion.value || (report.value as any)?.title || ''))
+
+// Tap a tile: open the customize modal when the flag is on, else run the legacy
+// handler passed in (chat prompt / panel open / instant generate).
+function openOutputModal(variant: 'dashboard' | 'report' | 'slides' | 'excel', legacy?: () => void) {
+	if (!outputCustomizeEnabled.value) { legacy?.(); return }
+	outputModalVariant.value = variant
+	outputModalOpen.value = true
+}
+
+async function onOutputGenerate(opts: any) {
+	outputModalOpen.value = false
+	const v = opts?.variant
+	if (v === 'dashboard' || v === 'slides') {
+		// Route the build through the CHAT agent (streams progress + names the
+		// artifact meaningfully) instead of the silent offline generate endpoint.
+		const fallback = lastUserQuestion.value || (report.value as any)?.title || 'this data'
+		const mods = [
+			opts.format && opts.format !== 'auto' && `(${opts.format})`,
+			opts.length && opts.length,
+			opts.depth && `${opts.depth} depth`,
+		].filter(Boolean).join(', ')
+		const lead = v === 'dashboard' ? 'Build an interactive dashboard' : 'Create a slide deck'
+		let prompt = mods ? `${lead}, ${mods}` : lead
+		prompt += opts.describe ? ` — focus: ${opts.describe}` : ` for ${fallback}`
+		if (opts.language && opts.language !== 'English') prompt += `. Respond in ${opts.language}.`
+		handleExampleClick(prompt.replace(/\s+/g, ' ').trim())
+	} else if (v === 'excel') {
+		setPanelView('excel', true)
+	} else if (v === 'report') {
+		// Report has no artifact endpoint — drive it through chat with the options.
+		const bits = [opts.format && `as a ${opts.format}`, opts.length && `(${opts.length})`,
+			opts.language && opts.language !== 'English' && `in ${opts.language}`].filter(Boolean).join(' ')
+		const focus = opts.describe || (lastUserQuestion.value || (report.value as any)?.title || 'this data')
+		handleExampleClick(`Write a narrative report ${bits} with key findings for: ${focus}`.replace(/\s+/g, ' ').trim())
 	}
 }
 
@@ -4939,12 +5050,12 @@ async function onSmartBuilt() {
 	try { await checkHasArtifacts() } catch {}
 }
 
-async function generateSlideDeck() {
+async function generateSlideDeck(opts?: any) {
 	if (slideGenLoading.value) return
 	slideGenLoading.value = true
 	slideGenError.value = null
 	try {
-		const { data, error } = await useMyFetch(`/reports/${report_id}/slides/generate`, { method: 'POST' })
+		const { data, error } = await useMyFetch(`/reports/${report_id}/slides/generate`, { method: 'POST', ...(opts ? { body: opts } : {}) })
 		if (error.value) {
 			throw new Error((error.value as any)?.data?.detail || 'Could not generate the deck.')
 		}
@@ -4955,18 +5066,27 @@ async function generateSlideDeck() {
 		// Refetch artifacts → hasSlidesArtifact flips true → ArtifactFrame renders.
 		await checkHasArtifacts()
 	} catch (e: any) {
-		slideGenError.value = e?.message || 'Slide generation failed. Please try again.'
+		const msg = e?.message || ''
+		// Offline builder needs existing success-status charts; if this report has
+		// none, build them via chat (full agent) instead of dead-ending.
+		if (/no charts yet|No valid visualizations/i.test(msg)) {
+			const focus = opts?.describe || lastUserQuestion.value || (report.value as any)?.title || 'this data'
+			handleExampleClick(`Create a slide deck summarizing: ${focus}`)
+			slideGenError.value = null
+			return
+		}
+		slideGenError.value = msg || 'Slide generation failed. Please try again.'
 	} finally {
 		slideGenLoading.value = false
 	}
 }
 
-async function generateDashboard() {
+async function generateDashboard(opts?: any) {
 	if (dashGenLoading.value) return
 	dashGenLoading.value = true
 	dashGenError.value = null
 	try {
-		const { data, error } = await useMyFetch(`/reports/${report_id}/dashboard/generate`, { method: 'POST' })
+		const { data, error } = await useMyFetch(`/reports/${report_id}/dashboard/generate`, { method: 'POST', ...(opts ? { body: opts } : {}) })
 		if (error.value) {
 			throw new Error((error.value as any)?.data?.detail || 'Could not generate the dashboard.')
 		}
@@ -4977,7 +5097,17 @@ async function generateDashboard() {
 		// Refetch artifacts → hasPageArtifact flips true → ArtifactFrame renders.
 		await checkHasArtifacts()
 	} catch (e: any) {
-		dashGenError.value = e?.message || 'Dashboard generation failed. Please try again.'
+		const msg = e?.message || ''
+		// Offline builder needs existing success-status charts; if this report has
+		// none (e.g. a prior run was stopped), build them via chat instead of
+		// dead-ending with a raw error.
+		if (/no charts yet|No valid visualizations/i.test(msg)) {
+			const focus = opts?.describe || lastUserQuestion.value || (report.value as any)?.title || 'this data'
+			handleExampleClick(`Build an interactive dashboard with KPI cards and charts for: ${focus}`)
+			dashGenError.value = null
+			return
+		}
+		dashGenError.value = msg || 'Dashboard generation failed. Please try again.'
 	} finally {
 		dashGenLoading.value = false
 	}
@@ -5011,12 +5141,7 @@ function toggleSplitScreen() {
 	nextTick(() => {
 		isSplitScreen.value = !isSplitScreen.value
 		if (isSplitScreen.value) {
-			const windowWidth = window.innerWidth
-			leftPanelWidth.value = (rightPanelView.value === 'summary' || rightPanelView.value === 'activity' || rightPanelView.value === 'studio')
-				? Math.round(windowWidth * 0.55)
-				: rightPanelView.value === 'agent'
-				? Math.round(windowWidth * 0.45)
-				: Math.round(windowWidth * 0.37)
+			leftPanelWidth.value = panelLeftWidthFor(rightPanelView.value)
 			collapseSidebar()
 		}
         safeScrollToBottom()
@@ -5050,6 +5175,8 @@ function stopResize() {
 	document.removeEventListener('mousemove', handleResize)
 	document.removeEventListener('mouseup', stopResize)
 	document.body.style.userSelect = 'auto'
+	// Remember this width for the current output view so it sticks next time.
+	savePanelWidth(rightPanelView.value, leftPanelWidth.value)
 }
 
 onUnmounted(() => {

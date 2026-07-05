@@ -43,6 +43,12 @@ class DataSourceFromFileRequest(BaseModel):
     data_source_name: Optional[str] = None
     sheet_names: Optional[List[str]] = None
     description: Optional[str] = None
+    # P1 (HYBRID_MERGE_SAME_SCHEMA): when an upload is made in the context of a
+    # Studio/agent, the same-schema merge PREFERS that agent's already-bound
+    # spreadsheet source so a later-session upload of the same monthly template
+    # always lands in the agent's ONE table (not a fresh source). Optional —
+    # callers that don't set it get the org-wide column-signature match.
+    studio_id: Optional[str] = None
 
 
 def _dlt_table_name(ds) -> str:
@@ -141,9 +147,68 @@ async def _spreadsheet_connections(db, org_id):
     return out
 
 
-async def _try_merge_same_schema(db, *, organization, current_user, file, abs_path, content_hash):
+async def _studio_bound_ds_ids(db, studio_id) -> set:
+    """DataSource ids currently bound to a Studio/agent (live links only).
+
+    Used by the same-schema merge to PREFER an agent's own spreadsheet source so
+    a later-session upload of the same template lands in its ONE table. Fail-soft:
+    any error -> empty set (falls back to org-wide match ordering)."""
+    if not studio_id:
+        return set()
+    try:
+        from app.models.studio import StudioDataSource
+
+        rows = (
+            await db.execute(
+                select(StudioDataSource.agent_id).where(
+                    StudioDataSource.studio_id == str(studio_id),
+                    StudioDataSource.deleted_at.is_(None),
+                )
+            )
+        ).scalars().all()
+        return {str(r) for r in rows if r}
+    except Exception:  # noqa: BLE001
+        return set()
+
+
+def _same_template(a, b) -> bool:
+    """True when two normalized column-sets are the SAME upload template.
+
+    Exact set equality is too brittle across separate sessions (a reordered
+    header, a case change, one added/renamed column). Order/case/whitespace and
+    lineage columns are already folded out by ``normalize_columns``; on top of
+    that this tolerates a small, bounded number of differing columns on EACH side
+    (a stray note column, one rename) while still rejecting a genuinely different
+    schema or a small table that is merely a subset of a much wider one.
+    """
+    try:
+        if not a or not b:
+            return False
+        if a == b:
+            return True
+        inter = len(a & b)
+        if inter == 0:
+            return False
+        only_a = len(a - b)
+        only_b = len(b - a)
+        # allow ~10% drift, at least one column, on each side independently
+        max_diff = max(1, round(0.10 * max(len(a), len(b))))
+        return only_a <= max_diff and only_b <= max_diff
+    except Exception:  # noqa: BLE001
+        return False
+
+
+async def _try_merge_same_schema(
+    db, *, organization, current_user, file, abs_path, content_hash, studio_id=None
+):
     """Task 5: return a response body when this upload should reuse an existing
     source (byte-identical dedup OR same-schema append), else None to fall back.
+
+    Matching is by COLUMN SIGNATURE (order-insensitive, lineage-column-excluded,
+    trivial-drift tolerant), never by filename/stem. When ``studio_id`` is in
+    scope, that agent's already-bound spreadsheet source is tried FIRST so an
+    agent's later-session uploads always converge into its one table. Soft-deleted
+    sources are excluded up front and can never block a live match.
 
     Defensive throughout — any failure returns None so the caller creates a new
     source as today.
@@ -155,6 +220,12 @@ async def _try_merge_same_schema(db, *, organization, current_user, file, abs_pa
     candidates = await _spreadsheet_connections(db, str(organization.id))
     if not candidates:
         return None
+
+    # P1: prefer the studio/agent's own bound spreadsheet source(s) — put them at
+    # the front so a schema match there wins over any other org source.
+    bound_ids = await _studio_bound_ds_ids(db, studio_id)
+    if bound_ids:
+        candidates.sort(key=lambda cd: 0 if str(cd[1].id) in bound_ids else 1)
 
     # ── (a) content-hash dedup: byte-identical re-upload -> point to existing ──
     for conn, ds in candidates:
@@ -191,9 +262,10 @@ async def _try_merge_same_schema(db, *, organization, current_user, file, abs_pa
             continue
         existing_colsets = {name: smart_upload.normalize_columns(df.columns) for name, df in existing.items()}
 
-        # Every NEW sheet must match SOME existing sheet exactly (conservative).
+        # Every NEW sheet must match SOME existing sheet by column signature
+        # (trivial-drift tolerant — the same monthly template across sessions).
         all_match = bool(new_colsets) and all(
-            any(smart_upload.columns_match(ncs, ecs) for ecs in existing_colsets.values())
+            any(_same_template(ncs, ecs) for ecs in existing_colsets.values())
             for ncs in new_colsets.values()
         )
         if not all_match:
@@ -431,6 +503,7 @@ async def create_data_source_from_file(
                 file=file,
                 abs_path=abs_path,
                 content_hash=content_hash,
+                studio_id=payload.studio_id,
             )
             if merged is not None:
                 return merged

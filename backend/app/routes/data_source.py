@@ -150,6 +150,150 @@ async def get_agent_memory(
     return {"enabled": True, "items": [_serialize_knowledge(r) for r in rows]}
 
 
+@router.post("/data_sources/{data_source_id}/auto-eda")
+async def rebuild_agent_eda(
+    data_source_id: str,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Rebuild this agent's Auto-EDA profile on demand (BI-uplift Phase 6).
+    Recomputes the profile from a fresh data sample + re-narrates, saving to
+    data_sources.eda_profile. No-op unless HYBRID_AUTO_EDA."""
+    from app.settings.hybrid_flags import flags
+    if not flags.AUTO_EDA:
+        return {"enabled": False, "eda": None}
+    ds = (await db.execute(
+        select(DataSource).where(
+            DataSource.id == str(data_source_id),
+            DataSource.organization_id == str(organization.id),
+        )
+    )).scalar_one_or_none()
+    if ds is None:
+        raise HTTPException(status_code=404, detail="not found")
+    model = None
+    try:
+        from app.services.llm_service import LLMService
+        model = await LLMService().get_default_model(db, organization)
+    except Exception:
+        model = None
+    from app.services.analytics.agent_eda import build_agent_eda
+    payload = await build_agent_eda(
+        db, organization=organization, data_source=ds, model=model)
+    return {"enabled": True, "eda": payload}
+
+
+@router.post("/data_sources/{data_source_id}/kpis")
+async def rebuild_agent_kpis(
+    data_source_id: str,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Rebuild this agent's governed KPI set on demand (BI-uplift Phase 3).
+    Proposes outcome-first, leading/lagging-tagged KPIs from the agent's data
+    profile, saving to data_sources.kpi_defs. No-op unless HYBRID_KPI_LAYER."""
+    from app.settings.hybrid_flags import flags
+    if not flags.KPI_LAYER:
+        return {"enabled": False, "kpis": None}
+    ds = (await db.execute(
+        select(DataSource).where(
+            DataSource.id == str(data_source_id),
+            DataSource.organization_id == str(organization.id),
+        )
+    )).scalar_one_or_none()
+    if ds is None:
+        raise HTTPException(status_code=404, detail="not found")
+    model = None
+    try:
+        from app.services.llm_service import LLMService
+        model = await LLMService().get_default_model(db, organization)
+    except Exception:
+        model = None
+    from app.services.analytics.agent_kpis import build_agent_kpis
+    payload = await build_agent_kpis(
+        db, organization=organization, data_source=ds, model=model)
+    return {"enabled": True, "kpis": payload}
+
+
+@router.post("/data_sources/{data_source_id}/forecast")
+async def rebuild_agent_forecast(
+    data_source_id: str,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Forecast this agent's primary time series by LLM reasoning (BI-uplift
+    Phase 7, Agent-Overview surface). Reuses the Auto-EDA time series, no ML
+    engine, Claude reasoning preferred. No-op unless HYBRID_ADV_METHODS."""
+    from app.settings.hybrid_flags import flags
+    if not flags.ADV_METHODS:
+        return {"enabled": False, "forecast": None}
+    ds = (await db.execute(
+        select(DataSource).where(
+            DataSource.id == str(data_source_id),
+            DataSource.organization_id == str(organization.id),
+        )
+    )).scalar_one_or_none()
+    if ds is None:
+        raise HTTPException(status_code=404, detail="not found")
+    model = None
+    try:
+        from app.services.llm_service import LLMService
+        model = await LLMService().get_default_model(db, organization)
+    except Exception:
+        model = None
+    from app.services.analytics.agent_forecast import build_agent_forecast
+    payload = await build_agent_forecast(
+        db, organization=organization, data_source=ds, model=model)
+    return {"enabled": True, "forecast": payload}
+
+
+@router.post("/data_sources/{data_source_id}/repair")
+async def repair_data_source(
+    data_source_id: str,
+    dry_run: bool = Query(False),
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Self-heal an agent whose same-schema data got split across multiple
+    physical staging tables (files uploaded in separate sessions). Stitches the
+    orphan tables back into the agent's ONE bound table (idempotent, backup +
+    transaction-safe). Owner-or-admin only. No-op unless HYBRID_INGEST_SELFHEAL.
+    ``?dry_run=true`` reports what WOULD be stitched without changing anything."""
+    from app.settings.hybrid_flags import flags
+    if not flags.INGEST_SELFHEAL:
+        return {"enabled": False, "report": None}
+    ds = (await db.execute(
+        select(DataSource).where(
+            DataSource.id == str(data_source_id),
+            DataSource.organization_id == str(organization.id),
+        )
+    )).scalar_one_or_none()
+    if ds is None:
+        raise HTTPException(status_code=404, detail="not found")
+    # Owner-or-admin (mirrors the connector/curate guards elsewhere).
+    allowed = bool(ds.owner_user_id and str(ds.owner_user_id) == str(current_user.id))
+    if not allowed:
+        try:
+            from app.core.permission_resolver import resolve_permissions, FULL_ADMIN
+            r = await resolve_permissions(db, str(current_user.id), str(organization.id))
+            allowed = (FULL_ADMIN in r.org_permissions
+                       or r.has_org_permission("manage_connections")
+                       or r.has_org_permission("create_data_source"))
+        except Exception:
+            allowed = False
+    if not allowed:
+        raise HTTPException(status_code=403, detail="not allowed")
+    from app.services.ingest.selfheal import selfheal_data_source
+    report = await selfheal_data_source(
+        db, organization=organization, data_source=ds,
+        dry_run=bool(dry_run), drop_orphans=not bool(dry_run),
+    )
+    return {"enabled": True, "report": report}
+
+
 @router.get("/memory/shared")
 async def get_shared_memory(
     current_user: User = Depends(current_user),

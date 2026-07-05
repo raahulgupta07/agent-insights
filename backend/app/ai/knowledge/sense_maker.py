@@ -283,11 +283,34 @@ def _cap_confidence(value: Any, ceiling: str) -> str:
 
 def _build_prompt(question: str, signals: List[Dict[str, Any]],
                   info_blocks: Dict[str, Dict[str, Any]],
-                  sample: List[Dict[str, Any]], note: Optional[str]) -> str:
+                  sample: List[Dict[str, Any]], note: Optional[str],
+                  insight_engine: bool = False) -> str:
     facts = json.dumps(signals, ensure_ascii=False, default=str)[:6000]
     info_s = json.dumps(info_blocks, ensure_ascii=False, default=str)[:4000]
     sample_s = json.dumps(sample, ensure_ascii=False, default=str)[:6000]
     note_line = f"\nNOTE: {note}\n" if note else "\n"
+
+    # BI-uplift Phase 2 (HYBRID_INSIGHT_ENGINE): additionally ask for a
+    # Context -> Conflict -> Resolution narrative and, on a decline, a driver
+    # enumeration (each candidate checked against the real columns). Additive —
+    # when off, the shape/rules are byte-identical to the original card.
+    ie_rules = ""
+    ie_shape = ""
+    if insight_engine:
+        ie_rules = (
+            "- ALSO write a decision narrative in three short sentences: 'context' "
+            "(what is happening), 'conflict' (the tension / problem / opportunity), "
+            "'resolution' (the single recommended action). Each grounded in the facts.\n"
+            "- If the dominant signal is a decline or risk, ALSO fill 'drivers': for each "
+            "plausible driver you can NAME FROM A REAL COLUMN, set verdict to 'cause' "
+            "(evidence supports it), 'ruled_out' (data contradicts it), or 'no_data' "
+            "(cannot check). Never assert a cause you did not check. Max 6 drivers.\n"
+        )
+        ie_shape = (
+            ',"context":"","conflict":"","resolution":"",'
+            '"drivers":[{"name":"","verdict":"no_data","note":""}]'
+        )
+
     return (
         "You are a senior data analyst writing a DECISION card that sits above a "
         "data answer. Turn the facts below into sense-making: what happened, why "
@@ -311,13 +334,16 @@ def _build_prompt(question: str, signals: List[Dict[str, Any]],
         "- kind is one of: anomaly|trend_change|threshold|opportunity|risk.\n"
         "- now_what.evidence is a list of short strings, each citing a real column "
         "name and/or a real number from the facts.\n"
-        "- Keep at most 4 findings and at most 3 alerts. Be concrete and brief.\n\n"
+        "- Keep at most 4 findings and at most 3 alerts. Be concrete and brief.\n"
+        f"{ie_rules}\n"
         "Return JSON EXACTLY matching this shape:\n"
         '{"headline":{"text":"","severity":"watch","confidence":"med","metric":""},'
         '"findings":[{"what":"","so_what":"","now_what":{"action":"","impact_rank":1,'
         '"confidence":"med","evidence":[""]},"kind":"anomaly","cause_hypothesis":"",'
         '"plain_language":""}],'
-        '"alerts":[{"rule":"","metric":"","value":"","threshold":"","severity":"watch","action":""}]}'
+        '"alerts":[{"rule":"","metric":"","value":"","threshold":"","severity":"watch","action":""}]'
+        f"{ie_shape}"
+        "}"
     )
 
 
@@ -435,7 +461,13 @@ async def build_sense_making(db, *, steps, question: str, model,
                 continue
 
         # 5. The single cheap LLM call.
-        prompt = _build_prompt(question or "", signals, info_blocks, sample, note)
+        try:
+            from app.settings.hybrid_flags import flags as _ie_flags
+            _insight_engine = bool(getattr(_ie_flags, "INSIGHT_ENGINE", False))
+        except Exception:
+            _insight_engine = False
+        prompt = _build_prompt(question or "", signals, info_blocks, sample, note,
+                               insight_engine=_insight_engine)
         from app.ai.llm.llm import LLM
         from app.dependencies import async_session_maker
 
@@ -508,13 +540,52 @@ async def build_sense_making(db, *, steps, question: str, model,
 
         clean_alerts = [a for a in alerts_in if isinstance(a, dict)]
 
-        return {
+        result = {
             "headline": headline if isinstance(headline, dict) else {},
             "findings": kept_findings,
             "alerts": clean_alerts,
             "generated_by": "hybrid",
             "model": getattr(model, "name", str(model)),
         }
+
+        # BI-uplift Phase 2 (HYBRID_INSIGHT_ENGINE): fold in the additive
+        # Context/Conflict/Resolution narrative + driver enumeration when present
+        # and grounded. Additive keys — the frozen FE contract ignores unknown
+        # keys, so this is inert when the flag is off (prompt never asked for them).
+        if _insight_engine:
+            def _clean_str(v):
+                s = str(v).strip() if isinstance(v, (str, int, float)) else ""
+                return s if s and _is_grounded(s, real_tokens, real_cols) else ""
+            ctx = _clean_str(parsed.get("context"))
+            cfl = _clean_str(parsed.get("conflict"))
+            res = str(parsed.get("resolution")).strip() if parsed.get("resolution") else ""
+            # resolution is an ACTION (may not cite a number) — keep if non-empty.
+            drivers_in = parsed.get("drivers") if isinstance(parsed.get("drivers"), list) else []
+            drivers = []
+            for d in drivers_in[:6]:
+                if not isinstance(d, dict):
+                    continue
+                name = str(d.get("name", "")).strip()
+                verdict = str(d.get("verdict", "")).strip().lower()
+                if not name or verdict not in ("cause", "ruled_out", "no_data"):
+                    continue
+                # a driver named from a real column is trustworthy; otherwise keep
+                # only if it's explicitly no_data (can't over-claim a cause).
+                grounded_name = _is_grounded(name, real_tokens, real_cols)
+                if verdict == "cause" and not grounded_name:
+                    verdict = "no_data"
+                drivers.append({"name": name, "verdict": verdict,
+                                "note": str(d.get("note", "")).strip()[:160]})
+            if ctx:
+                result["context"] = ctx
+            if cfl:
+                result["conflict"] = cfl
+            if res:
+                result["resolution"] = res[:300]
+            if drivers:
+                result["drivers"] = drivers
+
+        return result
     except Exception:
         logger.warning("sense_making: build_sense_making failed", exc_info=True)
         return None

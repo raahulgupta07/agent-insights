@@ -5,7 +5,7 @@
              card is collapsed (hideDropzone: the page's Upload button drives pick()). -->
         <input ref="fileInput" type="file" multiple class="hidden" accept=".csv,.xlsx,.xls,.pdf,.docx,.pptx,.txt,.tsv,.md" :disabled="canEdit === false" @change="onPick" />
         <!-- card body: shown when the dropzone is visible, or once an upload is in flight / done -->
-        <div v-if="!hideDropzone || busy || result || error" class="rounded-2xl border border-[#ECECEC] bg-[#FAF9F8] overflow-hidden">
+        <div v-if="!hideDropzone || busy || result || queuedResult || error" class="rounded-2xl border border-[#ECECEC] bg-[#FAF9F8] overflow-hidden">
         <div class="px-4 py-4">
             <!-- drop zone (hidden when hideDropzone — the page's Upload button drives pick()) -->
             <div
@@ -34,6 +34,12 @@
             <div v-if="busy" class="mt-3 flex items-center gap-2 text-[12px] text-[#6b7280]">
                 <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 animate-spin text-[#C2541E]" />
                 <span>{{ busyLabel }}</span>
+            </div>
+
+            <!-- queued-to-inbox confirmation (files HELD, not placed/trained yet) -->
+            <div v-if="queuedResult && !busy" class="mt-3 rounded-xl border border-[#EAD8CD] bg-[#FFF6F1] px-3.5 py-3">
+                <div class="text-[12.5px] font-semibold text-[#C2541E]">&#128229; {{ queuedResult.queued }} file{{ queuedResult.queued === 1 ? '' : 's' }} queued to the inbox</div>
+                <div class="text-[11.5px] text-[#6b7280] mt-1">Review &amp; re-route them in the Inbox below &mdash; nothing is imported until you <b>Train</b>.</div>
             </div>
 
             <!-- compact result -->
@@ -155,7 +161,7 @@ const props = withDefaults(
 )
 // log entry shape (dock pod matches this exactly):
 //   { stage: 'upload'|'classify'|'segregate'|'apply', level: 'info'|'done'|'active'|'warn', msg: string, meta?: string }
-const emit = defineEmits<{ (e: 'applied', summary: any): void; (e: 'log', entry: any): void }>()
+const emit = defineEmits<{ (e: 'applied', summary: any): void; (e: 'log', entry: any): void; (e: 'queued', summary: any): void }>()
 
 function log(stage: string, level: string, msg: string, meta?: string) {
     emit('log', { stage, level, msg, ...(meta ? { meta } : {}) })
@@ -184,6 +190,11 @@ const error = ref('')
 const items = ref<SmartItem[]>([])
 const summary = ref<{ auto: number; needs_confirm: number; total: number }>({ auto: 0, needs_confirm: 0, total: 0 })
 const result = ref<any>(null)
+// Queued-to-inbox confirmation (replaces the old auto-apply "sorted" result).
+const queuedResult = ref<{ queued: number } | null>(null)
+// Per-file browser metadata captured at upload time (real byte size + MIME),
+// keyed by the returned file id → enriches the queue payload.
+const uploadMeta = ref<Record<string, { content_type: string; size: number }>>({})
 
 const busy = computed(() => uploading.value || classifying.value || applying.value)
 const busyLabel = computed(() => {
@@ -228,8 +239,10 @@ function onDrop(e: DragEvent) {
 async function handleFiles(files: File[]) {
     error.value = ''
     result.value = null
+    queuedResult.value = null
     reviewOpen.value = false
     items.value = []
+    uploadMeta.value = {}
     uploading.value = true
     log('upload', 'active', `Uploading ${files.length} file${files.length === 1 ? '' : 's'}…`)
     const fileIds: string[] = []
@@ -244,7 +257,10 @@ async function handleFiles(files: File[]) {
                 log('upload', 'warn', f.name, 'upload failed')
                 continue
             }
-            fileIds.push((data.value as any).id)
+            const fid = (data.value as any).id
+            fileIds.push(fid)
+            // Capture real byte size + MIME from the browser File for the queue metadata.
+            uploadMeta.value[fid] = { content_type: f.type || '', size: f.size || 0 }
             log('upload', 'done', f.name)
         }
     } catch (e: any) {
@@ -286,8 +302,52 @@ async function classify(fileIds: string[]) {
     } finally {
         classifying.value = false
     }
-    // Single flow: place everything immediately, no confirm step.
-    if (!error.value && keepCount.value) await apply()
+    // Queue everything into the Inbox — HOLD, do NOT apply/train. The user
+    // reviews + re-routes in the Inbox and places it all with the Train button.
+    if (!error.value && items.value.length) await queue()
+}
+
+async function queue() {
+    if (!items.value.length || applying.value) return
+    applying.value = true
+    error.value = ''
+    log('segregate', 'active', `Queuing ${items.value.length} file${items.value.length === 1 ? '' : 's'} to the inbox…`)
+    try {
+        const payload: any = {
+            items: items.value.map(it => {
+                const meta = uploadMeta.value[it.file_id] || { content_type: '', size: 0 }
+                return {
+                    file_id: it.file_id,
+                    filename: it.filename,
+                    dest: it.dest,
+                    confidence: it.confidence,
+                    size: meta.size,
+                    content_type: meta.content_type,
+                    ext: (it as any).ext,
+                    source: (it as any).source,
+                    signals: it.signals,
+                    reason: it.reason,
+                    needs_confirm: it.needs_confirm,
+                }
+            }),
+        }
+        const { data, error: qErr } = await useMyFetch<any>(`/studios/${props.studioId}/smart-upload/queue`, { method: 'POST', body: payload })
+        if (qErr?.value) {
+            error.value = (qErr.value as any)?.data?.detail || 'Could not queue these files.'
+            log('segregate', 'warn', 'Could not queue these files.')
+            return
+        }
+        const res = data.value as any
+        queuedResult.value = { queued: res?.queued_count ?? items.value.length }
+        for (const it of items.value) {
+            log('segregate', 'done', `${it.filename} → queued`, `${destMeta(it.dest).short} · will place on Train`)
+        }
+        emit('queued', res)
+    } catch (e: any) {
+        error.value = e?.data?.detail || e?.message || 'Queue failed.'
+    } finally {
+        applying.value = false
+    }
 }
 
 async function apply() {

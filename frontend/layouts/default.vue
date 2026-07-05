@@ -14,7 +14,7 @@
     <!-- Fixed app shell: the window itself never scrolls. The top bar is pinned
          (shrink-0) and a single scroll zone lives BELOW it, so content scrolls
          under the bar instead of the whole document scrolling past a sticky bar. -->
-    <div class="h-screen overflow-hidden flex flex-col" :class="[showTopBanner ? 'pt-10' : '']">
+    <div class="h-dvh overflow-hidden flex flex-col" :class="[showTopBanner ? 'pt-10' : '']">
       <TopNav class="shrink-0" />
       <div class="flex-1 min-h-0">
         <UNotifications />

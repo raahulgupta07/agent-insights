@@ -254,6 +254,73 @@ async def _apply_teach(db, *, organization, studio_id, path, filename):
     return summary
 
 
+async def _apply_examples(db, *, organization, studio_id, path, filename):
+    """examples sink: Q&A / logic doc -> pending StudioExample rows.
+
+    Primary path reuses the existing logic-doc parser (Q./Ans:/Logic: triples).
+    If that yields nothing (a doc using different markers), fall back to a single
+    cheap small-model call that extracts {question, answer, sql} pairs. Each pair
+    becomes a StudioExample born status='pending' (the review gate), so the
+    studio's Examples lane fills after upload. Fail-soft — never raises the batch.
+    """
+    from app.services.ingest import logic_parser
+    from app.models.studio import StudioExample
+
+    def _add(question, answer, sql):
+        question = (question or "").strip()
+        if not question:
+            return 0
+        answer = (answer or "").strip() or "(see logic)"
+        db.add(StudioExample(
+            studio_id=str(studio_id), question=question, answer=answer,
+            sql=(sql or None), source="auto", status="pending",
+        ))
+        return 1
+
+    created = 0
+    # --- primary: structured Q./Ans:/Logic: parser -----------------------------
+    try:
+        for t in (logic_parser.parse_logic_doc(path) or []):
+            answer = (t.get("answer_text") or "").strip() or (t.get("logic_text") or "").strip()
+            created += _add(t.get("question"), answer, t.get("sql"))
+    except Exception as e:  # noqa: BLE001 - fall through to LLM
+        logger.warning("smart_upload.apply examples: parser failed: %s", e)
+
+    # --- fallback: one small-model extraction if the parser found nothing -------
+    if created == 0:
+        try:
+            text = _file_text(path, filename)
+            if text and text.strip():
+                from app.services.llm_service import LLMService
+                from app.ai.llm.llm import LLM
+                from app.dependencies import async_session_maker
+                model = await LLMService().get_default_model(
+                    db, organization, None, is_small=True)
+                if model is not None:
+                    prompt = (
+                        "Extract EVERY question-and-answer / example the document "
+                        "contains as JSON. Do NOT summarize or drop any. Return ONLY:\n"
+                        '{"examples":[{"question":"...","answer":"...","sql":"..."}]}\n'
+                        "sql is optional (\"\" if none). Preserve the original wording.\n"
+                        "DOCUMENT:\n<<<\n" + text[:60000] + "\n>>>"
+                    )
+                    raw = LLM(model, usage_session_maker=async_session_maker).inference(
+                        prompt, usage_scope="smart_upload_examples") or ""
+                    import json as _json
+                    import re as _re
+                    m = _re.search(r"\{.*\}", raw, _re.DOTALL)
+                    data = _json.loads(m.group(0)) if m else {}
+                    for ex in (data.get("examples") or []):
+                        if isinstance(ex, dict):
+                            created += _add(ex.get("question"), ex.get("answer"), ex.get("sql"))
+        except Exception as e:  # noqa: BLE001 - fail-soft
+            logger.warning("smart_upload.apply examples: LLM fallback failed: %s", e)
+
+    if created:
+        await db.commit()
+    return {"examples": created}
+
+
 async def _apply_knowledge(db, *, organization, file_id, filename, path,
                            data_source_id):
     """knowledge sink: chunk + index the doc as a pending KnowledgeDoc."""
@@ -290,11 +357,52 @@ async def apply_routes(
     by ``dest`` in its OWN try/except (one failure never blocks the others). A
     per-item result ``{file_id, dest, ok, detail, created}`` is collected.
 
-    Returns ``{applied: <n ok>, results: [...]}``.
+    Returns ``{applied: <n ok>, results: [...], data_source_id: <effective id>}``.
     """
+    from app.models.organization import Organization
+    from app.models.user import User
+
+    # GREENLET LANDMINE: the database sink (create_data_source_from_file) commits
+    # AND rolls back internally across its fail-soft stages. A rollback expires
+    # EVERY ORM object on this shared request session (expire_on_commit only
+    # governs commit, not rollback), so on the next item, reading the expired
+    # request-scoped `organization`/`current_user` triggers a sync lazy-load
+    # outside the async greenlet -> MissingGreenlet -> _load_file swallows it and
+    # returns None -> "file not found in this organization". Capture ids up-front
+    # and re-hydrate a fresh, live org/user per item.
+    org_id = str(organization.id)
+    user_id = str(current_user.id)
+
+    # BACKFILL: on a brand-NEW agent the caller has no data_source_id yet — the
+    # database dest CREATES it mid-loop. Track it locally so the semantic/knowledge
+    # sinks (which NEED a real target id) can bind to the just-created source instead
+    # of the still-None outer param. `effective_ds_id` is updated the moment a
+    # database item succeeds; it defaults to the passed-in id for existing agents.
+    effective_ds_id = data_source_id
+
+    # ORDER-INDEPENDENT: process all database dests FIRST so the agent id exists no
+    # matter what order the caller sent items in (e.g. glossary before its CSV).
+    # Stable-sort a working COPY (never mutate the caller's list) — database items
+    # keep their relative order, everything else keeps its relative order after them.
+    def _dest_of(it: Dict[str, Any]) -> str:
+        d = str((it or {}).get("dest") or "").strip().lower()
+        if d not in contract.ALL_DESTS_SET:
+            d = contract.normalize_record({"dest": d})["dest"]
+        return d
+
+    ordered_items = sorted(
+        (it for it in (items or []) if isinstance(it, dict)),
+        key=lambda it: 0 if _dest_of(it) == DEST_DATABASE else 1,
+    )
+
     results: List[Dict[str, Any]] = []
 
-    for item in (items or []):
+    for item in ordered_items:
+        # Re-hydrate live ORM objects for THIS item — a prior item's ingest may
+        # have expired them via an internal rollback. db.get() is awaited, so the
+        # reload happens inside the greenlet (safe).
+        organization = await db.get(Organization, org_id)
+        current_user = await db.get(User, user_id)
         item = item if isinstance(item, dict) else {}
         file_id = item.get("file_id")
         dest = str(item.get("dest") or "").strip().lower()
@@ -332,12 +440,20 @@ async def apply_routes(
                     db, organization=organization, current_user=current_user,
                     file_id=file_id, filename=filename, studio_id=studio_id,
                 )
+                # A brand-new agent's id is born here — backfill it so the
+                # semantic/knowledge sinks that follow can target this source.
+                effective_ds_id = (created or {}).get("data_source_id") or effective_ds_id
             elif dest == DEST_SEMANTIC:
                 created = await _apply_semantic(
                     db, organization=organization, file_id=file_id,
-                    data_source_id=data_source_id,
+                    data_source_id=effective_ds_id,
                 )
-            elif dest in (DEST_INSTRUCTIONS, DEST_EXAMPLES):
+            elif dest == DEST_EXAMPLES:
+                created = await _apply_examples(
+                    db, organization=organization, studio_id=studio_id,
+                    path=path, filename=filename,
+                )
+            elif dest == DEST_INSTRUCTIONS:
                 created = await _apply_teach(
                     db, organization=organization, studio_id=studio_id,
                     path=path, filename=filename,
@@ -345,7 +461,7 @@ async def apply_routes(
             elif dest == DEST_KNOWLEDGE:
                 created = await _apply_knowledge(
                     db, organization=organization, file_id=file_id,
-                    filename=filename, path=path, data_source_id=data_source_id,
+                    filename=filename, path=path, data_source_id=effective_ds_id,
                 )
             else:  # pragma: no cover - normalized above
                 created = {}
@@ -365,4 +481,4 @@ async def apply_routes(
         results.append(result)
 
     applied = sum(1 for r in results if r.get("ok"))
-    return {"applied": applied, "results": results}
+    return {"applied": applied, "results": results, "data_source_id": effective_ds_id}

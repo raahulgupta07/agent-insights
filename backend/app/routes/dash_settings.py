@@ -8,6 +8,54 @@ from app.models.organization import Organization
 
 router = APIRouter()
 
+
+async def _org_llm_configured() -> bool:
+    """True only if the primary organization has at least one ENABLED LLM
+    provider whose API key decrypts to a non-empty string AND that provider has
+    at least one ENABLED model. FAIL-CLOSED: any error => False (never raises).
+
+    This route is global/unauthenticated (like ``needs_setup``), so we resolve
+    the primary/first org.
+    """
+    try:
+        from sqlalchemy import select
+        from app.dependencies import async_session_maker
+        from app.models.organization import Organization
+        from app.models.llm_provider import LLMProvider
+
+        async with async_session_maker() as _s:
+            org = (await _s.execute(
+                select(Organization).order_by(Organization.created_at.asc()).limit(1)
+            )).scalar_one_or_none()
+            if org is None:
+                return False
+
+            # LLMProvider.models is a lazy="joined" collection → the Result MUST
+            # be .unique()'d or SQLAlchemy raises (which would fail-close to False).
+            providers = (await _s.execute(
+                select(LLMProvider).where(
+                    LLMProvider.organization_id == org.id,
+                    LLMProvider.is_enabled == True,  # noqa: E712
+                )
+            )).unique().scalars().all()
+
+            for p in providers:
+                # A blank key still encrypts to a valid blob that decrypts to ""
+                # — so decrypt + check non-empty, not just "key present".
+                try:
+                    api_key, _secret = p.decrypt_credentials()
+                except Exception:
+                    continue
+                if not (isinstance(api_key, str) and api_key.strip()):
+                    continue
+                # provider.models is eager-loaded (lazy="joined").
+                if any(getattr(m, "is_enabled", False) for m in (p.models or [])):
+                    return True
+            return False
+    except Exception:
+        return False
+
+
 @router.get("/settings", tags=["settings"])
 async def get_frontend_settings():
     """Get frontend configuration settings"""
@@ -70,8 +118,11 @@ async def get_frontend_settings():
     except Exception:
         needs_setup = False
 
+    llm_configured = await _org_llm_configured()
+
     return JSONResponse({
         "needs_setup": needs_setup,
+        "llm_configured": llm_configured,
         "google_oauth": {
             "enabled": google_enabled,
             "logo": google_logo,

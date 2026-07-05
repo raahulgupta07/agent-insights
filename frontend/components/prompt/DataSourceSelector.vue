@@ -355,15 +355,17 @@ const showFlyoutAtEvent = (evt: MouseEvent) => {
     // Clamp left to viewport
     left = Math.max(12, Math.min(left, window.innerWidth - flyoutWidth - 12))
 
-    // Align bottom of flyout with bottom of dropdown panel (use CSS bottom)
-    const panelBottom = panelRect?.bottom ?? rect.bottom
-    const bottom = window.innerHeight - panelBottom
-
+    // Anchor the flyout's BOTTOM to the hovered ROW's bottom, so it sits beside
+    // the row (cursor can bridge onto it) and grows UPWARD into the empty space
+    // above — the composer picker lives at the bottom of the screen, so there's
+    // always room above and never below. Two earlier bugs this avoids: anchoring
+    // to the panel bottom detached it from the row (gap → hover dropped); anchor-
+    // ing the TOP to a low row pushed it off the bottom of the viewport. Clamp so
+    // the top never runs off-screen; content scrolls internally.
+    const bottom = Math.max(12, window.innerHeight - rect.bottom - 8)
     flyout.left = left
-    flyout.bottom = Math.max(12, bottom) // Clamp to viewport
-    // Cap height to the room available above the bottom anchor so the flyout
-    // never grows off the top of the screen — it scrolls internally instead.
-    flyout.maxHeight = Math.max(160, window.innerHeight - flyout.bottom - 12)
+    flyout.bottom = bottom
+    flyout.maxHeight = Math.max(160, window.innerHeight - bottom - 12)
     flyout.visible = true
 }
 

@@ -87,6 +87,10 @@ class ConnectionEmbedded(BaseModel):
     # Latest schema indexing run, if any. Frontend derives the "indexing"
     # effective status from this plus user_status.connection.
     indexing: Optional[Dict[str, Any]] = None
+    # Preset/catalog key ("monday", "notion", …) so the UI can render the
+    # connector's brand icon. Not a column on the Connection model — derived
+    # from config below when built straight from ORM objects.
+    connector_key: Optional[str] = None
 
     @validator('config', 'allowed_user_auth_modes', pre=True)
     def parse_json_fields(cls, v):
@@ -96,6 +100,19 @@ class ConnectionEmbedded(BaseModel):
             except (json.JSONDecodeError, TypeError):
                 return None
         return v
+
+    @validator('connector_key', always=True)
+    def derive_connector_key(cls, v, values):
+        # connector_key isn't stored on the Connection model — when this schema
+        # is built straight from ORM objects (e.g. report responses) fall back
+        # to the preset key recorded in config at connection-create time, so
+        # the UI can render the provider's brand icon.
+        if v:
+            return v
+        cfg = values.get('config')
+        if isinstance(cfg, dict):
+            return cfg.get('catalog_key') or None
+        return None
 
     class Config:
         from_attributes = True
@@ -175,6 +192,11 @@ class DataSourceSchema(DataSourceBase):
     primary_instruction: Optional[Any] = None
     primary_instruction_id: Optional[str] = None
 
+    # BI uplift: per-agent Auto-EDA profile (HYBRID_AUTO_EDA) + governed KPI
+    # defs (HYBRID_KPI_LAYER). Rendered on the agent Overview only; null until built.
+    eda_profile: Optional[Any] = None
+    kpi_defs: Optional[Any] = None
+
     @field_validator('primary_instruction', mode='before')
     @classmethod
     def _guard_primary_instruction(cls, v: Any) -> Any:
@@ -217,6 +239,12 @@ class DataSourceListItemSchema(BaseModel):
     # tools-only connector rather than an analytical data agent. Lets /agents
     # surface it distinctly. False (default) when the flag is OFF.
     is_connector: bool = False
+
+    # Backing connection type IFF it is one of the 4 real connectors
+    # (powerbi_user / ms_fabric / sharepoint / onedrive) — else None. Lets the
+    # Data Agents hub list ONLY connector-backed agents and hide file/spreadsheet
+    # uploads. None for file uploads and every non-connector source.
+    connector_kind: Optional[str] = None
 
     # True only when this private data source is visible solely because the
     # caller used the admin "show all" view (full_admin_access /

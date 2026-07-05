@@ -28,32 +28,58 @@
                                 {{ $t('data.agentsTitle') }}
                             </h1>
                             <p class="mt-2 text-[#6b6b6b] leading-relaxed max-w-2xl">{{ $t('data.agentsAutoHint') }}</p>
+                            <p class="mt-1 text-[13px] text-[#9a958c]">
+                                {{ t('data.studiosPointer') }}
+                                <component :is="NuxtLink" to="/studios" class="text-[#C2541E] font-medium hover:underline">{{ t('data.studiosPointerLink') }}</component>
+                            </p>
                         </div>
-                        <!-- Compact search — only once the user has agents to filter -->
-                        <div v-if="allAgents.length > 1" class="relative shrink-0 mt-1.5 w-40 sm:w-56">
-                            <input
-                                v-model="searchQuery"
-                                type="text"
-                                :placeholder="$t('data.searchAgents')"
-                                class="w-full ps-9 pe-3 py-2 text-[13px] bg-white border border-[#E9E0D3] rounded-lg text-[#1f2328] placeholder:text-[#9a958c] focus:outline-none focus:ring-2 focus:ring-[#C2541E]/40 focus:border-[#C2541E]"
-                            />
-                            <UIcon
-                                name="i-heroicons-magnifying-glass"
-                                class="absolute start-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9a958c]"
-                            />
+                        <!-- Right side: search (once there's >1 agent) + New agent -->
+                        <div class="flex items-center gap-2 shrink-0 mt-1.5">
+                            <!-- Compact search — only once the user has agents to filter -->
+                            <div v-if="allAgents.length > 1" class="relative w-40 sm:w-56">
+                                <input
+                                    v-model="searchQuery"
+                                    type="text"
+                                    :placeholder="$t('data.searchAgents')"
+                                    class="w-full ps-9 pe-3 py-2 text-[13px] bg-white border border-[#E9E0D3] rounded-lg text-[#1f2328] placeholder:text-[#9a958c] focus:outline-none focus:ring-2 focus:ring-[#C2541E]/40 focus:border-[#C2541E]"
+                                />
+                                <UIcon
+                                    name="i-heroicons-magnifying-glass"
+                                    class="absolute start-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9a958c]"
+                                />
+                            </div>
+                            <!-- Primary create action → shell-first "create agent → add data" flow -->
+                            <component
+                                :is="NuxtLink"
+                                to="/agents/new"
+                                class="inline-flex items-center gap-1.5 px-3.5 py-2 text-[13px] font-medium text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-lg whitespace-nowrap transition-colors"
+                            >
+                                <UIcon name="i-heroicons-plus" class="w-4 h-4" />
+                                {{ $t('data.newAgent') }}
+                            </component>
                         </div>
                     </div>
 
                     <!-- Sample databases -->
                     <div v-if="uninstalledDemos.length > 0 && allAgents.length === 0" class="mb-4">
                         <div class="text-xs text-[#9a958c] mb-2">{{ $t('data.trySample') }}</div>
+                        <!-- LLM-not-configured card (gated demo/create) -->
+                        <div v-if="!llmConfigured" class="mb-3 flex items-start gap-2.5 rounded-xl bg-[#FBF1DD] border border-[#E9D5A8] text-[#8A5A12] px-3.5 py-3 max-w-md">
+                            <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 mt-0.5 shrink-0 text-[#B4791E]" />
+                            <div class="min-w-0 flex-1">
+                                <p class="text-[12px] font-semibold leading-snug">LLM not configured</p>
+                                <p class="text-[11px] leading-snug mt-0.5 text-[#9A6A1E]">An admin must add a model key in Settings → Models before you can create agents.</p>
+                            </div>
+                            <component :is="NuxtLink" to="/settings/models" class="ml-2 shrink-0 self-center text-[11px] font-semibold text-[#8A5A12] hover:underline whitespace-nowrap">Open Settings →</component>
+                        </div>
                         <div class="flex flex-wrap gap-2">
                             <button
                                 v-for="demo in uninstalledDemos"
                                 :key="`demo-${demo.id}`"
                                 @click="installDemo(demo.id)"
-                                :disabled="installingDemo === demo.id"
+                                :disabled="installingDemo === demo.id || !llmConfigured"
                                 class="inline-flex items-center gap-2 px-3 py-1.5 text-xs text-[#6b6b6b] rounded-full border border-[#E9E0D3] bg-white hover:bg-[#F4EEE5] hover:border-[#C2541E]/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                :class="{ 'opacity-50 cursor-not-allowed': !llmConfigured }"
                             >
                                 <Spinner v-if="installingDemo === demo.id" class="h-3 w-3" />
                                 <DataSourceIcon v-else class="h-4" :type="demo.type" />
@@ -98,10 +124,24 @@
                     <p class="mt-2 text-[#6b6b6b] leading-relaxed max-w-2xl">{{ $t('data.agentsAutoHint') }}</p>
                     <div class="mt-5 py-14 text-center border border-dashed border-[#E9E0D3] rounded-2xl bg-[#FCFAF6]">
                         <div class="inline-flex w-11 h-11 mx-auto mb-3 items-center justify-center rounded-xl bg-[#F4EEE5] border border-[#E9E0D3] text-[#C2541E]">
-                            <UIcon name="i-heroicons-arrow-up" class="w-6 h-6" />
+                            <UIcon name="i-heroicons-arrow-up-tray" class="w-6 h-6" />
                         </div>
                         <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ $t('data.emptyNoAgents') }}</h3>
-                        <p class="mt-1 text-sm text-[#9a958c]">{{ $t('data.emptyNoAgentsHint') }}</p>
+                        <p class="mt-1 text-sm text-[#9a958c] max-w-md mx-auto">{{ $t('data.emptyNoAgentsHint') }}</p>
+                        <div class="mt-5">
+                            <component
+                                :is="NuxtLink"
+                                to="/agents/new"
+                                class="inline-flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-lg transition-colors"
+                            >
+                                <UIcon name="i-heroicons-plus" class="w-4 h-4" />
+                                {{ $t('data.newAgent') }}
+                            </component>
+                        </div>
+                        <p class="mt-4 text-[13px] text-[#9a958c]">
+                            {{ t('data.studiosPointer') }}
+                            <component :is="NuxtLink" to="/studios" class="text-[#C2541E] font-medium hover:underline">{{ t('data.studiosPointerLink') }}</component>
+                        </p>
                     </div>
                 </div>
 
@@ -144,9 +184,13 @@ import {
     publishStatusLabel,
     publishStatusDescription,
 } from '~/composables/useDataSourcePublishStatus'
+import { useLlmConfigured } from '~/composables/useLlmConfigured'
 import { resolveComponent } from 'vue'
 
 const NuxtLink = resolveComponent('NuxtLink')
+
+// Org has no LLM key → hard-disable create entry points. FAIL-OPEN (default true).
+const { llmConfigured } = useLlmConfigured()
 
 const { t } = useI18n()
 const { organization } = useOrganization()
@@ -179,16 +223,23 @@ const loading = computed(() => loadingConnected.value || loadingDemos.value || l
 const { data: currentUser } = useAuth()
 const myUserId = computed(() => (currentUser.value as any)?.id || null)
 
-// All agents. Two filters:
-//  1. Connector TEMPLATES (is_user_template) are admin config shells, not usable
-//     agents — they live in the hub tiles above, never as a card.
-//  2. Personal view: keep only agents YOU own (owner_user_id === me) or private
-//     agents; hide public/org demos you don't own (e.g. the Financial Market
-//     sample) so signing in to one source doesn't surface everyone else's work.
+// The hub lists ONLY connector Data Agents — the 4 Microsoft/cloud connectors
+// (Power BI, Fabric, SharePoint, OneDrive), incl. each user's per-user clones.
+// A connector agent is identified by `ds.connector_kind` (backend field = the
+// backing connection type; null for file/spreadsheet uploads). Everything else
+// — file uploads, studio-backing sources, admin templates — is intentionally
+// excluded: agents are created explicitly via "New agent" → add data, and
+// uploads live inside their agent/studio, not as standalone hub twins.
+// (connector_kind may be undefined until the backend lands — undefined ⇒ not a
+// connector ⇒ excluded.)
+const CONNECTOR_KINDS = new Set([
+    'powerbi_user', 'powerbi',
+    'ms_fabric', 'ms_fabric_user',
+    'sharepoint', 'onedrive',
+])
 const allAgents = computed(() => (connected_ds.value || []).filter((ds: any) => {
-    if (ds.is_user_template) return false
-    if (!ds.is_public) return true                    // your private agents + clones
-    return !!myUserId.value && ds.owner_user_id === myUserId.value
+    if (ds.is_user_template) return false             // admin config shell, not an agent
+    return CONNECTOR_KINDS.has(ds.connector_kind)     // connectors only; uploads (null) excluded
 }))
 
 // Uninstalled demo data sources
@@ -457,6 +508,7 @@ async function getDemoDataSources() {
 }
 
 async function installDemo(demoId: string) {
+    if (!llmConfigured.value) return
     installingDemo.value = demoId
     try {
         const response = await useMyFetch(`/data_sources/demos/${demoId}`, { method: 'POST' })

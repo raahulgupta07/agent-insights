@@ -1,43 +1,16 @@
 <template>
-  <div class="flex flex-col h-full bg-[#FBFAF6]">
-    <!-- Scrollable empty-state area -->
-    <div class="flex-1 overflow-y-auto">
-      <div class="flex flex-col items-center text-center min-h-[58vh] justify-center px-4">
-        <h1
-          class="text-lg font-semibold"
-          style="font-family: ui-serif, Georgia, 'Times New Roman', serif"
-        >{{ emptyTitle }}</h1>
-
-        <!-- Suggested questions from the selected sources (mirrors landing page) -->
-        <div v-if="selectedDataSources" class="mt-5">
-          <DataSourceQuestionsHome
-            :data_sources="selectedDataSources"
-            @update-content="(c) => (textareaContent = c)"
-          />
-        </div>
-      </div>
-    </div>
-
-    <!-- Composer (lazy-create: no report_id → PromptBoxV2.createReport() handles POST + redirect) -->
-    <div class="shrink-0 bg-[#FBFAF6] pt-2 pb-6">
-      <div class="mx-auto w-full px-4 max-w-2xl">
-        <PromptBoxV2
-          :initialSelectedDataSources="selectedDataSources"
-          :initialSelectedStudioId="selectedStudioId"
-          :initialMode="'chat'"
-          :textareaContent="textareaContent"
-          @update:modelValue="handlePromptUpdate"
-        />
-      </div>
-      <p class="text-center text-[11px] text-gray-400 mt-2">City Agent can make mistakes - double-check results.</p>
-    </div>
+  <!-- Thin redirect: /reports/new opens (or reuses) a real draft report and lands
+       on /reports/{id} so the FULL chat shell renders — every panel tab, Share,
+       collapse/expand, drag-resize — all real, before a single message is sent.
+       A brief centered spinner shows while we resolve the draft. -->
+  <div class="flex items-center justify-center h-full bg-[#FBFAF6]">
+    <Spinner class="w-5 h-5 text-gray-400" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-import PromptBoxV2 from '~/components/prompt/PromptBoxV2.vue';
-import DataSourceQuestionsHome from '~/components/DataSourceQuestionsHome.vue';
+import { onMounted } from 'vue';
+import Spinner from '@/components/Spinner.vue';
 
 definePageMeta({
   layout: 'default',
@@ -45,22 +18,59 @@ definePageMeta({
   permissions: ['view_reports'],
 });
 
-const { t } = useI18n();
-
-// Selected agents from the AgentSelector are the data sources (mirror pages/index.vue)
 const { selectedAgentObjects, selectedStudioId } = useAgent();
-const selectedDataSources = computed(() => selectedAgentObjects.value);
 
-// Heading: prefer the i18n key, fall back to a literal if it doesn't resolve
-const emptyTitle = computed(() => {
-  const key = 'reports.emptyTitle';
-  const resolved = t(key);
-  return resolved === key ? 'Ask a question to get started.' : resolved;
+const SCRATCH_KEY = 'scratchReportId';
+
+// A scratch draft is reusable only if it still exists AND has never been chatted
+// in (0 completions). Once a user sends a message it "graduates" to a real report
+// and the next New-report click mints a fresh scratch — so at most one empty
+// "untitled report" ever sits in the sidebar.
+async function isReusable(id: string): Promise<boolean> {
+  try {
+    const rep = await useMyFetch(`/reports/${id}`);
+    if ((rep as any)?.error?.value || !(rep as any)?.data?.value) return false;
+    const comps = await useMyFetch(`/reports/${id}/completions`);
+    const list = (comps as any)?.data?.value;
+    const arr = Array.isArray(list) ? list : (list?.completions || list?.items || []);
+    return Array.isArray(arr) && arr.length === 0;
+  } catch {
+    return false;
+  }
+}
+
+async function createDraft(): Promise<string | null> {
+  try {
+    const resp = await useMyFetch('/reports', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: 'untitled report',
+        data_sources: (selectedAgentObjects.value || []).map((ds: any) => ds.id).filter(Boolean),
+        studio_id: selectedStudioId.value || null,
+      }),
+    });
+    const data = (resp as any)?.data?.value as any;
+    return data?.id || null;
+  } catch {
+    return null;
+  }
+}
+
+onMounted(async () => {
+  let id: string | null = null;
+  try { id = localStorage.getItem(SCRATCH_KEY); } catch { /* ignore */ }
+
+  if (!id || !(await isReusable(id))) {
+    id = await createDraft();
+    if (id) { try { localStorage.setItem(SCRATCH_KEY, id); } catch { /* ignore */ } }
+  }
+
+  if (id) {
+    // replace so Back doesn't bounce through /reports/new again.
+    await navigateTo(`/reports/${id}`, { replace: true });
+  } else {
+    // Fallback: land on Home if the draft could not be created.
+    await navigateTo('/', { replace: true });
+  }
 });
-
-// Bound to the composer textarea; chips just prefill it
-const textareaContent = ref('');
-const handlePromptUpdate = (value: string) => {
-  textareaContent.value = value;
-};
 </script>

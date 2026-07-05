@@ -86,6 +86,7 @@ async def _load_report(db: AsyncSession, report_id: str, organization) -> Report
 async def _generate_artifact(
     *, mode: str, report_id: str, current_user, organization, db: AsyncSession,
     steer_prompt: str = "", depth: str = "", size: str = "",
+    model_id: str = "", language: str = "", output_format: str = "",
 ) -> dict:
     """Shared builder for both modes. Runs the chat create_artifact pipeline over
     the report's existing visualizations and returns the result dict. Deletes its
@@ -111,8 +112,18 @@ async def _generate_artifact(
             detail="This report has no charts yet — ask the agent to create some first.",
         )
 
-    # Org default LLM (same model the planner uses). Codegen needs it.
-    model = await organization.get_default_llm_model(db)
+    # Model: honor an explicit pick (customize dialog); else org default.
+    # 'auto'/'moa'/'' -> keep the org default for this offline build pipeline.
+    model = None
+    if model_id and model_id not in ("", "auto", "moa", "default"):
+        try:
+            from app.services.llm_service import LLMService
+            model = await LLMService().get_model_by_id(
+                db, organization, current_user, model_id)
+        except Exception:  # noqa: BLE001 - fall back to org default
+            model = None
+    if model is None:
+        model = await organization.get_default_llm_model(db)
     if model is None:
         raise HTTPException(
             status_code=400,
@@ -167,6 +178,11 @@ async def _generate_artifact(
             steer_bits.append("SIZE: full — a complete multi-section presentation with detail slides.")
         else:
             steer_bits.append("SIZE: full — a complete multi-section dashboard.")
+    if (output_format or "").strip():
+        steer_bits.append(f"OUTPUT FORMAT: {output_format.strip()}")
+    if (language or "").strip() and language.strip().lower() not in ("english", "en"):
+        steer_bits.append(
+            f"LANGUAGE: write ALL titles, labels, and prose in {language.strip()}.")
     full_prompt = base_prompt if not steer_bits else (base_prompt + "\n\n" + "\n".join(steer_bits))
     tool_input = {
         "mode": mode,
@@ -243,33 +259,55 @@ async def _generate_artifact(
     }
 
 
+from pydantic import BaseModel as _BaseModel
+
+
+class OutputOptions(_BaseModel):
+    """Optional customize-dialog params for dashboard/slides generation.
+    Empty body = today's behavior byte-for-byte."""
+    describe: str = ""       # free-text focus (steer_prompt)
+    format: str = ""         # variant preset (KPI-led / exec-deck / ...)
+    length: str = ""         # compact | full  (maps to size)
+    depth: str = ""          # exec | analyst
+    model_id: str = ""       # explicit model pick; ''/'auto'/'moa' -> org default
+    language: str = ""       # output language
+
+
 @router.post("/reports/{report_id}/slides/generate")
 async def generate_report_slides(
     report_id: str,
+    opts: Optional[OutputOptions] = None,
     current_user: User = Depends(current_user),
     organization: Organization = Depends(get_current_organization),
     db: AsyncSession = Depends(get_async_db),
 ):
     """Build a real slides artifact (mode='slides') from this report's charts."""
     _ensure_enabled()
+    o = opts or OutputOptions()
     return await _generate_artifact(
         mode="slides", report_id=report_id,
         current_user=current_user, organization=organization, db=db,
+        steer_prompt=o.describe, depth=o.depth, size=o.length,
+        model_id=o.model_id, language=o.language, output_format=o.format,
     )
 
 
 @router.post("/reports/{report_id}/dashboard/generate")
 async def generate_report_dashboard(
     report_id: str,
+    opts: Optional[OutputOptions] = None,
     current_user: User = Depends(current_user),
     organization: Organization = Depends(get_current_organization),
     db: AsyncSession = Depends(get_async_db),
 ):
     """Build a real dashboard artifact (mode='page') from this report's charts."""
     _ensure_enabled()
+    o = opts or OutputOptions()
     return await _generate_artifact(
         mode="page", report_id=report_id,
         current_user=current_user, organization=organization, db=db,
+        steer_prompt=o.describe, depth=o.depth, size=o.length,
+        model_id=o.model_id, language=o.language, output_format=o.format,
     )
 
 

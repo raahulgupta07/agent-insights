@@ -65,3 +65,7 @@ scratchpad/
 
 # full-project backups (contain .env secrets — never commit)
 backups/full-project-*/
+
+# hot-cp / editor backups
+*.bak
+*.bak.*

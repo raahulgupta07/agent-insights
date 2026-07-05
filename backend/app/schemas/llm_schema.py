@@ -19,6 +19,12 @@ class LLMProviderSchema(LLMProviderBase):
     additional_config: Optional[Dict[str, Any]] = None
     models: list[LLMModelSchema] = []
 
+    # Old DB rows can have NULL bool columns → coerce None→False so the
+    # response schema never 500s with ResponseValidationError.
+    @validator('is_preset', 'is_enabled', pre=True, allow_reuse=True)
+    def _coerce_bool_none(cls, value):
+        return False if value is None else value
+
     @validator('config', pre=True)
     def parse_config(cls, value):
         if isinstance(value, str):
@@ -185,12 +191,24 @@ class LLMModelBase(BaseModel):
     output_cost_per_million_tokens_usd: Optional[float] = None
     config: Optional[Dict[str, Any]] = None
 
+    # Old DB rows can have NULL bool columns → coerce None→False so a stored
+    # NULL never triggers a ResponseValidationError (500) on the LLM routes.
+    @validator('is_default', 'is_small_default', 'supports_vision', pre=True, allow_reuse=True)
+    def _coerce_bool_none(cls, value):
+        return False if value is None else value
+
 class LLMModelSchema(LLMModelBase):
     id: Optional[str] = None  # Optional for new models
     provider_id: Optional[str] = None  # Optional for new models
     is_preset: bool = False
     is_enabled: bool = True
     is_custom: bool = False
+
+    # NULL is_custom (and siblings) in legacy rows 500'd GET /llm/providers,
+    # GET /llm/models and POST /llm/providers → coerce None→False.
+    @validator('is_preset', 'is_enabled', 'is_custom', pre=True, allow_reuse=True)
+    def _coerce_model_bool_none(cls, value):
+        return False if value is None else value
 
     class Config:
         from_attributes = True

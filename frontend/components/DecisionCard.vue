@@ -125,6 +125,36 @@
       </div>
 
       <div v-if="!collapsed">
+        <!-- BI-uplift Phase 2 (HYBRID_INSIGHT_ENGINE): Context → Conflict →
+             Resolution narrative + driver enumeration. Additive keys; renders
+             nothing when the backend didn't attach them. -->
+        <div v-if="sense?.context || sense?.conflict || sense?.resolution || sense?.drivers?.length" class="px-4 pt-1 pb-2">
+          <div v-if="sense?.context || sense?.conflict || sense?.resolution" class="rounded-lg border border-[#E7C9B7] overflow-hidden">
+            <div v-if="sense?.context" class="px-3 py-2 border-b border-[#F0E3D6]">
+              <div class="text-[9px] font-bold uppercase tracking-wide text-[#2C53A8] mb-0.5">Context</div>
+              <div class="text-[12.5px] text-[#3b4250] leading-snug">{{ sense.context }}</div>
+            </div>
+            <div v-if="sense?.conflict" class="px-3 py-2 border-b border-[#F0E3D6]">
+              <div class="text-[9px] font-bold uppercase tracking-wide text-[#B83434] mb-0.5">Conflict</div>
+              <div class="text-[12.5px] text-[#3b4250] leading-snug">{{ sense.conflict }}</div>
+            </div>
+            <div v-if="sense?.resolution" class="px-3 py-2">
+              <div class="text-[9px] font-bold uppercase tracking-wide text-[#157A43] mb-0.5">Resolution</div>
+              <div class="text-[12.5px] text-[#3b4250] leading-snug">{{ sense.resolution }}</div>
+            </div>
+          </div>
+          <div v-if="sense?.drivers?.length" class="mt-2">
+            <div class="text-[9px] font-bold uppercase tracking-wide text-gray-400 mb-1">Drivers checked</div>
+            <div class="space-y-1">
+              <div v-for="(d, di) in sense.drivers" :key="di" class="flex items-center gap-2 text-[12px]">
+                <span class="w-2 h-2 rounded-full flex-none" :class="d.verdict === 'cause' ? 'bg-[#B83434]' : d.verdict === 'ruled_out' ? 'bg-gray-300' : 'bg-amber-400'"></span>
+                <span class="text-[#3b4250]">{{ d.name }}</span>
+                <span class="ms-auto text-[10px] font-semibold" :class="d.verdict === 'cause' ? 'text-[#B83434]' : d.verdict === 'ruled_out' ? 'text-gray-400' : 'text-amber-600'">{{ d.verdict === 'cause' ? 'CAUSE' : d.verdict === 'ruled_out' ? 'ruled out' : 'no data' }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- FINDINGS -->
         <div v-if="findings.length" class="px-4 pb-1 space-y-3">
           <div

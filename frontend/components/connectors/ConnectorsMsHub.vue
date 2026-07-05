@@ -7,6 +7,16 @@
             <div class="h-px flex-1 bg-[#E9E0D3]"></div>
         </div>
 
+        <!-- No LLM key → connecting a source can't create a usable agent. Card + gated actions below. -->
+        <div v-if="!llmConfigured" class="mb-4 flex items-start gap-2.5 rounded-xl bg-[#FBF1DD] border border-[#E9D5A8] text-[#8A5A12] px-3.5 py-3">
+            <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 mt-0.5 shrink-0 text-[#B4791E]" />
+            <div class="min-w-0 flex-1">
+                <p class="text-[12px] font-semibold leading-snug">LLM not configured</p>
+                <p class="text-[11px] leading-snug mt-0.5 text-[#9A6A1E]">An admin must add a model key in Settings → Models before you can create agents.</p>
+            </div>
+            <NuxtLink to="/settings/models" class="ml-2 shrink-0 self-center text-[11px] font-semibold text-[#8A5A12] hover:underline whitespace-nowrap">Open Settings →</NuxtLink>
+        </div>
+
         <!-- Connector tiles. Members see: logo · name · status · one action.
              Super-admins ALSO get a hover gear + config chip + "Set up".
              Config is gated on manage_connections — members' DOM never has it. -->
@@ -55,7 +65,7 @@
                     <div class="flex gap-1.5 items-center flex-wrap">
                         <NuxtLink :to="`/agents/${cloneFor(c.key).id}`" class="inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#3f9e6a] text-white hover:bg-[#348659]" :title="$t('connectors.open')">✓ {{ $t('connectors.connected') }}</NuxtLink>
                         <button @click="startConnect(c.key)" class="text-xs font-medium text-[#9a958c] hover:text-[#C2541E]">{{ $t('connectors.resync') }}</button>
-                        <button @click="startConnect(c.key)" class="text-xs font-medium text-[#9a958c] hover:text-[#C2541E]" :title="'Sign in with a different Microsoft account to add a separate agent'">＋ Another account</button>
+                        <button @click="startConnect(c.key)" :disabled="!llmConfigured" class="text-xs font-medium text-[#9a958c] hover:text-[#C2541E]" :class="{ 'opacity-50 cursor-not-allowed': !llmConfigured }" :title="'Sign in with a different Microsoft account to add a separate agent'">＋ Another account</button>
                     </div>
                 </template>
 
@@ -64,7 +74,7 @@
                     <div class="text-[11px] flex items-center gap-1.5 text-[#9a958c] mb-3">
                         <span class="w-1.5 h-1.5 rounded-full bg-[#3f9e6a]"></span>Ready to connect
                     </div>
-                    <button @click="startConnect(c.key)" class="w-full text-xs font-semibold px-3 py-2 rounded-lg bg-[#C2541E] text-white hover:bg-[#A8330F] transition-colors">{{ $t('connectors.signIn') }} →</button>
+                    <button @click="startConnect(c.key)" :disabled="!llmConfigured" class="w-full text-xs font-semibold px-3 py-2 rounded-lg bg-[#C2541E] text-white hover:bg-[#A8330F] transition-colors" :class="{ 'opacity-50 cursor-not-allowed': !llmConfigured }">{{ $t('connectors.signIn') }} →</button>
                 </template>
 
                 <!-- LIVE but NOT CONFIGURED -->
@@ -73,7 +83,7 @@
                         <span class="w-1.5 h-1.5 rounded-full bg-[#D8CDBB]"></span>{{ $t('connectors.comingSoon') }}
                     </div>
                     <!-- admin sees actionable "Set up"; member sees nothing -->
-                    <button v-if="canManage" @click="openAdminConfig(c.key)" class="w-full text-xs font-semibold px-3 py-2 rounded-lg bg-[#C2541E] text-white hover:bg-[#A8330F] transition-colors">Set up →</button>
+                    <button v-if="canManage" @click="openAdminConfig(c.key)" :disabled="!llmConfigured" class="w-full text-xs font-semibold px-3 py-2 rounded-lg bg-[#C2541E] text-white hover:bg-[#A8330F] transition-colors" :class="{ 'opacity-50 cursor-not-allowed': !llmConfigured }">Set up →</button>
                     <span v-else class="inline-block text-xs font-medium text-[#B9AE9C]">{{ $t('connectors.signIn') }}</span>
                 </template>
 
@@ -167,6 +177,10 @@
 import Spinner from '~/components/Spinner.vue'
 import ConnectorsRegisterModal from '~/components/connectors/ConnectorsRegisterModal.vue'
 import { useCan } from '~/composables/usePermissions'
+import { useLlmConfigured } from '~/composables/useLlmConfigured'
+
+// Org has no LLM key → connecting a source can't yield a usable agent. FAIL-OPEN (default true).
+const { llmConfigured } = useLlmConfigured()
 
 const props = defineProps<{ agents: any[] }>()
 const emit = defineEmits<{ (e: 'refresh'): void }>()
@@ -267,6 +281,7 @@ const editingKey = ref('fabric')
 const editingConn = computed(() => catalog.value.find(c => c.key === editingKey.value) || baseCatalog[0])
 
 function openAdminConfig(key: string) {
+    if (!llmConfigured.value) return
     editingKey.value = key
     const tpl = templateFor(key)
     cfg.server_hostname = tpl?.config?.server_hostname || ''
@@ -343,6 +358,7 @@ let cancelled = false
 // Tile "Sign in" / "Resync" → open the ADAPTIVE modal (email+password first; it
 // falls back to device-code automatically if the account needs MFA).
 function startConnect(key: string) {
+    if (!llmConfigured.value) return
     const tpl = templateFor(key)
     if (!tpl) return
     const c = catalog.value.find(cc => cc.key === key)

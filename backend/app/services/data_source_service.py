@@ -928,6 +928,9 @@ class DataSourceService:
             user_status=connections_list[0].user_status if connections_list else None,
             primary_instruction_id=data_source.primary_instruction_id,
             primary_instruction=primary_instruction_data,
+            # BI uplift: per-agent Auto-EDA (Phase 6) + governed KPIs (Phase 3).
+            eda_profile=getattr(data_source, "eda_profile", None),
+            kpi_defs=getattr(data_source, "kpi_defs", None),
         )
 
         return schema
@@ -1047,6 +1050,18 @@ class DataSourceService:
                     is_tools_only_type(getattr(c, "type", None)) for c in _conns
                 )
 
+            # connector_kind: backing connection type IFF it's one of the 4 real
+            # connectors → lets the hub list ONLY connector-backed agents (file/
+            # spreadsheet uploads resolve to None). Fail-soft: any error → None.
+            connector_kind = None
+            try:
+                _CONNECTOR_KINDS = {"powerbi_user", "ms_fabric", "sharepoint", "onedrive"}
+                _ct = conn.type if conn else None
+                if _ct in _CONNECTOR_KINDS:
+                    connector_kind = _ct
+            except Exception:
+                connector_kind = None
+
             s = DataSourceListItemSchema(
                 id=str(d.id),
                 name=d.name,
@@ -1062,6 +1077,7 @@ class DataSourceService:
                 user_status=connections_list[0].user_status if connections_list else None,
                 template_source_id=getattr(d, "template_source_id", None),
                 is_connector=is_connector,
+                connector_kind=connector_kind,
                 # Flag entries surfaced only by the admin "show all" view:
                 # private and not an explicit membership of the caller.
                 admin_only=(
@@ -1307,6 +1323,59 @@ class DataSourceService:
         # Capture details before deletion for audit
         data_source_name = data_source.name
 
+        # 0) Collect the physical per-org staging tables + the studios that pin this
+        #    agent BEFORE the child sweep clears their links, so UI delete leaves no
+        #    disk blobs or empty studio shells behind (parity with a full org wipe).
+        from sqlalchemy import text as _text0
+        import re as _re0
+        _ident = _re0.compile(r'^[A-Za-z0-9_]+$')
+        _staging_targets: list = []   # (schema, physical_table)
+        _studio_ids: list = []
+        try:
+            from app.services.ingest.tenant_schema import org_schema as _org_schema
+            _org_stg = _org_schema(str(organization.id))
+            import json as _json0
+            _rows = (await db.execute(_text0(
+                "SELECT ct.name, ct.metadata_json FROM connection_tables ct "
+                "JOIN datasource_tables dt ON dt.connection_table_id = ct.id "
+                "WHERE dt.datasource_id = :id"
+            ), {"id": data_source_id})).all()
+            for _nm, _meta in _rows:
+                _sch, _tbl = None, None
+                if isinstance(_meta, str):
+                    try:
+                        _meta = _json0.loads(_meta)
+                    except Exception:
+                        _meta = None
+                if isinstance(_meta, dict):
+                    _sch = _meta.get("schema") or None
+                if _nm and "." in _nm:
+                    _s2, _t2 = _nm.split(".", 1)
+                    _sch = _sch or (_s2 or None)
+                    _tbl = _t2 or None
+                elif _nm:
+                    _tbl = _nm
+                if not _tbl:
+                    continue
+                _sch = _sch or _org_stg
+                # Only ever drop this org's OWN staging schema, valid identifiers only.
+                if not (str(_sch).startswith("staging_") and _ident.match(str(_sch)) and _ident.match(str(_tbl))):
+                    continue
+                # Never drop a physical table another live data source still references.
+                _shared = (await db.execute(_text0(
+                    "SELECT COUNT(*) FROM datasource_tables dt2 "
+                    "JOIN connection_tables ct2 ON ct2.id = dt2.connection_table_id "
+                    "WHERE dt2.datasource_id <> :id AND ct2.name = :nm"
+                ), {"id": data_source_id, "nm": _nm})).scalar()
+                if _shared:
+                    continue
+                _staging_targets.append((str(_sch), str(_tbl)))
+            _studio_ids = [str(r[0]) for r in (await db.execute(_text0(
+                "SELECT DISTINCT studio_id FROM studio_data_sources WHERE agent_id = :id"
+            ), {"id": data_source_id})).all()]
+        except Exception:
+            _staging_targets, _studio_ids = [], []
+
         # 1) Delete per-user overlay columns and tables (they hard-FK the data source)
         #    Delete columns via subquery of overlay table ids, then overlay tables.
         overlay_ids_subq = select(UserOverlayTable.id).where(UserOverlayTable.data_source_id == data_source_id)
@@ -1496,6 +1565,47 @@ class DataSourceService:
                     await db.rollback()
                 except Exception:
                     pass
+
+        # Soft-delete now-empty studio shells (the agent's wrapper) so the /studios
+        # list never shows a source-less studio. Multi-source studios stay intact.
+        for _sid in _studio_ids:
+            try:
+                _remaining = (await db.execute(_text0(
+                    "SELECT COUNT(*) FROM studio_data_sources WHERE studio_id = :sid"
+                ), {"sid": _sid})).scalar()
+                if not _remaining:
+                    await db.execute(_text0(
+                        "UPDATE studios SET deleted_at = now() "
+                        "WHERE id = :sid AND deleted_at IS NULL"
+                    ), {"sid": _sid})
+                    await db.commit()
+            except Exception:
+                try:
+                    await db.rollback()
+                except Exception:
+                    pass
+
+        # Drop the physical per-org staging tables (disk cleanup). Runs on the raw
+        # managed engine in a worker thread (sync) so it never blocks the event loop
+        # or fires IO in the async greenlet. Fail-soft: any undropped table is inert.
+        if _staging_targets:
+            def _drop_physical(targets):
+                try:
+                    from app.services.ingest.tenant_schema import loader_write_engine
+                    from sqlalchemy import text as _t
+                    eng = loader_write_engine()
+                except Exception:
+                    return
+                for _sch, _tbl in targets:
+                    try:
+                        with eng.begin() as _c:
+                            _c.execute(_t(f'DROP TABLE IF EXISTS "{_sch}"."{_tbl}" CASCADE'))
+                    except Exception:
+                        pass
+            try:
+                await asyncio.to_thread(_drop_physical, list(_staging_targets))
+            except Exception:
+                pass
 
         # Audit log
         try:

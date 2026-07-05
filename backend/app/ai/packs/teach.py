@@ -75,8 +75,16 @@ JSON schema:
 Rules: required_inputs keys are LOGICAL names (snake_case), not the user's exact
 column names — list those as synonyms. Mark an input optional:true if the method
 still works without it. Keep method_text data-agnostic (refer to the logical
-inputs, never invent column names). Emit 1-8 spans. If the input is clearly a
-single method, emit ONE SKILL span.
+inputs, never invent column names).
+
+EXHAUSTIVE CAPTURE (critical): extract EVERY distinct rule, definition, metric
+convention, filter, and Q&A fact in the input as its OWN span. Do NOT summarize,
+merge, generalize, or drop any of them — one span per distinct rule/definition,
+preserving the original wording in "content" verbatim. If the document defines a
+term (e.g. "new user"), states how a metric is computed, or gives a
+channel/contribution/segment rule, each is a SEPARATE DATA_RULE span. It is
+better to emit too many spans than to omit one. There is no upper limit on the
+number of spans. If the input is clearly a single method, emit ONE SKILL span.
 {COLUMN_HINT}
 INPUT:
 <<<
@@ -94,7 +102,7 @@ AVAILABLE COLUMNS: {COLS}
 
 
 def _build_classify_prompt(text: str, column_names: Optional[List[str]] = None) -> str:
-    snippet = (text or "")[:12000]
+    snippet = (text or "")[:60000]
     if column_names:
         hint = _COLUMN_HINT_TMPL.replace("{COLS}", ", ".join(str(c) for c in column_names[:80]))
     else:

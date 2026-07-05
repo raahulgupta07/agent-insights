@@ -56,6 +56,15 @@ class DataSource(BaseSchema):
     conversation_starters = Column(JSON, nullable=True)
     use_llm_sync = Column(Boolean, nullable=False, default=False)
 
+    # BI uplift (mig biuplift1) — additive, per-agent, flag-gated & inert until on.
+    # eda_profile: Auto-EDA result (computed profile + narrated insights +
+    #   suggested questions + data-prep summary). One per agent, overwritten on
+    #   retrain. HYBRID_AUTO_EDA / HYBRID_DATA_PREP_GATE. Rendered on Overview only.
+    # kpi_defs: per-agent governed KPI definitions (outcome ratios, leading/lagging
+    #   chains, target/owner/action). HYBRID_KPI_LAYER.
+    eda_profile = Column(JSON, nullable=True)
+    kpi_defs = Column(JSON, nullable=True)
+
     # Primary instruction: the canonical overview instruction for this agent
     primary_instruction_id = Column(String(36), ForeignKey('instructions.id', ondelete='SET NULL'), nullable=True)
     primary_instruction = relationship(

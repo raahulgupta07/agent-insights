@@ -147,6 +147,10 @@ class ToolRegistry:
         SKILL_TOOLS = {"load_skill", "run_skill_file", "read_skill_file"}
         SUBAGENT_TOOLS = {"delegate_subtask"}
         FORECAST_TOOLS = {"forecast_df"}
+        # LLM-as-predictor tools (HYBRID_ADV_METHODS, BI-uplift P7): zero-shot
+        # forecast / classify / discover by reasoning over real numbers (no ML
+        # engine). Hidden from the planner when the flag is OFF.
+        ADV_METHOD_TOOLS = {"forecast_llm", "classify_llm", "discover_llm"}
         # Lean tool catalog (HYBRID_LEAN_TOOLS): when ON, hide the audited
         # overlap/duplicate tools (docs/TOOL_AUDIT.md) so the planner isn't split
         # across near-identical tools ("less is more"). These are all default-chat
@@ -167,18 +171,21 @@ class ToolRegistry:
             subagents_on = bool(flags.SUBAGENTS)
             forecast_on = bool(flags.FORECAST)
             lean_on = bool(flags.LEAN_TOOLS)
+            adv_on = bool(flags.ADV_METHODS)
         except Exception:
             # Fail-open: if flags can't be read, leave the catalog unchanged.
             skills_on = True
             subagents_on = True
             forecast_on = True
             lean_on = False
+            adv_on = False
         catalog = [
             t for t in catalog
             if not (t["name"] in SKILL_TOOLS and not skills_on)
             and not (t["name"] in SUBAGENT_TOOLS and not subagents_on)
             and not (t["name"] in FORECAST_TOOLS and not forecast_on)
             and not (t["name"] in LEAN_RETIRE_TOOLS and lean_on)
+            and not (t["name"] in ADV_METHOD_TOOLS and not adv_on)
         ]
 
         return catalog

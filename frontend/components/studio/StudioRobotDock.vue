@@ -1,12 +1,14 @@
 <template>
-    <!-- Floating robot mascot pinned bottom-right of the studio page. Click = expand a
-         BIG mac-style CLI terminal streaming the studio's live activity one stage at a time
-         (model, per-file counts, confidence, train stages, tokens, spend, elapsed, readiness).
-         Collapsed = just the robot button (pulses when active). Self-contained toggle. -->
+    <!-- Floating robot mascot pinned bottom-right of the studio page. Click = expand a calm,
+         Claude-Code-style terminal with TWO TABS: Terminal (live CLI log, newest at bottom) and
+         Stages (checklist of train stages). Header (Working… · model) + footer (tokens/spend/
+         elapsed/readiness) stay visible in both tabs. Collapsed = just the robot button.
+         All live state comes in via props; this component only owns open/tab/auto-scroll. -->
     <div class="srd-dock">
         <!-- expanded CLI panel -->
         <transition name="srd-pop">
             <div v-if="open" class="srd-panel" role="dialog" aria-label="Studio activity terminal" @keydown.esc="close">
+                <!-- header: Working… · model <X> -->
                 <div class="srd-head">
                     <svg class="srd-bot-sm" viewBox="0 0 64 52" fill="none" aria-hidden="true">
                         <rect x="6" y="21" width="8" height="8" rx="2.5" fill="#C2683F" />
@@ -26,7 +28,20 @@
                     <button class="srd-x" @click="close" aria-label="Close">✕</button>
                 </div>
 
-                <div class="srd-term">
+                <!-- tab bar -->
+                <div class="srd-tabs" role="tablist" aria-label="Activity views">
+                    <button
+                        class="srd-tab" :class="{ on: tab === 'terminal' }"
+                        role="tab" :aria-selected="tab === 'terminal'" type="button"
+                        @click="tab = 'terminal'">Terminal</button>
+                    <button
+                        class="srd-tab" :class="{ on: tab === 'stages' }"
+                        role="tab" :aria-selected="tab === 'stages'" type="button"
+                        @click="tab = 'stages'">Stages<span v-if="stages.length" class="srd-tab-n">{{ stages.length }}</span></button>
+                </div>
+
+                <!-- TERMINAL tab: live CLI log -->
+                <div v-show="tab === 'terminal'" class="srd-term" role="tabpanel" aria-label="Terminal">
                     <div class="srd-term-bar">
                         <span class="d" style="background:#ff5f57"></span>
                         <span class="d" style="background:#febc2e"></span>
@@ -35,34 +50,27 @@
                         <span class="srd-clock">{{ elapsed || '0:00' }}</span>
                     </div>
                     <div ref="scrollEl" class="srd-term-body">
-                        <div v-if="!lines.length" class="srd-boot"><span class="srd-spin">◍</span> waiting for activity…</div>
+                        <div v-if="!lines.length" class="srd-boot">waiting for activity…</div>
                         <div v-for="(ln, i) in lines" :key="ln.key != null ? ln.key : i" class="srd-ln">
+                            <span class="srd-time">{{ lineTime(ln, i) }}</span>
                             <span class="srd-stage">{{ ln.stage }}</span>
-                            <span class="srd-mk" :class="'srd-mk-' + ln.level">
-                                <span v-if="ln.level === 'active'" class="srd-spin">◍</span>
-                                <template v-else>{{ glyph(ln.level) }}</template>
-                            </span>
-                            <span class="srd-msg">{{ ln.msg }}</span>
+                            <span class="srd-msg" :class="'srd-lvl-' + ln.level">{{ ln.msg }}</span>
                             <span v-if="ln.meta" class="srd-meta">{{ ln.meta }}</span>
                         </div>
                     </div>
                 </div>
 
-                <!-- STAGES strip: one-by-one finishing feel -->
-                <div v-if="stages && stages.length" class="srd-stages">
+                <!-- STAGES tab: checklist -->
+                <div v-show="tab === 'stages'" class="srd-stages-panel" role="tabpanel" aria-label="Stages">
+                    <div v-if="!stages.length" class="srd-boot srd-stages-empty">no stages yet…</div>
                     <div v-for="st in stages" :key="st.key" class="srd-st" :class="'srd-st-' + st.status">
-                        <span class="srd-st-mk">
-                            <span v-if="st.status === 'active'" class="srd-spin">◍</span>
-                            <template v-else>{{ stageGlyph(st.status) }}</template>
-                        </span>
+                        <span class="srd-st-mk">{{ stageGlyph(st.status) }}</span>
                         <span class="srd-st-lbl">{{ st.label }}</span>
-                        <span v-if="st.status === 'active' && st.pct != null" class="srd-st-bar">
-                            <span class="srd-st-fill" :style="{ width: clampPct(st.pct) + '%' }"></span>
-                        </span>
-                        <span v-if="st.status === 'active' && st.pct != null" class="srd-st-pct">{{ clampPct(st.pct) }}%</span>
+                        <span v-if="st.pct != null" class="srd-st-pct">{{ clampPct(st.pct) }}%</span>
                     </div>
                 </div>
 
+                <!-- footer: tokens / spend / elapsed / readiness -->
                 <div class="srd-foot">
                     <div class="srd-foot-row">
                         <span class="srd-stat">tokens <b>{{ fmt(tokensIn) }}</b> in · <b>{{ fmt(tokensOut) }}</b> out</span>
@@ -103,8 +111,9 @@
 
 <script lang="ts" setup>
 // Studio activity terminal. The parent studio page feeds all live state via props;
-// this component only owns the open/closed toggle + auto-scroll.
-interface StreamLine { key?: string | number; stage: string; level: 'info' | 'done' | 'active' | 'warn' | 'pending'; msg: string; meta?: string }
+// this component only owns the open/closed toggle, the active tab, per-line timestamps
+// (captured once when a line first appears), and auto-scroll.
+interface StreamLine { key?: string | number; stage: string; level: 'info' | 'done' | 'active' | 'warn' | 'pending'; msg: string; meta?: string; time?: string }
 interface StageItem { key: string; label: string; status: 'done' | 'active' | 'pending' | 'error'; pct?: number }
 
 const props = withDefaults(defineProps<{
@@ -126,6 +135,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{ (e: 'close'): void }>()
 
 const open = ref(false)
+const tab = ref<'terminal' | 'stages'>('terminal')
 const scrollEl = ref<HTMLElement | null>(null)
 
 const lines = computed(() => props.lines || [])
@@ -135,11 +145,19 @@ const readyPct = computed(() => clampPct(props.readiness || 0))
 
 function close() { open.value = false; emit('close') }
 
-function glyph(level: string) {
-    return ({ done: '✓', warn: '⚠', pending: '·', info: '•' } as Record<string, string>)[level] || '•'
+// Per-line timestamps: prefer a time the entry already carries; otherwise stamp it once when
+// the line first appears (captured in the watcher below → stable, never re-derived on re-render).
+const lineStamps = reactive<Record<string | number, string>>({})
+function lineKey(ln: StreamLine, i: number) { return ln.key != null ? ln.key : i }
+function lineTime(ln: StreamLine, i: number) { return ln.time || lineStamps[lineKey(ln, i)] || '' }
+function nowClock() {
+    const d = new Date()
+    const p = (n: number) => String(n).padStart(2, '0')
+    return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
+
 function stageGlyph(status: string) {
-    return ({ done: '✓', error: '✕', pending: '·' } as Record<string, string>)[status] || '·'
+    return ({ done: '✓', active: '◐', pending: '·', error: '✕' } as Record<string, string>)[status] || '·'
 }
 function clampPct(n: number) { return Math.max(0, Math.min(100, Math.round(n || 0))) }
 function fmt(n?: number) {
@@ -149,12 +167,17 @@ function fmt(n?: number) {
     return String(v)
 }
 
-// Auto-scroll the body to the bottom when lines change (only while open).
+// Stamp new lines + auto-scroll the terminal to the newest line when lines change (only while open).
 watch(() => lines.value.length, async () => {
+    const stamp = nowClock()
+    lines.value.forEach((ln, i) => {
+        const k = lineKey(ln, i)
+        if (lineStamps[k] == null) lineStamps[k] = ln.time || stamp
+    })
     if (!open.value) return
     await nextTick()
     if (scrollEl.value) scrollEl.value.scrollTop = scrollEl.value.scrollHeight
-})
+}, { immediate: true })
 watch(open, async (o) => {
     if (!o) return
     await nextTick()
@@ -183,7 +206,16 @@ watch(open, async (o) => {
 .srd-x { border: none; background: none; color: #b7ac9c; cursor: pointer; font-size: 15px; padding: 4px; border-radius: 8px; }
 .srd-x:hover { background: #F4EEE5; color: #C2541E; }
 
-.srd-term { margin: 12px; border-radius: 12px; background: linear-gradient(180deg, #17120D, #1F1811); border: 1px solid #0d0a07; overflow: hidden; }
+/* tab bar */
+.srd-tabs { display: flex; gap: 2px; padding: 8px 12px 0; border-bottom: 1px solid #EFE7DA; }
+.srd-tab { position: relative; border: none; background: none; cursor: pointer; padding: 7px 12px 9px; font-size: 12px; font-weight: 600; color: #8A7F70; font-family: ui-monospace, Menlo, monospace; border-bottom: 2px solid transparent; margin-bottom: -1px; border-radius: 6px 6px 0 0; }
+.srd-tab:hover { color: #4a4238; }
+.srd-tab:focus-visible { outline: 2px solid #C2541E; outline-offset: -2px; }
+.srd-tab.on { color: #C2541E; border-bottom-color: #C2541E; }
+.srd-tab-n { margin-left: 6px; font-size: 10px; background: #F1E7D9; color: #8A7F70; border-radius: 8px; padding: 1px 6px; }
+.srd-tab.on .srd-tab-n { background: #F6E3D6; color: #C2541E; }
+
+.srd-term { margin: 12px; border-radius: 12px; background: #1b1813; border: 1px solid #0d0a07; overflow: hidden; }
 .srd-term-bar { display: flex; align-items: center; gap: 6px; padding: 8px 11px; border-bottom: 1px solid #2b2119; }
 .srd-term-bar .d { width: 9px; height: 9px; border-radius: 50%; }
 .srd-term-ttl { margin-left: 6px; font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; color: #c9bdaa; }
@@ -193,27 +225,28 @@ watch(open, async (o) => {
 .srd-term-body::-webkit-scrollbar { width: 7px; }
 .srd-term-body::-webkit-scrollbar-thumb { background: #3a2e22; border-radius: 8px; }
 .srd-boot { color: #8b7d6b; }
-.srd-ln { display: flex; gap: 8px; align-items: baseline; white-space: pre-wrap; animation: srd-in .18s ease; }
-@keyframes srd-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
-.srd-stage { flex: none; width: 62px; text-align: right; font-weight: 700; font-size: 9.5px; color: #8b7d6b; text-transform: uppercase; letter-spacing: .3px; padding-top: 2px; overflow: hidden; text-overflow: ellipsis; }
-.srd-mk { flex: none; width: 13px; text-align: center; }
-.srd-mk-done { color: #5FCE93; } .srd-mk-active { color: #C2541E; } .srd-mk-warn { color: #E0A44B; } .srd-mk-pending { color: #6b6156; } .srd-mk-info { color: #C2683F; }
-.srd-msg { color: #e7ddcd; flex: 1; min-width: 0; }
+.srd-ln { display: flex; gap: 8px; align-items: baseline; white-space: pre-wrap; }
+.srd-time { flex: none; color: #6b6156; font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.srd-stage { flex: none; width: 62px; text-align: right; font-weight: 700; font-size: 9.5px; color: #8b7d6b; text-transform: uppercase; letter-spacing: .3px; overflow: hidden; text-overflow: ellipsis; }
+.srd-msg { color: #cfc4b3; flex: 1; min-width: 0; }
+.srd-lvl-info { color: #b0a593; }
+.srd-lvl-pending { color: #8b7d6b; }
+.srd-lvl-active { color: #C2541E; }
+.srd-lvl-done { color: #4fae7c; }
+.srd-lvl-warn { color: #cf9a3d; }
 .srd-meta { flex: none; color: #8b7d6b; font-size: 10.5px; margin-left: auto; padding-left: 8px; }
-.srd-spin { display: inline-block; color: #C2541E; animation: srd-sp .8s linear infinite; }
-@keyframes srd-sp { to { transform: rotate(360deg); } }
 
-.srd-stages { display: flex; flex-direction: column; gap: 5px; padding: 0 14px 4px; }
-.srd-st { display: flex; align-items: center; gap: 8px; font-size: 11.5px; }
-.srd-st-mk { flex: none; width: 14px; text-align: center; }
-.srd-st-lbl { flex: none; min-width: 84px; font-weight: 600; color: #4a4238; }
-.srd-st-done .srd-st-mk { color: #3FA86B; } .srd-st-done .srd-st-lbl { color: #2F7E50; }
+/* stages checklist */
+.srd-stages-panel { padding: 12px 14px; max-height: 380px; overflow-y: auto; display: flex; flex-direction: column; gap: 7px; }
+.srd-stages-empty { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: #9a958c; }
+.srd-st { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
+.srd-st-mk { flex: none; width: 16px; text-align: center; font-size: 13px; }
+.srd-st-lbl { flex: 1; min-width: 0; font-weight: 600; color: #4a4238; }
+.srd-st-pct { flex: none; font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; color: #8A7F70; }
+.srd-st-done .srd-st-mk { color: #2f7a52; } .srd-st-done .srd-st-lbl { color: #2F7E50; }
 .srd-st-active .srd-st-mk { color: #C2541E; } .srd-st-active .srd-st-lbl { color: #C2541E; }
 .srd-st-error .srd-st-mk { color: #C2541E; } .srd-st-error .srd-st-lbl { color: #B4432B; }
-.srd-st-pending { opacity: .5; } .srd-st-pending .srd-st-mk, .srd-st-pending .srd-st-lbl { color: #9a958c; }
-.srd-st-bar { flex: 1; height: 5px; border-radius: 4px; background: #EFE7DA; overflow: hidden; }
-.srd-st-fill { display: block; height: 100%; background: linear-gradient(90deg, #C2683F, #C2541E); border-radius: 4px; transition: width .3s ease; }
-.srd-st-pct { flex: none; font-family: ui-monospace, Menlo, monospace; font-size: 10px; color: #8A7F70; width: 30px; text-align: right; }
+.srd-st-pending { opacity: .55; } .srd-st-pending .srd-st-mk, .srd-st-pending .srd-st-lbl { color: #9a958c; }
 
 .srd-foot { padding: 8px 14px 13px; border-top: 1px solid #EFE7DA; }
 .srd-foot-row { display: flex; flex-wrap: wrap; gap: 4px 14px; }
@@ -226,5 +259,5 @@ watch(open, async (o) => {
 
 .srd-pop-enter-active, .srd-pop-leave-active { transition: opacity .18s, transform .18s; }
 .srd-pop-enter-from, .srd-pop-leave-to { opacity: 0; transform: translateY(8px) scale(.98); }
-@media (prefers-reduced-motion: reduce) { .srd-ln, .srd-spin, .srd-fab-dot, .srd-fab, .srd-st-fill, .srd-ready-fill { animation: none; transition: none; } }
+@media (prefers-reduced-motion: reduce) { .srd-fab-dot, .srd-fab, .srd-ready-fill, .srd-pop-enter-active, .srd-pop-leave-active { animation: none; transition: none; } }
 </style>

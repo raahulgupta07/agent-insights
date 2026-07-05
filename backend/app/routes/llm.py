@@ -8,6 +8,8 @@ from app.models.organization import Organization
 from app.core.auth import current_user
 from app.core.permissions_decorator import requires_permission
 from app.services.llm_service import LLMService
+from app.services.organization_settings_service import OrganizationSettingsService
+from sqlalchemy.orm.attributes import flag_modified
 from app.schemas.llm_schema import (
     LLMProviderSchema,
     LLMProviderCreate,
@@ -24,6 +26,20 @@ logger = get_logger(__name__)
 
 router = APIRouter(tags=["llm"])
 llm_service = LLMService()
+org_settings_service = OrganizationSettingsService()
+
+# Org-level Agent Defaults are stored in organization_settings.config under
+# these three keys (JSON column, merged in place like the hybrid_overrides).
+_DEFAULTS_KEYS = {
+    "analysis": "default_analysis_model_id",
+    "train": "default_train_model_id",
+    "router": "default_router_model_id",
+}
+
+
+def _read_defaults(config: dict) -> dict:
+    config = config if isinstance(config, dict) else {}
+    return {k: config.get(ckey) for k, ckey in _DEFAULTS_KEYS.items()}
 
 @router.get("/llm/available_providers", response_model=list[dict])
 @requires_permission('manage_llm')
@@ -210,3 +226,67 @@ async def set_default_model(
 ):
     """Set a model as the default model for the organization. Use small=true for small default."""
     return await llm_service.set_default_model(db, current_user, organization, model_id, small=small)
+
+
+# ---------------------------------------------------------------------------
+# Org-level Agent Defaults (analysis / training / router models)
+# Persisted in organization_settings.config keys default_analysis_model_id /
+# default_train_model_id / default_router_model_id. Consumed by the LLM
+# settings screen; the training default is wired into train_orchestrator.
+# ---------------------------------------------------------------------------
+
+@router.get("/llm/defaults", response_model=dict)
+async def get_llm_defaults(
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Read the org's default analysis/train/router models (null when unset)."""
+    try:
+        settings = await org_settings_service.get_settings(db, organization, current_user)
+        config = settings.config if isinstance(settings.config, dict) else {}
+    except Exception as e:  # noqa: BLE001
+        logger.error("get_llm_defaults error: %s", e, exc_info=True)
+        config = {}
+    return _read_defaults(config)
+
+
+@router.put("/llm/defaults", response_model=dict)
+@requires_permission('manage_llm')
+async def update_llm_defaults(
+    payload: dict,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Persist the org's default analysis/train/router models.
+
+    Body {analysis?, train?, router?} — only supplied keys are updated; other
+    config keys are preserved (merge). A null/blank value clears that default.
+    Fail-soft: returns the saved {analysis, train, router}.
+    """
+    try:
+        settings = await org_settings_service.get_settings(db, organization, current_user)
+        if settings.config is None:
+            settings.config = {}
+        config = settings.config
+
+        for k, ckey in _DEFAULTS_KEYS.items():
+            if k not in payload:
+                continue
+            val = payload.get(k)
+            if val is None or val == "":
+                config.pop(ckey, None)
+            else:
+                config[ckey] = str(val)
+
+        flag_modified(settings, "config")
+        await db.commit()
+        return _read_defaults(config)
+    except Exception as e:  # noqa: BLE001
+        logger.error("update_llm_defaults error: %s", e, exc_info=True)
+        try:
+            await db.rollback()
+        except Exception:  # noqa: BLE001
+            pass
+        raise HTTPException(status_code=500, detail="Could not save agent defaults")

@@ -291,6 +291,30 @@ _SAFE_BUILTINS = {
 _SAFE_BUILTINS['__build_class__'] = _builtins_module.__build_class__
 
 
+def _guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+    """Runtime import fence that mirrors the AST import allow-list.
+
+    Every generated `generate_df()` legitimately starts with `import pandas as pd`
+    (even the coder's own fallback stub does). The `import` statement compiles to
+    an implicit `__import__` call, so without this name in `__builtins__` that
+    statement dies at runtime with "__import__ not found" — silently breaking
+    EVERY create_data / inspect_data run. We expose an `__import__` that delegates
+    to the real one but blocks the same roots the static `CodeSecurityVisitor`
+    already rejects (FORBIDDEN_MODULES: os/sys/subprocess/socket/...). This keeps
+    runtime name-resolution consistent with the static scan: safe modules
+    (pandas/numpy/math/datetime/json/re/...) import; capability modules do not.
+    Direct `__import__(...)` CALLS remain AST-forbidden (visit_Call), so this is
+    only reachable via a normal `import`/`from ... import` statement.
+    """
+    root = (name or '').split('.')[0]
+    if root in FORBIDDEN_MODULES:
+        raise ImportError(f"Import of '{name}' is not allowed in the sandbox")
+    return _builtins_module.__import__(name, globals, locals, fromlist, level)
+
+
+_SAFE_BUILTINS['__import__'] = _guarded_import
+
+
 def _fresh_safe_builtins() -> Dict[str, Any]:
     """Return a fresh copy of the curated builtins for one exec namespace.
 

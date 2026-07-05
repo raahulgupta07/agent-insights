@@ -231,9 +231,35 @@ class SpreadsheetClient(DataSourceClient):
         used: set[str] = set()
         primary = self._read_one_file(self.path)
 
-        # Fast path: no merge -> preserve exact prior behavior (slug + return).
+        # HYBRID_ONE_TABLE_MERGE: same-schema monthly files must land in ONE
+        # timeless table. Compute the flag up-front so the naming is period-free
+        # even at CREATION (the first single file, when merged_paths is still
+        # empty) — not only on later merges. Without this the very first month's
+        # slug (`…_jan_25`) freezes as the table name forever and a later August
+        # upload can't correct it.
+        try:
+            from app.settings.hybrid_flags import flags as _otm_flags
+            one_table = bool(_otm_flags.ONE_TABLE_MERGE)
+        except Exception:  # noqa: BLE001
+            one_table = False
+
+        def _timeless_name(raw: str) -> str:
+            """Slug the sheet/stem, then (when one_table) drop any month/year
+            token so `…_jan_25`, `…_aug_25`, `…_2025_08` all resolve to the same
+            period-free table name. Falls back to the plain slug on any issue."""
+            base = self._safe_table_name(raw, used)
+            if not one_table:
+                return base
+            try:
+                from app.services.ingest.post_ingest import derive_period_and_stem
+                stem, _p = derive_period_and_stem(base)
+                return (stem or base).strip("_") or base
+            except Exception:  # noqa: BLE001
+                return base
+
+        # Fast path: no merge -> slug (period-stripped when one_table) + return.
         if not self.merged_paths:
-            return {self._safe_table_name(name, used): df for name, df in primary.items()}
+            return {_timeless_name(name): df for name, df in primary.items()}
 
         from app.services.ingest.smart_upload import (
             SOURCE_LABEL_COL,
@@ -248,11 +274,29 @@ class SpreadsheetClient(DataSourceClient):
         # keyed by their COLUMN SIGNATURE, not the per-file stem — so the agent
         # queries `FROM crm` instead of UNION-ALL across N stem-named tables.
         # Flag OFF -> group by stem name (exact prior behavior).
-        try:
-            from app.settings.hybrid_flags import flags as _otm_flags
-            one_table = bool(_otm_flags.ONE_TABLE_MERGE)
-        except Exception:  # noqa: BLE001
-            one_table = False
+
+        # Tolerant signature grouping: files that are the SAME monthly template
+        # apart from a stray/renamed column must stack into ONE table — matching
+        # the from-file route's same-schema merge tolerance (`_same_template`).
+        # Exact-hash grouping would split a trivially-drifted file into its own
+        # table and re-break "one agent = one table". `pd.concat(sort=False)`
+        # unions the differing columns (NaN-filling the gaps) so the extra column
+        # is harmless. The primary file is processed first, so it seeds the
+        # representative signature for its group.
+        _sig_groups: list[tuple[str, frozenset]] = []
+
+        def _same_template(a: frozenset, b: frozenset) -> bool:
+            # identical after normalization, or differing by a small bounded
+            # number of columns on each side (one added / one renamed). Rejects a
+            # genuinely different schema or a narrow subset of a much wider table.
+            if not a or not b:
+                return False
+            if a == b:
+                return True
+            if not (a & b):
+                return False
+            max_diff = max(1, round(0.10 * max(len(a), len(b))))
+            return len(a - b) <= max_diff and len(b - a) <= max_diff
 
         def _group_key(name: str, df) -> str:
             if not one_table:
@@ -263,7 +307,14 @@ class SpreadsheetClient(DataSourceClient):
                 cols = [c for c in df.columns
                         if str(c) not in (SOURCE_LABEL_COL, SOURCE_PERIOD_COL)]
                 sig = normalize_columns(cols)
-                return "sig:" + str(hash(sig))
+                if not sig:
+                    return name
+                for gk, gsig in _sig_groups:
+                    if _same_template(sig, gsig):
+                        return gk
+                gk = "sig:%d" % len(_sig_groups)
+                _sig_groups.append((gk, sig))
+                return gk
             except Exception:  # noqa: BLE001
                 return name
 
@@ -271,10 +322,14 @@ class SpreadsheetClient(DataSourceClient):
         group_name: dict[str, str] = {}
 
         def _canon(name: str) -> str:
+            # Slug FIRST (raw stems carry spaces/parens like "…(Jan'25)" that the
+            # period regex can't see), THEN strip the period token — so the merge
+            # path derives the same timeless name as the creation fast path above.
             try:
                 from app.services.ingest.post_ingest import derive_period_and_stem
-                stem, _p = derive_period_and_stem(str(name))
-                return (stem or str(name)).strip("_") or "dataset"
+                base = self._safe_table_name(str(name), set())
+                stem, _p = derive_period_and_stem(base)
+                return (stem or base).strip("_") or "dataset"
             except Exception:  # noqa: BLE001
                 return str(name)
 

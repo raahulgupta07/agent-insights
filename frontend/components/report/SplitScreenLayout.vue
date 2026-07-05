@@ -3,7 +3,11 @@
     <!-- dashboardFirst (URL ?focus=dashboard): visually move the dashboard panel to
          the main/left side and dock the chat narrow on the right via flex-row-reverse.
          No DOM reorder — the existing chat/panel slots are only resized + flipped. -->
-    <div class="flex h-screen overflow-y-hidden bg-[#FAF8F3]"
+    <!-- h-full (not h-dvh): fill the layout's already-bounded slot
+         (100dvh − TopNav). h-dvh here overflowed the parent by the
+         navbar height, pushing the right rail's bottom (Context /
+         Skills / Sub-agents) below the viewport with no way to scroll. -->
+    <div class="flex h-full overflow-y-hidden bg-[#FAF8F3]"
          :class="dashboardFirst ? 'flex-row-reverse' : 'flex-row'">
         <!-- Left (Chat) — z-20 so popovers can overlap the right panel.
              In dashboardFirst mode this is the narrow right-hand chat dock

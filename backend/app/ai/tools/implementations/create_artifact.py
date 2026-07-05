@@ -414,6 +414,44 @@ Fix the errors while keeping the same design and functionality. Output the corre
             # Return original code if fix fails
             return code
 
+    def _compose_dashboard_order(self, visualizations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """BI-uplift Phase 4: order vizs for a hero + F-pattern page.
+
+        hero (large, top-left) → KPI strip → charts → tables, preserving the
+        original order within each group. hero = first KPI-shaped viz, else the
+        first chart, else the first viz. Tags the hero with ``_hero=True`` so the
+        profile/prompt can flag it. Pure + fail-soft; returns input on any error.
+        """
+        try:
+            if not visualizations:
+                return visualizations
+
+            def kind(v: Dict[str, Any]) -> str:
+                t = str(v.get("data_model_type") or "").lower()
+                rc = int(v.get("row_count") or 0)
+                if t in ("metric_card", "count") or rc == 1:
+                    return "kpi"
+                if t in ("table", ""):
+                    return "table"
+                return "chart"
+
+            kpis = [v for v in visualizations if kind(v) == "kpi"]
+            charts = [v for v in visualizations if kind(v) == "chart"]
+            hero = kpis[0] if kpis else (charts[0] if charts else visualizations[0])
+
+            rest = [v for v in visualizations if v is not hero]
+            ordered = (
+                [hero]
+                + [v for v in rest if kind(v) == "kpi"]
+                + [v for v in rest if kind(v) == "chart"]
+                + [v for v in rest if kind(v) == "table"]
+            )
+            if ordered:
+                ordered[0]["_hero"] = True
+            return ordered
+        except Exception:
+            return visualizations
+
     def _build_viz_profile(self, viz: Dict[str, Any], allow_llm_see_data: bool) -> Dict[str, Any]:
         """Build a privacy-aware profile of a visualization's data."""
         # Enrich columns with dtype/unique_count/min/max from column_info (always — not sensitive)
@@ -440,6 +478,10 @@ Fix the errors while keeping the same design and functionality. Output the corre
             "row_count": viz.get("row_count", 0),
             "columns": enriched_columns,
         }
+        # BI-uplift Phase 4: mark the composer-chosen hero so the page prompt can
+        # render it as the large headline tile (absent/false when composer off).
+        if viz.get("_hero"):
+            profile["hero"] = True
 
         # Include data model hints
         data_model = viz.get("dataModel") or {}
@@ -709,6 +751,21 @@ Fix the errors while keeping the same design and functionality. Output the corre
             visualizations.append(ventry)
             included_viz_ids.append(str(viz.id))
 
+        # BI-uplift Phase 4: dashboard composer (flag HYBRID_DASHBOARD_COMPOSER).
+        # Deterministically pick ONE hero metric and order the rest in an
+        # F-pattern (hero → KPI strip → charts → tables), then keep
+        # included_viz_ids in lockstep so the FE data order matches. Additive &
+        # fail-soft: off or on error → original order untouched. Page mode only.
+        _composer = False
+        try:
+            from app.settings.hybrid_flags import flags as _dc_flags
+            if getattr(_dc_flags, "DASHBOARD_COMPOSER", False) and data.mode == "page":
+                _composer = True
+                visualizations = self._compose_dashboard_order(visualizations)
+                included_viz_ids = [str(v["id"]) for v in visualizations]
+        except Exception as _dc_err:
+            logger.debug("dashboard_composer skipped: %s", _dc_err)
+
         # Early failure: if no valid visualizations were resolved, fail like create_data does with tables
         if not visualizations:
             yield ToolEndEvent(
@@ -812,6 +869,22 @@ Fix the errors while keeping the same design and functionality. Output the corre
             organization_settings=organization_settings,
             sense_making=sense_making,
         )
+
+        # BI-uplift Phase 4: deterministic hero + F-pattern directive (only when
+        # the composer reordered the vizs). Appended to the built prompt so it's
+        # purely additive — off = prompt unchanged.
+        if _composer:
+            prompt += (
+                "\n\nDASHBOARD COMPOSER — deterministic layout, follow exactly:\n"
+                "- The FIRST visualization (the one tagged \"hero\": true) is the HERO. "
+                "Render it LARGE and prominent at the top-left as the page's headline answer.\n"
+                "- Then a compact KPI strip, then the remaining charts, then any tables — "
+                "in the order given (F-pattern: most important top-left, supporting below).\n"
+                "- Give the hero clear visual dominance; MUTE the supporting tiles. Use ONE "
+                "accent colour for emphasis — do not weight everything equally.\n"
+                "- The page must be scannable in 5 seconds: the hero answers the main "
+                "question at a glance.\n"
+            )
 
         # Stream from LLM
         yield ToolProgressEvent(type="tool.progress", payload={"stage": "llm_generating"})
@@ -938,6 +1011,19 @@ Fix the errors while keeping the same design and functionality. Output the corre
             "code": code,
             "visualization_ids": included_viz_ids,
         }
+
+        # BI-uplift Phase 4: advisory pre-publish QA (the deck's "5-second check").
+        # Non-breaking — recorded under a benign key the FE ignores; never flips
+        # status or render_errors, so a QA note can't break the page.
+        if _composer and data.mode == "page" and code:
+            _qa = []
+            if "viz[0]" not in code and "viz [0]" not in code:
+                _qa.append("hero (viz[0]) not clearly referenced")
+            if len(code) < 200:
+                _qa.append("artifact code suspiciously short")
+            if _qa:
+                content["composer_qa"] = _qa
+                logger.info("[dashboard_composer] QA notes: %s", "; ".join(_qa))
 
         # Add slides-specific content
         if data.mode == "slides" and preview_images:

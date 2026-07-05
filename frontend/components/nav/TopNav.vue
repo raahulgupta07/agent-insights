@@ -70,10 +70,7 @@
         <!-- Install as desktop app (PWA) — only shows when installable -->
         <InstallApp />
 
-        <!-- Notifications inbox — bell (HYBRID_NOTIFICATIONS_INBOX-gated) -->
-        <NotificationBell v-if="notificationsInboxEnabled" class="hidden sm:block" />
-
-        <!-- What's new (changelog) — bell before profile -->
+        <!-- Notifications + What's new — single merged bell (Notifications | What's new tabs) -->
         <WhatsNew class="hidden sm:block" />
 
         <!-- User dropdown — desktop -->
@@ -232,7 +229,6 @@
   import McpModal from '~/components/McpModal.vue'
   import AgentSelector from '~/components/AgentSelector.vue'
   import WhatsNew from '~/components/nav/WhatsNew.vue'
-  import NotificationBell from '~/components/nav/NotificationBell.vue'
   import InstallApp from '~/components/nav/InstallApp.vue'
   import UserProfileModal from '~/components/UserProfileModal.vue'
   import { useCan } from '~/composables/usePermissions'
@@ -268,7 +264,6 @@
     showMcpModal,
     loadDomainPacksFlag,
     userAvatarEnabled,
-    notificationsInboxEnabled,
   } = useAppNav()
 
   const mobileOpen = ref(false)

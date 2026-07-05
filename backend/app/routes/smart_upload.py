@@ -22,6 +22,7 @@ annotations — the data_source_from_file landmine).
 """
 
 import logging
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -153,6 +154,28 @@ class ApplyRequest(BaseModel):
 
 class InboxAddRequest(BaseModel):
     file_ids: List[str]
+
+
+class QueueItem(BaseModel):
+    """One classified file to hold in the inbox (NOT applied/trained yet)."""
+    file_id: str
+    filename: Optional[str] = None
+    dest: Optional[str] = None
+    confidence: Optional[float] = None
+    size: Optional[int] = None
+    content_type: Optional[str] = None
+    ext: Optional[str] = None
+
+    class Config:
+        extra = "allow"  # carry through reason/signals/source/needs_confirm harmlessly
+
+
+class QueueRequest(BaseModel):
+    items: List[QueueItem]
+
+
+class InboxRerouteRequest(BaseModel):
+    dest: str
 
 
 # --------------------------------------------------------------------------- #
@@ -351,6 +374,90 @@ async def smart_upload_inbox_add(
     return {"queued": queued, "added": added}
 
 
+@router.post("/studios/{studio_id}/smart-upload/queue")
+async def smart_upload_queue(
+    studio_id: str,
+    body: QueueRequest,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+) -> Dict[str, Any]:
+    """QUEUE already-classified files into the studio inbox WITHOUT applying or
+    training them. Each item carries its classifier metadata (guessed lane,
+    confidence, size, type) and gets a SERVER-set ``queued_at`` ISO timestamp.
+
+    Files rest in ``Studio.config['inbox']`` until the user clicks Train (the
+    ``route_inbox`` train stage consumes this list). Dedupes by ``file_id``
+    (a re-queue refreshes the existing record). Fail-soft per file.
+    """
+    _require_inbox_flag()
+    await _require_role(db, studio_id, current_user, editor=True)
+    studio = await _load_studio(db, studio_id, organization)
+
+    import os
+
+    queued = list(_inbox_of(studio))
+    by_id = {str(it.get("file_id")): it for it in queued if isinstance(it, dict)}
+    now_iso = datetime.now(timezone.utc).isoformat()
+    added = 0
+    for it in (body.items or []):
+        fid = str(it.file_id)
+        if not fid:
+            continue
+        # Org-scope the file; skip anything not visible to this org.
+        f = (await db.execute(
+            select(FileModel).where(
+                FileModel.id == fid,
+                FileModel.organization_id == organization.id,
+            )
+        )).scalar_one_or_none()
+        if f is None:
+            continue
+
+        filename = it.filename or (f.filename or "")
+        # size: prefer client-reported, else disk.
+        size = int(it.size) if it.size is not None else 0
+        if not size:
+            try:
+                p = smart_apply._resolve_path(f.path or "") or ""
+                if p and os.path.exists(p):
+                    size = os.path.getsize(p)
+            except Exception:  # noqa: BLE001
+                size = 0
+        ext = it.ext or (os.path.splitext(filename)[1].lower() if filename else "")
+        extra = it.dict(exclude={"file_id", "filename", "dest", "confidence",
+                                 "size", "content_type", "ext"})
+
+        record = {
+            "file_id": fid,
+            "filename": filename,
+            "dest": it.dest,
+            "confidence": it.confidence,
+            "size": int(size),
+            "content_type": it.content_type or "",
+            "ext": ext,
+            "status": "queued",
+            "queued_at": now_iso,
+        }
+        # carry through reason/signals/source/needs_confirm (from classify).
+        for k, v in (extra or {}).items():
+            record.setdefault(k, v)
+
+        if fid in by_id:
+            # Re-queue: keep the original queued_at, refresh the rest.
+            existing = by_id[fid]
+            record["queued_at"] = existing.get("queued_at") or now_iso
+            existing.clear()
+            existing.update(record)
+        else:
+            queued.append(record)
+            by_id[fid] = record
+            added += 1
+
+    await _save_inbox(db, studio, queued=queued)
+    return {"queued": queued, "added": added, "queued_count": len(queued)}
+
+
 @router.delete("/studios/{studio_id}/smart-upload/inbox/{file_id}")
 async def smart_upload_inbox_remove(
     studio_id: str,
@@ -384,6 +491,35 @@ async def smart_upload_inbox_clear(
     studio = await _load_studio(db, studio_id, organization)
     await _save_inbox(db, studio, queued=[])
     return {"queued": [], "held": _held_of(studio)}
+
+
+@router.post("/studios/{studio_id}/smart-upload/inbox/{file_id}")
+async def smart_upload_inbox_reroute(
+    studio_id: str,
+    file_id: str,
+    body: InboxRerouteRequest,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+) -> Dict[str, Any]:
+    """Change a QUEUED file's guessed lane (``dest``) before training — the file
+    stays in the inbox, nothing is placed/trained. Marks ``dest_source='user'``
+    so the train ``route_inbox`` stage honors the human choice over a re-classify.
+    """
+    _require_inbox_flag()
+    await _require_role(db, studio_id, current_user, editor=True)
+    studio = await _load_studio(db, studio_id, organization)
+
+    fid = str(file_id)
+    dest = (body.dest or "").strip()
+    queued = list(_inbox_of(studio))
+    for it in queued:
+        if isinstance(it, dict) and str(it.get("file_id")) == fid:
+            it["dest"] = dest
+            it["dest_source"] = "user"
+            break
+    await _save_inbox(db, studio, queued=queued)
+    return {"queued": queued, "held": _held_of(studio)}
 
 
 # --------------------------------------------------------------------------- #

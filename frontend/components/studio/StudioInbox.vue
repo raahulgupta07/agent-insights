@@ -28,15 +28,20 @@
           <span class="text-[#C2541E]">&#128196;</span>
           <div class="min-w-0 flex-1">
             <div class="text-[12.5px] font-medium text-[#1f2328] truncate">{{ f.filename }}</div>
-            <div class="text-[10.5px] text-[#9a958c]">{{ humanSize(f.size) }}<template v-if="f.status"> &middot; {{ f.status }}</template></div>
+            <div class="text-[10.5px] text-[#9a958c] flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+              <span v-if="fmtWhen(f.queued_at)">{{ fmtWhen(f.queued_at) }}</span>
+              <template v-if="fmtWhen(f.queued_at) && humanSize(f.size)">&middot;</template>
+              <span v-if="humanSize(f.size)">{{ humanSize(f.size) }}</span>
+              <template v-if="typeLabel(f)">&middot;</template>
+              <span v-if="typeLabel(f)" class="uppercase tracking-wide">{{ typeLabel(f) }}</span>
+            </div>
           </div>
-          <!-- v2: instant type-guess chip + inline re-route -->
-          <template v-if="v2 && f.guess">
-            <span class="shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold rounded-full border px-2 py-0.5" :class="chipFor(f.guess.dest).cls" :title="signalsSummary(f.guess.signals)">
-              {{ chipFor(f.guess.dest).emoji }} {{ chipFor(f.guess.dest).label }}<span v-if="confPct(f.guess.confidence)" class="opacity-70">· {{ confPct(f.guess.confidence) }}</span>
-            </span>
-          </template>
-          <div v-if="v2" class="relative shrink-0">
+          <!-- instant type-guess chip (guessed lane + confidence) -->
+          <span v-if="laneOf(f)" class="shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold rounded-full border px-2 py-0.5" :class="chipFor(laneOf(f)).cls" :title="signalsSummary(f.guess && f.guess.signals)">
+            {{ chipFor(laneOf(f)).emoji }} {{ chipFor(laneOf(f)).label }}<span v-if="confPct(confOfFile(f))" class="opacity-70">· {{ confPct(confOfFile(f)) }}</span>
+          </span>
+          <!-- re-route: change the lane before training (updates the inbox, no import) -->
+          <div class="relative shrink-0">
             <select v-model="f._reroute" :disabled="busy" @change="rerouteQueued(f)"
               class="appearance-none text-[10.5px] font-medium rounded-lg border border-[#E9E0D3] bg-white pl-2 pr-6 py-1 cursor-pointer focus:outline-none focus:border-[#C2541E] text-[#6b6b6b] disabled:opacity-50">
               <option value="">Re-route…</option>
@@ -102,15 +107,19 @@
 
 <script setup lang="ts">
 interface Guess { dest?: string; confidence?: number; source?: string; signals?: any }
-interface QueuedFile { file_id: string; filename: string; size?: number; status?: string; guess?: Guess; _reroute?: string }
+interface QueuedFile {
+  file_id: string; filename: string; size?: number; status?: string
+  dest?: string; confidence?: number; content_type?: string; ext?: string
+  queued_at?: string; dest_source?: string; guess?: Guess; _reroute?: string
+}
 interface HeldFile { file_id: string; filename: string; dest: string; confidence?: number; reason?: string; source?: string; signals?: any; _dest?: string }
 
 const props = withDefaults(defineProps<{ studioId: string; v2?: boolean }>(), { v2: false })
 
-const DESTS = ['database', 'semantic', 'instructions', 'examples', 'knowledge']
+const DESTS = ['database', 'semantic', 'instructions', 'examples', 'knowledge', 'skip']
 const DEST_LABEL: Record<string, string> = {
   database: 'Database', semantic: 'Semantic', instructions: 'Instructions',
-  examples: 'Examples', knowledge: 'Knowledge',
+  examples: 'Examples', knowledge: 'Knowledge', skip: 'Skip',
 }
 const destLabel = (d?: string) => DEST_LABEL[d || ''] || d || 'database'
 
@@ -154,8 +163,30 @@ function humanSize(n?: number): string {
   return `${(b / (1024 * 1024 * 1024)).toFixed(1)} GB`
 }
 
+// queued_at (ISO) → "Jul 5, 2:14 PM". Empty if unparseable.
+function fmtWhen(iso?: string): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+}
+
+// Short type label from ext or filename (e.g. "CSV", "PDF").
+function typeLabel(f: QueuedFile): string {
+  let e = (f.ext || '').replace(/^\./, '')
+  if (!e && f.filename && f.filename.includes('.')) e = f.filename.split('.').pop() || ''
+  return e ? e.toUpperCase() : ''
+}
+
+// Effective guessed lane + confidence: the stored classify result first,
+// falling back to the v2 sniff guess.
+function laneOf(f: QueuedFile): string | undefined { return f.dest || f.guess?.dest }
+function confOfFile(f: QueuedFile): number | undefined {
+  return f.confidence != null ? f.confidence : f.guess?.confidence
+}
+
 function applyResult(d: any) {
-  queued.value = (Array.isArray(d?.queued) ? d.queued : []).map((q: QueuedFile) => ({ ...q, _reroute: '' }))
+  queued.value = (Array.isArray(d?.queued) ? d.queued : []).map((q: QueuedFile) => ({ ...q, _reroute: q.dest || '' }))
   held.value = (Array.isArray(d?.held) ? d.held : []).map((h: HeldFile) => ({ ...h, _dest: h.dest || 'database' }))
 }
 
@@ -188,18 +219,20 @@ async function load() {
   await sniffGuesses()
 }
 
-// v2 only: re-route a queued file to a concrete dest now (place it via apply, then reload).
+// Re-route a queued file to a different lane BEFORE training — updates the
+// stored dest in the inbox (marked user-pinned). Nothing is placed/trained here;
+// the Train button honors the pinned lane.
 async function rerouteQueued(f: QueuedFile) {
   const dest = f._reroute
-  if (!dest || busy.value) return
+  if (!dest || dest === f.dest || busy.value) return
   busy.value = true; error.value = ''
   try {
-    const { error: e } = await useMyFetch<any>(`/studios/${props.studioId}/smart-upload/apply`, {
+    const { data, error: e } = await useMyFetch<any>(`/studios/${props.studioId}/smart-upload/inbox/${f.file_id}`, {
       method: 'POST',
-      body: { items: [{ file_id: f.file_id, dest, filename: f.filename }], train: false },
+      body: { dest },
     })
     if (e?.value) throw e.value
-    await load()
+    applyResult(data.value)
   } catch (e: any) {
     error.value = e?.data?.detail || 'Could not re-route that file.'
   }

@@ -234,7 +234,8 @@ async def _route_inbox(sid, studio_id, organization_id, user_id) -> dict:
     """``route_inbox`` train stage (flag HYBRID_TRAIN_ROUTING).
 
     Classifies each file queued in ``Studio.config['inbox']`` with the train
-    model (default ``z-ai/glm-5.2``; per-studio override ``train_model_id``) and
+    model (the studio's configured ``model_id``, else legacy ``train_model_id``,
+    else the org default model — NO hardcoded slug) and
     a LARGE excerpt, then AUTO-PLACES confident files via the Smart Upload sinks
     and HOLDS uncertain / answer-changing ones in ``Studio.config['inbox_held']``
     for post-train Review. Runs in its OWN session so ``apply_routes``'s internal
@@ -282,10 +283,25 @@ async def _route_inbox(sid, studio_id, organization_id, user_id) -> dict:
 
             _log(sid, f"▸ route_inbox · sorting {len(queued)} inbox file(s)", "info")
 
-            # Resolve the train model (default GLM-5.2; studio override wins;
-            # fall back to the org small default; None => heuristic-only).
+            # Resolve the train model: prefer the studio's configured model,
+            # else the legacy train_model_id, else the org default model.
+            # NO hardcoded slug. None => heuristic-only.
             train_model = None
-            want = cfg.get("train_model_id") or "z-ai/glm-5.2"
+            want = cfg.get("model_id") or cfg.get("train_model_id")
+            if not want:
+                # Org-level training default (LLM settings → Agent Defaults),
+                # inserted between the studio config and the generic org default.
+                # Fail-soft: never break training if settings are unreadable.
+                try:
+                    from app.services.organization_settings_service import (
+                        OrganizationSettingsService,
+                    )
+                    _os = await OrganizationSettingsService().get_settings(
+                        rdb, organization, user)
+                    _oc = _os.config if isinstance(_os.config, dict) else {}
+                    want = _oc.get("default_train_model_id") or want
+                except Exception:  # noqa: BLE001
+                    pass
             try:
                 train_model = (await rdb.execute(
                     select(LLMModel)
@@ -298,7 +314,7 @@ async def _route_inbox(sid, studio_id, organization_id, user_id) -> dict:
             if train_model is None:
                 try:
                     train_model = await LLMService().get_default_model(
-                        rdb, organization, user, is_small=True)
+                        rdb, organization, user)
                 except Exception:  # noqa: BLE001
                     train_model = None
             _log(sid, f"  route model: "
@@ -329,8 +345,17 @@ async def _route_inbox(sid, studio_id, organization_id, user_id) -> dict:
             # data source to map onto — at train time there isn't one yet, so we
             # HOLD it for Review rather than letting it fail mid-batch.
             confident = []  # plain apply items
+            _VALID_DESTS = {"database", "data", "semantic", "instructions",
+                            "examples", "knowledge", "skip"}
             for q, rec in zip(queued, records):
                 rec = dict(rec)
+                # Honor a human re-route from the Inbox: if the user pinned a
+                # lane before training, use it instead of the re-classification.
+                if (q.get("dest_source") == "user"
+                        and q.get("dest") in _VALID_DESTS):
+                    rec["dest"] = q.get("dest")
+                    rec["source"] = "user"
+                    rec["needs_confirm"] = False
                 dest = rec.get("dest")
                 src = rec.get("source")
                 base = {"file_id": q.get("file_id"), "filename": q.get("filename"),
@@ -554,13 +579,70 @@ async def run_training(studio_id, organization_id, user_id) -> None:
             # (Resolved AFTER route_inbox so freshly-placed sources are included.)
             sources = await _resolve_pinned_sources(db, studio, organization)
             _log(sid, f"studio '{getattr(studio, 'name', sid)}' · {len(sources)} pinned source(s)", "info")
+
+            # --- Stage 0b: ingest self-heal (stitch split same-schema tables) --
+            # Repair an agent whose same-schema data got split across multiple
+            # physical staging tables (files uploaded in separate sessions) —
+            # UNION-append the orphan rows back into the ONE bound table. Runs
+            # BEFORE profiling/reconcile/index so every later stage sees the
+            # merged rows. Generic + idempotent + fail-soft. No-op unless the
+            # flag is on / self-limits to sources that actually have staging
+            # tables. Never raises.
             try:
+                from app.settings.hybrid_flags import flags as _sh_flags
+                if _sh_flags.INGEST_SELFHEAL:
+                    _set(sid, step="selfheal", pct=9, note="repairing split data")
+                    _log(sid, "▸ self-heal split data", "info")
+                    from app.services.ingest.selfheal import selfheal_data_source
+                    _healed = 0
+                    _added = 0
+                    for ds in sources:
+                        try:
+                            r = await selfheal_data_source(
+                                db, organization=organization, data_source=ds,
+                                dry_run=False, drop_orphans=True,
+                            )
+                            if r and r.get("tables_stitched"):
+                                _healed += int(r.get("tables_stitched") or 0)
+                                _added += int(r.get("rows_added") or 0)
+                                _log(sid, f"  {getattr(ds,'name','?')}: {r.get('note')}", "info")
+                        except Exception as _she:  # noqa: BLE001 — per-source fail-soft
+                            logger.warning("train_orchestrator selfheal failed for %s: %s",
+                                           getattr(ds, "id", "?"), _she)
+                    detail["selfheal"] = f"ok ({_healed} stitched, {_added} rows)"
+                    _log(sid, f"self-heal: {_healed} table(s) stitched, {_added} rows added", "info")
+            except Exception as _e:  # noqa: BLE001
+                try:
+                    await db.rollback()
+                except Exception:  # noqa: BLE001
+                    pass
+                detail["selfheal"] = f"error: {_e}"
+                _log(sid, f"selfheal failed: {_e}", "warn")
+            # --- Resolve the studio's CHOSEN train model ONCE ------------------
+            # studio.config['train_model_id'] -> org LLMModel row -> org default.
+            # Passed into every generation stage below so the WHOLE train log +
+            # output reflects the picked model (not the org small default). When
+            # unset -> None -> each stage falls back to its own get_default_model.
+            train_model = None
+            try:
+                from app.models.llm_model import LLMModel as _LLMModelTM
                 from app.services.llm_service import LLMService as _LLMSvc0
-                _dm = await _LLMSvc0().get_default_model(db, organization)
-                _dm_name = getattr(_dm, "model_id", None) or getattr(_dm, "name", None) or str(_dm)
-                _log(sid, f"default analysis model: {_dm_name}", "info")
+                _cfg0 = studio.config if isinstance(studio.config, dict) else {}
+                _want = _cfg0.get("train_model_id")
+                if _want:
+                    train_model = (await db.execute(
+                        select(_LLMModelTM)
+                        .filter(_LLMModelTM.organization_id == organization.id)
+                        .filter(_LLMModelTM.model_id == _want)
+                        .filter(_LLMModelTM.is_enabled == True)  # noqa: E712
+                    )).scalar_one_or_none()
+                if train_model is None:
+                    train_model = await _LLMSvc0().get_default_model(db, organization)
+                _tm_name = getattr(train_model, "model_id", None) or getattr(train_model, "name", None) or "org default"
+                _log(sid, f"train model: {_tm_name}", "info")
             except Exception as _dme:  # noqa: BLE001 - fail-soft, model is informational
-                _log(sid, f"could not resolve default model: {_dme}", "warn")
+                train_model = None
+                _log(sid, f"could not resolve train model: {_dme}", "warn")
 
             # --- Stage 1: profile all pinned sources (pct 10 -> 40) -----------
             # Profiling N tables × many columns against a live connector can take
@@ -614,6 +696,96 @@ async def run_training(studio_id, organization_id, user_id) -> None:
                 detail["profiling"] = f"error: {e}"
             _set(sid, pct=40, note="")
             await _persist_db(db, studio, sid)
+
+            # --- Stage 1a-pre: smart source name (month token -> real range) ---
+            # If a source's display name carries a SINGLE month token (e.g.
+            # "(Apr'25)") but its merged table actually spans multiple periods
+            # (_source_period), rewrite the display NAME to the true range
+            # ("(Jan-Jun'25)"). Renames DataSource.name ONLY — never the table
+            # id/slug. Entirely fail-soft: any error leaves the name unchanged.
+            from app.settings.hybrid_flags import flags as _ssn_flags
+            if _ssn_flags.SMART_SOURCE_NAME:
+                _set(sid, step="smart_source_name", pct=40)
+                try:
+                    import re as _re
+                    from sqlalchemy import select as _sel_n
+                    from app.models.datasource_table import DataSourceTable as _DST_n
+
+                    _MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+                    _SINGLE_RE = _re.compile(
+                        r"\(\s*([A-Za-z]{3,9})\s*['`’]?\s*(\d{2,4})\s*\)")
+
+                    def _fmt_range(pmin, pmax):
+                        try:
+                            y1, m1 = int(pmin[:4]), int(pmin[5:7])
+                            y2, m2 = int(pmax[:4]), int(pmax[5:7])
+                            if not (1 <= m1 <= 12 and 1 <= m2 <= 12):
+                                return None
+                            a, b = _MON[m1 - 1], _MON[m2 - 1]
+                            if y1 == y2:
+                                return f"{a}-{b}'{y2 % 100:02d}"
+                            return f"{a}'{y1 % 100:02d}-{b}'{y2 % 100:02d}"
+                        except Exception:  # noqa: BLE001
+                            return None
+
+                    renamed = 0
+                    for ds in sources:
+                        try:
+                            cur = getattr(ds, "name", None) or ""
+                            # need a single-month token; skip if already a range
+                            if "-" in cur.split("(")[-1] or "–" in cur:
+                                continue
+                            if not _SINGLE_RE.search(cur):
+                                continue
+                            tbls = list((await db.execute(
+                                _sel_n(_DST_n)
+                                .where(_DST_n.datasource_id == str(ds.id))
+                                .where(_DST_n.is_active.is_(True))
+                            )).scalars().all())
+                            client = None
+                            periods = set()
+                            for tbl in tbls:
+                                cols = tbl.columns if isinstance(tbl.columns, list) else []
+                                if not any(isinstance(c, dict) and c.get("name") == "_source_period" for c in cols):
+                                    continue
+                                if client is None:
+                                    client = ds.get_client()
+                                df = await client.aexecute_query(
+                                    f'SELECT DISTINCT "_source_period" AS p FROM "{tbl.name}" ORDER BY 1')
+                                try:
+                                    vals = list(df["p"].tolist())
+                                except Exception:  # noqa: BLE001
+                                    vals = list(df.iloc[:, 0].tolist())
+                                for v in vals[:200]:
+                                    s = str(v) if v is not None else ""
+                                    if _re.fullmatch(r"\d{4}-\d{2}", s):
+                                        periods.add(s)
+                            if len(periods) <= 1:
+                                continue
+                            rng = _fmt_range(min(periods), max(periods))
+                            if not rng:
+                                continue
+                            base = _SINGLE_RE.sub("", cur)
+                            base = _re.sub(r"\.(csv|xlsx?|tsv|parquet|json)\b", "", base, flags=_re.I)
+                            base = _re.sub(r"\s{2,}", " ", base).strip().rstrip("-·").strip()
+                            new_name = f"{base} ({rng})".strip()
+                            if new_name and new_name != cur:
+                                ds.name = new_name
+                                renamed += 1
+                                _log(sid, f"renamed source -> {new_name}", "info")
+                        except Exception as _one:  # noqa: BLE001 - per-source fail-soft
+                            logger.warning("smart_source_name: %s failed: %s",
+                                           getattr(ds, "id", "?"), _one)
+                    if renamed:
+                        await db.commit()
+                    detail["smart_source_name"] = f"ok ({renamed} renamed)"
+                except Exception as e:  # noqa: BLE001
+                    try:
+                        await db.rollback()
+                    except Exception:
+                        pass
+                    detail["smart_source_name"] = f"error: {e}"
 
             # --- Stage 1a: deep profile v2 (Wave1 P1) -------------------------
             # When flags.PROFILE_V2 is ON, run profile_table_v2 on every active
@@ -679,7 +851,7 @@ async def run_training(studio_id, organization_id, user_id) -> None:
                     from app.ai.knowledge.code_enrich import enrich_source
                     from app.services.llm_service import LLMService as _LLMSvc
 
-                    _ce_model = await _LLMSvc().get_default_model(
+                    _ce_model = train_model or await _LLMSvc().get_default_model(
                         db, organization, user, is_small=True
                     )
                     ce_enriched = 0
@@ -747,6 +919,7 @@ async def run_training(studio_id, organization_id, user_id) -> None:
                     organization=organization,
                     current_user=user,
                     studio_id=sid,
+                    model=train_model,
                     skill_context=skill_context,
                 )
                 detail["queries"] = qres
@@ -772,6 +945,7 @@ async def run_training(studio_id, organization_id, user_id) -> None:
                     organization=organization,
                     current_user=user,
                     studio_id=sid,
+                    model=train_model,
                     skill_context=skill_context,
                 )
                 detail["evals"] = eres
@@ -825,7 +999,8 @@ async def run_training(studio_id, organization_id, user_id) -> None:
                 for kind in _ARTIFACT_KINDS:
                     try:
                         content = await generate_artifact(
-                            db, studio, kind, organization=organization
+                            db, studio, kind, organization=organization,
+                            model=train_model
                         )
                         row = StudioArtifact(
                             studio_id=sid, kind=kind, content=content
@@ -870,7 +1045,7 @@ async def run_training(studio_id, organization_id, user_id) -> None:
                         if (_flags.SEMANTIC_LAYER and _flags.METRICS_CATALOG)
                         else ("semantic" if _flags.SEMANTIC_LAYER else "metrics")
                     )
-                    model = await LLMService().get_default_model(
+                    model = train_model or await LLMService().get_default_model(
                         db, organization, user, is_small=True
                     )
                     sem_ids: list[str] = []
@@ -1056,6 +1231,37 @@ async def run_training(studio_id, organization_id, user_id) -> None:
                 detail["verified_goldens"] = f"error: {_e}"
                 _log(sid, f"verified_goldens failed: {_e}", "warn")
 
+            # --- Attached docs -> Knowledge (any file, any type) ---------------
+            # Turn every doc-type file attached to a source (PDF/Word/PPT/text/
+            # reference-xlsx) into searchable KnowledgeDoc chunks so the agent can
+            # CITE them. Idempotent (content-hash dedup) + fail-soft. Runs BEFORE
+            # hybrid_index so the new approved docs get embedded THIS run. No-op
+            # unless HYBRID_DOC_KNOWLEDGE is on.
+            try:
+                from app.settings.hybrid_flags import flags as _dk_flags
+                if _dk_flags.DOC_KNOWLEDGE:
+                    _set(sid, step="ingest_docs", pct=98)
+                    _log(sid, "▸ ingest attached docs", "info")
+                    from app.services.knowledge.file_ingest import backfill_data_source_docs
+                    _ing = 0
+                    for ds in sources:
+                        try:
+                            r = await backfill_data_source_docs(
+                                db, organization=organization, data_source_id=str(ds.id))
+                            _ing += int((r or {}).get("ingested", 0) or 0)
+                        except Exception as _de:  # noqa: BLE001 — per-source fail-soft
+                            logger.warning("train_orchestrator ingest_docs failed for %s: %s",
+                                           getattr(ds, "id", "?"), _de)
+                    detail["ingest_docs"] = f"ok ({_ing} docs indexed)"
+                    _log(sid, f"ingest attached docs: {_ing} indexed", "info")
+            except Exception as _e:  # noqa: BLE001
+                try:
+                    await db.rollback()
+                except Exception:  # noqa: BLE001
+                    pass
+                detail["ingest_docs"] = f"error: {_e}"
+                _log(sid, f"ingest_docs failed: {_e}", "warn")
+
             # --- Hybrid Search auto-index (P13: wire reindex INTO training) ---
             # Approved semantic/metric/query/doc rows -> knowledge_search_index
             # (tsv + pgvector). Without this the Hybrid Search tab stays blank
@@ -1098,6 +1304,105 @@ async def run_training(studio_id, organization_id, user_id) -> None:
             except Exception as _e:  # noqa: BLE001
                 detail["brain_graph"] = f"error: {_e}"
                 _log(sid, f"brain_graph failed: {_e}", "warn")
+
+            # --- Per-agent Auto-EDA (BI-uplift Phase 6) -----------------------
+            # Profile each agent's data (computed) + narrate insights + suggested
+            # questions, saved to data_sources.eda_profile and shown ONLY on that
+            # agent's Overview. Per-source fail-soft. No-op unless HYBRID_AUTO_EDA.
+            try:
+                from app.settings.hybrid_flags import flags as _eda_flags
+                if getattr(_eda_flags, "AUTO_EDA", False):
+                    _set(sid, step="auto_eda", pct=99)
+                    _log(sid, "▸ auto_eda", "info")
+                    from app.services.analytics.agent_eda import build_agent_eda
+                    _eda_ok = 0
+                    for ds in sources:
+                        try:
+                            r = await build_agent_eda(
+                                db, organization=organization, data_source=ds,
+                                model=train_model)
+                            if r and not r.get("error"):
+                                _eda_ok += 1
+                            elif r and r.get("error"):
+                                _log(sid, f"  auto_eda {getattr(ds,'name','?')}: {r['error']}", "warn")
+                        except Exception as _ee:  # noqa: BLE001 — per-source fail-soft
+                            logger.warning("train_orchestrator auto_eda failed for %s: %s",
+                                           getattr(ds, "id", "?"), _ee)
+                    detail["auto_eda"] = f"ok ({_eda_ok} agents)"
+                    _log(sid, f"auto_eda: {_eda_ok} agents profiled", "info")
+            except Exception as _e:  # noqa: BLE001
+                try:
+                    await db.rollback()
+                except Exception:  # noqa: BLE001
+                    pass
+                detail["auto_eda"] = f"error: {_e}"
+                _log(sid, f"auto_eda failed: {_e}", "warn")
+
+            # --- Per-agent KPI layer (BI-uplift Phase 3) ----------------------
+            # Propose governed KPIs (outcome ratios, leading/lagging, target/
+            # action) grounded on the agent's EDA profile, saved to
+            # data_sources.kpi_defs, shown on the agent Overview. Runs AFTER
+            # auto_eda so it can reuse the fresh profile. Per-source fail-soft.
+            try:
+                from app.settings.hybrid_flags import flags as _kpi_flags
+                if getattr(_kpi_flags, "KPI_LAYER", False):
+                    _set(sid, step="agent_kpis", pct=99)
+                    _log(sid, "▸ agent_kpis", "info")
+                    from app.services.analytics.agent_kpis import build_agent_kpis
+                    _kpi_ok = 0
+                    for ds in sources:
+                        try:
+                            r = await build_agent_kpis(
+                                db, organization=organization, data_source=ds,
+                                model=train_model)
+                            if r and not r.get("error"):
+                                _kpi_ok += 1
+                            elif r and r.get("error"):
+                                _log(sid, f"  agent_kpis {getattr(ds,'name','?')}: {r['error']}", "warn")
+                        except Exception as _ke:  # noqa: BLE001 — per-source fail-soft
+                            logger.warning("train_orchestrator agent_kpis failed for %s: %s",
+                                           getattr(ds, "id", "?"), _ke)
+                    detail["agent_kpis"] = f"ok ({_kpi_ok} agents)"
+                    _log(sid, f"agent_kpis: {_kpi_ok} agents", "info")
+            except Exception as _e:  # noqa: BLE001
+                try:
+                    await db.rollback()
+                except Exception:  # noqa: BLE001
+                    pass
+                detail["agent_kpis"] = f"error: {_e}"
+                _log(sid, f"agent_kpis failed: {_e}", "warn")
+
+            # --- Agent Overview autofill -------------------------------------
+            # Pin a primary instruction + seed conversation starters for any
+            # agent whose Overview is still empty, so a freshly-trained agent
+            # isn't blank ("No primary instruction / No conversation starters").
+            # Fills only what's missing; never overrides a user's choice.
+            # Fail-soft. No-op unless HYBRID_AUTOFILL_AGENT_OVERVIEW is on.
+            try:
+                from app.settings.hybrid_flags import flags as _ao_flags
+                if getattr(_ao_flags, "AUTOFILL_AGENT_OVERVIEW", True):
+                    _set(sid, step="agent_overview", pct=99)
+                    _log(sid, "▸ agent_overview", "info")
+                    from app.services.knowledge.agent_overview import autofill_agent_overview
+                    _filled = 0
+                    for ds in sources:
+                        try:
+                            r = await autofill_agent_overview(
+                                db, organization=organization, data_source=ds)
+                            if r and not r.get("error"):
+                                _filled += 1
+                        except Exception as _ae:  # noqa: BLE001 — per-source fail-soft
+                            logger.warning("train_orchestrator agent_overview failed for %s: %s",
+                                           getattr(ds, "id", "?"), _ae)
+                    detail["agent_overview"] = f"ok ({_filled} agents)"
+                    _log(sid, f"agent_overview: {_filled} agents filled", "info")
+            except Exception as _e:  # noqa: BLE001
+                try:
+                    await db.rollback()
+                except Exception:  # noqa: BLE001
+                    pass
+                detail["agent_overview"] = f"error: {_e}"
+                _log(sid, f"agent_overview failed: {_e}", "warn")
 
             # --- Done ---------------------------------------------------------
             _errs = [k for k, v in detail.items()

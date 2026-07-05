@@ -7,14 +7,26 @@
                     <h1 class="studios-h1">{{ $t('studio.title') }}</h1>
                     <p class="mt-3 text-[16px] leading-relaxed text-[#6E6356]">{{ $t('studio.subtitle') }}</p>
                 </div>
-                <button
-                    v-if="!disabled"
-                    class="studios-new shrink-0"
-                    @click="openCreate"
-                >
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>
-                    {{ $t('studio.newStudio') }}
-                </button>
+                <div v-if="!disabled" class="shrink-0 flex flex-col items-end gap-2">
+                    <button
+                        class="studios-new"
+                        :class="{ 'opacity-50 cursor-not-allowed': !llmConfigured }"
+                        :disabled="!llmConfigured"
+                        @click="openCreate"
+                    >
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>
+                        {{ $t('studio.newStudio') }}
+                    </button>
+                    <!-- LLM-not-configured card (gated New Studio) -->
+                    <div v-if="!llmConfigured" class="mt-3 max-w-[280px] rounded-xl bg-[#FBF1DD] border border-[#E9D5A8] text-[#8A5A12] px-3.5 py-3 text-left">
+                        <div class="flex items-center gap-2">
+                            <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 shrink-0 text-[#B4791E]" />
+                            <p class="text-[12px] font-semibold leading-snug">LLM not configured</p>
+                        </div>
+                        <p class="text-[11px] leading-snug mt-1 text-[#9A6A1E]">An admin must add a model key in Settings → Models before you can create agents.</p>
+                        <NuxtLink to="/settings/models" class="inline-flex items-center gap-1 mt-2 text-[11px] font-semibold text-[#8A5A12] hover:underline">Open Settings →</NuxtLink>
+                    </div>
+                </div>
             </div>
 
             <!-- Disabled (flag off) -->
@@ -52,9 +64,18 @@
                             </span>
                             <p class="text-sm text-[#1f2328] font-medium mb-1">{{ $t('studio.empty') }}</p>
                             <p class="text-xs text-[#9a958c] mb-4 max-w-md mx-auto leading-relaxed">{{ $t('studio.emptyHint') }}</p>
-                            <UButton color="white" size="xs" icon="i-heroicons-plus" class="bg-[#C2541E] hover:bg-[#A8330F] text-white font-semibold border-0 cursor-pointer transition-colors" @click="openCreate">
+                            <UButton color="white" size="xs" icon="i-heroicons-plus" class="bg-[#C2541E] hover:bg-[#A8330F] text-white font-semibold border-0 cursor-pointer transition-colors" :class="{ 'opacity-50 cursor-not-allowed': !llmConfigured }" :disabled="!llmConfigured" @click="openCreate">
                                 {{ $t('studio.newStudio') }}
                             </UButton>
+                            <!-- LLM-not-configured card (gated empty-state create) -->
+                            <div v-if="!llmConfigured" class="mt-4 max-w-md mx-auto rounded-xl bg-[#FBF1DD] border border-[#E9D5A8] text-[#8A5A12] px-3.5 py-3 text-left">
+                                <div class="flex items-center gap-2">
+                                    <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 shrink-0 text-[#B4791E]" />
+                                    <p class="text-[12px] font-semibold leading-snug">LLM not configured</p>
+                                </div>
+                                <p class="text-[11px] leading-snug mt-1 text-[#9A6A1E]">An admin must add a model key in Settings → Models before you can create agents.</p>
+                                <NuxtLink to="/settings/models" class="inline-flex items-center gap-1 mt-2 text-[11px] font-semibold text-[#8A5A12] hover:underline">Open Settings →</NuxtLink>
+                            </div>
                         </div>
                     </div>
 
@@ -157,8 +178,12 @@
 <script setup lang="ts">
 import StudioCard from '~/components/studio/StudioCard.vue'
 import Spinner from '~/components/Spinner.vue'
+import { useLlmConfigured } from '~/composables/useLlmConfigured'
 
 definePageMeta({ auth: true, layout: 'default' })
+
+// Org has no LLM key configured → hard-disable create entry points. FAIL-OPEN (default true).
+const { llmConfigured } = useLlmConfigured()
 
 // Design fonts (Spectral serif headings + Hanken Grotesk body).
 useHead({
@@ -307,6 +332,7 @@ const form = reactive({
 })
 
 const openCreate = () => {
+    if (!llmConfigured.value) return
     form.name = ''
     form.description = ''
     form.share_scope = 'private'

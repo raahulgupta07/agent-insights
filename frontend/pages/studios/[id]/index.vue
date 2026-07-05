@@ -200,11 +200,12 @@
                                 :hide-dropzone="true"
                                 class="mb-4"
                                 @applied="onSmartApplied"
+                                @queued="refreshInbox"
                                 @log="onStudioLog"
                             />
                             <!-- Auto-pilot v2 (reordered ADD→QUEUE→TRAIN→RESULT) — flag HYBRID_AUTOPILOT_V2.
                                  When OFF the original panel below renders byte-for-byte unchanged. -->
-                            <StudioAutopilotV2 v-if="autopilotV2Enabled" :studio-id="studio?.id" :sources="sources" :docs="docs" :readiness="readiness" :can-edit="canEdit" :training-all="trainingAll" :can-train="canTrain" :train-log="trainLog" :train-stages="trainStages" :train-log-lines="trainLogLines" :active-instr="activeInstr" :active-examples="activeExamples" :show-train-log-panel="showTrainLogPanel" @add="onAutopilotAdd" @train="runFullTrain" @open-tab="t => activeTab = t" />
+                            <StudioAutopilotV2 v-if="autopilotV2Enabled" ref="autopilotRef" :studio-id="studio?.id" :sources="sources" :docs="docs" :readiness="readiness" :can-edit="canEdit" :training-all="trainingAll" :can-train="canTrain" :train-log="trainLog" :train-stages="trainStages" :train-log-lines="trainLogLines" :active-instr="activeInstr" :active-examples="activeExamples" :show-train-log-panel="showTrainLogPanel" @add="onAutopilotAdd" @train="runFullTrain" @open-tab="t => activeTab = t" />
                             <template v-else>
                             <div class="flex items-start justify-between gap-4 mb-1">
                                 <div>
@@ -1143,11 +1144,9 @@
                         <section v-else-if="activeTab === 'i_codeenrich'">
                             <StudioIntelligence :studio-id="studioId" :sources="sources" :can-edit="canEdit" :forceLayer="'codeenrich'" />
                         </section>
-                        <section v-else-if="activeTab === 'i_insights'">
-                            <StudioIntelligence :studio-id="studioId" :sources="sources" :can-edit="canEdit" :forceLayer="'insights'" />
-                        </section>
-                        <section v-else-if="activeTab === 'i_forecast'">
-                            <StudioIntelligence :studio-id="studioId" :sources="sources" :can-edit="canEdit" :forceLayer="'forecast'" />
+                        <!-- Insights & Forecasts = Proactive Insights + Forecasting + Predictions in one panel -->
+                        <section v-else-if="activeTab === 'i_insights_forecasts'">
+                            <StudioIntelligence :studio-id="studioId" :sources="sources" :can-edit="canEdit" :forceLayer="'insights'" :combined="true" />
                         </section>
                         <section v-else-if="activeTab === 'i_search'">
                             <StudioIntelligence :studio-id="studioId" :sources="sources" :can-edit="canEdit" :forceLayer="'search'" />
@@ -1627,7 +1626,12 @@ async function loadInboxCount() {
         inboxCount.value = Array.isArray(q) ? q.length : 0
     } catch { inboxCount.value = 0 }
 }
-const refreshInbox = () => { try { inboxPanel.value?.refresh?.() } catch { /* fail-soft */ } ; loadInboxCount() }
+const autopilotRef = ref<any>(null)
+const refreshInbox = () => {
+    try { inboxPanel.value?.refresh?.() } catch { /* fail-soft */ }
+    try { autopilotRef.value?.refresh?.() } catch { /* fail-soft */ }
+    loadInboxCount()
+}
 // Train can run when a source is pinned OR data is queued in the inbox.
 const canTrain = computed(() => sources.value.length > 0 || inboxCount.value > 0)
 
@@ -2059,7 +2063,7 @@ const trainModel = computed<string>(() => {
         const hit = m.match(/(?:analysis|train)\s+model:\s*([^\s·]+)/i) || m.match(/route\s+model:\s*([^\s·]+)/i)
         if (hit && hit[1] && hit[1] !== 'heuristic-only') return hit[1]
     }
-    return 'z-ai/glm-5.2'
+    return studio.value?.config?.model_id || 'Auto'
 })
 const dockLines = ref<any[]>([])                  // combined stream fed to the dock
 let dockLineKey = 0                                // monotonic key for :key stability
@@ -2502,8 +2506,8 @@ const tabs = computed(() => [
     // INTELLIGENCE — the 8 hybrid capability layers (Wave 1+2). Additive group;
     // each item mounts StudioIntelligence pinned via :forceLayer (read-only v1).
     { value: 'i_codeenrich', label: 'Code Enrich', icon: 'i-heroicons-code-bracket', group: 'intelligence' },
-    { value: 'i_insights', label: 'Proactive Insights', icon: 'i-heroicons-sparkles', group: 'intelligence' },
-    { value: 'i_forecast', label: 'Forecasting', icon: 'i-heroicons-presentation-chart-line', group: 'intelligence' },
+    // Insights + Forecasting + Predictions folded into ONE tab (3 run buttons in StudioIntelligence combined mode).
+    { value: 'i_insights_forecasts', label: 'Insights & Forecasts', icon: 'i-heroicons-sparkles', group: 'intelligence' },
     { value: 'i_search', label: 'Hybrid Search + KG', icon: 'i-heroicons-share', group: 'intelligence' },
     { value: 'evals', label: t('studio.tabEvals') || 'Evals', icon: 'i-heroicons-beaker', group: 'operate' },
     { value: 'monitoring', label: t('studio.tabMonitoring') || 'Monitoring', icon: 'i-heroicons-chart-bar', group: 'operate' },

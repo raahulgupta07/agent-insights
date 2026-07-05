@@ -12,10 +12,12 @@ question resolving from an approved doc).
 
 Design invariants (mirrors the rest of the hybrid knowledge layer):
 
-* **Approval gate.** An ingested doc lands ``status='pending'``. ONLY
-  ``status='approved'`` docs (and their chunks) surface in :func:`search_docs`,
-  so a freshly ingested doc is automatically invisible until a human approves it
-  (mirrors the JOIN_MINER / SemanticTable / BrainGraphEdge convention).
+* **Approval gate.** ONLY ``status='approved'`` docs (and their chunks) surface in
+  :func:`search_docs`. A learned/external ingested doc lands ``status='pending'``
+  (invisible until a human approves it — mirrors the JOIN_MINER / SemanticTable /
+  BrainGraphEdge convention). First-party docs generated from the user's OWN
+  uploaded data (see :func:`_resolve_ingest_status`) land ``'approved'`` directly
+  when ``AUTOEDA_AUTOAPPROVE`` is on, so the agent can cite its own insights.
 * **Dedupe.** A re-ingest of the same ``(organization, data_source, content)``
   is UPSERTed in place rather than duplicated; identical body is a soft skip.
 * **Fail-soft retrieval.** :func:`search_docs` degrades silently to ``[]`` on ANY
@@ -47,6 +49,34 @@ _MIN_CHUNK_CHARS = 1
 # Paragraph / sentence boundary splitters for the chunker.
 _PARA_RE = re.compile(r"\n\s*\n")
 _SENT_RE = re.compile(r"(?<=[.!?])\s+")
+
+# First-party sources: docs generated FROM the user's own uploaded data / attached
+# files (spreadsheet glossaries, uploaded documents, Auto-EDA/insight summaries).
+# These are trusted → they may land 'approved' directly when AUTOEDA_AUTOAPPROVE is
+# on, so the agent can cite its own generated insights without a manual review step.
+# LEARNED / AI-proposed knowledge does NOT flow through ``ingest_doc`` at all (the
+# distiller / knowledge_proposer write SemanticTable/MetricDefinition/StudioInstruction
+# proposals, which keep their own review gate), and external sources ("notion",
+# "slack", "paste", "manual") are intentionally excluded here so they stay pending.
+_FIRST_PARTY_SOURCES = frozenset({"upload"})
+
+
+def _resolve_ingest_status(source: str, approve: Optional[bool]) -> str:
+    """Decide the status a freshly ingested doc should land in.
+
+    First-party = generated from the user's own uploaded data / attached files
+    (``approve=True`` explicitly, or ``source`` in :data:`_FIRST_PARTY_SOURCES`).
+    Such docs land ``'approved'`` ONLY when the ``AUTOEDA_AUTOAPPROVE`` flag is on;
+    everything else — and any flag-read failure — falls back to today's ``'pending'``
+    (backward-compatible, fail-soft). Never raises."""
+    try:
+        first_party = approve if approve is not None else (source in _FIRST_PARTY_SOURCES)
+        if not first_party:
+            return "pending"
+        from app.settings.hybrid_flags import flags
+        return "approved" if flags.AUTOEDA_AUTOAPPROVE else "pending"
+    except Exception:  # noqa: BLE001 — any flag/import failure => keep the gate
+        return "pending"
 
 
 # ---------------------------------------------------------------------------
@@ -149,16 +179,23 @@ async def ingest_doc(
     source: str = "upload",
     data_source_id: Optional[str] = None,
     url: Optional[str] = None,
+    approve: Optional[bool] = None,
 ) -> dict:
     """Ingest (or re-ingest) one document for an org, chunk it, and persist.
+
+    The landing ``status`` is decided by :func:`_resolve_ingest_status`: first-party
+    docs (``approve=True`` or a first-party ``source`` such as ``"upload"``) land
+    ``'approved'`` when ``AUTOEDA_AUTOAPPROVE`` is on, so the agent can cite its own
+    generated insights immediately; everything else (and any flag failure) stays
+    ``'pending'`` behind the review gate — today's behavior.
 
     UPSERT keyed on ``(organization_id, data_source_id, content_hash)``:
 
     * **Existing (non-deleted) match** — update its ``title/body/source/url``,
-      reset ``status`` back to ``'pending'`` (re-approval required), drop and
-      re-insert its chunks. If the body is byte-identical we soft-skip the
-      re-chunk (the row already reflects this content) and report ``deduped``.
-    * **No match** — INSERT a new ``KnowledgeDoc(status='pending')`` tagged
+      set ``status`` per the rule above, drop and re-insert its chunks. If the body
+      is byte-identical we soft-skip the re-chunk (the row already reflects this
+      content) and report ``deduped``.
+    * **No match** — INSERT a new ``KnowledgeDoc`` tagged
       ``structured_data={"origin": "docs_index"}``.
 
     Chunks are produced by :func:`_chunk_text` and one ``KnowledgeDocChunk`` is
@@ -177,6 +214,10 @@ async def ingest_doc(
     title = title or ""
     body = body or ""
     content_hash = _content_hash(title, body)
+
+    # First-party generated docs (uploaded data / attached files) may land
+    # 'approved' when AUTOEDA_AUTOAPPROVE is on; otherwise 'pending' (the gate).
+    doc_status = _resolve_ingest_status(source, approve)
 
     try:
         # --- locate an existing (non-deleted) doc for this dedupe key --------
@@ -198,7 +239,7 @@ async def ingest_doc(
             existing.source = source
             existing.url = url
             existing.body = body
-            existing.status = "pending"
+            existing.status = doc_status
 
             if body_identical:
                 # Count existing live chunks for an accurate return value.
@@ -227,7 +268,7 @@ async def ingest_doc(
                 body=body,
                 url=url,
                 content_hash=content_hash,
-                status="pending",
+                status=doc_status,
                 structured_data={"origin": "docs_index"},
             )
             db.add(doc)

@@ -298,7 +298,7 @@ def _build_prompt(kind: str, source_names: List[str], schema_digest: str) -> str
     )
 
 
-async def generate_artifact(db: AsyncSession, studio, kind: str, *, organization=None) -> str:
+async def generate_artifact(db: AsyncSession, studio, kind: str, *, organization=None, model=None) -> str:
     """Generate an artifact body for ``kind`` over the Studio's pinned sources.
 
     ``kind`` must be in :data:`GENERATED_KINDS`. ``data_dictionary`` is built
@@ -329,9 +329,10 @@ async def generate_artifact(db: AsyncSession, studio, kind: str, *, organization
     # Resolve the org's small/cheap default model (reuse, no new infra).
     from app.services.llm_service import LLMService
 
-    model = await LLMService().get_default_model(
-        db, organization, getattr(studio, "owner_user_id", None), is_small=True
-    )
+    if model is None:
+        model = await LLMService().get_default_model(
+            db, organization, getattr(studio, "owner_user_id", None), is_small=True
+        )
     if model is None:
         raise ValueError("No LLM model is configured for this organization.")
 
@@ -342,7 +343,7 @@ async def generate_artifact(db: AsyncSession, studio, kind: str, *, organization
         from app.ai.llm.llm import LLM
         from app.dependencies import async_session_maker
 
-        return LLM(model, usage_session_maker=async_session_maker).inference(prompt)
+        return LLM(model, usage_session_maker=async_session_maker).inference(prompt, usage_scope="train_artifacts")
 
     try:
         text = await asyncio.to_thread(_infer)

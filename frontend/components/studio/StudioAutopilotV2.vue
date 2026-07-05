@@ -20,29 +20,61 @@
       </div>
     </div>
 
+    <!-- MODEL (compact — pick the LLM this agent uses for analysis + file routing) -->
+    <div class="mt-4 border border-[#E9E0D3] rounded-xl bg-white px-3 py-2.5">
+      <div class="flex items-center gap-3 flex-wrap">
+        <span class="text-[12.5px] font-semibold text-[#1f2328] shrink-0">Model</span>
+        <div class="relative">
+          <select
+            v-model="selectedModelId"
+            :disabled="modelSaving"
+            class="appearance-none text-[12px] text-[#1f2328] bg-[#fdfcf9] border border-[#E9E0D3] rounded-lg pl-2.5 pr-7 py-1.5 focus:outline-none focus:border-[#C2541E] disabled:opacity-60"
+            @change="saveModel">
+            <option :value="null">Default (org)</option>
+            <option v-for="m in models" :key="m.id" :value="m.id">{{ m.name }}</option>
+          </select>
+          <UIcon name="i-heroicons-chevron-down" class="w-3.5 h-3.5 text-[#9a958c] absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+        </div>
+        <Spinner v-if="modelSaving" class="h-3.5 w-3.5 text-[#C2541E]" />
+        <span v-else-if="modelSaved" class="inline-flex items-center gap-1 text-[11px] font-semibold text-[#2F6F4F]">
+          <UIcon name="i-heroicons-check-circle" class="w-4 h-4" /> Saved
+        </span>
+        <span v-else-if="modelError" class="text-[11px] text-[#A8330F]">{{ modelError }}</span>
+        <span class="text-[10.5px] text-[#9a958c] ms-auto">Used for analysis and file routing.</span>
+      </div>
+    </div>
+
+    <!-- LLM-key gate notice (shown only when the org has no model key) -->
+    <div v-if="llmConfigured === false" class="mt-4 flex items-center gap-2 text-[11.5px] text-[#9A6A12] bg-[#FBF1DD] border border-[#EBD9AE] rounded-xl px-3 py-2">
+      <UIcon name="i-heroicons-key" class="w-4 h-4 shrink-0" />
+      <span>Add your model key in
+        <NuxtLink to="/settings/models" class="font-semibold underline hover:text-[#C2541E]">Settings &rarr; Models</NuxtLink>
+        to start adding data.</span>
+    </div>
+
     <!-- 1 · ADD (compact) -->
     <div class="relative mt-4 border border-[#E9E0D3] rounded-2xl bg-white p-3">
       <span class="absolute -top-2.5 left-4 bg-[#2B2A26] text-white text-[9.5px] font-semibold px-2.5 py-0.5 rounded-full tracking-wide">1 &middot; ADD</span>
       <!-- One row of source buttons: Database · Upload · OneDrive · SharePoint · Folder.
            Each opens its existing connect flow via @add. Scrolls horizontally if narrow. -->
       <div class="flex gap-2 mt-1.5 overflow-x-auto pb-1">
-        <button type="button" :disabled="!canEdit" class="flex-1 min-w-[150px] flex items-center gap-2 text-left border border-[#E9E0D3] rounded-xl px-3 py-2.5 bg-gradient-to-b from-white to-[#fdfcf9] hover:border-[#2F6F4F] transition-colors disabled:opacity-50" @click="$emit('add','database')">
+        <button type="button" :disabled="!canEdit || !llmConfigured" class="flex-1 min-w-[150px] flex items-center gap-2 text-left border border-[#E9E0D3] rounded-xl px-3 py-2.5 bg-gradient-to-b from-white to-[#fdfcf9] hover:border-[#2F6F4F] transition-colors disabled:opacity-50 disabled:cursor-not-allowed" @click="$emit('add','database')">
           <span class="w-7 h-7 rounded-lg bg-[#E7F1EB] flex items-center justify-center shrink-0"><UIcon name="i-heroicons-circle-stack" class="w-4 h-4 text-[#2F6F4F]" /></span>
           <span class="min-w-0"><span class="block text-[12.5px] font-semibold text-[#1f2328] truncate">Database</span><span class="block text-[10.5px] text-[#9a958c] truncate">Postgres · MySQL · Snowflake</span></span>
         </button>
-        <button type="button" :disabled="!canEdit" class="flex-1 min-w-[150px] flex items-center gap-2 text-left border border-[#E9E0D3] rounded-xl px-3 py-2.5 bg-gradient-to-b from-white to-[#fdfcf9] hover:border-[#C2541E] transition-colors disabled:opacity-50" @click="$emit('add','upload')">
+        <button type="button" :disabled="!canEdit || !llmConfigured" class="flex-1 min-w-[150px] flex items-center gap-2 text-left border border-[#E9E0D3] rounded-xl px-3 py-2.5 bg-gradient-to-b from-white to-[#fdfcf9] hover:border-[#C2541E] transition-colors disabled:opacity-50 disabled:cursor-not-allowed" @click="$emit('add','upload')">
           <span class="w-7 h-7 rounded-lg bg-[#F6EBE3] flex items-center justify-center shrink-0"><UIcon name="i-heroicons-arrow-up-tray" class="w-4 h-4 text-[#C2541E]" /></span>
           <span class="min-w-0"><span class="block text-[12.5px] font-semibold text-[#1f2328] truncate">Upload file</span><span class="block text-[10.5px] text-[#9a958c] truncate">.csv .xlsx .pdf .docx</span></span>
         </button>
-        <button type="button" :disabled="!canEdit" class="flex-1 min-w-[150px] flex items-center gap-2 text-left border border-[#E9E0D3] rounded-xl px-3 py-2.5 bg-gradient-to-b from-white to-[#fdfcf9] hover:border-[#2C6EB5] transition-colors disabled:opacity-50" @click="$emit('add','onedrive')">
+        <button type="button" :disabled="!canEdit || !llmConfigured" class="flex-1 min-w-[150px] flex items-center gap-2 text-left border border-[#E9E0D3] rounded-xl px-3 py-2.5 bg-gradient-to-b from-white to-[#fdfcf9] hover:border-[#2C6EB5] transition-colors disabled:opacity-50 disabled:cursor-not-allowed" @click="$emit('add','onedrive')">
           <span class="w-7 h-7 rounded-lg bg-[#E6F0FA] flex items-center justify-center shrink-0"><UIcon name="i-heroicons-cloud" class="w-4 h-4 text-[#2C6EB5]" /></span>
           <span class="min-w-0"><span class="block text-[12.5px] font-semibold text-[#1f2328] truncate">OneDrive</span><span class="block text-[10.5px] text-[#9a958c] truncate">personal files</span></span>
         </button>
-        <button type="button" :disabled="!canEdit" class="flex-1 min-w-[150px] flex items-center gap-2 text-left border border-[#E9E0D3] rounded-xl px-3 py-2.5 bg-gradient-to-b from-white to-[#fdfcf9] hover:border-[#2C6EB5] transition-colors disabled:opacity-50" @click="$emit('add','sharepoint')">
+        <button type="button" :disabled="!canEdit || !llmConfigured" class="flex-1 min-w-[150px] flex items-center gap-2 text-left border border-[#E9E0D3] rounded-xl px-3 py-2.5 bg-gradient-to-b from-white to-[#fdfcf9] hover:border-[#2C6EB5] transition-colors disabled:opacity-50 disabled:cursor-not-allowed" @click="$emit('add','sharepoint')">
           <span class="w-7 h-7 rounded-lg bg-[#E6F0FA] flex items-center justify-center shrink-0"><UIcon name="i-heroicons-building-office-2" class="w-4 h-4 text-[#2C6EB5]" /></span>
           <span class="min-w-0"><span class="block text-[12.5px] font-semibold text-[#1f2328] truncate">SharePoint</span><span class="block text-[10.5px] text-[#9a958c] truncate">team library</span></span>
         </button>
-        <button type="button" :disabled="!canEdit" class="flex-1 min-w-[150px] flex items-center gap-2 text-left border border-[#E9E0D3] rounded-xl px-3 py-2.5 bg-gradient-to-b from-white to-[#fdfcf9] hover:border-[#C2541E] transition-colors disabled:opacity-50" @click="$emit('add','folder')">
+        <button type="button" :disabled="!canEdit || !llmConfigured" class="flex-1 min-w-[150px] flex items-center gap-2 text-left border border-[#E9E0D3] rounded-xl px-3 py-2.5 bg-gradient-to-b from-white to-[#fdfcf9] hover:border-[#C2541E] transition-colors disabled:opacity-50 disabled:cursor-not-allowed" @click="$emit('add','folder')">
           <span class="w-7 h-7 rounded-lg bg-[#F4E5DA] flex items-center justify-center shrink-0 text-[#C2541E] text-base">⟳</span>
           <span class="min-w-0"><span class="block text-[12.5px] font-semibold text-[#1f2328] truncate">Folder</span><span class="block text-[10.5px] text-[#9a958c] truncate">desktop auto-sync</span></span>
         </button>
@@ -131,7 +163,10 @@
             <div class="flex items-center gap-1.5"><DataSourceIcon v-if="s.type" class="h-3.5 shrink-0" :type="s.type" /><UIcon v-else name="i-heroicons-circle-stack" class="w-3.5 h-3.5 text-[#9a958c] shrink-0" /><span class="text-[11px] font-medium text-[#1f2328] truncate">{{ s.name || s.agent_id }}</span></div>
           </div>
           <div v-if="!(sources || []).length" class="text-[10.5px] text-[#5f7d6c] mt-1.5">Add a sheet or connect a source above.</div>
-          <button type="button" class="mt-auto pt-2 text-[10px] text-[#2F6F4F] font-medium text-left hover:underline" @click="$emit('openTab','sources')">Manage in Sources →</button>
+          <div class="mt-auto pt-2 flex items-center gap-3">
+            <button type="button" class="text-[10px] text-[#2F6F4F] font-medium text-left hover:underline" @click="$emit('openTab','sources')">Manage in Sources →</button>
+            <button v-if="(sources || []).length" type="button" :disabled="repairing" class="text-[10px] text-[#9A6A12] font-medium hover:underline disabled:opacity-50" title="Stitch same-schema tables that were uploaded in separate sessions back into one table" @click="repairData">{{ repairing ? 'Repairing…' : 'Repair data' }}</button>
+          </div>
         </div>
         <!-- KNOWLEDGE -->
         <div class="rounded-xl border border-[#E9E0D3] bg-[#E4F0F4] p-3 flex flex-col min-h-[164px]">
@@ -171,6 +206,8 @@
 </template>
 
 <script setup lang="ts">
+import { useLlmConfigured } from '~/composables/useLlmConfigured'
+
 const props = defineProps<{
   studioId: string
   sources: any[]
@@ -195,6 +232,98 @@ defineEmits<{
 
 const inboxRef = ref<any>(null)
 const termEl = ref<HTMLElement | null>(null)
+
+// Repair data: stitch same-schema orphan tables (files uploaded in separate
+// sessions) back into each pinned source's ONE bound table. POSTs the generic
+// self-heal route for every pinned source and surfaces a single result toast.
+const toast = useToast()
+const repairing = ref(false)
+async function repairData() {
+  if (repairing.value) return
+  repairing.value = true
+  let stitched = 0
+  let rows = 0
+  let failed = 0
+  try {
+    for (const s of (props.sources || [])) {
+      const dsId = s.agent_id || s.data_source_id || s.id
+      if (!dsId) continue
+      try {
+        const { data, error } = await useMyFetch<any>(`/data_sources/${dsId}/repair`, { method: 'POST' })
+        if (error.value) { failed++; continue }
+        const rep = (data.value as any)?.report
+        if (rep && rep.ok) { stitched += (rep.tables_stitched || 0); rows += (rep.rows_added || 0) }
+        else if (rep && rep.ok === false) { failed++ }
+      } catch { failed++ }
+    }
+    if (failed && !stitched) {
+      toast.add({ title: 'Repair failed', description: 'Could not repair this agent’s data.', color: 'red', icon: 'i-heroicons-exclamation-triangle' })
+    } else if (stitched) {
+      toast.add({ title: 'Data repaired', description: `Stitched ${stitched} orphaned table(s), added ${rows} row(s).`, color: 'green', icon: 'i-heroicons-check-circle' })
+    } else {
+      toast.add({ title: 'Nothing to repair', description: 'No split tables found — data is already unified.', color: 'green', icon: 'i-heroicons-check-circle' })
+    }
+  } finally {
+    repairing.value = false
+  }
+}
+
+// LLM-key gate (fail-open: llmConfigured defaults true, flips false only on explicit no-key).
+const { llmConfigured } = useLlmConfigured()
+
+// ─── Model selection card ───────────────────────────────────────────────────
+// Lists the org's enabled models (same endpoint/shape as PromptBoxV2.loadModels).
+// Value = model slug/id; null = org default. Reads/writes studio.config.model_id.
+const models = ref<any[]>([])
+const studioConfig = ref<Record<string, any>>({})   // full existing config (backend REPLACES it wholesale)
+const selectedModelId = ref<string | null>(null)
+const modelSaving = ref(false)
+const modelSaved = ref(false)
+const modelError = ref('')
+let savedTimer: any = null
+
+async function loadModelList() {
+  try {
+    const { data } = await useMyFetch<any>('/llm/models?is_enabled=true')
+    if (Array.isArray(data.value)) models.value = data.value
+  } catch { /* fail-soft — dropdown just shows Default (org) */ }
+}
+
+async function loadStudioModel() {
+  if (!props.studioId) return
+  try {
+    const { data, error } = await useMyFetch<any>(`/studios/${props.studioId}`)
+    if (error?.value) return
+    const cfg = ((data.value as any)?.config) || {}
+    studioConfig.value = cfg
+    selectedModelId.value = cfg.model_id != null ? cfg.model_id : null
+  } catch { /* fail-soft */ }
+}
+
+async function saveModel() {
+  modelError.value = ''
+  modelSaved.value = false
+  modelSaving.value = true
+  // Spread the FULL existing config (backend replaces it wholesale), set/omit model_id.
+  const nextConfig: Record<string, any> = { ...studioConfig.value }
+  if (selectedModelId.value) nextConfig.model_id = selectedModelId.value
+  else delete nextConfig.model_id
+  try {
+    const { error } = await useMyFetch<any>(`/studios/${props.studioId}`, {
+      method: 'PATCH',
+      body: { config: nextConfig },
+    })
+    if (error?.value) throw error.value
+    studioConfig.value = nextConfig
+    modelSaved.value = true
+    if (savedTimer) clearTimeout(savedTimer)
+    savedTimer = setTimeout(() => { modelSaved.value = false }, 2000)
+  } catch {
+    modelError.value = 'Save failed'
+  } finally {
+    modelSaving.value = false
+  }
+}
 
 // Own train-status fetch (parent already polls for the log lines we render as a prop,
 // but the segregation receipt — detail.route_inbox — we resolve here, fail-soft).
@@ -280,6 +409,17 @@ watch(() => props.trainingAll, (now, prev) => {
   }
 })
 
-onMounted(() => { loadStatus(); loadCoverage() })
-onBeforeUnmount(() => { if (timer) { clearInterval(timer); timer = null } })
+// Parent calls this (via ref) after an inline upload queues files → refresh the
+// embedded Inbox rows + train status so the newly-queued files appear.
+function refresh() {
+  try { inboxRef.value?.refresh?.() } catch { /* fail-soft */ }
+  loadStatus()
+}
+defineExpose({ refresh })
+
+onMounted(() => { loadStatus(); loadCoverage(); loadModelList(); loadStudioModel() })
+onBeforeUnmount(() => {
+  if (timer) { clearInterval(timer); timer = null }
+  if (savedTimer) { clearTimeout(savedTimer); savedTimer = null }
+})
 </script>

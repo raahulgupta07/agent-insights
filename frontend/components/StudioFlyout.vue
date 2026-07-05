@@ -1,8 +1,10 @@
 <template>
   <!-- Studio hover flyout (teleported so it never gets clipped by popovers).
-       Mirrors AgentFlyout but for a Studio: shows the auto-generated summary,
-       pinned sources and suggested questions. Clicking a question starts a
-       grounded report on the studio + all its pinned sources. -->
+       Same tabbed layout as a Data Agent: the shared <AgentDetail> renders
+       Overview / Tables / Instructions / Queries for the studio's bound source,
+       with the studio's own summary + suggested questions injected into Overview
+       via the overview-lead slot. Clicking a question starts a grounded report
+       on the studio + all its pinned sources. -->
   <Teleport to="body">
     <Transition
       enter-active-class="transition-all duration-150 ease-out"
@@ -37,16 +39,26 @@
                 Open studio →
               </NuxtLink>
             </div>
-            <!-- Pinned source chips -->
+            <!-- Pinned source chips. When a studio pins more than one source the
+                 chips are clickable and switch which source's tables/instructions/
+                 queries the tabs show; with a single source they're just labels. -->
             <div v-if="sources.length" class="flex flex-wrap gap-1 mt-2">
-              <span
+              <button
                 v-for="src in sources.slice(0, 4)"
                 :key="src.agent_id"
-                class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-gray-200 bg-gray-50 text-[11px] text-gray-600"
+                type="button"
+                @click="selectedAgentId = src.agent_id"
+                :class="[
+                  'inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[11px] transition-colors',
+                  sources.length > 1 ? 'cursor-pointer' : 'cursor-default',
+                  src.agent_id === selectedAgentId && sources.length > 1
+                    ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
+                    : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100'
+                ]"
               >
                 <DataSourceIcon v-if="src.type" :type="src.type" class="h-3 flex-shrink-0" />
                 <span class="truncate max-w-[120px]">{{ src.name || 'Source' }}</span>
-              </span>
+              </button>
               <span v-if="sources.length > 4" class="text-[11px] text-gray-400 self-center">+{{ sources.length - 4 }}</span>
             </div>
             <div v-else class="mt-2 inline-flex items-center gap-1 text-[11px] text-amber-600">
@@ -55,18 +67,23 @@
             </div>
           </div>
 
-          <div class="p-4 flex-1 min-h-0 overflow-y-auto">
-            <div v-if="loading" class="flex items-center justify-center py-8">
-              <Spinner class="w-5 h-5 text-gray-400 animate-spin" />
-            </div>
+          <!-- Body -->
+          <div v-if="loading" class="p-4 flex items-center justify-center py-8 flex-shrink-0">
+            <Spinner class="w-5 h-5 text-gray-400 animate-spin" />
+          </div>
 
-            <template v-else>
-              <!-- Summary -->
-              <div v-if="summary" class="text-xs text-gray-600 leading-relaxed mb-4 max-h-[200px] overflow-auto pe-1">
+          <!-- Tabbed detail for the selected pinned source, with the studio's own
+               summary + suggested questions surfaced at the top of Overview. -->
+          <AgentDetail
+            v-else-if="selectedAgentId"
+            :agent-id="selectedAgentId"
+            :show-starters="false"
+            :report-grounding="{ dataSources: allSourceIds, studioId }"
+          >
+            <template #overview-lead>
+              <div v-if="summary" class="text-xs text-gray-600 leading-relaxed max-h-[200px] overflow-auto pe-1">
                 {{ summary }}
               </div>
-
-              <!-- Suggested questions -->
               <div v-if="questions.length">
                 <div class="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-2">Sample questions</div>
                 <div class="space-y-1.5">
@@ -88,14 +105,17 @@
                   </button>
                 </div>
               </div>
-
-              <div
-                v-if="!summary && !questions.length"
-                class="text-xs text-gray-400 italic py-6 text-center"
-              >
-                No studio details yet. Pin a source to generate them.
-              </div>
             </template>
+          </AgentDetail>
+
+          <!-- No pinned source → nothing to show tabs for. -->
+          <div v-else class="p-4 flex-shrink-0">
+            <div v-if="summary" class="text-xs text-gray-600 leading-relaxed mb-4 max-h-[200px] overflow-auto pe-1">
+              {{ summary }}
+            </div>
+            <div class="text-xs text-gray-400 italic py-6 text-center">
+              No sources pinned yet. Pin a source to see its tables, instructions and queries.
+            </div>
           </div>
         </div>
       </div>
@@ -106,6 +126,7 @@
 <script setup lang="ts">
 import Spinner from '~/components/Spinner.vue'
 import DataSourceIcon from '~/components/DataSourceIcon.vue'
+import AgentDetail from '~/components/AgentDetail.vue'
 
 const router = useRouter()
 
@@ -137,6 +158,10 @@ const questions = ref<string[]>([])
 const sources = ref<any[]>([])
 const cache = ref<Record<string, { summary: string; questions: string[]; sources: any[] }>>({})
 
+// Which pinned source's detail is shown in the tabs (defaults to the first).
+const selectedAgentId = ref<string | null>(null)
+const allSourceIds = computed(() => sources.value.map((x: any) => String(x.agent_id)).filter(Boolean))
+
 const creating = ref(false)
 const creatingIdx = ref<number | null>(null)
 
@@ -152,10 +177,16 @@ function _parseQuestions(content: string | null | undefined): string[] {
   return []
 }
 
+function _applyEntry(entry: { summary: string; questions: string[]; sources: any[] }) {
+  summary.value = entry.summary
+  questions.value = entry.questions
+  sources.value = entry.sources
+  selectedAgentId.value = entry.sources?.[0]?.agent_id ? String(entry.sources[0].agent_id) : null
+}
+
 async function fetchStudio(id: string) {
   if (cache.value[id]) {
-    const c = cache.value[id]
-    summary.value = c.summary; questions.value = c.questions; sources.value = c.sources
+    _applyEntry(cache.value[id])
     return
   }
   loading.value = true
@@ -170,9 +201,7 @@ async function fetchStudio(id: string) {
     const srcs = (srcData.value as any[] | null) || []
     const entry = { summary: sum, questions: _parseQuestions(sq), sources: srcs }
     cache.value[id] = entry
-    if (props.studioId === id) {
-      summary.value = entry.summary; questions.value = entry.questions; sources.value = entry.sources
-    }
+    if (props.studioId === id) _applyEntry(entry)
   } catch (e) {
     console.error('Failed to load studio flyout:', e)
   } finally {
@@ -185,14 +214,13 @@ async function startReport(question: string, idx: number) {
   creating.value = true
   creatingIdx.value = idx
   try {
-    const dataSources = sources.value.map((x: any) => String(x.agent_id))
     const { data, error } = await useMyFetch<any>('/reports', {
       method: 'POST',
       body: {
         title: `${props.name || 'Studio'} chat`,
         files: [],
         new_message: question,
-        data_sources: dataSources,
+        data_sources: allSourceIds.value,
         studio_id: props.studioId,
       },
     })
@@ -211,7 +239,7 @@ async function startReport(question: string, idx: number) {
 
 watch(() => props.studioId, (id, old) => {
   if (id && id !== old) {
-    summary.value = ''; questions.value = []; sources.value = []
+    summary.value = ''; questions.value = []; sources.value = []; selectedAgentId.value = null
     fetchStudio(id)
   }
 }, { immediate: true })
