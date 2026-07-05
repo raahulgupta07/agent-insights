@@ -1929,7 +1929,14 @@ class AgentV2:
                 studio_id=_studio_id,
                 data_source_ids=_ds_ids,
             )
-            if not outcome.served or not outcome.answer_md:
+            # Never short-circuit the agent loop with a DEGENERATE cache hit.
+            # A served answer with 0 rows (or blank markdown) renders as an empty
+            # assistant bubble AND skips the clarifying-question step — repeated
+            # identical prompts (e.g. "summaries for me") were serving a hollow
+            # 0-row entry, so the user saw nothing and was never asked what they
+            # wanted. Fall through to a real run instead (correctness > cache).
+            _ans_md = (outcome.answer_md or "").strip()
+            if not outcome.served or not _ans_md or getattr(outcome, "row_count", 0) <= 0:
                 return False
 
             # Write the served answer + stamp the serving tier and end-to-end

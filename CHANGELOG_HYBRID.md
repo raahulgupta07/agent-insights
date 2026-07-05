@@ -9,6 +9,10 @@ Bullet rules (this is the user-facing "What's new" feed):
     Hidden from the popover; shown collapsed on the full /changelog page only.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.111.0 — Repeated prompts no longer answer with an empty bubble  (2026-07-05)
+- Asking the same thing twice used to return a blank reply (and skip the clarifying questions) — now it re-runs and answers properly instead of serving a hollow cached result.
+  - `ai/agent_v2.py::_serve_from_reasoning_cache` (~L1932): the serving-funnel answer cache short-circuits the whole agent loop on a cache hit, but a DEGENERATE hit (blank markdown or `row_count <= 0`) rendered as an empty assistant bubble AND skipped the clarifying-question step (repeated identical prompts served a 0-row entry — log tell `serving-funnel answer_cache hit (0 rows, 0 LLM)`). Guard added: `if not outcome.served or not (outcome.answer_md or '').strip() or getattr(outcome,'row_count',0) <= 0: return False` → fall through to a real run. Correctness > cache.
+
 ## v1.110.0 — Chat tables scroll instead of shredding into letter-by-letter columns  (2026-07-05)
 - Wide tables in a chat answer no longer crush every column so words break mid-letter — the table now scrolls sideways and each column gets real width, so text wraps on spaces and stays readable.
   - `components/CompletionMessageComponent.vue` `:deep(.markdown-content) table`: markdown emits a bare `<table>` (no wrapper), so the table itself is the scroll box — `display:block; width:max-content; max-width:100%; overflow-x:auto` (grow to content, capped at the chat column width, scroll when wider) replacing the old `w-full`. Cells gain `min-width:6rem; white-space:normal; word-break:normal; overflow-wrap:normal; vertical-align:top`; first (label) column `white-space:nowrap`. CSS-only, no template/JS change.
