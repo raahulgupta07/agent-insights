@@ -33,7 +33,8 @@
                                 <component :is="NuxtLink" to="/studios" class="text-[#C2541E] font-medium hover:underline">{{ t('data.studiosPointerLink') }}</component>
                             </p>
                         </div>
-                        <!-- Right side: search (once there's >1 agent) + New agent -->
+                        <!-- Right side: search only. Agents are created by signing into a
+                             connector above, so no manual "New agent" action here. -->
                         <div class="flex items-center gap-2 shrink-0 mt-1.5">
                             <!-- Compact search — only once the user has agents to filter -->
                             <div v-if="allAgents.length > 1" class="relative w-40 sm:w-56">
@@ -48,15 +49,6 @@
                                     class="absolute start-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9a958c]"
                                 />
                             </div>
-                            <!-- Primary create action → shell-first "create agent → add data" flow -->
-                            <component
-                                :is="NuxtLink"
-                                to="/agents/new"
-                                class="inline-flex items-center gap-1.5 px-3.5 py-2 text-[13px] font-medium text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-lg whitespace-nowrap transition-colors"
-                            >
-                                <UIcon name="i-heroicons-plus" class="w-4 h-4" />
-                                {{ $t('data.newAgent') }}
-                            </component>
                         </div>
                     </div>
 
@@ -128,16 +120,6 @@
                         </div>
                         <h3 class="text-[15px] font-semibold text-[#1f2328]" style="font-family: 'Spectral', ui-serif, Georgia, serif">{{ $t('data.emptyNoAgents') }}</h3>
                         <p class="mt-1 text-sm text-[#9a958c] max-w-md mx-auto">{{ $t('data.emptyNoAgentsHint') }}</p>
-                        <div class="mt-5">
-                            <component
-                                :is="NuxtLink"
-                                to="/agents/new"
-                                class="inline-flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium text-white bg-[#C2541E] hover:bg-[#A8330F] rounded-lg transition-colors"
-                            >
-                                <UIcon name="i-heroicons-plus" class="w-4 h-4" />
-                                {{ $t('data.newAgent') }}
-                            </component>
-                        </div>
                         <p class="mt-4 text-[13px] text-[#9a958c]">
                             {{ t('data.studiosPointer') }}
                             <component :is="NuxtLink" to="/studios" class="text-[#C2541E] font-medium hover:underline">{{ t('data.studiosPointerLink') }}</component>

@@ -3,6 +3,10 @@
 Hybrid feature changelog (our additions on top of the bagofwords/Dash base). Newest first.
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` then bullets.
 
+## v1.123.2 — Remove "New agent" button from Data Agents page  (2026-07-05)
+- Data Agents are created automatically when you sign into a connector, so the manual "+ New agent" button was redundant — removed it from both the header and the empty state. The connector hub above is the only way in.
+  - `pages/agents/index.vue`: dropped both `/agents/new` NuxtLink buttons. Route left intact (dead link, harmless).
+
 ## v1.123.1 — Fix: connector Show/Hide toggle now actually persists  (2026-07-05)
 - The connector Show/Hide toggle saved but always sprang back to "shown" (and never hid the card on the Data Agents page). Fixed — it now sticks.
   - Root cause: `GET /organization/settings` serializes `config` through a fixed Pydantic schema (`OrganizationSettingsConfig`) that whitelists keys; `connectors_hidden` wasn't declared → stripped on every read (saved to the DB json column by PUT, dropped on read). Added `connectors_hidden: List[str] = []` to the schema so it round-trips. Backend-only, no FE change.
