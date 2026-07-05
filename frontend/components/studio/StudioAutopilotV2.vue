@@ -115,7 +115,7 @@
           <div class="flow-bar-row">
             <div class="flow-bar"><div class="flow-bar-fill" :style="{ width: flowPct + '%' }"></div></div>
             <span v-if="trainingAll" class="flow-status flow-status-run">running &middot; {{ flowPct }}%</span>
-            <span v-else-if="flowAllDone" class="flow-status flow-status-done">✓ agent ready &middot; 100%</span>
+            <span v-else-if="flowReady" class="flow-status flow-status-done">✓ agent ready &middot; 100%</span>
             <span v-else class="flow-status">{{ flowPct }}%</span>
           </div>
 
@@ -130,7 +130,7 @@
                   <div class="bpmn-box">
                     <svg class="bpmn-icon" viewBox="0 0 24 24" v-html="iconFor(n.key)" />
                     <svg class="ring" viewBox="0 0 70 70"><circle class="track" cx="35" cy="35" r="32" /><circle class="fill" cx="35" cy="35" r="32" stroke-dasharray="201" :stroke-dashoffset="n.state === 'running' ? 110 : 201" /></svg>
-                    <span class="bpmn-badge">{{ n.state === 'done' ? '✓' : n.state === 'held' ? '◌' : '' }}</span>
+                    <span class="bpmn-badge">{{ n.state === 'done' ? '✓' : n.state === 'skipped' ? '✓' : n.state === 'held' ? '◌' : '' }}</span>
                   </div>
                   <span class="bpmn-lbl">{{ nodeLabel(n.key) }}</span>
                 </div>
@@ -162,16 +162,16 @@
                   <div class="bpmn-box">
                     <svg class="bpmn-icon" viewBox="0 0 24 24" v-html="iconFor(n.key)" />
                     <svg class="ring" viewBox="0 0 70 70"><circle class="track" cx="35" cy="35" r="32" /><circle class="fill" cx="35" cy="35" r="32" stroke-dasharray="201" :stroke-dashoffset="n.state === 'running' ? 110 : 201" /></svg>
-                    <span class="bpmn-badge">{{ n.state === 'done' ? '✓' : n.state === 'held' ? '◌' : '' }}</span>
+                    <span class="bpmn-badge">{{ n.state === 'done' ? '✓' : n.state === 'skipped' ? '✓' : n.state === 'held' ? '◌' : '' }}</span>
                   </div>
                   <span class="bpmn-lbl">{{ nodeLabel(n.key) }}</span>
                 </div>
               </template>
 
               <!-- final arrow → terminal ✓ -->
-              <div class="bpmn-arrow" :class="{ done: flowAllDone }" aria-hidden="true"><svg viewBox="0 0 34 16"><path d="M1 8h28M24 3l6 5-6 5" /></svg></div>
+              <div class="bpmn-arrow" :class="{ done: flowReady }" aria-hidden="true"><svg viewBox="0 0 34 16"><path d="M1 8h28M24 3l6 5-6 5" /></svg></div>
               <div class="bpmn-terminal-final">
-                <div class="tcircle" :class="{ ok: flowAllDone }">✓</div>
+                <div class="tcircle" :class="{ ok: flowReady }">✓</div>
                 <span class="tlbl">Agent ready</span>
               </div>
             </div>
@@ -180,6 +180,7 @@
               <span><i class="dot d" />done</span>
               <span><i class="dot r" />working</span>
               <span><i class="dot q" />queued</span>
+              <span><i class="dot s" />skipped &middot; nothing to do</span>
               <span><i class="dot h" />held</span>
             </div>
           </div>
@@ -528,24 +529,72 @@ const trainFlow = computed(() => {
   return phases
 })
 
-const _flowNodes = computed(() => trainFlow.value.flatMap(p => p.nodes))
+// Raw "every node done" — read from trainFlow directly (NOT the resolved list) so it
+// stays independent of runComplete (avoids a computed cycle). Used only as a signal now.
+const flowAllDone = computed(() => {
+  const nodes = trainFlow.value.flatMap(p => p.nodes)
+  return nodes.length > 0 && nodes.every(n => n.state === 'done')
+})
+
+// runComplete — true once a train has FINISHED (and is not currently running). Fail-soft:
+// any signal we can find flips it. During an active run this is always false, so queued
+// nodes stay queued (never prematurely skipped).
+const runComplete = computed(() => {
+  try {
+    if (props.trainingAll) return false
+    // signal 1: a train-log line says the run is done
+    const raw = (props.trainLogLines && props.trainLogLines.length)
+      ? props.trainLogLines
+      : ((props.trainLog && Array.isArray((props.trainLog as any).log)) ? (props.trainLog as any).log : [])
+    if (Array.isArray(raw)) {
+      for (const li of raw) {
+        const text = String((li && (li.text ?? li.message ?? li.line)) ?? li ?? '').toLowerCase()
+        if (text.includes('all stages complete') || text.includes('agent ready')) return true
+      }
+    }
+    // signal 2: persisted train status is a terminal success state
+    const st = String((status.value && status.value.status) || (props.trainLog && (props.trainLog as any).status) || '').toLowerCase()
+    if (['done', 'complete', 'completed', 'ready', 'success', 'finished'].includes(st)) return true
+    // signal 3: the flow is already fully done
+    if (flowAllDone.value) return true
+  } catch { /* fail-soft */ }
+  return false
+})
+
+// Resolved flow — once the run has completed, any still-'queued' node becomes 'skipped'
+// (a genuine no-op that had nothing to do). Held/done/running are untouched. During an
+// active run runComplete is false → identical to the raw trainFlow.
+const _resolvedFlow = computed(() => {
+  const rc = runComplete.value
+  if (!rc) return trainFlow.value
+  return trainFlow.value.map(p => ({
+    ...p,
+    nodes: p.nodes.map(n => (n.state === 'queued' ? { ...n, state: 'skipped' } : n)),
+  }))
+})
+
+const _flowNodes = computed(() => _resolvedFlow.value.flatMap(p => p.nodes))
+// done + skipped + held all count as RESOLVED toward completion.
+const _RESOLVED = new Set(['done', 'skipped', 'held'])
 const flowPct = computed(() => {
   const nodes = _flowNodes.value
   if (!nodes.length) return 0
-  return Math.round(100 * nodes.filter(n => n.state === 'done').length / nodes.length)
+  return Math.round(100 * nodes.filter(n => _RESOLVED.has(n.state)).length / nodes.length)
 })
-const flowAllDone = computed(() => {
+// flowReady drives the terminal ✓ + "agent ready" label: a finished run, or every node resolved.
+const flowReady = computed(() => {
+  if (runComplete.value) return true
   const nodes = _flowNodes.value
-  return nodes.length > 0 && nodes.every(n => n.state === 'done')
+  return nodes.length > 0 && nodes.every(n => _RESOLVED.has(n.state))
 })
 
 // ─── BPMN spine derivation (reuses trainFlow above — no new state) ───────────
 // Split the same node set into the pre-diamond ROUTE group and the main spine.
 const routeNodes = computed(() => {
-  const p = trainFlow.value.find(x => x.id === 'route')
+  const p = _resolvedFlow.value.find(x => x.id === 'route')
   return p ? p.nodes : []
 })
-const spineNodes = computed(() => trainFlow.value.filter(x => x.id !== 'route').flatMap(x => x.nodes))
+const spineNodes = computed(() => _resolvedFlow.value.filter(x => x.id !== 'route').flatMap(x => x.nodes))
 const routerDone = computed(() => routeNodes.value.length > 0 && routeNodes.value.every(n => n.state === 'done'))
 const heldCount = computed(() => Number((routeInbox.value && routeInbox.value.held) || 0))
 
@@ -681,6 +730,11 @@ onBeforeUnmount(() => {
 .bpmn-node.st-held .bpmn-box { background: #f3efe8; color: #a89f90; border: 1.5px dashed #c9bfae; }
 .bpmn-node.st-held .bpmn-lbl { color: #9a958c; }
 .bpmn-node.st-queued .bpmn-box { background: #f3efe8; color: #cfc8bb; border-color: #eae3d7; }
+/* skipped = a no-op that had nothing to do (resolved). Muted grey-green ✓ — clearly NOT
+   the teal "done" and NOT the grey "queued". */
+.bpmn-node.st-skipped .bpmn-box { background: #eef2ef; color: #9db3a9; border-color: #cdddd4; }
+.bpmn-node.st-skipped .bpmn-lbl { color: #9db3a9; }
+.bpmn-node.st-skipped .bpmn-badge { background: #b6c7bf; color: #f7faf8; }
 
 /* running progress ring */
 .ring { position: absolute; top: -5px; left: -5px; width: 62px; height: 62px; pointer-events: none; display: none; }
@@ -727,6 +781,7 @@ onBeforeUnmount(() => {
 .bpmn-legend .dot.d { background: #2fb8a6; }
 .bpmn-legend .dot.r { background: #e0912f; }
 .bpmn-legend .dot.q { background: #d8cfc0; }
+.bpmn-legend .dot.s { background: #b6c7bf; }
 .bpmn-legend .dot.h { background: #b8afa0; }
 
 @keyframes bpmn-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(224, 145, 47, .35); } 50% { box-shadow: 0 0 0 6px rgba(224, 145, 47, 0); } }

@@ -9,6 +9,10 @@ Bullet rules (this is the user-facing "What's new" feed):
     Hidden from the popover; shown collapsed on the full /changelog page only.
 Every shipped feature bumps `VERSION_HYBRID` and adds an entry here.
 
+## v1.118.0 — Finished trains now read 100% (no-op steps show as "skipped")  (2026-07-05)
+- The process flow used to stall at e.g. 91% after a train finished, because steps that had nothing to do (like ingest when there were 0 new inbox files, or coverage with 0 periods) stayed grey. Now, once a run completes, those no-op steps show as **skipped** (a muted ✓ — nothing to do), the bar reaches **100%**, and the **✓ Agent ready** circle turns green. Steps that genuinely need attention still show as held.
+  - `components/studio/StudioAutopilotV2.vue`: added `runComplete` (train log `all stages complete`/`agent ready`, or status ∈ done/complete/ready/…, or `flowAllDone`) and a `_resolvedFlow` wrapper that remaps `queued → skipped` ONLY when `runComplete` (active runs unchanged). `flowPct` now counts done+skipped+held as resolved; new `flowReady` drives the terminal/label. New `st-skipped` state (dim ✓) + legend entry. Rebased `flowAllDone` off raw `trainFlow` to avoid a computed cycle.
+
 ## v1.117.0 — Full process-flow diagram + training now uses your chosen model  (2026-07-05)
 - The training view is now a proper process diagram: every step is its own icon box, connected left→right by arrows, with a "router" decision that branches anything it wasn't sure about down to a "Held · review" spot, ending in a green ✓ "Agent ready" circle. Steps light up as they run (amber, spinning) and turn green with a tick when done. Covers all ~20 real steps and scrolls sideways.
 - Fixed: training was ignoring the Training model you set in Settings → LLM (Agent Defaults) and always used the analysis default (Claude). Now a train run uses your configured Training model — e.g. Gemini 3.5 Flash — as it should.
