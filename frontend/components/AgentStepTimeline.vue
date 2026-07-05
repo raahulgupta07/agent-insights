@@ -16,57 +16,43 @@ const props = withDefaults(
 const isRunning = computed(() => props.status === 'in_progress')
 const stepCount = computed(() => props.steps.length)
 
-// Collapse state for the whole timeline (toggled via the thinking pill).
-const collapsed = ref(false)
-// Per-step body expansion, keyed by step id.
+// Whole-timeline collapse. Live runs are EXPANDED; a finished/reloaded run
+// starts COLLAPSED (persisted completions mount collapsed).
+const collapsed = ref(props.status !== 'in_progress')
+// Per-step body (tool code/output) expansion, keyed by step id.
 const open = ref<Record<string, boolean>>({})
 
 function toggleStep(id: string) {
   open.value[id] = !open.value[id]
 }
 
-// ---- Live "wave · what's happening · wave" running indicator ----
-// Friendly fallback verbs cycled while the run hasn't emitted a concrete step
-// yet (so the line is never blank). Once real steps arrive, we show the live
-// step title instead — driven entirely by the run stream, not faked.
-const FALLBACK = [
-  'Understanding your question…',
-  'Reading your data…',
-  'Writing the query…',
-  'Running the query…',
-  'Composing the answer…',
-]
-const fallbackIdx = ref(0)
+// ---- Live elapsed timer (reused 1s tick) ----
 const elapsed = ref(0) // seconds since the run started
 let tick: ReturnType<typeof setInterval> | null = null
+let collapseTimer: ReturnType<typeof setTimeout> | null = null
 
 function stopTick() { if (tick) { clearInterval(tick); tick = null } }
 function startTick() {
   stopTick()
   elapsed.value = 0
-  fallbackIdx.value = 0
-  tick = setInterval(() => {
-    elapsed.value += 1
-    // advance the fallback verb every ~2s, only while no real step is live
-    if (stepCount.value === 0 && elapsed.value % 2 === 0) {
-      fallbackIdx.value = (fallbackIdx.value + 1) % FALLBACK.length
-    }
-  }, 1000)
+  tick = setInterval(() => { elapsed.value += 1 }, 1000)
 }
 
+// run/stop the elapsed tick with the run
 watch(isRunning, (running) => { running ? startTick() : stopTick() }, { immediate: true })
-onUnmounted(stopTick)
 
-// Current live stage text: the running step's title, else the last step's
-// title, else a cycling friendly fallback verb.
-const currentStage = computed(() => {
-  const steps = props.steps
-  if (steps.length) {
-    const live = [...steps].reverse().find(s => s.status === 'run')
-    return (live || steps[steps.length - 1])?.title || FALLBACK[fallbackIdx.value]
+// expand on start; auto-collapse ~0.5s after a LIVE run finishes.
+// (Not immediate → a persisted done-on-mount stays collapsed via the ref init.)
+watch(isRunning, (running, was) => {
+  if (running) {
+    collapsed.value = false
+  } else if (was) {
+    if (collapseTimer) clearTimeout(collapseTimer)
+    collapseTimer = setTimeout(() => { collapsed.value = true }, 500)
   }
-  return FALLBACK[fallbackIdx.value]
 })
+
+onUnmounted(() => { stopTick(); if (collapseTimer) clearTimeout(collapseTimer) })
 
 const elapsedLabel = computed(() => {
   const m = Math.floor(elapsed.value / 60)
@@ -74,9 +60,39 @@ const elapsedLabel = computed(() => {
   return `${m}:${s}`
 })
 
-const pillLabel = computed(() => {
-  const n = stepCount.value
-  return `Thought process · ${n} step${n === 1 ? '' : 's'} · Done`
+// Total run seconds for the collapsed "Worked for Ns" line. Prefer the live
+// elapsed counter; on a reloaded completion (timer never ran) derive it from
+// the real step timestamps/durations — never invented.
+const totalSeconds = computed(() => {
+  if (elapsed.value > 0) return elapsed.value
+  const s = props.steps
+  if (!s.length) return 0
+  const first = s[0].ts || 0
+  const lastStep = s[s.length - 1]
+  const last = (lastStep.ts || first) + (lastStep.durationMs || 0)
+  const span = Math.round((last - first) / 1000)
+  if (span > 0) return span
+  const sum = s.reduce((a, x) => a + (x.durationMs || 0), 0)
+  return Math.round(sum / 1000)
+})
+
+// Collapsed summary — COUNTED from the real steps (tool count + their mapped
+// titles + any row counts already present in step output). Nothing fabricated.
+const summary = computed(() => {
+  const s = props.steps
+  if (!s.length) return 'no steps'
+  const tools = s.filter(x => x.kind === 'tool')
+  const n = tools.length || s.length
+  const parts: string[] = [`${n} step${n === 1 ? '' : 's'}`]
+  const titles = [...new Set(tools.map(t => t.title).filter(Boolean))]
+  if (titles.length) parts.push(titles.slice(0, 3).join(', '))
+  let rows = 0
+  for (const st of s) {
+    const m = (st.body?.output || '').match(/([\d,]+)\s+rows?/i)
+    if (m) rows = Math.max(rows, parseInt(m[1].replace(/,/g, ''), 10) || 0)
+  }
+  if (rows) parts.push(`${rows.toLocaleString()} rows`)
+  return parts.join(' · ')
 })
 
 function fmtDuration(ms?: number): string {
@@ -84,85 +100,73 @@ function fmtDuration(ms?: number): string {
   if (ms < 1000) return `${Math.round(ms)}ms`
   return `${(ms / 1000).toFixed(1)}s`
 }
-
-function nodeClass(s: AgentStep): string {
-  if (s.status === 'done') return 'bg-[#3F7A4F] border-[#3F7A4F]'
-  if (s.status === 'warn') return 'bg-[#B5822F] border-[#B5822F]'
-  // run
-  return 'bg-[#C2541E] border-[#C2541E] step-pulse'
+function fmtPlus(ms?: number): string {
+  if (ms == null) return ''
+  return `+${(ms / 1000).toFixed(1)}s`
 }
 
-function badgeClass(s: AgentStep): string {
-  if (s.kind === 'think') return 'bg-[#f3eefb] text-[#7c3aed]'
-  if (s.kind === 'retry' || s.kind === 'warn') return 'bg-[#FBF1E0] text-[#B5822F]'
-  if (s.kind === 'subagent') return 'bg-[#f3eefb] text-[#7c3aed]'
-  // tool
-  return 'bg-[#F4E5DA] text-[#8B4427]'
+const isErr = (s: AgentStep) => s.status === 'err' || s.kind === 'warn' || s.kind === 'retry' || s.status === 'warn'
+
+function stepTitle(s: AgentStep): string {
+  return s.kind === 'think' ? 'Thinking' : s.title
+}
+
+// node dot treatment: run = pulsing clay ring, done = filled clay,
+// warn/err = amber (warn) / clay-deep (err).
+function nodeClass(s: AgentStep): string {
+  if (s.status === 'err') return 'node-err'
+  if (s.kind === 'warn' || s.kind === 'retry' || s.status === 'warn') return 'node-warn'
+  if (s.status === 'run') return 'node-run'
+  return 'node-done'
 }
 </script>
 
 <template>
-  <!-- Empty + running: just the bare thinking pill. -->
   <!-- Empty + finished: render nothing. -->
   <div v-if="stepCount > 0 || isRunning" class="agent-step-timeline">
-    <!-- RUNNING: wave · live stage · wave · elapsed -->
-    <button
+    <!-- RUNNING header: ✳ Working… + live M:SS (calm, no weave) -->
+    <div
       v-if="isRunning"
-      type="button"
-      class="flex items-center gap-2.5 w-full text-[13.5px] mb-3 select-none"
-      @click="collapsed = !collapsed"
+      class="cai-head flex items-center gap-2.5 text-[13.5px] mb-3 select-none"
     >
-      <span class="cai-wave flex-none" aria-hidden="true">
-        <svg viewBox="0 0 40 18" preserveAspectRatio="none">
-          <path class="wv wv1" d="M0 9 Q10 1 20 9 T40 9" stroke="#D67037" />
-          <path class="wv wv2" d="M0 9 Q10 17 20 9 T40 9" stroke="#C2541E" style="opacity:.55" />
+      <span class="clay-spark flex-none" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="15" height="15">
+          <path
+            d="M12 1.5 L13.6 8.4 L20.5 6.8 L15.4 12 L20.5 17.2 L13.6 15.6 L12 22.5 L10.4 15.6 L3.5 17.2 L8.6 12 L3.5 6.8 L10.4 8.4 Z"
+            fill="#C2541E"
+          />
         </svg>
       </span>
-      <span class="serif font-medium text-[#2A2420] truncate">{{ currentStage }}</span>
-      <span class="cai-wave cai-flip flex-none" aria-hidden="true">
-        <svg viewBox="0 0 40 18" preserveAspectRatio="none">
-          <path class="wv wv1" d="M0 9 Q10 1 20 9 T40 9" stroke="#D67037" />
-          <path class="wv wv2" d="M0 9 Q10 17 20 9 T40 9" stroke="#C2541E" style="opacity:.55" />
-        </svg>
-      </span>
+      <span class="serif font-medium text-[#2A2420]">Working…</span>
       <span class="ml-auto flex-none tabular-nums text-[11.5px] text-[#9A8678]">{{ elapsedLabel }}</span>
-      <Icon
-        v-if="stepCount > 0"
-        name="heroicons:chevron-down"
-        class="w-3.5 h-3.5 flex-none text-[#9A8678] transition-transform"
-        :class="collapsed ? '-rotate-90' : ''"
-      />
-    </button>
+    </div>
 
-    <!-- DONE: collapsed "thought process" pill -->
+    <!-- DONE header: ⌄ Worked for Ns · summary (click to re-expand) -->
     <button
       v-else
       type="button"
-      class="flex items-center gap-2 text-[13px] text-[#7A7066] mb-3 select-none"
+      class="cai-head flex items-center gap-2 text-[13px] text-[#7A7066] mb-3 select-none w-full text-left"
       @click="collapsed = !collapsed"
     >
-      <Icon name="heroicons:check-circle" class="w-4 h-4 text-[#3F7A4F] flex-none" />
-      <span class="serif">{{ pillLabel }}</span>
+      <Icon name="heroicons:check-circle" class="w-4 h-4 text-[#3F8F5B] flex-none" />
+      <span class="serif truncate">Worked for {{ totalSeconds }}s · {{ summary }}</span>
       <Icon
         v-if="stepCount > 0"
         name="heroicons:chevron-down"
-        class="w-3.5 h-3.5 transition-transform"
+        class="w-3.5 h-3.5 flex-none text-[#9A8678] transition-transform ml-auto"
         :class="collapsed ? '-rotate-90' : ''"
       />
     </button>
 
-    <!-- TIMELINE -->
-    <div v-if="!collapsed && stepCount > 0" class="border-l-2 border-[#ECE6DE] ml-1.5">
+    <!-- TIMELINE (rail grows as steps land) -->
+    <div v-if="!collapsed && stepCount > 0" class="cai-rail">
       <div
         v-for="step in steps"
         :key="step.id"
         class="relative pl-5 mb-0.5"
       >
         <!-- node dot -->
-        <span
-          class="absolute -left-[6px] top-[11px] w-[11px] h-[11px] rounded-full border-2"
-          :class="nodeClass(step)"
-        />
+        <span class="cai-node" :class="nodeClass(step)" />
 
         <!-- step row -->
         <button
@@ -172,44 +176,78 @@ function badgeClass(s: AgentStep): string {
         >
           <Icon
             :name="step.icon"
-            class="w-4 h-4 flex-none text-[#8B4427]"
+            class="w-4 h-4 flex-none"
+            :class="isErr(step) ? 'text-[#A8330F]' : 'text-[#8B4427]'"
           />
-          <span class="font-medium text-[13.5px] text-[#2A2420] truncate">{{ step.title }}</span>
+          <span
+            class="font-medium text-[13.5px] truncate"
+            :class="isErr(step) ? 'text-[#A8330F]' : 'text-[#2A2420]'"
+          >{{ stepTitle(step) }}</span>
+
+          <!-- recovered pill (kept) -->
+          <span
+            v-if="step.recovered && step.recoveredLabel"
+            class="text-[10.5px] font-semibold px-1.5 py-0.5 rounded-full bg-[#FBF1E0] text-[#B5822F] flex-none"
+          >{{ step.recoveredLabel }}</span>
+
           <span class="ml-auto flex items-center gap-2 flex-none">
-            <span
-              class="text-[10.5px] font-semibold px-2 py-0.5 rounded-full"
-              :class="badgeClass(step)"
-            >{{ step.badge }}</span>
-            <span
-              v-if="step.durationMs != null"
-              class="text-[11px] text-[#7A7066]"
-            >{{ fmtDuration(step.durationMs) }}</span>
+            <!-- live spinner on the running step -->
             <Icon
+              v-if="step.status === 'run'"
+              name="heroicons:arrow-path"
+              class="w-3.5 h-3.5 text-[#C2541E] cai-spin"
+            />
+            <!-- +N.Ns on completed steps -->
+            <span
+              v-else-if="step.durationMs != null"
+              class="text-[11px] text-[#9A8678] tabular-nums"
+            >{{ fmtPlus(step.durationMs) }}</span>
+            <Icon
+              v-if="step.body && (step.body.code || step.body.output)"
               name="heroicons:chevron-right"
-              class="w-3 h-3 text-[#7A7066] transition-transform"
+              class="w-3 h-3 text-[#9A8678] transition-transform"
               :class="open[step.id] ? 'rotate-90' : ''"
             />
           </span>
         </button>
 
-        <!-- collapsible body -->
+        <!-- live reasoning / narration line (run step or think step) with caret -->
         <div
-          v-if="open[step.id] && step.body"
-          class="mx-2 mb-2 mt-0.5 border border-[#ECE6DE] rounded-lg overflow-hidden"
+          v-if="step.status === 'run' && (step.body?.text || step.why || step.kind === 'think')"
+          class="pl-2 pr-2 pb-1.5 text-[12.5px] text-[#7A7066] leading-snug"
+        >
+          {{ step.body?.text || step.why }}<span class="cai-caret">▍</span>
+        </div>
+        <div
+          v-else-if="step.kind === 'think' && (step.body?.text || step.why)"
+          class="pl-2 pr-2 pb-1.5 text-[12.5px] text-[#7A7066] leading-snug"
+        >{{ step.body?.text || step.why }}</div>
+        <div
+          v-else-if="step.why"
+          class="pl-2 pr-2 pb-1 text-[12px] text-[#9A8678] leading-snug italic"
+        >{{ step.why }}</div>
+
+        <!-- collapsible tool box (code / output) -->
+        <div
+          v-if="open[step.id] && step.body && (step.body.code || step.body.output)"
+          class="cai-toolbox mx-2 mb-2 mt-0.5 rounded-lg overflow-hidden"
         >
           <pre
             v-if="step.body.code"
-            class="bg-[#FAF7F2] font-mono text-[12px] px-3 py-2.5 whitespace-pre overflow-auto border-b border-[#ECE6DE] text-[#2A2420]"
+            class="font-mono text-[12px] px-3 py-2.5 whitespace-pre overflow-auto text-[#2A2420]"
+            :class="step.body.output ? 'border-b border-[#E9E0D3]' : ''"
           >{{ step.body.code }}</pre>
           <pre
             v-if="step.body.output"
             class="font-mono text-[12px] px-3 py-2 text-[#7A7066] whitespace-pre overflow-auto max-h-[150px]"
           >{{ step.body.output }}</pre>
-          <div
-            v-if="step.body.text"
-            class="px-3 py-2 text-[13px] text-[#7A7066]"
-          >{{ step.body.text }}</div>
         </div>
+
+        <!-- error detail (kept, behind the same body toggle) -->
+        <div
+          v-if="open[step.id] && step.errorDetail"
+          class="mx-2 mb-2 mt-0.5 rounded-lg bg-[#FBEDE7] border border-[#F0C7BB] px-3 py-2 font-mono text-[11.5px] text-[#A8330F] whitespace-pre-wrap overflow-auto max-h-[150px]"
+        >{{ step.errorDetail }}</div>
       </div>
     </div>
   </div>
@@ -219,50 +257,65 @@ function badgeClass(s: AgentStep): string {
 .serif {
   font-family: 'Iowan Old Style', 'Palatino Linotype', Georgia, ui-serif, serif;
 }
-/* running "wave · stage · wave" indicator */
-.cai-wave {
-  width: 30px;
-  height: 16px;
-  display: inline-block;
+
+/* faint vertical rail — grows with the number of rows */
+.cai-rail {
+  border-left: 2px solid #ECE6DE;
+  margin-left: 0.375rem;
 }
-.cai-wave svg {
-  width: 100%;
-  height: 100%;
-  display: block;
-  overflow: visible;
+
+/* timeline node dots */
+.cai-node {
+  position: absolute;
+  left: -6px;
+  top: 11px;
+  width: 11px;
+  height: 11px;
+  border-radius: 9999px;
+  box-sizing: border-box;
 }
-.cai-wave.cai-flip {
-  transform: scaleX(-1);
+.cai-node.node-done { background: #C2541E; border: 2px solid #C2541E; }
+.cai-node.node-run {
+  background: transparent;
+  border: 2px solid #C2541E;
+  animation: cai-pulse 1.2s infinite;
 }
-.cai-wave .wv {
-  fill: none;
-  stroke-width: 2.2;
-  stroke-linecap: round;
-  transform-origin: center;
+.cai-node.node-warn { background: #B5822F; border: 2px solid #B5822F; }
+.cai-node.node-err { background: #A8330F; border: 2px solid #A8330F; }
+
+/* slow-spinning clay spark in the running header */
+.clay-spark { display: inline-flex; line-height: 0; }
+.clay-spark svg { animation: cai-slow-spin 3.2s linear infinite; transform-origin: center; }
+
+.cai-spin { animation: cai-slow-spin 1s linear infinite; }
+
+.cai-caret {
+  color: #C2541E;
+  animation: cai-blink 1s step-start infinite;
 }
-.cai-wave .wv1 {
-  animation: cai-wob 1.5s ease-in-out infinite;
+
+.cai-toolbox {
+  background: #F4EEE4;
+  border: 1px solid #E9E0D3;
 }
-.cai-wave .wv2 {
-  animation: cai-wob 1.5s ease-in-out infinite 0.25s;
+
+@keyframes cai-slow-spin { to { transform: rotate(360deg); } }
+@keyframes cai-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(194, 84, 30, 0.45); }
+  50% { box-shadow: 0 0 0 5px rgba(194, 84, 30, 0); }
 }
-@keyframes cai-wob {
-  0%, 100% { transform: scaleY(0.3); }
-  50% { transform: scaleY(1); }
-}
+@keyframes cai-blink { 50% { opacity: 0; } }
+
 @media (prefers-reduced-motion: reduce) {
-  .cai-wave .wv { animation: none; }
+  .clay-spark svg,
+  .cai-spin,
+  .cai-node.node-run,
+  .cai-caret { animation: none; }
 }
-.step-pulse {
-  animation: step-pulse 1.2s infinite;
-}
-@keyframes step-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(194, 104, 63, 0.4);
-  }
-  50% {
-    box-shadow: 0 0 0 5px rgba(194, 104, 63, 0);
-  }
+
+/* dark mode (opt-in via the app's theme hook; harmless if unused) */
+@media (prefers-color-scheme: dark) {
+  :root[data-theme='dark'] .cai-rail { border-left-color: #3A342C; }
+  :root[data-theme='dark'] .cai-toolbox { background: #201C17; border-color: #3A342C; }
 }
 </style>

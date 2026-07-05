@@ -335,9 +335,9 @@
 											class="flex items-center gap-2 mb-2 text-[13px] text-[#7A7066] select-none"
 										>
 											<template v-if="m.status === 'in_progress'">
-												<span class="cai-wave" aria-hidden="true"><svg viewBox="0 0 40 18" preserveAspectRatio="none"><path class="wv wv1" d="M0 9 Q5 3 10 9 T20 9 T30 9 T40 9" stroke="#D67037"/><path class="wv wv2" d="M0 9 Q5 15 10 9 T20 9 T30 9 T40 9" stroke="#C2541E" style="opacity:.55"/></svg></span>
-												<span class="ui-serif font-medium text-[#2A2420] truncate cc-shimmer">{{ runningStageText(m) }}</span>
-												<span class="cai-wave cai-flip" aria-hidden="true"><svg viewBox="0 0 40 18" preserveAspectRatio="none"><path class="wv wv1" d="M0 9 Q5 3 10 9 T20 9 T30 9 T40 9" stroke="#D67037"/><path class="wv wv2" d="M0 9 Q5 15 10 9 T20 9 T30 9 T40 9" stroke="#C2541E" style="opacity:.55"/></svg></span>
+												<Icon name="heroicons-sparkles" class="w-4 h-4 flex-none animate-spin text-[#C2541E]" style="animation-duration:2.4s" aria-hidden="true" />
+												<span class="ui-serif font-medium text-[#2A2420] flex-none">Working…</span>
+												<span class="ui-serif truncate cc-shimmer text-[#7A7066]">{{ runningStageText(m) }}</span>
 												<span class="ml-1 tabular-nums text-[11.5px] text-[#9A8678] flex-none">{{ liveElapsed(m) }}</span>
 											</template>
 											<template v-else>
@@ -497,9 +497,9 @@
 
 										<!-- Thinking pill when system is working but no visible progress - moved to end -->
 										<div v-if="shouldShowWorkingDots(m)" class="mt-2 flex items-center gap-2.5 text-[13px] text-[#7A7066]">
-											<span class="cai-wave" aria-hidden="true"><svg viewBox="0 0 40 18" preserveAspectRatio="none"><path class="wv wv1" d="M0 9 Q5 3 10 9 T20 9 T30 9 T40 9" stroke="#D67037"/><path class="wv wv2" d="M0 9 Q5 15 10 9 T20 9 T30 9 T40 9" stroke="#C2541E" style="opacity:.55"/></svg></span>
-											<span class="ui-serif font-medium text-[#2A2420] truncate cc-shimmer">{{ runningStageText(m) }}</span>
-											<span class="cai-wave cai-flip" aria-hidden="true"><svg viewBox="0 0 40 18" preserveAspectRatio="none"><path class="wv wv1" d="M0 9 Q5 3 10 9 T20 9 T30 9 T40 9" stroke="#D67037"/><path class="wv wv2" d="M0 9 Q5 15 10 9 T20 9 T30 9 T40 9" stroke="#C2541E" style="opacity:.55"/></svg></span>
+											<Icon name="heroicons-sparkles" class="w-4 h-4 flex-none animate-spin text-[#C2541E]" style="animation-duration:2.4s" aria-hidden="true" />
+											<span class="ui-serif font-medium text-[#2A2420] flex-none">Working…</span>
+											<span class="ui-serif truncate cc-shimmer text-[#7A7066]">{{ runningStageText(m) }}</span>
 											<span class="ml-1 tabular-nums text-[11.5px] text-[#9A8678] flex-none">{{ liveElapsed(m) }}</span>
 										</div>
 									</div>
@@ -711,7 +711,7 @@
 			<div v-if="autoBuilding || decisionForming" class="mx-auto w-full px-4 max-w-2xl mb-2">
 				<div class="flex items-center gap-2.5 px-3.5 py-2 rounded-xl border border-[#EFE3D5] bg-gradient-to-b from-[#FCF4EC] to-[#FAF8F3] text-[13px] text-[#7A7066]">
 					<span class="cai-wave" aria-hidden="true"><svg viewBox="0 0 40 18" preserveAspectRatio="none"><path class="wv wv1" d="M0 9 Q5 3 10 9 T20 9 T30 9 T40 9" stroke="#D67037"/><path class="wv wv2" d="M0 9 Q5 15 10 9 T20 9 T30 9 T40 9" stroke="#C2541E" style="opacity:.55"/></svg></span>
-					<span class="ui-serif font-medium text-[#2A2420] truncate cc-shimmer">{{ (decisionForming && !autoBuilding) ? 'Reading the result… forming the decision' : 'Building a dashboard from your data…' }}</span>
+					<span class="ui-serif font-medium text-[#2A2420] truncate cc-shimmer">{{ (decisionForming && !autoBuilding) ? 'Forming the decision…' : 'Building a dashboard from your data…' }}</span>
 					<span class="cai-wave cai-flip" aria-hidden="true"><svg viewBox="0 0 40 18" preserveAspectRatio="none"><path class="wv wv1" d="M0 9 Q5 3 10 9 T20 9 T30 9 T40 9" stroke="#D67037"/><path class="wv wv2" d="M0 9 Q5 15 10 9 T20 9 T30 9 T40 9" stroke="#C2541E" style="opacity:.55"/></svg></span>
 					<span class="ml-auto flex-none text-[11px] text-[#9A8678]">auto · one-click</span>
 				</div>

@@ -68,7 +68,9 @@ const TOOL_MAP: Record<string, PrettyTool> = {
   done: { icon: 'heroicons:check-circle', title: 'Finished' },
 }
 
-function titleCase(name: string): string {
+// Prettify a raw tool_name for display: strip underscores, collapse spaces,
+// title-case each word (e.g. `run_forecast` → `Run Forecast`). Empty → ''.
+function prettify(name: string): string {
   return String(name || '')
     .replace(/_/g, ' ')
     .replace(/\s+/g, ' ')
@@ -78,12 +80,14 @@ function titleCase(name: string): string {
 
 /**
  * Map a known tool name to a {icon, title}. Unknown names fall back to a
- * generic wrench icon + title-cased name.
+ * neutral wrench icon + a self-narrating `Ran <Prettified Name>` title, so a
+ * brand-new tool describes itself with zero hardcoding (reads like Claude).
  */
 export function prettyTool(name: string): PrettyTool {
   const key = String(name || '').toLowerCase()
   if (TOOL_MAP[key]) return { ...TOOL_MAP[key] }
-  return { icon: 'heroicons:wrench-screwdriver', title: titleCase(name) || 'Tool' }
+  const pretty = prettify(name)
+  return { icon: 'heroicons:wrench-screwdriver', title: pretty ? `Ran ${pretty}` : 'Ran tool' }
 }
 
 function safeGet<T>(fn: () => T): T | undefined {
