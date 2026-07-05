@@ -3,6 +3,10 @@
 Hybrid feature changelog (our additions on top of the bagofwords/Dash base). Newest first.
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` then bullets.
 
+## v1.125.0 — Stop saving blank "untitled report" drafts  (2026-07-05)
+- The sidebar was filling with empty "untitled report" chats you never wrote in. Now only reports that actually have a conversation are saved and listed — blank drafts are hidden, and switching agents no longer spawns a new empty one each time. Cleaned up the 22 blanks that had piled up.
+  - Root cause: `/reports/new` eagerly creates a row on mount (the "lazy" comments lied), the sidebar `GET /reports` had no empty-filter, and v1.122's `isReusable` (require draft sources == picked agent) minted a fresh orphan on every agent switch. Fixes: (a) `report_service.get_reports` now excludes placeholder-title reports with 0 completions (`title NOT IN placeholders OR EXISTS(completion)`) — still openable by id; (b) `reports/new.vue` `isReusable` relaxed to reuse the one scratch draft + new `rescopeDraft` PUTs its `data_sources` to the picked agent (keeps the v1.122 lock, kills the multiplier); (c) one-time archive of the 22 existing blanks via the DELETE API.
+
 ## v1.124.0 — Connector Sync Hero: table-by-table progress on the agent page  (2026-07-05)
 - Connecting a Power BI / Fabric agent used to drop you on a near-blank page with a thin log ("0/0 tables") for minutes with no idea what was happening. Now the agent page shows a live **Sync Hero**: a stage strip (Sign in → Discover → Import → Learn → Ready), an overall progress bar with **elapsed + estimated time left**, and each table checking off **one by one with its row count**. You can leave the page — it keeps syncing in the background and can notify you when it's done.
 - When the sync finishes it collapses to a slim "✓ Synced · N tables · N rows" ribbon and the page fills with the auto-filled instruction + starters. Partial/failed syncs show which tables were skipped and let you retry — the ones that synced are usable immediately.

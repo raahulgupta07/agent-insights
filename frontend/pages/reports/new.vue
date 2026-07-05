@@ -35,17 +35,28 @@ async function isReusable(id: string): Promise<boolean> {
     const list = (comps as any)?.data?.value;
     const arr = Array.isArray(list) ? list : (list?.completions || list?.items || []);
     if (!Array.isArray(arr) || arr.length !== 0) return false;
-    // Also require the draft's data_sources to match the currently-selected agent(s).
-    // Otherwise, picking a different agent then hitting "New" would reopen this empty
-    // draft still scoped to the OLD agent. Compare against the SAME id-set createDraft
-    // uses (selectedAgentObjects = the explicit pick, or ALL agents when none picked),
-    // so an explicit single-agent pick compares by that id, not the "all" fallback.
-    const wantIds = (selectedAgentObjects.value || []).map((ds: any) => ds?.id).filter(Boolean);
-    const haveIds = (repData?.data_sources || []).map((ds: any) => ds?.id).filter(Boolean);
-    return wantIds.length === haveIds.length && wantIds.every((x: string) => haveIds.includes(x));
+    // Reusable = exists + never chatted in (0 completions). We do NOT require the
+    // draft's data_sources to match the picked agent — instead we RE-SCOPE the same
+    // scratch row to the current selection (see rescopeDraft below). This keeps at
+    // most ONE empty draft in existence instead of minting a fresh orphan on every
+    // agent switch.
+    return true;
   } catch {
     return false;
   }
+}
+
+// Point the reused scratch draft at the currently-selected agent(s) so its grounding
+// follows the picker (mirrors the v1.122 report-lock). Fail-soft.
+async function rescopeDraft(id: string): Promise<void> {
+  try {
+    const ids = (selectedAgentObjects.value || []).map((ds: any) => ds?.id).filter(Boolean);
+    await useMyFetch(`/reports/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data_sources: ids, studio_id: selectedStudioId.value || null }),
+    });
+  } catch { /* ignore — draft still opens, just keeps prior scope */ }
 }
 
 async function createDraft(): Promise<string | null> {
@@ -72,6 +83,9 @@ onMounted(async () => {
   if (!id || !(await isReusable(id))) {
     id = await createDraft();
     if (id) { try { localStorage.setItem(SCRATCH_KEY, id); } catch { /* ignore */ } }
+  } else {
+    // Reusing the existing empty scratch — re-point it at the picked agent(s).
+    await rescopeDraft(id);
   }
 
   if (id) {

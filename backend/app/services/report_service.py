@@ -1204,6 +1204,20 @@ class ReportService:
                     or_(Report.user_id == current_user.id, visible_to_user)
                 )
 
+            # Hide blank drafts: a report that was eagerly created (placeholder title)
+            # but never chatted in (0 completions) must not clutter the sidebar/list.
+            # Keep it if it has EITHER a real (non-placeholder) title OR ≥1 completion.
+            # The report is still openable by id (get_report doesn't use this filter),
+            # so an in-progress empty draft only appears once it has a conversation.
+            from app.models.completion import Completion as _Completion
+            _placeholder_titles = ["", "untitled report", "untitled_report", "new report", "untitled"]
+            base_conditions.append(
+                or_(
+                    func.coalesce(Report.title, "").notin_(_placeholder_titles),
+                    Report.id.in_(select(_Completion.report_id)),
+                )
+            )
+
             # Optional search on report title and completion content
             if search:
                 from app.models.completion import Completion
