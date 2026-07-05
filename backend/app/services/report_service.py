@@ -482,6 +482,31 @@ class ReportService:
                 scoped = [str(x) for x in data_source_ids if str(x) in pinned_set]
                 data_source_ids = scoped if scoped else list(pinned_ids)
 
+        # Data-Agent path (no studio_id): the composer sends the picked Data Agent's
+        # source id(s), but a stale/cached selection can carry a source from ANOTHER
+        # context (e.g. a different agent, or — in a shared deploy — another org).
+        # There's no studio to re-scope against here, so apply the safe UNIVERSAL guard:
+        # keep only ids whose DataSource is actually in THIS organization. We do NOT
+        # reorder or drop a legitimate multi-source selection — a flat id list has no
+        # primary/selected field to key on — we only strip cross-org / stale ids. When
+        # every id is valid + in-org this is a no-op (the attach query below already
+        # org-filters, so the linked set is byte-identical; this only adds the warning).
+        elif data_source_ids:
+            in_ids = [str(x) for x in data_source_ids]
+            org_res = await db.execute(
+                select(DataSource.id).where(
+                    DataSource.id.in_(in_ids),
+                    DataSource.organization_id == organization.id,
+                )
+            )
+            in_org = {str(x) for x in org_res.scalars().all()}
+            scoped = [x for x in in_ids if x in in_org]
+            for dropped in [x for x in in_ids if x not in in_org]:
+                logger.warning(
+                    f"create_report: dropping data_source_id {dropped} not in org {organization.id} (stale/cross-org selection)"
+                )
+            data_source_ids = scoped
+
         # Associate data sources only if there are any (skip unnecessary query)
         if data_source_ids:
             ds_result = await db.execute(

@@ -3,7 +3,11 @@
 Hybrid feature changelog (our additions on top of the bagofwords/Dash base). Newest first.
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` then bullets.
 
-## v1.121.0 — Teach the agent: metrics, queries & a downloadable template  (2026-07-05)
+## v1.122.0 — Connector Disable/Enable label + each report stays on its own agent's data  (2026-07-05)
+- The connector **Enable / Disable** button now reads properly (it was showing a raw code label). Disabling a connector hides it from the Data Agents page; enabling brings it back.
+- **A report now stays locked to the agent's own data.** Before, opening a report and switching the agent in the picker changed the title to the new agent but the working folders + "Grounded on…" still showed the old agent's data. Now: switch agent in a fresh report → its data follows; switch in a report that already has a conversation → it opens a **new report** on the new agent instead of quietly re-grounding the old chat.
+  - Bug 1: five `connectors.*` i18n keys were missing (`disable/enable/disabledChip/disabled/enabled`); vue-i18n returns the raw key (truthy) so the `$t()||'x'` fallback never fired. Added to `locales/en.json`.
+  - Bug 2: working-folders + grounding scope to persisted `report.data_sources`, but the composer picker only mutated the live `currentAgents` ref (header) without persisting. `reports/[id]/index.vue` new `onAgentPickerChange`: history+changed → seed `useAgent().selectAgents` + `/reports/new`; fresh → PUT `/reports/{id}` `{data_sources}` + reload grounding. `reports/new.vue` `isReusable` now also requires the stale draft's sources match the picked agent. Backend `report_service.create_report` Data-Agent path (no `studio_id`) drops any `data_source_id` not in the org (fail-soft, all-valid = no-op). — Teach the agent: metrics, queries & a downloadable template  (2026-07-05)
 - Teach the agent now creates **Metrics, Queries and verified Q&A examples** too — not just rules and skills. Paste "Total leads = 1,544, Logic: …" and it becomes a real locked Metric; a named SQL becomes a golden Query; a Q/A becomes an Example.
 - **Three ways to teach:** type one rule at a time, paste many at once, or **download a template, fill it offline, and upload it** — the agent reads the file and proposes everything to review before saving.
 - Download the template as **Markdown or Excel** (Metrics / Queries / Examples / Data rules / Skills / Instructions / Knowledge sections). A "Load template into box" helper drops a starter snippet in for quick one-off teaching.

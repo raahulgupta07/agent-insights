@@ -750,7 +750,7 @@
 					@editScheduledPrompt="editScheduledPrompt"
 					@editTrainingInstruction="editTrainingInstruction"
 					@openInstructions="() => { if (isMobile) { mobileView = 'agent'; } else { if (!isSplitScreen) toggleSplitScreen(); setPanelView('agent', true); } }"
-					@update:selectedDataSources="(val: any[]) => currentAgents = val"
+					@update:selectedDataSources="onAgentPickerChange"
 					@update:mode="(m: any) => currentPromptMode = m"
 					@deleteScheduledPrompt="deleteScheduledPrompt"
 					@toggleScheduledPrompt="toggleScheduledPromptActive"
@@ -2224,6 +2224,50 @@ async function loadGroundingScope() {
         const { data } = await useMyFetch(`/knowledge/context-scope?data_source_ids=${encodeURIComponent(ids.join(','))}`, { method: 'GET' })
         if (data.value) groundingScope.value = data.value as any
     } catch { /* non-fatal */ }
+}
+
+// True when this report already holds a real (persisted or in-flight) conversation.
+// Mirrors the page's own empty-state logic (see the `messages.length` chat list +
+// "New report · no messages yet" banner): a fresh 0-chat report loads with an empty
+// `messages` array, so any message present here means real history.
+const hasChatHistory = computed(() => messages.value.length > 0)
+
+// Shared agent selection (drives the /reports/new draft flow) + a fail-soft toast.
+const { selectAgents } = useAgent()
+const _pickerToast = useToast()
+
+// The composer / agent picker changed the selected Data Agent(s).
+// APPROVED BEHAVIOR: switching the agent inside a report that ALREADY has chat
+// history must START A NEW REPORT scoped to the new agent — never rewrite an
+// existing conversation's grounding. Switching inside a FRESH (0-chat) report may
+// re-scope in place so the working folders + grounding strip follow the new agent.
+async function onAgentPickerChange(val: any[]) {
+    const newIds = (val || []).map((a: any) => a?.id).filter(Boolean)
+    const curIds = (report.value?.data_sources || []).map((d: any) => d?.id).filter(Boolean)
+    const sameSet = newIds.length === curIds.length && newIds.every((id: string) => curIds.includes(id))
+
+    // Report has a conversation AND the pick actually differs -> branch to a NEW
+    // report scoped to the new agent (do NOT mutate this report's grounding). Seed
+    // the shared selection that /reports/new reads, then use the same entry route.
+    if (hasChatHistory.value && !sameSet) {
+        selectAgents(newIds)
+        await navigateTo('/reports/new')
+        return
+    }
+
+    // Fresh report (or no real change): re-scope in place. Header follows currentAgents.
+    currentAgents.value = val
+    if (sameSet) return
+    // Persist the new grounding on the report. ReportUpdate takes data_sources as a
+    // list of ids (verified against PUT /reports/{id} -> ReportUpdate.data_sources).
+    const { error } = await useMyFetch(`/reports/${report_id}`, { method: 'PUT', body: { data_sources: newIds } })
+    if (error.value) {
+        _pickerToast.add({ title: "Couldn't update this report's data agent", color: 'red' })
+    }
+    // Follow the new scope locally regardless of PUT outcome so the UI isn't stuck.
+    // Working folders bind to report.data_sources; grounding re-reads it below.
+    if (report.value) report.value.data_sources = val
+    await loadGroundingScope()
 }
 
 // An agent was connected from ReportAgentPanel's credentials modal — refetch

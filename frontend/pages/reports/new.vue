@@ -29,11 +29,20 @@ const SCRATCH_KEY = 'scratchReportId';
 async function isReusable(id: string): Promise<boolean> {
   try {
     const rep = await useMyFetch(`/reports/${id}`);
-    if ((rep as any)?.error?.value || !(rep as any)?.data?.value) return false;
+    const repData = (rep as any)?.data?.value;
+    if ((rep as any)?.error?.value || !repData) return false;
     const comps = await useMyFetch(`/reports/${id}/completions`);
     const list = (comps as any)?.data?.value;
     const arr = Array.isArray(list) ? list : (list?.completions || list?.items || []);
-    return Array.isArray(arr) && arr.length === 0;
+    if (!Array.isArray(arr) || arr.length !== 0) return false;
+    // Also require the draft's data_sources to match the currently-selected agent(s).
+    // Otherwise, picking a different agent then hitting "New" would reopen this empty
+    // draft still scoped to the OLD agent. Compare against the SAME id-set createDraft
+    // uses (selectedAgentObjects = the explicit pick, or ALL agents when none picked),
+    // so an explicit single-agent pick compares by that id, not the "all" fallback.
+    const wantIds = (selectedAgentObjects.value || []).map((ds: any) => ds?.id).filter(Boolean);
+    const haveIds = (repData?.data_sources || []).map((ds: any) => ds?.id).filter(Boolean);
+    return wantIds.length === haveIds.length && wantIds.every((x: string) => haveIds.includes(x));
   } catch {
     return false;
   }
