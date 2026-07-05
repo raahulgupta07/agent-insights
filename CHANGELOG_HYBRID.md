@@ -3,6 +3,13 @@
 Hybrid feature changelog (our additions on top of the bagofwords/Dash base). Newest first.
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` then bullets.
 
+## v1.124.0 — Connector Sync Hero: table-by-table progress on the agent page  (2026-07-05)
+- Connecting a Power BI / Fabric agent used to drop you on a near-blank page with a thin log ("0/0 tables") for minutes with no idea what was happening. Now the agent page shows a live **Sync Hero**: a stage strip (Sign in → Discover → Import → Learn → Ready), an overall progress bar with **elapsed + estimated time left**, and each table checking off **one by one with its row count**. You can leave the page — it keeps syncing in the background and can notify you when it's done.
+- When the sync finishes it collapses to a slim "✓ Synced · N tables · N rows" ribbon and the page fills with the auto-filled instruction + starters. Partial/failed syncs show which tables were skipped and let you retry — the ones that synced are usable immediately.
+  - Backend (additive, fail-soft, **bulk DB seed unchanged**): `connector_sync.log_step` gains optional `status`/`rows` keys (JSON log, no migration); `per_user_connector.sync_clone_bg` runs the bulk seed first, then emits paced per-table `syncing→done(rows)` events grounded in the real discovered catalog (`ConnectionTable.no_rows`), `inc_tables` advancing the bar. Wrapped in try/except so progress can never break the sync.
+  - FE: `AgentSyncLog.vue` rebuilt into the Sync Hero (stage strip, `tableRows` grouped from `log[]` by table, ETA, notify toggle, done ribbon, retry) — poll/emit/self-hide preserved. `pages/agents/[id]/index.vue`: `isSyncing` gates a "Learning your data…" skeleton, disables the report launcher, hides the redundant discovering bar, and refetches on done. Non-syncing agents unchanged.
+  - Backup: git tag `pre-sync-hero-redesign` + file copies in scratchpad.
+
 ## v1.123.3 — Show-password eye toggle on connector sign-in  (2026-07-05)
 - The connector Connect box now has an eye button to show/hide the password while typing.
   - `ConnectorsRegisterModal.vue`: `showPassword` ref toggles the input `type` between password/text; heroicons eye / eye-slash button inside the field.

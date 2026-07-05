@@ -1082,15 +1082,14 @@ async def sync_clone_bg(clone_id: str, org_id: str, user_id: str,
             await connector_sync.set_totals(
                 db, clone_id, tables_total=tables_total
             )
-            for ct in distinct_tables:
-                # ConnectionTable carries no_rows (best-effort; 0 when unavailable,
-                # e.g. Power BI / on-prem catalogs that don't report row counts).
-                await connector_sync.log_step(
-                    db, clone_id, level="ok", table=ct.name,
-                    inc_tables=True, add_rows=int(ct.no_rows or 0), msg="synced",
-                )
+            await connector_sync.log_step(
+                db, clone_id, level="step", phase="syncing",
+                msg=f"discovering complete — {tables_total} tables found",
+            )
 
             # Seed DataSourceTable from the catalog (reload clone fresh first).
+            # The bulk seed is the ONLY DB write path — run it FIRST so the data is
+            # correct, THEN animate a per-table checklist for the frontend below.
             fresh = (
                 await db.execute(
                     select(DataSource)
@@ -1100,6 +1099,35 @@ async def sync_clone_bg(clone_id: str, org_id: str, user_id: str,
             ).scalars().first()
             if fresh and fresh.connections:
                 await DataSourceService_seed(db, fresh, fresh.connections[0])
+
+            # Per-table progress: emit rich one-at-a-time events grounded in the REAL
+            # discovered catalog + real row counts, so the frontend can show a
+            # table-by-table checklist. The seed already finished (DB is correct);
+            # this is purely additive progress UX. Fully fail-soft — a progress-emit
+            # error must never abort the real sync.
+            try:
+                _pace = 0.15 if tables_total <= 40 else 0.0
+                for ct in distinct_tables:
+                    # ConnectionTable carries no_rows (best-effort; 0 when
+                    # unavailable, e.g. Power BI / on-prem catalogs that don't
+                    # report row counts → show as "catalog").
+                    _rows = int(ct.no_rows or 0)
+                    await connector_sync.log_step(
+                        db, clone_id, level="active", table=ct.name,
+                        msg=f"{ct.name}", status="syncing",
+                    )
+                    await connector_sync.log_step(
+                        db, clone_id, level="ok", table=ct.name,
+                        msg=f"{ct.name}", status="done", rows=_rows,
+                        inc_tables=True, add_rows=_rows,
+                    )
+                    if _pace:
+                        await asyncio.sleep(_pace)
+            except Exception as pe:  # noqa: BLE001 — progress must never break sync
+                logger.warning(
+                    "per_user_connector.sync_clone_bg: per-table progress emit "
+                    "failed for %s: %s", clone_id, pe,
+                )
 
             # 4b. Relevance: classify each seeded table and deactivate noise
             #     (Power BI usage-metrics telemetry, staging copies, measure/empty

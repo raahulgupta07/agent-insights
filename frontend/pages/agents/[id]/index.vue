@@ -20,7 +20,7 @@
 
             <!-- Live sync-log terminal (self-hides when there's no active/recent sync run;
                  the FULL warm-dark terminal appears only while a sync is actually running) -->
-            <AgentSyncLog :data-source-id="(route.params.id as string)" @phase="onSyncPhase" />
+            <AgentSyncLog :data-source-id="(route.params.id as string)" :agent-name="dataSource?.name" @phase="onSyncPhase" />
 
             <!-- Status strip — HONEST: green "ready" only when the sync has actually
                  finished AND kept at least one queryable table. While a sync is running
@@ -69,7 +69,7 @@
 
             <!-- Indexing banner: shown while any linked connection is discovering schema -->
             <div
-                v-if="indexingConnections.length > 0"
+                v-if="indexingConnections.length > 0 && !isSyncing"
                 class="mb-4 flex items-start gap-3 bg-[#F4EEE5] border border-[#E9E0D3] text-[#1f2328] rounded-2xl px-4 py-3"
             >
                 <UIcon name="heroicons-arrow-path" class="w-5 h-5 mt-0.5 animate-spin flex-none text-[#C2541E]" />
@@ -186,6 +186,20 @@
                                 {{ showFullInstruction ? 'Show less' : 'Show more' }}
                             </button>
                         </template>
+
+                        <!-- Learning state — while a sync is running and nothing is filled yet -->
+                        <div v-else-if="isSyncing" class="border border-dashed border-[#E9E0D3] rounded-2xl px-6 py-8 bg-[#F4EEE5]/40">
+                            <div class="flex items-center gap-2 text-[13px] font-medium text-[#8a5a3c]">
+                                <UIcon name="heroicons-arrow-path" class="w-4 h-4 animate-spin text-[#C2541E]" />
+                                Learning your data…
+                            </div>
+                            <div class="text-xs text-[#A8A29E] mt-1">Primary instruction &amp; starters will auto-fill when the sync finishes.</div>
+                            <div class="mt-4 space-y-2">
+                                <div class="h-3 rounded bg-[#ECE4D7] animate-pulse w-3/4"></div>
+                                <div class="h-3 rounded bg-[#ECE4D7] animate-pulse w-full"></div>
+                                <div class="h-3 rounded bg-[#ECE4D7] animate-pulse w-2/3"></div>
+                            </div>
+                        </div>
 
                         <!-- Empty state -->
                         <div v-else class="border border-dashed border-[#E9E0D3] rounded-2xl px-6 py-10 text-center bg-[#F4EEE5]/50">
@@ -342,17 +356,23 @@
                             <button v-if="useCan('update_data_source')" @click="openEditStarters" class="ml-auto text-[11px] font-medium text-[#C2541E] hover:underline">{{ $t('dataSource.edit') }}</button>
                         </div>
                         <div class="p-4">
+                            <!-- syncing note — the agent isn't ready to answer yet -->
+                            <div v-if="isSyncing" class="flex items-center gap-1.5 text-[12px] text-[#A8A29E] mb-2">
+                                <UIcon name="heroicons-arrow-path" class="w-3.5 h-3.5 animate-spin" />
+                                Ready in a moment — finishing sync
+                            </div>
                             <!-- free-text launcher -->
-                            <div class="flex gap-2 items-center bg-white border border-[#EAE8E4] rounded-[10px] pl-3 pr-1.5 py-1.5 mb-3">
+                            <div class="flex gap-2 items-center bg-white border border-[#EAE8E4] rounded-[10px] pl-3 pr-1.5 py-1.5 mb-3" :class="{ 'opacity-60': isSyncing }">
                                 <input
                                     v-model="launchText"
                                     type="text"
-                                    placeholder="Ask this agent…"
-                                    class="flex-1 min-w-0 text-[13px] bg-transparent outline-none text-[#1C1917] placeholder:text-[#A8A29E]"
+                                    :disabled="isSyncing"
+                                    :placeholder="isSyncing ? 'Finishing sync…' : 'Ask this agent…'"
+                                    class="flex-1 min-w-0 text-[13px] bg-transparent outline-none text-[#1C1917] placeholder:text-[#A8A29E] disabled:cursor-not-allowed"
                                     @keydown.enter="launchReport(launchText)"
                                 />
                                 <button
-                                    :disabled="launching || !launchText.trim()"
+                                    :disabled="launching || isSyncing || !launchText.trim()"
                                     @click="launchReport(launchText)"
                                     class="shrink-0 text-[12px] font-medium px-2.5 py-1.5 bg-[#C2541E] text-white rounded-lg hover:bg-[#A8330F] transition-colors disabled:opacity-50"
                                 >→</button>
@@ -556,11 +576,18 @@ const syncPhase = ref<string>('')
 const syncActive = computed(
     () => !!syncPhase.value && !['done', 'error', 'idle'].includes(syncPhase.value),
 )
+// Alias for the syncing-state page treatment (skeletons, launcher gate, hidden indexing banner).
+const isSyncing = syncActive
 function onSyncPhase(p: string) {
     syncPhase.value = p || ''
     // A finished sync changed the kept-table set → refresh the overview + headline
     // once so the strip + cards reflect the real result instead of the pre-sync snapshot.
-    if (p === 'done') { try { fetchOverview() } catch (_e) {} try { fetchHeadline() } catch (_e) {} }
+    // Also refetch the agent detail so the auto-filled primary instruction + starters appear.
+    if (p === 'done') {
+        try { fetchOverview() } catch (_e) {}
+        try { fetchHeadline() } catch (_e) {}
+        try { injectedFetchIntegration() } catch (_e) {}
+    }
 }
 
 // Hot Start — headline KPIs (the model's own measures), pre-computed per-user.

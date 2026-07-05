@@ -74,9 +74,13 @@ async def log_step(
     phase: str | None = None,
     inc_tables: bool = False,
     add_rows: int = 0,
+    status: str | None = None,
+    rows: int | None = None,
 ) -> None:
     """Append one log entry and (optionally) bump counters / set phase, then commit
-    so pollers see it live. level ∈ step|ok|active|error."""
+    so pollers see it live. level ∈ step|ok|active|error. Optional per-table
+    ``status`` (e.g. syncing|done) and ``rows`` (row count) enrich the entry for a
+    table-by-table checklist; omitted → entry unchanged (backward-compat)."""
     ds_id = str(data_source_id)
     try:
         run = await _get(db, ds_id)
@@ -88,6 +92,10 @@ async def log_step(
             "msg": msg,
             "table": table,
         }
+        if status is not None:
+            entry["status"] = status
+        if rows is not None:
+            entry["rows"] = rows
         # Reassign a NEW list so SQLAlchemy JSON change-tracking fires.
         run.log = (run.log or [])[-(_LOG_CAP - 1):] + [entry]
         if phase is not None:
