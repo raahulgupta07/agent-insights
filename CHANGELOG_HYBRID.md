@@ -3,6 +3,10 @@
 Hybrid feature changelog (our additions on top of the bagofwords/Dash base). Newest first.
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` then bullets.
 
+## v1.123.1 — Fix: connector Show/Hide toggle now actually persists  (2026-07-05)
+- The connector Show/Hide toggle saved but always sprang back to "shown" (and never hid the card on the Data Agents page). Fixed — it now sticks.
+  - Root cause: `GET /organization/settings` serializes `config` through a fixed Pydantic schema (`OrganizationSettingsConfig`) that whitelists keys; `connectors_hidden` wasn't declared → stripped on every read (saved to the DB json column by PUT, dropped on read). Added `connectors_hidden: List[str] = []` to the schema so it round-trips. Backend-only, no FE change.
+
 ## v1.123.0 — Connector Show/Hide toggle on every row + Test before save  (2026-07-05)
 - Settings › Connectors: every connector row (Fabric, Power BI, SharePoint, OneDrive) now has a **Show / Hide toggle**. Turn one off and its card disappears from the Data Agents page — including the "coming soon" ones. Turn it back on to show it again.
 - The Configure box now has a **Test** button — check the Tenant ID (and Fabric SQL endpoint) are valid and reachable **before** you Save. Save waits for a passing test, with a "Save anyway" escape.

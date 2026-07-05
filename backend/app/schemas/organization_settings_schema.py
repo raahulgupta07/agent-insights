@@ -178,6 +178,9 @@ class OrganizationSettingsConfig(BaseModel):
     dashboard_key_insights: FeatureConfig = FeatureConfig(value=True, name="Dashboard Key Insights", description="Bake an LLM-generated, data-grounded Key Insights panel and a Decision callout into the top of every generated dashboard", is_lab=False, editable=True)
     session_summary: FeatureConfig = FeatureConfig(value=True, name="Session Summary", description="Roll up all turns of a report (question/answer, decisions and produced artifacts) into one cheap-LLM structured summary, pinned in the Outputs panel. Recomputed on demand or when the conversation changes.", is_lab=False, editable=True)
 
+    # Connector keys hidden from the Data Agents page (Settings › Connectors toggle).
+    connectors_hidden: List[str] = []
+
     ai_features: Dict[str, FeatureConfig] = {
         # Update defaults to use 'value' instead of 'enabled'
         "planner": FeatureConfig(value=True, name="Planner", description="Orchestrates analysis by breaking down user requests into actionable steps", is_lab=False, editable=False),
