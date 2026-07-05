@@ -5,7 +5,8 @@
 > Companion: `CLAUDE.md` (rules/current state), `DEVLOG.md` (dated history), `ROADMAP.md` (forward plan),
 > `docs/INGEST_BRAIN_DESIGN.md` (F09 universal-ingest design).
 > **Keep current:** when a ship changes a load-bearing path/pattern, update this file (same habit as DEVLOG bump).
-> Last verified: 2026-07-05 · `VERSION_HYBRID` **1.105.0** · mig head **single `sidesort1`** (no new mig) · durable-baked.
+> Last verified: 2026-07-05 · `VERSION_HYBRID` **1.113.0** · mig head **single `sidesort1`** (no new mig) · branch `integration/merge-all-20260705`, committed not-pushed (v1.108–1.113 = fe-sync/hot-cp, NOT baked into image).
+> 2026-07-05 v1.113 SPLIT JOINT MS CONNECTOR (committed `0f0761d6`, org b2bec83d): Power BI + Microsoft Fabric are now TWO separate cards on `/agents` (connect Fabric→Fabric agent, connect PowerBI→PowerBI agent, no fan-out/dupes). The joint "Microsoft (Fabric + Power BI)" tile was flag-gated (`HYBRID_MS_UNIFIED_SIGNIN`) NOT hardcoded — ONE change: `frontend/components/connectors/ConnectorsMsHub.vue` `catalog` computed = `baseCatalog` always (dropped `combinedTile`/`unifiedEnabled` + `unified`/`fanout` in `startConnect`/`onRegistered`). Flag `superseded_by HYBRID_PER_USER_CONNECTOR` (inert/Legacy). Backend already made separate agents per template `type` (`ms_fabric` vs `powerbi_user`); `per_user_connector._build_fabric_sibling` only fires on `fanout=true` (only from the old combined tile). Existing connected agents untouched.
 > 2026-07-05 v1.105 SELF-HEALING INGEST (BAKED, not committed, org b2bec83d): kills the recurring "only April" partial
 > ingest for ANY dataset. 4 flags (`hybrid_flags.py`): `HYBRID_ONE_TABLE_MERGE`+`HYBRID_INGEST_RECONCILE` flipped ON,
 > NEW `HYBRID_INGEST_SELFHEAL`+`HYBRID_AUTOEDA_AUTOAPPROVE` (default ON). P1 cross-session merge — `_try_merge_same_schema`
