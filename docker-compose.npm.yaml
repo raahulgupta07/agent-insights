@@ -1,0 +1,138 @@
+# =============================================================================
+# CityAgent Analytics — Nginx Proxy Manager (NPM) stack
+# =============================================================================
+# Public HTTPS via the NPM web UI (add domain + Let's Encrypt cert with clicks —
+# no hand-edited nginx.conf, no certbot commands). NPM fronts the app; the app is
+# NOT published directly — NPM reaches it over the internal network at app:3000.
+#
+# Quick start:
+#   1. cp .env.example .env    # set DASH_ENCRYPTION_KEY, DASH_ADMIN_*, POSTGRES_PASSWORD
+#   2. docker compose -f docker-compose.npm.yaml up -d --build
+#   3. Open the NPM admin UI:  http://<SERVER_IP>:81
+#        default login:  admin@example.com  /  changeme   (it forces a change on first login)
+#   4. NPM → Hosts → Proxy Hosts → Add Proxy Host:
+#        Domain Names:      your-domain.com
+#        Scheme:            http
+#        Forward Hostname:  app            ← the container name, NOT the server IP
+#        Forward Port:      3000           ← the app's INTERNAL port
+#        [x] Block Common Exploits   [x] Websockets Support
+#        SSL tab → request a new Let's Encrypt cert, [x] Force SSL, [x] HTTP/2
+#        ADVANCED tab → paste the streaming block below (REQUIRED — see note).
+#
+#   ⚠ STREAMING (REQUIRED): CityAgent streams chat token-by-token (SSE). NPM buffers
+#     by default → the chat looks frozen until the whole answer lands. In the proxy
+#     host's ADVANCED tab, paste:
+#         proxy_buffering off;
+#         proxy_cache off;
+#         proxy_request_buffering off;
+#         proxy_http_version 1.1;
+#         proxy_read_timeout 3600s;
+#         proxy_send_timeout 3600s;
+#         client_max_body_size 0;
+#
+#   DNS: point your-domain.com → SERVER_IP first, and open 80 + 443 (+ 81 for the UI,
+#        ideally restricted to your IP) in the cloud security group.
+# =============================================================================
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    container_name: dash-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-dash}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dashpassword}
+      POSTGRES_DB: ${POSTGRES_DB:-dash}
+    volumes:
+      - postgres_data:/var/lib/postgresql   # PG18+: mount parent, not /data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dash} -d ${POSTGRES_DB:-dash}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - dash-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: dash-redis
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - dash-network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cityagent-analytics:dev
+    container_name: dash-app
+    restart: unless-stopped
+    # No host port — NPM fronts the app and reaches it at app:3000 internally.
+    expose:
+      - "3000"
+    environment:
+      - ENVIRONMENT=production
+      - DASH_DATABASE_URL=postgresql://${POSTGRES_USER:-dash}:${POSTGRES_PASSWORD:-dashpassword}@postgres:5432/${POSTGRES_DB:-dash}
+      - DASH_ENCRYPTION_KEY=${DASH_ENCRYPTION_KEY:-}
+      - DASH_LICENSE_KEY=${DASH_LICENSE_KEY:-}
+      - DASH_ADMIN_EMAIL=${DASH_ADMIN_EMAIL:-}
+      - DASH_ADMIN_PASSWORD=${DASH_ADMIN_PASSWORD:-}
+      - DASH_ADMIN_NAME=${DASH_ADMIN_NAME:-Admin}
+      - DASH_CONFIG_PATH=/app/dash-config.yaml
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+    volumes:
+      - ./dash-config.yaml:/app/dash-config.yaml:ro
+      - uploads_data:/app/backend/uploads
+      - branding_data:/app/backend/branding_uploads
+      - logs_data:/app/backend/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+    networks:
+      - dash-network
+
+  # Nginx Proxy Manager — GUI reverse proxy + Let's Encrypt. Add the domain + HTTPS
+  # in its web UI (http://SERVER_IP:81). Reaches the app at app:3000 on dash-network.
+  nginx-proxy-manager:
+    image: jc21/nginx-proxy-manager:latest
+    container_name: dash-npm
+    restart: unless-stopped
+    ports:
+      - "80:80"      # HTTP + ACME challenge
+      - "443:443"    # HTTPS
+      - "81:81"      # admin web UI (http://SERVER_IP:81) — restrict to your IP in the SG
+    volumes:
+      - npm_data:/data
+      - npm_letsencrypt:/etc/letsencrypt
+    depends_on:
+      - app
+    networks:
+      - dash-network
+
+volumes:
+  postgres_data:
+  uploads_data:
+  branding_data:
+  logs_data:
+  npm_data:
+  npm_letsencrypt:
+
+networks:
+  dash-network:
+    driver: bridge
