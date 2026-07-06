@@ -2672,6 +2672,41 @@ class DataSourceService:
         except Exception:
             return "none"
 
+    async def _load_approved_column_meanings(self, db: AsyncSession, organization_id: str, data_source_id: str) -> dict:
+        """Build a {(table_name, column_name) -> meaning} lookup from the APPROVED
+        semantic layer for this data source (Tables view column definitions).
+
+        A meaning is LIVE only when BOTH the semantic_table AND the semantic_column
+        are status='approved' and meaning is non-empty. Fully fail-soft: any error
+        returns an empty dict so the schema endpoint is never broken.
+        """
+        try:
+            from app.models.semantic_table import SemanticTable, SemanticColumn
+
+            stmt = (
+                select(SemanticTable.table_name, SemanticColumn.name, SemanticColumn.meaning)
+                .join(SemanticColumn, SemanticColumn.semantic_table_id == SemanticTable.id)
+                .where(SemanticTable.organization_id == str(organization_id))
+                .where(SemanticTable.data_source_id == str(data_source_id))
+                .where(SemanticTable.status == "approved")
+                .where(SemanticColumn.status == "approved")
+            )
+            try:  # bi-temporal: only currently-valid semantic_table rows (no-op when flag OFF)
+                from app.ai.brain import bitemporal
+                cond = bitemporal.current_condition(SemanticTable)
+                if cond is not None:
+                    stmt = stmt.where(cond)
+            except Exception:
+                pass
+
+            lookup: dict = {}
+            for tbl_name, col_name, meaning in (await db.execute(stmt)).all():
+                if meaning and str(meaning).strip():
+                    lookup[(tbl_name, col_name)] = str(meaning).strip()
+            return lookup
+        except Exception:
+            return {}
+
     async def get_data_source_schema_paginated(
         self,
         db: AsyncSession,
@@ -2916,11 +2951,30 @@ class DataSourceService:
             for s in stats_result.scalars().all():
                 stats_map[(s.table_fqn or '').lower()] = s
         
+        # Approved semantic column meanings (Tables-view "Definition" column).
+        # One extra query per request; fail-soft (empty dict on any error) so the
+        # payload is byte-identical to today when no meanings exist.
+        meaning_lookup = await self._load_approved_column_meanings(db, organization.id, data_source_id)
+
         # Convert to schema objects
         tables = []
         for table in table_rows:
             # Get stats for this table
             stats = stats_map.get((table.name or '').lower()) if with_stats else None
+
+            # Attach approved semantic meaning to each column (omit when absent →
+            # column dict unchanged). Never mutate the ORM object's column list.
+            _cols = table.columns or []
+            if meaning_lookup and _cols:
+                _tname = table.name
+                _enriched = []
+                for _c in _cols:
+                    if isinstance(_c, dict):
+                        _m = meaning_lookup.get((_tname, _c.get("name")))
+                        if _m:
+                            _c = {**_c, "meaning": _m}
+                    _enriched.append(_c)
+                _cols = _enriched
 
             # Extract connection info from relationship
             conn_id = None
@@ -2935,7 +2989,7 @@ class DataSourceService:
             table_schema = DataSourceTableSchema(
                 id=str(table.id),
                 name=table.name,
-                columns=table.columns or [],
+                columns=_cols,
                 no_rows=table.no_rows or 0,
                 datasource_id=str(table.datasource_id),
                 pks=table.pks or [],

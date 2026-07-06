@@ -78,3 +78,7 @@ frontend/localhost.pem
 # session file backups
 .backups/
 **/.backups/
+
+# session hot-cp backups
+.*_backup/
+**/.*_backup/

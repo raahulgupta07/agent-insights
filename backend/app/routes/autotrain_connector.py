@@ -102,9 +102,25 @@ async def autotrain_from_connector(
     if ds is None:
         raise HTTPException(status_code=404, detail="data_source not found")
 
-    model = (
-        await db.execute(select(LLMModel).where(LLMModel.is_default == True))  # noqa: E712
-    ).scalars().first()
+    # Resolve the DATA-AGENT training model: org default_data_train_model_id ->
+    # default_train_model_id (shared) -> is_default fallback. Lets Settings > LLM
+    # drive which model trains data agents (separate from studio training).
+    model = None
+    try:
+        from app.services.organization_settings_service import OrganizationSettingsService
+        _settings = await OrganizationSettingsService().get_settings(db, organization, user)
+        _cfg = _settings.config if isinstance(_settings.config, dict) else {}
+        _want = _cfg.get("default_data_train_model_id") or _cfg.get("default_train_model_id")
+        if _want:
+            model = (
+                await db.execute(select(LLMModel).where(LLMModel.model_id == _want))
+            ).scalars().first()
+    except Exception:
+        model = None
+    if model is None:
+        model = (
+            await db.execute(select(LLMModel).where(LLMModel.is_default == True))  # noqa: E712
+        ).scalars().first()
 
     # Build the (table, columns) work list.
     rows = (

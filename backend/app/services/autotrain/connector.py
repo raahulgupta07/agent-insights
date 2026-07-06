@@ -19,7 +19,7 @@ from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
-_IDENT = re.compile(r"^[A-Za-z0-9_]+$")
+_IDENT = re.compile(r"^[A-Za-z0-9_ ./\-]+$")  # TEMP(bench): allow PBI names (slash/space) — revert after
 _STAGING_QUALIFIER = re.compile(r"(?i)\bstaging\.")
 
 # numeric-ish dtype hints (covers sqlite + warehouse dtypes)

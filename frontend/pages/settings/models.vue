@@ -21,7 +21,7 @@
                 </div>
             </div>
 
-            <div class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div v-for="row in defaultRows" :key="row.key">
                     <label class="block text-[11px] font-semibold text-[#7c7368] uppercase tracking-wide mb-1">{{ row.label }}</label>
                     <select
@@ -47,13 +47,15 @@ definePageMeta({ auth: true, permissions: ['manage_llm'], layout: 'settings' })
 
 const defaultRows = [
     { key: 'analysis' as const, label: 'Analysis model' },
-    { key: 'train' as const, label: 'Training model' },
+    { key: 'data_train' as const, label: 'Data Agent training' },
+    { key: 'studio_train' as const, label: 'Studio Agent training' },
     { key: 'router' as const, label: 'Router / small' },
 ]
 
-const agentDefaults = reactive<{ analysis: string | null; train: string | null; router: string | null }>({
+const agentDefaults = reactive<{ analysis: string | null; data_train: string | null; studio_train: string | null; router: string | null }>({
     analysis: null,
-    train: null,
+    data_train: null,
+    studio_train: null,
     router: null,
 })
 const defaultModelOptions = ref<{ value: string; label: string }[]>([])
@@ -78,7 +80,9 @@ const loadAgentDefaults = async () => {
         const { data } = await useMyFetch<any>('/llm/defaults', { method: 'GET' })
         const d = (data.value as any) || {}
         agentDefaults.analysis = d.analysis ?? null
-        agentDefaults.train = d.train ?? null
+        // fall back to the shared `train` default if a per-surface one isn't set yet
+        agentDefaults.data_train = d.data_train ?? d.train ?? null
+        agentDefaults.studio_train = d.studio_train ?? d.train ?? null
         agentDefaults.router = d.router ?? null
     } catch {
         // fail-soft: leave as system default
@@ -94,7 +98,10 @@ const saveDefaults = async () => {
             method: 'PUT',
             body: {
                 analysis: agentDefaults.analysis,
-                train: agentDefaults.train,
+                data_train: agentDefaults.data_train,
+                studio_train: agentDefaults.studio_train,
+                // keep the shared `train` key in sync (back-compat consumers)
+                train: agentDefaults.data_train,
                 router: agentDefaults.router,
             },
         })

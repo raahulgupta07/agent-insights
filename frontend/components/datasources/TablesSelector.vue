@@ -361,16 +361,28 @@
                 </button>
               </div>
               <div v-if="expandedTables[table.name]" class="mt-2 ms-7">
-                <!-- Columns -->
+                <!-- Columns. When any column carries an approved semantic
+                     meaning, show a 3rd "Definition" column; otherwise keep the
+                     original 2-column layout unchanged. -->
                 <div v-if="table.columns?.length" class="border border-gray-100 rounded">
-                  <div class="grid grid-cols-2 text-xs font-medium text-gray-500 bg-gray-50 px-2 py-1 rounded-t">
+                  <div
+                    class="text-xs font-medium text-gray-500 bg-gray-50 px-2 py-1 rounded-t"
+                    :class="tableHasMeanings(table) ? 'grid grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)_minmax(0,1.6fr)] gap-2' : 'grid grid-cols-2'"
+                  >
                     <div>Name</div>
                     <div>Type</div>
+                    <div v-if="tableHasMeanings(table)">Definition</div>
                   </div>
                   <div class="divide-y divide-gray-100">
-                    <div v-for="col in table.columns" :key="col.name" class="grid grid-cols-2 text-xs px-2 py-1">
-                      <div class="text-gray-700">{{ col.name }}</div>
-                      <div class="text-gray-500">{{ col.dtype || col.type }}</div>
+                    <div
+                      v-for="col in table.columns"
+                      :key="col.name"
+                      class="text-xs px-2 py-1"
+                      :class="tableHasMeanings(table) ? 'grid grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)_minmax(0,1.6fr)] gap-2 items-start' : 'grid grid-cols-2'"
+                    >
+                      <div class="text-gray-700 break-words">{{ col.name }}</div>
+                      <div class="text-gray-500 break-words">{{ col.dtype || col.type }}</div>
+                      <div v-if="tableHasMeanings(table)" class="text-gray-500 break-words">{{ col.meaning || '' }}</div>
                     </div>
                   </div>
                 </div>
@@ -533,7 +545,7 @@
 import Spinner from '@/components/Spinner.vue'
 import DataSourceIcon from '@/components/DataSourceIcon.vue'
 
-type Column = { name: string; dtype?: string; type?: string }
+type Column = { name: string; dtype?: string; type?: string; meaning?: string }
 type ForeignKey = {
   column?: { name: string; dtype?: string };
   references_name: string;
@@ -778,6 +790,12 @@ function tableHasPii(table: Table): boolean {
   const cols = table.columns
   if (!cols?.length) return false
   return cols.some(c => /passport|identity|birth|ssn|national.?id/i.test(c.name || ''))
+}
+
+// True when at least one column carries an approved semantic meaning — gates the
+// optional "Definition" column so sources without meanings look unchanged.
+function tableHasMeanings(table: Table): boolean {
+  return !!table.columns?.some(c => typeof c.meaning === 'string' && c.meaning.trim() !== '')
 }
 
 // Short reason sub-line for hidden/inactive rows, if the classifier gave one.

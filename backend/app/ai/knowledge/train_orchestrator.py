@@ -299,7 +299,7 @@ async def _route_inbox(sid, studio_id, organization_id, user_id) -> dict:
                     _os = await OrganizationSettingsService().get_settings(
                         rdb, organization, user)
                     _oc = _os.config if isinstance(_os.config, dict) else {}
-                    want = _oc.get("default_train_model_id") or want
+                    want = _oc.get("default_studio_train_model_id") or _oc.get("default_train_model_id") or want
                 except Exception:  # noqa: BLE001
                     pass
             try:
@@ -640,7 +640,7 @@ async def run_training(studio_id, organization_id, user_id) -> None:
                         _os0 = await OrganizationSettingsService().get_settings(
                             db, organization, user)
                         _oc0 = _os0.config if isinstance(_os0.config, dict) else {}
-                        _want = _oc0.get("default_train_model_id") or _want
+                        _want = _oc0.get("default_studio_train_model_id") or _oc0.get("default_train_model_id") or _want
                     except Exception:  # noqa: BLE001
                         pass
                 if _want:

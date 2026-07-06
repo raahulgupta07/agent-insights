@@ -3,6 +3,14 @@
 Hybrid feature changelog (our additions on top of the bagofwords/Dash base). Newest first.
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` then bullets.
 
+## v1.144.0 — Pick the training model for Data Agents and Studios separately  (2026-07-06)
+- Settings → LLM now has two training-model pickers: one for Data Agents, one for Studio Agents — set them the same or different.
+- Both default to Gemini 3.5 Flash — fast and cheap for training, while live analysis keeps using Claude Sonnet.
+  - Split org default keys `default_data_train_model_id` + `default_studio_train_model_id` (shared `default_train_model_id` kept as fallback). `_DEFAULTS_KEYS` in `routes/llm.py` (GET/PUT auto-cover the new keys).
+  - Data-Agent autotrain (`routes/autotrain_connector.py`) now resolves `default_data_train_model_id → default_train_model_id → is_default` (was hardcoded to `is_default`). Studio training (`ai/knowledge/train_orchestrator.py`, both resolvers) now prefers `default_studio_train_model_id → default_train_model_id`.
+  - `routes/settings/models.vue`: single Training dropdown split into "Data Agent training" + "Studio Agent training" (4-col grid), load falls back to the shared `train` key, save writes both + keeps `train` in sync.
+  - Connector autotrain `_IDENT` guard relaxed to allow Power BI table names (slash/space) so multi-dataset PBI connectors can be trained.
+
 ## v1.143.0 — Power BI model introspection: the agent now knows your measures + relationships (kills DAX errors)  (2026-07-06)
 - **★ The biggest Power BI DAX-error fix.** The agent used to write DAX from scratch (inventing `COUNTROWS(FILTER(...))` etc.) because it only knew table + column names — not the model's measures or relationships. The Power BI client already had the code to pull them (`fetch_model_metadata` → `EVALUATE INFO.VIEW.MEASURES()` / `INFO.VIEW.RELATIONSHIPS()`, `set_model_meta`, and `_model_meta_prompt` already wired into `system_prompt()`) — but `fetch_model_metadata`/`set_model_meta` were **never called anywhere** (dead code). Wired both call sites, flag-gated `HYBRID_BI_MODEL_INTROSPECT` (default OFF), fail-soft per dataset.
   - **At sync** (`per_user_connector.sync_clone_bg`): collect the distinct `datasetId`s from `datasource_tables.metadata_json['powerbi']`, call `fetch_model_metadata` (offloaded via `asyncio.to_thread`), and persist the result to **`Connection.config['pbi_model_meta']`** (NOTE: `data_sources` has no `config` column — model config lives on `Connection`; persisting to a DataSource attr would silently not save).

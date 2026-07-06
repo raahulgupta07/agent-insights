@@ -32,7 +32,9 @@ org_settings_service = OrganizationSettingsService()
 # these three keys (JSON column, merged in place like the hybrid_overrides).
 _DEFAULTS_KEYS = {
     "analysis": "default_analysis_model_id",
-    "train": "default_train_model_id",
+    "train": "default_train_model_id",  # shared fallback (back-compat)
+    "data_train": "default_data_train_model_id",    # Data-Agent (connector) training
+    "studio_train": "default_studio_train_model_id",  # Studio-Agent training
     "router": "default_router_model_id",
 }
 
