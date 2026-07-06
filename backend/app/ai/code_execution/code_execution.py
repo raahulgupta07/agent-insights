@@ -761,6 +761,148 @@ class QueryCapturingClientWrapper:
         return getattr(self._original, name)
 
 
+def _normalize_client_key(key: Any) -> str:
+    """Normalize a client key for forgiving comparison.
+
+    Lowercases, drops any `:connection` suffix, and strips all non-alphanumeric
+    characters (spaces, punctuation, parens) so that `'Power BI (User Sign-in)'`,
+    `'PowerBI'` and `'power_bi'` all collapse to the same token.
+    """
+    s = str(key or "")
+    # Drop the "{data_source.name}:{connection.name}" suffix — match on the
+    # data-source name, which is what the model tends to write.
+    s = s.split(":", 1)[0]
+    s = s.lower()
+    return re.sub(r"[^a-z0-9]", "", s)
+
+
+def _client_type_aliases(client: Any) -> set:
+    """Derive generous type/kind aliases for a client VALUE, data-driven from its
+    class name (or an explicit connector_kind/type/source_type attribute).
+
+    Future connectors self-alias by their class name — no per-connector table
+    needed beyond a few obvious short-alias groups.
+    """
+    aliases: set = set()
+
+    # 1. Prefer an explicit kind/type attribute if the client exposes one.
+    raw_type = None
+    for attr in ("connector_kind", "type", "source_type"):
+        val = getattr(client, attr, None)
+        if isinstance(val, str) and val.strip():
+            raw_type = val
+            break
+    if raw_type is None:
+        raw_type = type(client).__name__  # e.g. PowerBIUserClient, MsFabricClient
+
+    norm = re.sub(r"[^a-z0-9]", "", raw_type.lower())
+    if norm:
+        aliases.add(norm)
+        # Bare class-name minus a trailing "client" (powerbiuserclient -> powerbiuser).
+        if norm.endswith("client") and len(norm) > len("client"):
+            aliases.add(norm[: -len("client")])
+
+    # 2. Generous short-alias groups keyed off substrings of the normalized name.
+    #    Kept small + data-driven; the class-name aliases above cover the rest.
+    haystack = norm
+    if "powerbi" in haystack or "pbi" in haystack:
+        aliases.update({"powerbi", "pbi", "power_bi", "powerbiuser"})
+    if "fabric" in haystack:
+        aliases.update({"fabric", "ms_fabric", "msfabric"})
+    if "sisense" in haystack:
+        aliases.add("sisense")
+    if "bigquery" in haystack or haystack == "bq":
+        aliases.update({"bigquery", "bq"})
+
+    # Normalize every alias through the same key normalizer so lookups match.
+    return {_normalize_client_key(a) for a in aliases if a}
+
+
+class ClientResolver(dict):
+    """A ``dict`` of ``{key: client}`` with FORGIVING key lookup.
+
+    Agent-generated Python frequently copies docstring examples like
+    ``db_clients['powerbi']`` even though the real runtime dict is keyed by the
+    data-source name (``"Power BI (User Sign-in):conn"`` + a bare-name alias).
+    A bare ``dict`` raises ``KeyError: 'powerbi'`` → "Execution error: 'powerbi'".
+
+    This subclass keeps exact keys byte-identical (correct code is unaffected)
+    and only kicks in when a key MISSES, resolving it in this order:
+      a. exact hit
+      b. normalized match (case/space/punctuation/`:conn`-suffix insensitive)
+      c. type/kind alias derived from the client class name (powerbi/pbi/...)
+      d. single-client fallback (one distinct client → return it for any key)
+      e. else a clear KeyError listing the available keys.
+
+    All the usual dict operations (``[...]``, ``.get()``, ``in``, ``.values()``,
+    ``.items()``, iteration, JSON) keep working because it IS a dict.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._rebuild_indexes()
+
+    # --- index construction (cached; rebuilt if the dict is mutated) ---------
+    def _rebuild_indexes(self):
+        norm_map: Dict[str, Any] = {}
+        alias_map: Dict[str, Any] = {}
+        distinct: Dict[int, Any] = {}
+        for real_key, client in super().items():
+            nk = _normalize_client_key(real_key)
+            if nk and nk not in norm_map:
+                norm_map[nk] = client
+            for alias in _client_type_aliases(client):
+                # Real/normalized keys win over type aliases on collision.
+                if alias not in alias_map:
+                    alias_map[alias] = client
+            distinct[id(client)] = client
+        self._norm_map = norm_map
+        self._alias_map = alias_map
+        self._distinct_clients = distinct
+        self._index_size = super().__len__()
+
+    def _ensure_indexes(self):
+        # Cheap guard so mutations after construction don't stale the cache.
+        if getattr(self, "_index_size", None) != super().__len__():
+            self._rebuild_indexes()
+
+    # --- resolution ----------------------------------------------------------
+    def _resolve(self, key):
+        # a. exact
+        if super().__contains__(key):
+            return True, super().__getitem__(key)
+        self._ensure_indexes()
+        nk = _normalize_client_key(key)
+        # b. normalized
+        if nk in self._norm_map:
+            return True, self._norm_map[nk]
+        # c. type/kind alias
+        if nk in self._alias_map:
+            return True, self._alias_map[nk]
+        # d. single distinct client
+        if len(self._distinct_clients) == 1:
+            return True, next(iter(self._distinct_clients.values()))
+        return False, None
+
+    def __getitem__(self, key):
+        found, client = self._resolve(key)
+        if found:
+            return client
+        available = list(super().keys())
+        raise KeyError(
+            f"no data client for {key!r}. Available: {available}. "
+            f"Use one of these keys."
+        )
+
+    def __contains__(self, key):
+        found, _ = self._resolve(key)
+        return found
+
+    def get(self, key, default=None):
+        found, client = self._resolve(key)
+        return client if found else default
+
+
 def wrap_clients_for_capture(
     ds_clients: Dict,
     captured_queries: List[str],
@@ -850,6 +992,14 @@ class StreamingCodeExecutor:
             UnsafePythonError: If code contains forbidden imports, calls, or attributes
             UnsafeSQLError: If code contains SQL strings with write/modify operations
         """
+        # Forgiving client lookup: agent code often writes db_clients['powerbi']
+        # while the real dict is keyed by data-source name. Wrap once here — the
+        # single chokepoint every exec path funnels through (execute_code_async,
+        # generate_and_execute_stream[/_v2], CodeExecutionManager.execute_code) —
+        # so any sane key the model writes resolves. Exact keys stay identical.
+        if ds_clients is not None and not isinstance(ds_clients, ClientResolver):
+            ds_clients = ClientResolver(ds_clients)
+
         with _tracer.start_as_current_span("code_execution.execute_code") as span:
             span.set_attribute("code_execution.code_chars", len(code or ""))
             span.set_attribute("code_execution.clients", len(ds_clients or {}))
@@ -1759,6 +1909,11 @@ class StreamingCodeExecutor:
         Returns:
             Boolean indicating if execution was successful
         """
+        # Forgiving client lookup (see StreamingCodeExecutor.execute_code) — wrap
+        # the incoming dict so any sane key the model writes resolves.
+        if db_clients is not None and not isinstance(db_clients, ClientResolver):
+            db_clients = ClientResolver(db_clients)
+
         # Use provided step or fall back to instance step
         current_step = step or self.step
         if not current_step:

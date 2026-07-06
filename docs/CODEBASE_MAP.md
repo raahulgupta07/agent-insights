@@ -111,6 +111,13 @@
 > HOLDS mismatch. See `docs/TRAINING_TODO.md` + `TRAINING_STATE.md`. Offline flag-test LANDMINE: bare
 > `docker exec python` skips `load_overrides_from_db` (flags read OFF) — `set_override`/load first.
 
+## Report agent binding — INVARIANT (v1.134, do not re-split)
+A report's agent binding = exactly ONE of `{auto}` / `{studio:S}` / `{agent:A}`, held in `studio_id` + `data_sources`.
+- **FE writes it through ONE function only:** `DataSourceSelector.setReportBinding({studioId, agentIds})` → single `PUT /reports/{id}` that ALWAYS sends BOTH `studio_id` (real id OR explicit `null`) and `data_sources`. NEVER write only one field, and NEVER add a second persist path (that reopens the whole "shows X but queries Y / can't unset studio" bug class). Auto→`null,[]` · Studio→`id,members(/studios/{id}/sources)` · Agent→`null,[agent]`.
+- **Backend is the single authority for display:** `report_service.get_report` → `_effective_data_sources` returns the STUDIO's members when `studio_id` set, else the report's own `data_sources`. Working Folder + grounding read this — they can't diverge from what the report queries. `update_report` uses `exclude_unset` so a literal `studio_id:null` CLEARS the studio.
+- **One report per create:** `PromptBoxV2.createReport` sends ONE binding field (studio_id XOR data_sources) + `isCreatingReport` in-flight guard (was POSTing both → backend made two reports).
+- Picker seed-once/pick-wins: `_seededReportKey` + `_userPicked` (never revert a live pick). onAgentPickerChange dedupe: `_lastPickerIds`.
+
 ## v1.41.0 live training log (CLI) + AI column meanings + SOON cards
 - **Train log:** `ai/knowledge/train_orchestrator.py` keeps a capped timestamped `log[]` in `_train_status`. A
   per-run `_RunLogHandler` (attached to loggers `app.ai.knowledge`/`app.ai.llm`/self, detached in `finally`)

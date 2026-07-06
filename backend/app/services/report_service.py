@@ -276,6 +276,53 @@ class ReportService:
         return settings.version
         
 
+    async def _effective_data_sources(self, db: AsyncSession, report: Report):
+        """Return the data sources a report ACTUALLY queries — the single source
+        of truth surfaced to the FE (Working Folder + grounding).
+
+        When the report is bound to a studio (`studio_id` set), its effective
+        sources are the studio's pinned member Data Agents (`studio_data_sources`),
+        NOT the report's own raw associations — which can go stale on an agent
+        switch and diverge from what queries are actually scoped to (queries are
+        already scoped by studio_id at runtime; this makes the serialized view
+        match). Falls back to the report's own `data_sources` when the flag is
+        off, no studio is bound, the studio has no members, or resolution fails.
+        """
+        studio_id = getattr(report, "studio_id", None)
+        if studio_id:
+            try:
+                from app.settings.hybrid_flags import flags as _hybrid_flags
+                if _hybrid_flags.STUDIOS:
+                    from app.models.studio import StudioDataSource
+                    res = await db.execute(
+                        select(StudioDataSource.agent_id).where(
+                            StudioDataSource.studio_id == studio_id,
+                            StudioDataSource.deleted_at.is_(None),
+                        )
+                    )
+                    agent_ids = [str(a) for a in res.scalars().all()]
+                    if agent_ids:
+                        # Mirror get_report's own loader: suppress the DataSource
+                        # cascade, keep connections for the computed `type`.
+                        ds_res = await db.execute(
+                            select(DataSource)
+                            .options(
+                                lazyload("*"),
+                                selectinload(DataSource.connections).options(lazyload("*")),
+                            )
+                            .where(DataSource.id.in_(agent_ids))
+                        )
+                        members = ds_res.unique().scalars().all()
+                        if members:
+                            return list(members)
+            except Exception:
+                logger.warning(
+                    "effective_data_sources: studio resolve failed for report %s; "
+                    "falling back to report.data_sources", getattr(report, "id", None),
+                    exc_info=True,
+                )
+        return report.data_sources
+
     async def get_report(self, db: AsyncSession, report_id: str, current_user: User, organization: Organization) -> ReportSchema:
         # Same pattern as get_reports: suppress only the DataSource cascade
         # (the actual cost), let Report's own lazy="selectin" fire so
@@ -322,7 +369,10 @@ class ReportService:
             created_at=report.created_at,
             updated_at=report.updated_at,
             app_version=app_version,
-            data_sources=report.data_sources,
+            # Single source of truth: when studio-bound, return the studio's
+            # member Data Agents (what the report actually queries), else the
+            # report's own associations.
+            data_sources=await self._effective_data_sources(db, report),
             external_platform=report.external_platform,
             theme_name=report.theme_name,
             theme_overrides=report.theme_overrides,
@@ -620,13 +670,28 @@ class ReportService:
                             detail="Training mode is not enabled for this organization"
                         )
             report.mode = report_data.mode
+        # Studios: an explicit studio_id in the payload (INCLUDING null) is the
+        # single authority for the report's agent binding. `exclude_unset` lets
+        # the FE send `studio_id: null` to UNBIND a studio (a real clear),
+        # distinct from omitting the field (leave the binding untouched). Applied
+        # BEFORE the data_sources replace below so source scoping keys off the NEW
+        # binding — a clear + new data_sources in the same PUT persist atomically.
+        _fields_set = report_data.model_dump(exclude_unset=True)
+        _studio_id_provided = 'studio_id' in _fields_set
+        if _studio_id_provided:
+            from app.settings.hybrid_flags import flags as _hybrid_flags
+            if _hybrid_flags.STUDIOS:
+                report.studio_id = _fields_set.get('studio_id')  # may be None -> unbind
+
         # Replace data_sources associations if provided
         if hasattr(report_data, 'data_sources') and report_data.data_sources is not None:
             _incoming_ds = report_data.data_sources
             # LOCK to the agent's pinned Data Agents in a studio (mirror create_report):
             # never let the composer re-introduce non-pinned org sources into a studio
             # report. Fall back to the full pinned set if nothing pinned was sent.
-            _eff_studio_id = getattr(report_data, 'studio_id', None) or getattr(report, 'studio_id', None)
+            # Read the (already-applied) binding on the report so an explicit
+            # studio clear does NOT re-scope to the old studio's pins.
+            _eff_studio_id = getattr(report, 'studio_id', None)
             if _eff_studio_id:
                 from app.settings.hybrid_flags import flags as _hf_upd
                 if _hf_upd.STUDIOS:
@@ -644,10 +709,12 @@ class ReportService:
             await self.set_data_sources_for_report(db, report, _incoming_ds, current_user, organization)
 
         # Studios (hybrid Studios): bind the report to a studio picked from the
-        # composer. Set studio_id and merge the studio's pinned Data Agents into
-        # the report's sources (through the SAME access-gated path as create).
-        # Flag OFF or no studio_id -> skipped entirely (upstream-identical).
-        studio_id = getattr(report_data, 'studio_id', None)
+        # composer. studio_id was already applied to the report above; here we
+        # merge the studio's pinned Data Agents into the report's sources
+        # (through the SAME access-gated path as create). Only fires when a
+        # truthy studio_id was provided in THIS payload (a clear/null or omitted
+        # field -> skipped, upstream-identical).
+        studio_id = _fields_set.get('studio_id') if _studio_id_provided else None
         if studio_id:
             from app.settings.hybrid_flags import flags as _hybrid_flags
             if _hybrid_flags.STUDIOS:

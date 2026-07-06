@@ -85,13 +85,19 @@ async def sync_definitions_to_instructions(
                 )
                 db.add(ins)
                 await db.flush()
-                if data_source_id:
+                # Link to the definition's OWN source (it may differ from the
+                # source being trained now — this fn sweeps every approved def in
+                # the org), falling back to the passed source. Without the own-id
+                # preference a train of agent A would link agent B's definitions
+                # into agent A (an org-global-style leak).
+                link_ds_id = getattr(d, "data_source_id", None) or data_source_id
+                if link_ds_id:
                     try:
                         await db.execute(
                             text("INSERT INTO instruction_data_source_association "
                                  "(instruction_id, data_source_id) VALUES (:i, :d) "
                                  "ON CONFLICT DO NOTHING"),
-                            {"i": ins.id, "d": str(data_source_id)},
+                            {"i": ins.id, "d": str(link_ds_id)},
                         )
                     except Exception:  # noqa: BLE001
                         pass

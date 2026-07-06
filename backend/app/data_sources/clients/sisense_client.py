@@ -574,7 +574,8 @@ The SQL table name is also available in `metadata.sisense.tableName`.
 
 ```python
 # Schema table name as 2nd arg, SQL table name in query
-df = db_clients['sisense'].execute_query(
+# Use the EXACT db_clients key for your data source (see 'Available data clients' above). Do NOT use a connector type name like 'sisense'.
+df = db_clients[<your data source name>].execute_query(
     "SELECT * FROM Customers",        # SQL uses the table name (after /)
     "SalesModel/Customers"            # Schema table name (REQUIRED)
 )

@@ -1428,7 +1428,55 @@ class PowerBIClient(DataSourceClient):
         return text
 
     def system_prompt(self) -> str:
-        return self._system_prompt_base() + self._model_meta_prompt()
+        return self._system_prompt_base() + self._grounding_rules_prompt() + self._model_meta_prompt()
+
+    def _real_table_names(self) -> List[str]:
+        """The exact bare DAX table names that actually exist in this dataset, pulled
+        from the already-cached offline table index (NO live network call). The index
+        is keyed by both full ``Dataset/Table`` and bare ``Table`` names — we return the
+        bare form (what DAX references). Empty list when the index isn't populated."""
+        names: List[str] = []
+        seen = set()
+        try:
+            for key in (self._table_index or {}).keys():
+                bare = key.split("/")[-1] if "/" in key else key
+                if bare and bare not in seen:
+                    seen.add(bare)
+                    names.append(bare)
+        except Exception:  # noqa: BLE001 — grounding must never break the prompt
+            return []
+        return sorted(names)
+
+    def _grounding_rules_prompt(self) -> str:
+        """Hard grounding rules that force ANY model to use the REAL table/column names
+        of this Power BI dataset instead of textbook placeholders (Table/Data/Measures/
+        Dimension) or an assumed relational ``id`` primary key. Always emitted (fail-soft):
+        the rule text stands even when the real-name list isn't available yet."""
+        real = self._real_table_names()
+        parts = ["\n### HARD GROUNDING RULES (Power BI — read before writing any DAX)\n"]
+        parts.append(
+            "This data source is Microsoft Power BI, queried with DAX (EVALUATE ...)."
+        )
+        if real:
+            joined = ", ".join(f"'{n}'" for n in real)
+            parts.append(f"Use ONLY these exact table names that exist in the dataset: [{joined}].")
+        else:
+            parts.append(
+                "Use ONLY table names that appear in the schema/metadata below — never guess a name."
+            )
+        parts.append(
+            "Reference columns as 'TableName'[ColumnName]. NEVER use generic placeholder "
+            "names like Table, Data, Measures, Dimension, Fact, or Dim<X>."
+        )
+        parts.append(
+            "There are NO `id` primary-key columns in this model — do NOT reference an `id` "
+            "column unless it is explicitly listed in the schema for that table."
+        )
+        parts.append(
+            "Each table belongs to a specific dataset — only query tables that exist above; "
+            "if you cannot find a suitable real table/column, say so instead of inventing one.\n"
+        )
+        return "\n".join(parts)
 
     def _system_prompt_base(self) -> str:
         return """
@@ -1457,7 +1505,8 @@ The DAX table name is also available in `metadata.powerbi.tableName`.
 
 ```python
 # Schema table name as 2nd arg, DAX table name in query
-df = db_clients['powerbi'].execute_query(
+# Use the EXACT db_clients key for your data source (see 'Available data clients' above). Do NOT use a connector type name like 'powerbi'.
+df = db_clients[<your data source name>].execute_query(
     "EVALUATE Customers",           # DAX uses the table name (after /)
     "SalesModel/Customers"          # Schema table name (REQUIRED)
 )

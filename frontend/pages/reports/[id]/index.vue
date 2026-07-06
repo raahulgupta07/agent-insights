@@ -648,8 +648,17 @@
 
 									<!-- Suggested follow-up questions (under the last system message only) -->
 									<div v-if="m.id === lastSystemMessage?.id && report?.mode !== 'training'" class="mt-3">
-										<div v-if="(m as any).followups_loading && !awaitingClarify" class="flex items-center gap-2">
-											<span class="px-3 py-1.5 text-xs rounded-full border border-gray-200 bg-gray-50 text-gray-400 animate-pulse">{{ localizedFollowupsEnabled ? $t('reportView.thinkingFollowUps') : 'Thinking of follow-ups…' }}</span>
+										<div v-if="(m as any).followups_loading && !awaitingClarify" class="flex flex-col gap-2">
+											<div class="flex items-center gap-1.5">
+												<Icon name="heroicons-sparkles" class="w-3.5 h-3.5 text-[#C2541E]" />
+												<span class="text-[11px] text-gray-500">{{ localizedFollowupsEnabled ? $t('reportView.thinkingFollowUps') : 'Suggesting follow-ups' }}</span>
+												<span class="text-[9px] px-1.5 py-0.5 rounded-full bg-[#FBEFE4] text-[#A8330F] font-medium uppercase tracking-wide">fast</span>
+											</div>
+											<div class="flex flex-wrap gap-2">
+												<span class="cai-sk-chip" style="width:120px;height:29px"></span>
+												<span class="cai-sk-chip" style="width:96px;height:29px"></span>
+												<span class="cai-sk-chip" style="width:140px;height:29px"></span>
+											</div>
 										</div>
 										<div v-else-if="(m as any).followups?.length">
 											<div class="text-[11px] text-gray-400 mb-1.5">{{ localizedFollowupsEnabled ? $t('reportView.followUpHeading') : 'Ask a follow-up' }}</div>
@@ -795,6 +804,7 @@
 					ref="promptBoxRef"
 					:report_id="report_id"
 					:initialSelectedDataSources="report?.data_sources || []"
+					:reportDataSources="report?.data_sources || []"
 					:initialMode="report?.mode || 'chat'"
 					:textareaContent="prefillText"
 					:latestInProgressCompletion="runActive ? {} : undefined"
@@ -2302,10 +2312,20 @@ const groundingScope = ref({ tables_total: 0, tables_injected: 0, metrics_total:
 // AFTER the report has settled, so only genuine user picks branch to a new report.
 const agentSwitchArmed = ref(false)
 let _armTimer: any = null
+// Dedupe guard (Phase 1a — the load-bearing fix). The composer picker re-emits its
+// selection reactively (our own `report.value.data_sources = val` re-feeds the prop →
+// picker re-emits the SAME set → handler fires again → ~73× hydrate loop). We stamp the
+// last-processed id-set here; an identical consecutive emit short-circuits before any
+// PUT/mutation. This is the primary loop-breaker; the `agentSwitchArmed` timer below is
+// only a fallback for telling init-emits from user picks.
+const _lastPickerIds = ref<string>('')
 watch(() => report.value?.data_sources, (val) => {
     if (val && currentAgents.value.length === 0) currentAgents.value = [...val]
     loadGroundingScope()
     loadDsTableCounts()
+    // Phase 3: `_armTimer` is set once and never nulled, so `!_armTimer` prevents any
+    // re-created timer even if this watch fires repeatedly. The timer is only a fallback;
+    // the real loop-breaker is the `_lastPickerIds` dedupe in onAgentPickerChange.
     if (val && !agentSwitchArmed.value && !_armTimer) {
         _armTimer = setTimeout(() => { agentSwitchArmed.value = true }, 1500)
     }
@@ -2349,9 +2369,8 @@ function coworkDsEmpty(ds: any): boolean {
 // `messages` array, so any message present here means real history.
 const hasChatHistory = computed(() => messages.value.length > 0)
 
-// Shared agent selection (drives the /reports/new draft flow) + a fail-soft toast.
+// Shared agent selection (drives the /reports/new draft flow).
 const { selectAgents } = useAgent()
-const _pickerToast = useToast()
 
 // The composer / agent picker changed the selected Data Agent(s).
 // APPROVED BEHAVIOR: switching the agent inside a report that ALREADY has chat
@@ -2360,6 +2379,12 @@ const _pickerToast = useToast()
 // re-scope in place so the working folders + grounding strip follow the new agent.
 async function onAgentPickerChange(val: any[]) {
     const newIds = (val || []).map((a: any) => a?.id).filter(Boolean)
+    // Phase 1a DEDUPE: an identical consecutive emit is a no-op. A reactive re-emit of the
+    // SAME id-set (e.g. from our own `report.value.data_sources = val` below re-feeding the
+    // picker prop) must NOT touch report state again — that is exactly the infinite loop.
+    // Sorted+joined stable key so order can't produce a false miss.
+    const key = [...newIds].sort().join(',')
+    if (key === _lastPickerIds.value) return
     const curIds = (report.value?.data_sources || []).map((d: any) => d?.id).filter(Boolean)
     const sameSet = newIds.length === curIds.length && newIds.every((id: string) => curIds.includes(id))
 
@@ -2382,14 +2407,16 @@ async function onAgentPickerChange(val: any[]) {
     // Fresh report (or no real change): re-scope in place. Header follows currentAgents.
     currentAgents.value = val
     if (sameSet) return
-    // Persist the new grounding on the report. ReportUpdate takes data_sources as a
-    // list of ids (verified against PUT /reports/{id} -> ReportUpdate.data_sources).
-    const { error } = await useMyFetch(`/reports/${report_id}`, { method: 'PUT', body: { data_sources: newIds } })
-    if (error.value) {
-        _pickerToast.add({ title: "Couldn't update this report's data agent", color: 'red' })
-    }
-    // Follow the new scope locally regardless of PUT outcome so the UI isn't stuck.
-    // Working folders bind to report.data_sources; grounding re-reads it below.
+    // Genuine change. SINGLE-WRITER INVARIANT: `DataSourceSelector.setReportBinding`
+    // is the SOLE authoritative writer of this report's binding (studio_id + data_sources,
+    // atomic, server-side). We must NOT PUT here (a second writer that omits studio_id)
+    // and must NOT `loadReport()` (a refetch that RACES setReportBinding's commit: it
+    // reads while studio_id is still the OLD studio, so the effective-sources resolver
+    // returns the stale studio member and reverts the UI to the previous agent — the
+    // exact "picked Power BI, Working Folder still MM Conso" bug). Instead just reflect
+    // the pick LOCALLY (instant, no round-trip); the server is already updated by
+    // setReportBinding, and a real page reload reads the correct effective binding.
+    _lastPickerIds.value = key
     if (report.value) report.value.data_sources = val
     await loadGroundingScope()
 }
@@ -3173,7 +3200,12 @@ function showChatThinkingSkeleton(message: ChatMessage): boolean {
 	if (message.role !== 'system' || message.status !== 'in_progress' || message.sigkill) return false
 	const blocks = message.completion_blocks || []
 	if (!blocks.length) return true
-	return !blocks.some(b =>
+	// Plan blocks (source_type === 'plan') carry content but render ONLY in the
+	// right-panel Progress, never in the chat — so an early plan-only turn would
+	// wrongly hide the shimmer while the chat is still blank. Ignore them here.
+	const visible = blocks.filter(b => b?.source_type !== 'plan')
+	if (!visible.length) return true
+	return !visible.some(b =>
 		b.content ||
 		b.plan_decision?.reasoning ||
 		b.plan_decision?.final_answer ||

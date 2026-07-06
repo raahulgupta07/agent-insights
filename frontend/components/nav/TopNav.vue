@@ -37,7 +37,7 @@
       <div class="flex items-center gap-2 sm:gap-3 ms-auto">
         <!-- Agent selector (compact). showLabel off to stay compact in the bar. -->
         <div class="w-44 sm:w-52">
-          <AgentSelector :show-text="true" :show-label="false" />
+          <AgentSelector v-if="!isReportPage" :show-text="true" :show-label="false" />
         </div>
 
         <!-- New Report — desktop primary button -->

@@ -311,7 +311,7 @@
             >
                 <div class="flex items-center space-x-1 relative">
                     <!-- Data source selector -->
-                    <DataSourceSelector ref="dataSourceSelectorRef" v-model:selectedDataSources="selectedDataSources" v-model:selectedStudioId="selectedStudioId" :reportId="report_id" />
+                    <DataSourceSelector ref="dataSourceSelectorRef" v-model:selectedDataSources="selectedDataSources" v-model:selectedStudioId="selectedStudioId" :reportDataSources="reportDataSources" :reportId="report_id" />
 
                     <!-- Use a workflow (HYBRID_WORKFLOWS_V2) -->
                     <button
@@ -653,6 +653,13 @@ const props = defineProps({
         type: Array,
         default: () => []
     },
+    // The OPEN report's persisted data_sources binding (display-truth). Passed
+    // straight through to DataSourceSelector so the composer picker on an existing
+    // report reflects THAT report's bound sources, not the global sticky pick.
+    reportDataSources: {
+        type: Array,
+        default: () => []
+    },
     initialMode: {
         type: String as () => 'chat' | 'deep' | 'training',
         default: 'chat'
@@ -803,9 +810,19 @@ async function loadContextScope() {
 }
 watch(selectedDataSources, () => loadContextScope(), { immediate: true, deep: true })
 
-// Emit whenever selected data sources change (for parent sync, e.g. agent panel)
-watch(selectedDataSources, (val) => {
+// Emit whenever selected data sources change (for parent sync, e.g. agent panel).
+// Defense-in-depth: only emit when the selected id-set ACTUALLY changed since the
+// last emit, so a prop-driven re-render that yields the same selection is a no-op
+// (no re-emit → no parent feedback loop).
+let _lastEmittedDsKey = ''
+function emitDsIfChanged(val: any) {
+    const key = (val || []).map((d: any) => d?.id).filter(Boolean).sort().join(',')
+    if (key === _lastEmittedDsKey) return
+    _lastEmittedDsKey = key
     emit('update:selectedDataSources', val)
+}
+watch(selectedDataSources, (val) => {
+    emitDsIfChanged(val)
 }, { deep: true })
 const isHydratingDataSources = ref(!!props.report_id && selectedDataSources.value.length === 0)
 const uploadedFiles = ref<any[]>([])
@@ -1146,20 +1163,25 @@ function onWorkflowRan(r: any) {
     if (r?.report_id) navigateTo('/reports/' + r.report_id)
 }
 const selectedModelLabel = computed(() => {
+    // Org default / first model name — the always-real fallback the chip shows
+    // instead of the dead "Select Model" label whenever a concrete pick is missing.
+    const defaultName = models.value.length
+        ? (models.value.find(m => m.is_default) || models.value[0])?.name
+        : ''
     if (selectedModel.value === 'auto') {
-        const picked = (props.autoPicked as any)?.model
+        // Auto shows what it resolves to: the routed/picked model when known,
+        // else the org default model's name → "Auto · Claude Sonnet 4.6".
+        const picked = (props.autoPicked as any)?.model || defaultName
         return picked ? `Auto · ${picked}` : 'Auto'
     }
     if (selectedModel.value === 'moa') return 'Mixture-of-Agents'
     const model = models.value.find(m => m.id === selectedModel.value)
     if (model?.name) return model.name
-    // Stale saved model id (predates a reseed) but real models exist →
+    // Stale saved model id (predates a reseed) OR unset, but real models exist →
     // never show the dead "Select Model" string; fall back to default/first.
-    if (models.value.length) {
-        const fallback = models.value.find(m => m.is_default) || models.value[0]
-        if (fallback?.name) return fallback.name
-    }
-    return t('prompt.selectModel')
+    if (defaultName) return defaultName
+    // Models genuinely not loaded yet → neutral loading state, never "Select Model".
+    return 'Loading model…'
 })
 
 // Legacy popper (for current Nuxt UI stable)
@@ -1740,7 +1762,12 @@ watch(() => props.initialMode, (newVal) => {
 
 const router = useRouter()
 
+// In-flight guard: a create action must fire exactly ONE POST /reports. A second
+// concurrent createReport() (re-triggered submit, double event) short-circuits.
+const isCreatingReport = ref(false)
+
 async function createReport() {
+    if (isCreatingReport.value) return
     try {
         if (!text.value.trim()) {
             isSubmitting.value = false
@@ -1751,17 +1778,26 @@ async function createReport() {
             isSubmitting.value = false
             return
         }
+        isCreatingReport.value = true
+        // Bind the new report to the CURRENT composer selection with exactly ONE
+        // binding field: a picked Studio wins (studio_id), otherwise the selected
+        // Data Agent(s) (data_sources). Sending BOTH made the backend create one
+        // report per binding-field (a studio-bound AND a data-agent-bound duplicate,
+        // identical created_at). Never send both.
+        const studioId = selectedStudioId.value || null
+        const createBody: any = {
+            title: 'untitled report',
+            files: successfullyUploadedFiles.value?.map((file: any) => file.id) || [],
+            new_message: text.value,
+        }
+        if (studioId) {
+            createBody.studio_id = studioId
+        } else {
+            createBody.data_sources = selectedDataSources.value?.map((ds: any) => ds.id) || []
+        }
         const response = await useMyFetch('/reports', {
             method: 'POST',
-            body: JSON.stringify({
-                title: 'untitled report',
-                files: successfullyUploadedFiles.value?.map((file: any) => file.id) || [],
-                new_message: text.value,
-                data_sources: selectedDataSources.value?.map((ds: any) => ds.id) || [],
-                // Studios: bind the new report to the picked studio (ignored by
-                // backend when null or HYBRID_STUDIOS is off).
-                studio_id: selectedStudioId.value || null
-            })
+            body: JSON.stringify(createBody)
         })
         if ((response as any)?.error?.value) {
             throw new Error('Report creation failed')
@@ -1796,6 +1832,10 @@ async function createReport() {
     } catch (error) {
         console.error('Failed to create report:', error)
         isSubmitting.value = false
+    } finally {
+        // Release the in-flight guard so a later create action can proceed (on the
+        // success path the page navigates away and unmounts regardless).
+        isCreatingReport.value = false
     }
 }
 </script>

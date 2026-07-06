@@ -203,7 +203,42 @@ class CompletionService:
             logger.warning("auto_model: _report_min_tier failed", exc_info=True)
         return None
 
-    async def _auto_pick_model(self, db, organization, current_user, question, small_model=None, min_tier=None):
+    async def _report_capability_signals(self, db, report):
+        """Cheap capability signals for the Auto-model floor: the set of connector
+        kinds backing the report's active data sources + the active table count.
+        Reuses the same proven (indexed) joins as ``_report_min_tier`` — no N+1, no
+        network call. Fail-soft → ``(set(), 0)`` so the floor degrades gracefully.
+        """
+        kinds = set()
+        table_count = 0
+        try:
+            from sqlalchemy import text as _sql_text
+            rows = await db.execute(_sql_text("""
+                SELECT DISTINCT c.type
+                FROM report_data_source_association rdsa
+                JOIN domain_connection dc ON dc.data_source_id = rdsa.data_source_id
+                JOIN connections c ON c.id = dc.connection_id
+                WHERE rdsa.report_id = :rid
+            """), {"rid": str(report.id)})
+            for r in rows:
+                if r[0]:
+                    kinds.add(str(r[0]))
+        except Exception:
+            logger.warning("auto_model: connector_kinds signal failed", exc_info=True)
+        try:
+            from sqlalchemy import text as _sql_text
+            cnt = await db.execute(_sql_text("""
+                SELECT COUNT(*)
+                FROM datasource_tables dt
+                JOIN report_data_source_association rdsa ON rdsa.data_source_id = dt.datasource_id
+                WHERE rdsa.report_id = :rid AND dt.is_active = true
+            """), {"rid": str(report.id)})
+            table_count = int(cnt.scalar() or 0)
+        except Exception:
+            table_count = 0
+        return kinds, table_count
+
+    async def _auto_pick_model(self, db, organization, current_user, question, small_model=None, min_tier=None, connector_kinds=None, table_count=0):
         """HYBRID_AUTO_MODEL: classify question complexity → cheapest capable model.
 
         Returns (model, decision_dict). NEVER raises — on any failure returns the org
@@ -221,6 +256,8 @@ class CompletionService:
                 default_model=default_model,
                 small_model=small_model,
                 min_tier=min_tier,
+                connector_kinds=connector_kinds,
+                table_count=table_count,
             )
         except Exception:
             logger.warning("auto_model: _auto_pick_model failed", exc_info=True)
@@ -585,10 +622,12 @@ class CompletionService:
                 # Auto model selection: classify question complexity → cheapest capable model.
                 # Floor to BALANCED for Power BI / Fabric so DAX code-gen never lands on the weakest model.
                 _min_tier = await self._report_min_tier(db, report)
+                _conn_kinds, _tbl_count = await self._report_capability_signals(db, report)
                 model, _auto_decision = await self._auto_pick_model(
                     db, organization, current_user,
                     (completion_data.prompt.content if completion_data.prompt else "") or "",
                     small_model, _min_tier,
+                    connector_kinds=_conn_kinds, table_count=_tbl_count,
                 )
             elif flags.MOA and _req_mid == "moa":
                 # Mixture-of-Agents: the aggregator model answers; the peer panel runs
@@ -2197,10 +2236,12 @@ class CompletionService:
                 # Auto model selection: classify question complexity → cheapest capable model.
                 # Floor to BALANCED for Power BI / Fabric so DAX code-gen never lands on the weakest model.
                 _min_tier = await self._report_min_tier(db, report)
+                _conn_kinds, _tbl_count = await self._report_capability_signals(db, report)
                 model, _auto_decision = await self._auto_pick_model(
                     db, organization, current_user,
                     (completion_data.prompt.content if completion_data.prompt else "") or "",
                     None, _min_tier,
+                    connector_kinds=_conn_kinds, table_count=_tbl_count,
                 )
                 _log(f"auto_model→{(_auto_decision or {}).get('model')} ({(_auto_decision or {}).get('tier')})")
             elif flags.MOA and _req_mid == "moa":

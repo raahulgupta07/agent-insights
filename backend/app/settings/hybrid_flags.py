@@ -218,7 +218,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_RICH_REPORT_EMAIL": {"label": "Rich Report Emails", "role": "agent", "category": "Agents & Access", "status": "beta", "note": "Render scheduled/automated report emails from structured results (clean table + sanitized insights + dashboard image/PDF) instead of dumping the raw agent chat. OFF = legacy raw-content email."},
     "HYBRID_ONECLICK_ARTIFACTS": {"label": "One-click Dashboard / Slides / Excel", "role": "user", "category": "Agents & Access", "status": "beta", "note": "On a report's right panel, turns the empty Dashboard/Slides/Excel states into one-click builders: 'Generate dashboard' (real page artifact), 'Generate slide deck' (python-pptx deck + previews + .pptx) from the report's existing charts, and an auto-filled Excel workbook. Reuses the chat create_artifact pipeline."},
     "HYBRID_OUTPUT_CUSTOMIZE": {"label": "Output Customize Dialogs (NotebookLM-style)", "role": "user", "category": "Agents & Access", "status": "beta", "note": "Tap a report output tile (Dashboard/Report/Slides/Excel) -> a customize modal (Format/Length/Depth/Focus/Model/Language) -> Generate passes those options into the build. OFF = tiles keep instant-generate. Default ON."},
-    "HYBRID_AUTO_ARTIFACT": {"label": "Auto-build Dashboard from chat", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "When a chat turn produces a dataset (the agent ran create_data → ≥1 chart) but makes NO artifact, automatically build a dashboard (page artifact) in the background so the Outputs panel isn't empty. Reuses the one-click create_artifact pipeline. Idempotent (only when the report has zero artifacts) + fully fail-soft. Default OFF."},
+    "HYBRID_AUTO_ARTIFACT": {"label": "Auto-build Dashboard from chat", "role": "user", "category": "Agents & Access", "status": "legacy", "superseded_by": ["HYBRID_ONECLICK_ARTIFACTS"], "note": "LEGACY — default OFF. Auto-built a dashboard in the background after any data turn with no artifact. Retired because it generated dashboards nobody asked for (token + time cost on trivial questions). Dashboards are now user-initiated only: ask in chat, or use the 'Build a dashboard' modal (HYBRID_ONECLICK_ARTIFACTS)."},
     "HYBRID_CROSS_SOURCE_UNIFY": {"label": "Cross-Source Unify", "role": "agent", "category": "Intelligence", "status": "experimental", "note": "At ingest, detect same-shape sibling tables (e.g. 6 monthly files with identical columns) and register a unified UNION ALL view (+ a _period column) so the agent queries across them in one shot. Records a union group + emits an instruction. Fail-soft, no migration. Default ON."},
     "HYBRID_DATA_QUALITY": {"label": "Data Quality Scan", "role": "user", "category": "Intelligence", "status": "experimental", "note": "At ingest, scan columns for quality issues (high null %, type-coercion risk, outliers, near-constant) and emit a data_quality guardrail instruction the agent reads. Pure pandas, fail-soft, no migration. Default OFF."},
     "HYBRID_VALUE_NORMALIZE": {"label": "Value Normalization (canonical)", "role": "agent", "category": "Intelligence", "status": "experimental", "note": "Resolve a canonical value for near-duplicate labels (e.g. 'daily_used__l' vs 'daily_used__l_') and record a value→canonical map so GROUP BY doesn't scatter one category across spellings. Detection only, no data rewrite. Default OFF."},
@@ -530,8 +530,10 @@ class HybridFlags:
         # empty. Reuses the one-click create_artifact pipeline
         # (report_slides._generate_artifact, mode='page'). Idempotent (skips when
         # the report already has any artifact) + fail-soft (never affects the
-        # chat response). No agent-loop effect. Default OFF.
-        return _bool("HYBRID_AUTO_ARTIFACT", True)
+        # chat response). No agent-loop effect. LEGACY — default OFF: dashboards
+        # are user-initiated only (chat ask or the "Build a dashboard" modal),
+        # never auto-generated. Superseded by HYBRID_ONECLICK_ARTIFACTS.
+        return _bool("HYBRID_AUTO_ARTIFACT", False)
 
     @property
     def CROSS_SOURCE_UNIFY(self) -> bool:

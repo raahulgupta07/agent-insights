@@ -214,6 +214,45 @@ def _floor_tier(tier: str, min_tier: Optional[str]) -> str:
     return tier
 
 
+# Connectors whose query IS generated code against a live semantic model (DAX) —
+# a weak FAST-tier model invents generic table/measure names and fails.
+_DAX_CONNECTOR_KINDS = {"powerbi", "powerbi_user", "ms_fabric", "ms_fabric_user"}
+
+
+def capability_floor(
+    *,
+    connector_kinds: Optional[List[str]] = None,
+    table_count: int = 0,
+    question: str = "",
+) -> str:
+    """Minimum tier a query REQUIRES based on WHAT it touches (not just keywords).
+
+    A cheap FAST-tier model is unsafe for code-gen connectors and multi-table joins,
+    so this raises a floor by structure:
+      · Power BI / Fabric (DAX) present   → at least BALANCED (never route DAX to FAST).
+      · a join (>= 2 active tables)        → at least BALANCED.
+      · genuine analytical depth in the    → REASON
+        question (forecast / why / root-cause / correlation / dashboard / deck …,
+        via the shared ``_HARD_RE`` / ``_ARTIFACT_RE``).
+      · otherwise                          → FAST.
+
+    Pure + synchronous. NEVER raises → returns ``"fast"`` on any error.
+    """
+    try:
+        floor = "fast"
+        kinds = {str(k).lower() for k in (connector_kinds or []) if k}
+        if kinds & _DAX_CONNECTOR_KINDS:
+            floor = "balanced"
+        if (table_count or 0) >= 2 and _TIER_ORDER[floor] < _TIER_ORDER["balanced"]:
+            floor = "balanced"
+        q = question or ""
+        if _HARD_RE.search(q) or _ARTIFACT_RE.search(q):
+            floor = "reason"
+        return floor
+    except Exception:
+        return "fast"
+
+
 async def choose_auto_model(
     *,
     question: str,
@@ -222,6 +261,8 @@ async def choose_auto_model(
     small_model: Any = None,
     allow_llm: bool = True,
     min_tier: Optional[str] = None,
+    connector_kinds: Optional[List[str]] = None,
+    table_count: int = 0,
 ) -> Tuple[Any, Dict[str, Any]]:
     """Pick the best model for ``question`` from ``models``. NEVER raises.
 
@@ -231,8 +272,24 @@ async def choose_auto_model(
     ``min_tier`` (fast|balanced|reason) floors the chosen tier — used to keep
     code-generation connectors (Power BI / DAX, warehouses) off the weakest model
     even when the question text scores as trivial ("how many projects?").
+
+    ``connector_kinds`` / ``table_count`` are OPTIONAL capability signals: when a
+    caller passes them, a structural :func:`capability_floor` is computed and folded
+    into ``min_tier`` (the STRONGER of the two wins). Callers that omit both new
+    params are byte-identical to before (no capability floor is applied).
     """
     try:
+        # Fold the structural capability floor into min_tier — only when the caller
+        # opted in by passing capability signals (keeps existing callers unchanged).
+        if connector_kinds is not None or table_count:
+            cap = capability_floor(
+                connector_kinds=connector_kinds,
+                table_count=table_count,
+                question=question,
+            )
+            if _TIER_ORDER.get(cap, 0) > _TIER_ORDER.get(min_tier or "", -1):
+                min_tier = cap
+
         sc = score_complexity(question)
         tier = sc["tier"]
         via = "heuristic"

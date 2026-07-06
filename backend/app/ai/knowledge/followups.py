@@ -1,10 +1,10 @@
-"""Generate 3-4 grounded FOLLOW-UP questions after a chat answer, PER-AGENT.
+"""Generate 3 grounded FOLLOW-UP questions after a chat answer, PER-AGENT.
 
 After a Studio chat answer, this proposes the questions a user would most
-likely ask NEXT — grounded in (a) the studio's pinned data-source schema,
-(b) the studio's voice/persona, (c) its ACTIVE instructions, and (d) an
-optional explicit `followup_policy` artifact. So a compliance agent steers
-follow-ups toward data-quality checks, a sales agent toward drill-downs, etc.
+likely ask NEXT — grounded in the user's QUESTION + the assistant's ANSWER,
+plus a light list of the studio's pinned table names for grounding. The prompt
+is kept deliberately small (no full schema / column values / voice /
+instructions dump) so the single small-model inference returns fast.
 
 Reuse, not reinvention (CLAUDE.md HARD RULES) — clones the idiom of the sibling
 ``auto_queries.py`` exactly:
@@ -37,12 +37,11 @@ from app.settings.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-# Bound the schema digest fed into the prompt (cheap tier).
-_MAX_SCHEMA_CHARS = 3000
-# How many pinned sources to introspect for schema grounding.
+# How many pinned sources to introspect for light table-name grounding.
 _MAX_SCHEMA_SOURCES = 3
-# How many active instructions to fold into the steer.
-_MAX_INSTRUCTIONS = 8
+# Cap on how many table names go into the prompt (light context only — the
+# follow-up suggester needs the Q + A, not a full schema dump).
+_MAX_TABLE_NAMES = 20
 # Hard cap on each follow-up question's length.
 _MAX_Q_CHARS = 120
 
@@ -109,58 +108,39 @@ def _parse_followup_list(text: str) -> List[str]:
     return out
 
 
-def _build_prompt(
-    question: str,
-    answer: str,
-    voice: str,
-    instructions_text: str,
-    policy: str,
-    schema_text: str,
-    max_n: int,
-) -> str:
-    """One-shot prompt asking for up to N grounded follow-up questions."""
+def _build_prompt(question: str, answer: str, table_names: str) -> str:
+    """Lean one-shot prompt asking for EXACTLY 3 short follow-up questions.
+
+    Deliberately tiny: a follow-up suggestion only needs the user's question,
+    the assistant's answer, and (optionally) the table names to stay grounded.
+    Heavier context (full schema, column values, voice, instructions, policy)
+    is intentionally omitted to keep the small-model inference fast, and the
+    "EXACTLY 3, <= ~90 chars each" instruction caps the output length.
+    """
     parts: List[str] = [
-        "You are a data analyst assistant. A user just received an answer in a "
-        "chat about their data. Propose the follow-up QUESTIONS the user is most "
-        f"likely to ask NEXT — up to {max_n} of them.",
+        "A user just received an answer in a chat about their data. Propose the "
+        "3 follow-up QUESTIONS the user is most likely to ask NEXT.",
         "",
         "Each follow-up MUST:",
-        "- be directly answerable on THIS data (reference real tables/columns "
-        "from the schema below; do NOT invent tables or columns),",
         "- build on the question + answer (drill down, compare, trend over time, "
         "segment, or check data quality),",
         "- be ONE concise natural-language question (<= ~90 characters),",
         "- have no numbering, no preamble, no explanation.",
     ]
-    if voice:
-        parts += ["", f"Agent voice / persona (honor its tone + focus):\n{voice}"]
-    if instructions_text:
+    if table_names:
         parts += [
             "",
-            "Active agent instructions (let these steer what the follow-ups "
-            f"focus on):\n{instructions_text}",
-        ]
-    if policy:
-        parts += [
-            "",
-            f"Follow-up policy (HARD steer — obey this):\n{policy}",
-        ]
-    if schema_text:
-        parts += ["", f"Data schema (table(col1, col2, ...) lines):\n{schema_text}"]
-    else:
-        parts += [
-            "",
-            "(No schema is available — base the follow-ups on the question and "
-            "answer + instructions; keep them generic but on-topic.)",
+            f"Tables available (ground on these; do NOT invent others): {table_names}",
         ]
     parts += [
         "",
-        f"The user's question was:\n{question or '(not provided)'}",
+        f"Question:\n{question or '(not provided)'}",
         "",
-        f"The answer they got was:\n{answer or '(not provided)'}",
+        f"Answer:\n{answer or '(not provided)'}",
         "",
-        "Return ONLY a single JSON array of strings (no prose, no markdown), e.g.:",
-        '["First follow-up question?", "Second follow-up question?"]',
+        "Return ONLY a single JSON array of EXACTLY 3 short strings (no prose, no "
+        'markdown), e.g.:',
+        '["First follow-up question?", "Second follow-up question?", "Third follow-up question?"]',
     ]
     return "\n".join(parts)
 
@@ -246,12 +226,11 @@ async def generate_followups(
     model=None,
     max_n: int = 4,
 ) -> dict:
-    """Generate 3-4 grounded follow-up questions for a report's last answer.
+    """Generate 3 grounded follow-up questions for a report's last answer.
 
-    Per-agent: when the report belongs to a Studio, the follow-ups are steered
-    by the studio's voice + active instructions + optional followup_policy and
-    grounded in its pinned-source schema. Otherwise it falls back to the
-    report's own data sources.
+    Grounded in the user's question + the assistant's answer, plus a light list
+    of the table names from the studio's pinned sources (or the report's own
+    data sources when there's no studio). Kept small for a fast small-model call.
 
     Self-gates on ``flags.FOLLOWUPS`` (default OFF -> ``{disabled:True}``).
     NEVER raises: any soft failure returns ``{"ok": False, "error": ...,
@@ -287,72 +266,14 @@ async def generate_followups(
         studio_id = getattr(report, "studio_id", None)
         source = "studio" if studio_id else "report"
 
-        voice = ""
-        instructions_text = ""
-        policy = ""
-        schema_chunks: List[str] = []
         ds_rows: List[Any] = []
 
-        # 2. Per-studio grounding.
+        # 2. Resolve the data sources to ground on — LIGHT table-name context
+        #    only (no full schema / column values / voice / instructions /
+        #    policy; a follow-up suggestion just needs the Q + A + table names).
         if studio_id:
-            from app.models.studio import (
-                Studio,
-                StudioArtifact,
-                StudioDataSource,
-                StudioInstruction,
-            )
+            from app.models.studio import StudioDataSource
 
-            # Voice / persona.
-            try:
-                sres = await db.execute(
-                    select(Studio).where(Studio.id == studio_id)
-                )
-                studio = sres.scalar_one_or_none()
-                if studio is not None:
-                    voice = _clean(getattr(studio, "persona", None))
-            except Exception:
-                voice = ""
-
-            # Active instructions (cap ~8).
-            try:
-                ires = await db.execute(
-                    select(StudioInstruction)
-                    .where(
-                        StudioInstruction.studio_id == studio_id,
-                        StudioInstruction.status == "active",
-                        StudioInstruction.deleted_at.is_(None),
-                    )
-                    .order_by(StudioInstruction.created_at.asc())
-                )
-                instr_rows = list(ires.scalars().all())[:_MAX_INSTRUCTIONS]
-                lines = [_clean(r.content) for r in instr_rows if _clean(r.content)]
-                instructions_text = "\n".join(f"- {ln}" for ln in lines)
-            except Exception:
-                instructions_text = ""
-
-            # Optional explicit followup_policy artifact (no `status` column on
-            # StudioArtifact -> just take the most recent of that kind).
-            try:
-                pres = await db.execute(
-                    select(StudioArtifact)
-                    .where(
-                        StudioArtifact.studio_id == studio_id,
-                        StudioArtifact.kind == "followup_policy",
-                        StudioArtifact.deleted_at.is_(None),
-                    )
-                    .order_by(StudioArtifact.created_at.desc())
-                )
-                art = pres.scalars().first()
-                if art is not None:
-                    content = getattr(art, "content", None)
-                    if isinstance(content, dict):
-                        policy = _clean(json.dumps(content))
-                    else:
-                        policy = _clean(content)
-            except Exception:
-                policy = ""
-
-            # Pinned sources -> schema.
             try:
                 from app.models.data_source import DataSource
 
@@ -380,15 +301,18 @@ async def generate_followups(
             except Exception:
                 ds_rows = []
 
-        # Schema digest (cap a few sources, ~3000 chars total).
+        # Light table-name context (cap a few sources / a handful of names).
+        table_names: List[str] = []
         for ds in ds_rows[:_MAX_SCHEMA_SOURCES]:
             try:
-                schema_text, _names = _introspect_schema_text(ds)
+                _schema_text, names = _introspect_schema_text(ds)
             except Exception:
-                schema_text = ""
-            if schema_text:
-                schema_chunks.append(schema_text)
-        schema_text = "\n".join(schema_chunks)[:_MAX_SCHEMA_CHARS]
+                names = set()
+            for n in (names or []):
+                n = _clean(n)
+                if n and n not in table_names:
+                    table_names.append(n)
+        table_names_text = ", ".join(table_names[:_MAX_TABLE_NAMES])
 
         # 4. Best-effort fill of answer/question from the latest completion.
         if not _clean(answer_text):
@@ -433,9 +357,7 @@ async def generate_followups(
         # 6. ONE small-model inference (SYNC -> worker thread).
         infer = _default_infer(model)
         try:
-            prompt = _build_prompt(
-                question, answer, voice, instructions_text, policy, schema_text, max_n
-            )
+            prompt = _build_prompt(question, answer, table_names_text)
             raw = await asyncio.to_thread(infer, prompt)
         except Exception as e:  # noqa: BLE001
             logger.warning("followups inference failed for %s: %s", report_id, e)

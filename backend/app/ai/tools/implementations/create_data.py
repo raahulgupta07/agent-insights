@@ -1364,6 +1364,85 @@ Do not use generic placeholders like "value" unless that is the actual column na
             # File-only mode: no database schemas needed
             schemas_excerpt = ""
 
+        # Power BI grounding: force ANY model (esp. weaker ones) to use the REAL table
+        # names of the dataset instead of textbook placeholders (Table/Data/Measures/
+        # Dimension) or an assumed relational `id` column. Fires ONLY when a Power BI
+        # client is in scope (guard below) so non-PBI sources are byte-identical.
+        # Fail-soft: injects the rule text even if the real-name list can't be built.
+        try:
+            _ds_clients = runtime_ctx.get("ds_clients", {}) or {}
+            from app.data_sources.clients.powerbi_client import PowerBIClient as _PBIClient
+            if any(isinstance(_c, _PBIClient) for _c in _ds_clients.values()):
+                _pbi_names: List[str] = []
+                for _grp in (resolved_tables or []):
+                    for _t in (_grp.get("tables", []) or []):
+                        _bare = _t.split("/")[-1] if isinstance(_t, str) and "/" in _t else _t
+                        if _bare and _bare not in _pbi_names:
+                            _pbi_names.append(_bare)
+                if _pbi_names:
+                    _names_line = "Use ONLY these exact table names: [" + ", ".join(
+                        f"'{n}'" for n in _pbi_names
+                    ) + "]."
+                else:
+                    _names_line = "Use ONLY the exact table names listed in the schema above — never guess a name."
+                _pbi_rules = (
+                    "\n### POWER BI — HARD RULE (use the real schema, not placeholders)\n"
+                    "This data source is Microsoft Power BI, queried with DAX (EVALUATE ...).\n"
+                    f"{_names_line}\n"
+                    "Reference columns as 'TableName'[ColumnName]. NEVER use generic placeholder "
+                    "names like Table, Data, Measures, Dimension, Fact, or Dim<X>.\n"
+                    "There are NO `id` primary-key columns — do NOT reference an `id` column "
+                    "unless it is explicitly listed in the schema for that table.\n"
+                    "Each table belongs to a specific dataset — only query tables that exist above.\n"
+                )
+                schemas_excerpt = (schemas_excerpt or "") + _pbi_rules
+        except Exception:
+            logger.debug("create_data PBI grounding injection skipped", exc_info=True)
+
+        # AVAILABLE DATA CLIENTS grounding (generic, always-present): the executed code
+        # indexes a `db_clients` dict whose keys are the DATA SOURCE NAME(s)
+        # ("{ds_name}:{conn_name}" plus a bare "{ds_name}" alias) — never a connector-type
+        # name like 'powerbi'/'sisense'. Inject the REAL keys so the model uses the right one
+        # on the FIRST attempt instead of guessing (which yields KeyError: 'powerbi'). Fail-soft.
+        try:
+            _ds_clients_keys = runtime_ctx.get("ds_clients", {}) or {}
+            if _ds_clients_keys:
+                # Dedupe clients (same client is keyed under ':conn' AND bare-name) and, per
+                # client, prefer the SHORTEST key that identifies it (= the human-friendly bare
+                # data-source name when both forms exist).
+                _shortest_by_client: Dict[int, str] = {}
+                for _k, _client in _ds_clients_keys.items():
+                    if not isinstance(_k, str) or not _k:
+                        continue
+                    _cid = id(_client)
+                    _cur = _shortest_by_client.get(_cid)
+                    if _cur is None or len(_k) < len(_cur):
+                        _shortest_by_client[_cid] = _k
+                _client_keys = sorted(set(_shortest_by_client.values()), key=lambda s: (len(s), s))
+                _client_keys = _client_keys[:20]  # cap defensively
+                if _client_keys:
+                    _keys_lines = "\n".join(f"    db_clients[{k!r}]" for k in _client_keys)
+                    _one_note = (
+                        " If only one client is listed, use that one."
+                        if len(_client_keys) == 1 else ""
+                    )
+                    _clients_block = (
+                        "\n### AVAILABLE DATA CLIENTS — use these EXACT keys in db_clients[...]\n"
+                        f"{_keys_lines}\n"
+                        "Do NOT invent a key like db_clients['powerbi'] or db_clients['sisense'] "
+                        "— use one of the keys listed above (the data-source NAME, not a "
+                        f"connector-type name).{_one_note}\n"
+                    )
+                    schemas_excerpt = (schemas_excerpt or "") + _clients_block
+            else:
+                schemas_excerpt = (schemas_excerpt or "") + (
+                    "\n### AVAILABLE DATA CLIENTS\n"
+                    "Use the data-source NAME as the db_clients key, not a connector-type name "
+                    "like 'powerbi'.\n"
+                )
+        except Exception:
+            logger.debug("create_data available-clients injection skipped", exc_info=True)
+
         # Static and warm sections for prompt grounding
         _resources_section_obj = getattr(context_view.static, "resources", None) if context_view else None
         resources_context = _resources_section_obj.render() if _resources_section_obj else ""

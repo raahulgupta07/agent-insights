@@ -294,6 +294,12 @@ const isAutoMode = computed(() =>
 // so the checkmark reflects the real pick even with one Data Agent.
 const autoActive = ref(true)
 
+// BUG1 guards: seed the OPEN report's data_sources ONCE per report (on report
+// identity change) and NEVER after the user has interacted, so a live pick
+// (agent/studio) is never snapped back to the report's original binding.
+const _seededReportKey = ref<string>('')
+const _userPicked = ref(false)
+
 // Hover flyout state
 const hoveredDataSourceId = ref<string | null>(null)
 const flyout = reactive({ visible: false, bottom: 0, left: 0, maxHeight: 0 })
@@ -461,6 +467,15 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+    // The OPEN report's persisted data_sources binding (display-truth). When
+    // provided AND non-empty, the composer picker initializes its selection from
+    // THIS (the report's real binding) instead of the global localStorage-sticky
+    // useAgent() store — so an existing report always shows the source it queries.
+    // Empty/absent (brand-new report) → keep inheriting the global sticky pick.
+    reportDataSources: {
+        type: Array,
+        default: () => [],
+    },
     reportId: {
         type: String,
         default: () => '',
@@ -527,10 +542,14 @@ async function getDataSources() {
         dataSources.value = allSources.filter((ds: any) => isUsable(ds) && CONNECTOR_KINDS.has(ds.connector_kind))
         // Everything else returned is a user_required source the user can connect.
         connectableDataSources.value = allSources.filter((ds: any) => !isUsable(ds))
-        // Initialize selection from prop if provided, otherwise leave empty for parent to decide
-        if ((props.selectedDataSources as any[])?.length) {
+        // Initialize selection from prop if provided, otherwise leave empty for parent to decide.
+        // Prefer the OPEN report's persisted binding (reportDataSources = display-truth) over the
+        // v-model selectedDataSources so an existing report never shows the global sticky pick.
+        const _reportSeed = Array.isArray(props.reportDataSources) ? (props.reportDataSources as any[]) : []
+        const _seedSource = _reportSeed.length ? _reportSeed : ((props.selectedDataSources as any[]) || [])
+        if (_seedSource.length) {
             // Align to the objects from the current dataSources list by id
-            const ids = new Set((props.selectedDataSources as any[]).map((x: any) => x.id))
+            const ids = new Set(_seedSource.map((x: any) => x?.id).filter(Boolean))
             const picked = dataSources.value.filter((ds: any) => ids.has(ds.id))
             internalSelectedDataSources.value = picked
             // Explicit pin unless it happens to equal every source (= Auto).
@@ -557,24 +576,59 @@ function handleSelectionChange() {
     emit('update:selectedDataSources', internalSelectedDataSources.value);
 }
 
-function selectStudio(studio: Studio) {
+async function selectStudio(studio: Studio) {
+    _userPicked.value = true
     if (internalSelectedStudioId.value === studio.id) {
-        // Deselect -> back to no studio (data-source mode)
+        // Deselect -> back to no studio. Fall back to Auto so studio_id is
+        // cleared AND report.data_sources resets to full scope (persist+emit).
         internalSelectedStudioId.value = ''
         // Propagate clear to global (explicit user action — no watcher feedback loop)
         clearStudioGlobal()
-    } else {
-        internalSelectedStudioId.value = studio.id
-        // Exclusive: a studio defines its own grounded scope. Clear any
-        // ad-hoc data-source selection so the two pickers don't fight.
-        internalSelectedDataSources.value = []
-        handleSelectionChange()
-        // Propagate to global so AgentSelector (top bar) reflects this pick
-        // and the selection persists to localStorage workspace-wide.
-        selectStudioGlobal(studio.id)
+        emit('update:selectedStudioId', '')
+        selectAuto()
+        return
     }
+    internalSelectedStudioId.value = studio.id
+    // Propagate to global so AgentSelector (top bar) reflects this pick
+    // and the selection persists to localStorage workspace-wide.
+    selectStudioGlobal(studio.id)
     emit('update:selectedStudioId', internalSelectedStudioId.value)
-    persistStudioIfReport()
+    // The Working Folder + "Grounded on" strip read report.data_sources, so a
+    // studio pick must ALSO set data_sources to the studio's member data agents
+    // (single source of truth). Resolve the members (fail-soft; empty on
+    // error/none), then bind studio_id + members in ONE atomic PUT below — so
+    // studio_id is persisted even if the sources fetch fails.
+    let memberIds: string[] = []
+    try {
+        const { data, error } = await useMyFetch(`/studios/${studio.id}/sources`, { method: 'GET' })
+        if (!error?.value) {
+            const rows = (data?.value as any[]) || []
+            if (rows.length) {
+                // Studio source rows key the data-source id on `agent_id`.
+                const ids = new Set(rows.map((r: any) => r?.agent_id).filter(Boolean).map((x: any) => String(x)))
+                let picked: any[] = dataSources.value.filter((ds: any) => ids.has(String(ds.id)))
+                if (!picked.length) {
+                    // Sources not in our loaded connector list — build minimal picker
+                    // objects (need an `id` for the emit/persist path).
+                    picked = rows
+                        .map((r: any) => ({ name: r.name || r.agent_name, ...r, id: String(r.agent_id) }))
+                        .filter((x: any) => x.id && x.id !== 'undefined')
+                }
+                if (picked.length) {
+                    autoActive.value = false
+                    internalSelectedDataSources.value = picked as any
+                    // Reuse the existing dedupe/emit path.
+                    handleSelectionChange()
+                    memberIds = picked.map((p: any) => String(p.id))
+                }
+            }
+        }
+    } catch (e) {
+        console.error('Failed to load studio sources:', e)
+    }
+    // ONE PUT sets BOTH studio_id (a real id) and its member data_sources —
+    // replaces the old persistStudioIfReport + persistSelectionIfReport split.
+    await setReportBinding({ studioId: studio.id, agentIds: memberIds })
 }
 
 function clearStudio() {
@@ -628,7 +682,8 @@ function isServiceAccount(ds: any) {
 
 // Auto (Studios-only): clear any pinned studio and fall back to auto scope so
 // the agent selects the right sources/skills for the question itself.
-function selectAuto() {
+async function selectAuto() {
+    _userPicked.value = true
     if (internalSelectedStudioId.value) {
         internalSelectedStudioId.value = ''
         clearStudioGlobal()
@@ -638,7 +693,8 @@ function selectAuto() {
     internalSelectedDataSources.value = [...visibleDataSources.value]
     handleSelectionChange()
     mirrorSelectionToGlobal()
-    persistSelectionIfReport()
+    // Auto = no studio, global-inherit scope → clear studio_id AND data_sources.
+    await setReportBinding({ studioId: null, agentIds: [] })
 }
 
 function toggleAutoMode() {
@@ -652,7 +708,8 @@ function toggleAutoMode() {
     persistSelectionIfReport()
 }
 
-function toggleDataSource(ds: DataSource) {
+async function toggleDataSource(ds: DataSource) {
+    _userPicked.value = true
     clearStudio()
     if (autoActive.value) {
         // Leaving Auto: pin only this source (explicit pick).
@@ -676,8 +733,12 @@ function toggleDataSource(ds: DataSource) {
     handleSelectionChange()
     // Mirror the pick into the shared store so the top-bar AgentSelector highlights it.
     mirrorSelectionToGlobal()
-    // If we are in a report context, persist selection at report level immediately
-    persistSelectionIfReport()
+    // Picking a Data Agent CLEARS any studio_id and sets the picked agents in ONE
+    // PUT — the core fix for "picking a Data Agent doesn't clear the studio".
+    await setReportBinding({
+        studioId: null,
+        agentIds: internalSelectedDataSources.value.map((x: any) => x.id),
+    })
 }
 
 // Write the current logical selection into the shared useAgent store so the
@@ -798,34 +859,70 @@ watch(() => props.selectedDataSources, (newVal: any[]) => {
     internalSelectedDataSources.value = mapped as any
 }, { immediate: true, deep: true })
 
-async function persistSelectionIfReport() {
+// The OPEN report's persisted binding is display-truth. It usually arrives AFTER
+// mount (the report is fetched async), so seed the picker from it whenever it
+// becomes non-empty — this overrides any global sticky value that seeded first.
+// Empty/malformed prop → no-op (brand-new report keeps the global-inherited pick).
+watch(() => props.reportDataSources, (newVal: any) => {
+    // Never override a live user pick.
+    if (_userPicked.value) return
+    if (!Array.isArray(newVal) || newVal.length === 0) return
+    const ids = new Set(newVal.map((x: any) => x?.id).filter(Boolean))
+    if (!ids.size) return
+    // One seed per report identity — reportId when available, else the incoming
+    // id-set. Skip if we've already seeded this same report.
+    const key = props.reportId || Array.from(ids).sort().join(',')
+    if (key === _seededReportKey.value) return
+    const mapped = dataSources.value.length
+        ? dataSources.value.filter((ds: any) => ids.has(ds.id))
+        : newVal
+    internalSelectedDataSources.value = mapped as any
+    autoActive.value = mapped.length > 0 && mapped.length === visibleDataSources.value.length
+    handleSelectionChange()
+    _seededReportKey.value = key
+}, { immediate: true, deep: true })
+
+// Opening a DIFFERENT report re-seeds: clear the live-pick lock and the seeded
+// marker so the reportDataSources watcher above seeds the newly-opened report.
+watch(() => props.reportId, () => {
+    _userPicked.value = false
+    _seededReportKey.value = ''
+})
+
+// SINGLE atomic writer for a report's agent binding. Every persist channel
+// (Auto / Studio / Data Agent) routes through here so studio_id and
+// data_sources can never fall out of sync: BOTH fields are ALWAYS written
+// together — studio_id is a real id OR an explicit null (never omitted), so
+// switching away from a Studio actually clears studio_id in the DB.
+// Landing page (no reportId) → no persist (new reports inherit the global pick).
+async function setReportBinding({ studioId, agentIds }: { studioId?: string | null; agentIds?: string[] }) {
     try {
         if (!props.reportId) return
-        const ids = internalSelectedDataSources.value.map((x: any) => x.id)
         await useMyFetch(`/reports/${props.reportId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ data_sources: ids })
+            body: JSON.stringify({ studio_id: studioId ?? null, data_sources: (agentIds || []) })
         })
     } catch (e) {
-        console.error('Failed to update report data sources:', e)
+        console.error('Failed to update report binding:', e)
     }
 }
 
-// Bind the studio to an existing report immediately (composer opened on a
-// live report). On the landing page (no reportId) the studio_id is carried
-// into the create call by the parent instead.
+// Thin wrappers preserved for existing call-sites — both delegate to the single
+// atomic writer, so each ALWAYS writes studio_id (value|null) + data_sources
+// together (never one field alone).
+async function persistSelectionIfReport() {
+    await setReportBinding({
+        studioId: internalSelectedStudioId.value || null,
+        agentIds: internalSelectedDataSources.value.map((x: any) => x.id),
+    })
+}
+
 async function persistStudioIfReport() {
-    try {
-        if (!props.reportId || !internalSelectedStudioId.value) return
-        await useMyFetch(`/reports/${props.reportId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ studio_id: internalSelectedStudioId.value })
-        })
-    } catch (e) {
-        console.error('Failed to bind report to studio:', e)
-    }
+    await setReportBinding({
+        studioId: internalSelectedStudioId.value || null,
+        agentIds: internalSelectedDataSources.value.map((x: any) => x.id),
+    })
 }
 
 // Keep internal studio selection in sync with parent-provided prop.
