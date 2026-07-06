@@ -139,10 +139,16 @@ if ! [[ "$CPUS" =~ ^[0-9]+$ ]] || [ "$CPUS" -le 0 ]; then
 fi
 
 # Calculate workers: half of available CPUs
-# - Minimum: 1 worker
+# - Minimum: 2 workers whenever the box has >1 vCPU (a single blocking request —
+#   e.g. a large Excel ingest, which runs inline — must never freeze the whole UI;
+#   a spare worker keeps page/data fetches answering). 1 only on a true 1-vCPU box.
 # - Maximum: 4 workers (safety cap to prevent OOM)
+# NOTE: each worker loads its own libs/DuckDB/Chromium → ~1.5-2 GB. On a small box
+# (2 vCPU / 4 GB) 2 workers can be tight; give it ≥8 GB, or pin UVICORN_WORKERS=1
+# if RAM-constrained (accepting the single-upload-freeze tradeoff).
 DEFAULT_WORKERS=$(( CPUS > 1 ? CPUS / 2 : 1 ))
 DEFAULT_WORKERS=$(( DEFAULT_WORKERS > 4 ? 4 : DEFAULT_WORKERS ))
+DEFAULT_WORKERS=$(( CPUS > 1 && DEFAULT_WORKERS < 2 ? 2 : DEFAULT_WORKERS ))
 DEFAULT_WORKERS=$(( DEFAULT_WORKERS < 1 ? 1 : DEFAULT_WORKERS ))
 
 # Allow override via environment variable
