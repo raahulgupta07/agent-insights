@@ -57,6 +57,92 @@ ALLOWED_VIZ_TYPES = {
 }
 
 
+def _smart_viz_override(chosen_type: str, profile: Dict[str, Any]) -> str:
+    """Deterministic viz-type correction for CLEAR mismatches (flag SMART_VIZ).
+
+    Pure code — uses ONLY information already in the `profile` produced by
+    ``_build_viz_profile`` (per-column dtype + unique_count/cardinality, counts).
+    Corrects only unambiguous mistakes; on anything ambiguous/missing it returns
+    ``chosen_type`` unchanged, and never returns a type outside ALLOWED_VIZ_TYPES.
+    """
+    try:
+        if chosen_type not in ALLOWED_VIZ_TYPES:
+            return chosen_type
+        cols = profile.get("columns") or []
+        if not isinstance(cols, list) or not cols:
+            return chosen_type
+
+        def _is_numeric(dt: Any) -> bool:
+            dt = str(dt or "").lower()
+            return any(k in dt for k in ("int", "float", "double", "decimal", "number", "numeric"))
+
+        def _is_datetime(dt: Any) -> bool:
+            dt = str(dt or "").lower()
+            return any(k in dt for k in ("date", "time", "timestamp", "datetime"))
+
+        numeric_cols = [c for c in cols if isinstance(c, dict) and _is_numeric(c.get("dtype"))]
+        datetime_cols = [c for c in cols if isinstance(c, dict) and _is_datetime(c.get("dtype"))]
+        categorical_cols = [
+            c for c in cols
+            if isinstance(c, dict) and not _is_numeric(c.get("dtype")) and not _is_datetime(c.get("dtype"))
+        ]
+
+        # Cardinality of the primary category column (first categorical).
+        cat_card: Optional[int] = None
+        if categorical_cols:
+            raw = categorical_cols[0].get("unique_count")
+            try:
+                cat_card = int(raw) if raw is not None else None
+            except Exception:
+                cat_card = None
+
+        # Too many bars/slices to read -> table (checked first so >50 wins over >8).
+        if chosen_type in ("bar_chart", "pie_chart") and cat_card is not None and cat_card > 50:
+            return "table"
+        # Pie unreadable with many slices -> bar_chart.
+        if chosen_type == "pie_chart" and cat_card is not None and cat_card > 8:
+            return "bar_chart"
+        # Time series: a datetime column + >=1 numeric, chosen bar/table -> line_chart.
+        if chosen_type in ("bar_chart", "table") and datetime_cols and len(numeric_cols) >= 1:
+            return "line_chart"
+        # Exactly 2 numeric, 0 categorical, chosen bar -> scatter_plot.
+        if chosen_type == "bar_chart" and len(numeric_cols) == 2 and len(categorical_cols) == 0:
+            return "scatter_plot"
+        return chosen_type
+    except Exception:
+        return chosen_type
+
+
+def _build_result_narrative(exec_df: Any) -> Optional[str]:
+    """Short (<=240 char) deterministic plain-text narrative of the top insights.
+
+    Reuses the shared, LLM-free insight engine (``compute_insights``) — no new
+    stats, no network. Fail-soft: returns None on any error, on a non-DataFrame,
+    or when there is nothing noteworthy to say.
+    """
+    try:
+        import pandas as _pd  # type: ignore
+        if exec_df is None or not isinstance(exec_df, _pd.DataFrame) or exec_df.empty:
+            return None
+        from app.ai.knowledge.insights import compute_insights
+        insights = compute_insights(exec_df)
+        if not insights:
+            return None
+        parts = []
+        for ins in insights[:2]:
+            msg = str((ins or {}).get("message") or "").strip()
+            if msg:
+                parts.append(msg)
+        if not parts:
+            return None
+        narrative = " ".join(parts)
+        if len(narrative) > 240:
+            narrative = narrative[:237].rstrip() + "..."
+        return narrative
+    except Exception:
+        return None
+
+
 def _extract_json_object(text: Optional[str]) -> Optional[Dict[str, Any]]:
     """Best-effort extraction of a single JSON object from an LLM response.
 
@@ -784,6 +870,21 @@ Do not use generic placeholders like "value" unless that is the actual column na
                 _col = _cols[0].get("field") or _cols[0].get("headerName")
                 if _col:
                     candidate = {"type": "metric_card", "series": [{"name": str(_col), "value": str(_col)}]}
+        except Exception:
+            pass
+
+        # SMART_VIZ (flag-gated): deterministic viz-type corrections for CLEAR
+        # mismatches, applied after the scalar-guard block using only the
+        # already-built `profile`. Fail-soft → keep the LLM-chosen type.
+        try:
+            from app.settings.hybrid_flags import flags as _sv_flags
+            if getattr(_sv_flags, "SMART_VIZ", False):
+                _chosen = candidate.get("type")
+                if isinstance(_chosen, str) and _chosen:
+                    _corrected = _smart_viz_override(_chosen, profile)
+                    if _corrected != _chosen and _corrected in ALLOWED_VIZ_TYPES:
+                        logger.info("smart_viz override %s->%s", _chosen, _corrected)
+                        candidate["type"] = _corrected
         except Exception:
             pass
 
@@ -1768,6 +1869,45 @@ Do not use generic placeholders like "value" unless that is the actual column na
             # affect the query result path.
             pass
 
+        # Query Learning (flag HYBRID_QUERY_LEARNING): a create_data step
+        # SUCCEEDED — persist its working query/approach to the query library
+        # (review-gated, born pending) tagged with the question and marked a
+        # win, so future similar questions can reuse it; a repeat success on the
+        # same question promotes it to a golden. Fail-then-success attempts are
+        # recorded as a down-weighted negative note. Connector-agnostic (captures
+        # DAX or SQL). Runs on a FRESH isolated session so it can never touch the
+        # query path's transaction. Fully fail-soft; flag OFF => byte-identical.
+        #
+        # NOTE: this hook previously lived ONLY in the unused mcp/create_data.py
+        # copy — the LIVE tool (this file) never captured live runs, so the
+        # library only ever grew from one-time training. Do NOT move it back.
+        try:
+            from app.settings.hybrid_flags import flags as _ql_flags
+            if _ql_flags.QUERY_LEARNING:
+                from app.ai.knowledge import query_learning as _ql
+                _ql_org = runtime_ctx.get("organization")
+                _ql_org_id = str(getattr(_ql_org, "id", "") or "")
+                _ql_report = runtime_ctx.get("report")
+                _ql_question = (data.user_prompt or data.interpreted_prompt or "")
+                _ql_ds_ids = [d for d in _ds_ids if d]
+                if _ql_org_id and _ql_report is not None and _ql_ds_ids and _ql_question:
+                    async with async_session_maker() as _ql_db:
+                        await _ql.capture_live_run(
+                            _ql_db,
+                            organization_id=_ql_org_id,
+                            data_source_ids=_ql_ds_ids,
+                            report=_ql_report,
+                            question=_ql_question,
+                            executed_queries=executed_queries or [],
+                            generated_code=generated_code or "",
+                            code_errors=code_errors or [],
+                        )
+                        await _ql_db.commit()
+        except Exception:
+            # Query Learning is best-effort background learning — never let it
+            # affect the query result path.
+            pass
+
         # Success path: format data and privacy-aware preview
         yield ToolProgressEvent(type="tool.progress", payload={"stage": "formatting_widget"})
         formatted = streamer.format_df_for_widget(exec_df)
@@ -1784,6 +1924,18 @@ Do not use generic placeholders like "value" unless that is the actual column na
                 "row_count": len(formatted.get("rows", [])),
                 "stats": info,
             }
+
+        # RESULT_NARRATIVE (flag-gated groundwork): a short deterministic
+        # plain-text narrative of the top insights, reusing the shared insight
+        # engine. Fail-soft; the key is attached to the output below only when a
+        # non-empty narrative was produced (payload byte-identical when OFF).
+        result_narrative = None
+        try:
+            from app.settings.hybrid_flags import flags as _rn_flags
+            if getattr(_rn_flags, "RESULT_NARRATIVE", False):
+                result_narrative = _build_result_narrative(exec_df)
+        except Exception:
+            result_narrative = None
 
         # Optional: infer minimal visualization model (type + series) using the existing DataModel schema
         inferred_dm = None
@@ -1911,6 +2063,10 @@ Do not use generic placeholders like "value" unless that is the actual column na
             "codegen_ms": codegen_ms,
             "execution_ms": execution_ms,
         }
+        # RESULT_NARRATIVE: attach only when the flag produced a non-empty
+        # narrative (no new key on the OFF path → byte-identical payload).
+        if result_narrative:
+            _success_output["result_narrative"] = result_narrative
 
         # ── Result cache store-after-success (flag RESULT_CACHE) ─────────────
         # Persist this deterministic result under the watermark-keyed key computed

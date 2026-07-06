@@ -225,6 +225,12 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_BI_SNAPSHOT": {"label": "BI Snapshot (Power BI/Fabric local cache)", "role": "agent", "category": "Performance", "status": "experimental", "note": "Snapshot Power BI / Fabric tables into a local store (DuckDB) on sync and query the local copy (ms) instead of live DAX over HTTP (slow + throttled). Per-agent 'Live mode' bypasses to the source. Needs FAST_LANE. Default OFF."},
     "HYBRID_FAST_CODEGEN": {"label": "Fast Codegen Model", "role": "agent", "category": "Performance", "status": "experimental", "note": "Route the pure code-generation step (create_data) to the org's fast/small model (a Gemini flash variant) so code steps run 3-5x cheaper/faster in tokens, while planning/reflection stay on the higher-quality model. Fail-soft to the normal model. Needs FAST_LANE. Default OFF."},
     "HYBRID_WAREHOUSE_CACHE": {"label": "Warehouse Result Cache", "role": "agent", "category": "Performance", "status": "experimental", "note": "Cache the ROWS returned by a SQL query against a live warehouse source (postgres/snowflake/bigquery/…) per (data_source, normalized SQL) for a short TTL, so a repeated identical query returns instantly with zero DB round-trip. Warehouse lane only (local uploads are already fast; BI has its own snapshot lane). Read-only SELECT results only; fail-soft (miss runs live). Needs FAST_LANE. Default OFF."},
+    "HYBRID_SMART_VIZ": {"label": "Smart Viz Picker", "role": "user", "category": "Intelligence", "status": "experimental", "note": "Deterministic chart-type correction on top of the LLM's pick, using the data profile already computed (rows, columns, dtype, cardinality): high-cardinality category -> bar not pie, time + numeric -> line, two numerics -> scatter, too many categories -> top-N. Never widens the allowed viz set; fail-soft to the LLM answer. Default OFF."},
+    "HYBRID_AUTO_FORMAT": {"label": "Result Auto-Format", "role": "user", "category": "Intelligence", "status": "experimental", "note": "Attach a per-column display format to result tables (thousands separators, currency, %, decimals, dates) derived from column dtype + name. Rendered as a valueFormatter; underlying values unchanged. Fail-soft. Default OFF = raw numeric/ISO."},
+    "HYBRID_BRAND_PALETTE": {"label": "Brand Chart Palette", "role": "user", "category": "Intelligence", "status": "experimental", "note": "Default chart theme uses the CityAgent brand palette (accent #C2541E-led) instead of generic blue. Per-report theme overrides still win. Frontend-only. Default OFF."},
+    "HYBRID_PARAM_TEMPLATES": {"label": "Parameterized Report Templates", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "Saved prompts with {{name}} parameters gain a fill-in UI + a substitution/run engine that creates a report from the filled template, plus a reusable-template gallery. Builds on the existing Prompt.parameters model. API always mounted; flag shows the UI. Default OFF."},
+    "HYBRID_STARTER_REFRESH": {"label": "Regenerate Starters", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "A Refresh button on the agent Overview re-runs the schema-grounded conversation-starter generator on demand. OFF = starters only made at onboarding/train. Default OFF."},
+    "HYBRID_RESULT_NARRATIVE": {"label": "Per-Result Interpretation", "role": "user", "category": "Intelligence", "status": "experimental", "note": "A short inline narrative attached to each individual result (reuses compute_insights + build_sense_making), rendered beside that result's table — finer than the existing turn-level DecisionCard. Fail-soft. Default OFF."},
     "HYBRID_CROSS_SOURCE_UNIFY": {"label": "Cross-Source Unify", "role": "agent", "category": "Intelligence", "status": "experimental", "note": "At ingest, detect same-shape sibling tables (e.g. 6 monthly files with identical columns) and register a unified UNION ALL view (+ a _period column) so the agent queries across them in one shot. Records a union group + emits an instruction. Fail-soft, no migration. Default ON."},
     "HYBRID_DATA_QUALITY": {"label": "Data Quality Scan", "role": "user", "category": "Intelligence", "status": "experimental", "note": "At ingest, scan columns for quality issues (high null %, type-coercion risk, outliers, near-constant) and emit a data_quality guardrail instruction the agent reads. Pure pandas, fail-soft, no migration. Default OFF."},
     "HYBRID_VALUE_NORMALIZE": {"label": "Value Normalization (canonical)", "role": "agent", "category": "Intelligence", "status": "experimental", "note": "Resolve a canonical value for near-duplicate labels (e.g. 'daily_used__l' vs 'daily_used__l_') and record a value→canonical map so GROUP BY doesn't scatter one category across spellings. Detection only, no data rewrite. Default OFF."},
@@ -591,6 +597,58 @@ class HybridFlags:
         # SELECT results only; fail-soft (miss runs live). Gated by FAST_LANE.
         # Default OFF = byte-identical to today.
         return _bool("HYBRID_WAREHOUSE_CACHE", False)
+
+    # --- Phase 4 (Julius-quality polish) — all default OFF ---
+    @property
+    def SMART_VIZ(self) -> bool:
+        # Deterministic viz-type override on top of the LLM's pick. Uses the data
+        # profile already computed (row_count, column_count, per-column dtype +
+        # cardinality) to correct obvious mismatches: high-cardinality category ->
+        # bar not pie, time + numeric -> line, two numerics -> scatter, too many
+        # categories -> top-N bar/table. Never widens the allowed set; fail-soft to
+        # the LLM answer. Default OFF = today's LLM-only choice.
+        return _bool("HYBRID_SMART_VIZ", False)
+
+    @property
+    def AUTO_FORMAT(self) -> bool:
+        # Attach a per-column display format (thousands separators, currency, %,
+        # decimals, dates) to result tables, derived from the column dtype + name
+        # heuristics that are already available at serialization time. Frontend
+        # renders it as a valueFormatter; raw values are unchanged. Fail-soft.
+        # Default OFF = raw numeric/ISO rendering.
+        return _bool("HYBRID_AUTO_FORMAT", False)
+
+    @property
+    def BRAND_PALETTE(self) -> bool:
+        # Make the default chart theme use the CityAgent brand palette (accent
+        # #C2541E-led) instead of the generic blue-led default. Per-report theme
+        # overrides still win. Frontend-only, fail-soft. Default OFF.
+        return _bool("HYBRID_BRAND_PALETTE", False)
+
+    @property
+    def PARAM_TEMPLATES(self) -> bool:
+        # Parameterized report templates: a saved Prompt with {{name}} parameters
+        # (already in the Prompt model/schema) gains a param UI + a substitution/run
+        # engine that fills the variables and creates a report from the result. A
+        # template gallery surfaces reusable prompts. API always mounted; flag shows
+        # the UI + enables the run engine. Default OFF.
+        return _bool("HYBRID_PARAM_TEMPLATES", False)
+
+    @property
+    def STARTER_REFRESH(self) -> bool:
+        # Allow on-demand regeneration of an agent's data-driven conversation
+        # starters (re-runs the schema-grounded generator) via a Refresh button on
+        # the agent Overview. OFF = starters only generated at onboarding/train.
+        # Default OFF.
+        return _bool("HYBRID_STARTER_REFRESH", False)
+
+    @property
+    def RESULT_NARRATIVE(self) -> bool:
+        # Per-result inline interpretation: a short deterministic-then-LLM narrative
+        # attached to each create_data result (reuses compute_insights +
+        # build_sense_making), rendered beside that result's table — finer-grained
+        # than the existing turn-level DecisionCard. Fail-soft. Default OFF.
+        return _bool("HYBRID_RESULT_NARRATIVE", False)
 
     @property
     def CROSS_SOURCE_UNIFY(self) -> bool:
@@ -1906,6 +1964,12 @@ class HybridFlags:
             "BI_SNAPSHOT": self.BI_SNAPSHOT,
             "FAST_CODEGEN": self.FAST_CODEGEN,
             "WAREHOUSE_CACHE": self.WAREHOUSE_CACHE,
+            "SMART_VIZ": self.SMART_VIZ,
+            "AUTO_FORMAT": self.AUTO_FORMAT,
+            "BRAND_PALETTE": self.BRAND_PALETTE,
+            "PARAM_TEMPLATES": self.PARAM_TEMPLATES,
+            "STARTER_REFRESH": self.STARTER_REFRESH,
+            "RESULT_NARRATIVE": self.RESULT_NARRATIVE,
             "CROSS_SOURCE_UNIFY": self.CROSS_SOURCE_UNIFY,
             "DATA_QUALITY": self.DATA_QUALITY,
             "VALUE_NORMALIZE": self.VALUE_NORMALIZE,

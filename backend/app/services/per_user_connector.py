@@ -1382,7 +1382,10 @@ async def sync_clone_bg(clone_id: str, org_id: str, user_id: str,
                 from app.settings.hybrid_flags import flags as _hf
                 if _hf.FAST_LANE and _hf.BI_SNAPSHOT:
                     from app.services.speed.source_lane import classify_data_source, LANE_BI
-                    from sqlalchemy.orm import selectinload
+                    # NOTE: selectinload is imported module-level (line 29). Do NOT
+                    # re-import it locally here — a function-scoped import makes
+                    # `selectinload` a local for the WHOLE function, so the earlier
+                    # uses in sync_clone_bg raise UnboundLocalError before this block.
                     from sqlalchemy import select as _select
                     _snap_ds = (
                         await db.execute(

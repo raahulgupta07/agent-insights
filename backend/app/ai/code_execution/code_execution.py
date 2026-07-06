@@ -1539,6 +1539,46 @@ class StreamingCodeExecutor:
             info_dict["column_info"][column] = column_info
         return info_dict
 
+    @staticmethod
+    def _derive_display_format(col_name, dtype_str: str) -> Optional[Dict]:
+        """AUTO_FORMAT: derive a frontend-consumable display format descriptor from a
+        column's pandas dtype + its name. Pure code, fail-soft (returns None on any error
+        or when no meaningful format applies → caller omits the key). Descriptor shape:
+        {"kind": "integer"|"decimal"|"currency"|"percent"|"date"|"text", "decimals": int, "symbol": str|None}
+        """
+        try:
+            name = str(col_name).lower().strip()
+            dt = (dtype_str or "").lower()
+            is_int = ("int" in dt)  # int64, Int64, int32, uint...
+            is_float = ("float" in dt)
+            is_datetime = ("datetime" in dt) or ("date" in dt and "object" not in dt) or ("timestamp" in dt)
+            is_numeric = is_int or is_float
+
+            _date_names = {"date", "month", "day", "created_at", "updated_at", "period", "timestamp"}
+            _currency_hints = ("revenue", "sales", "amount", "price", "cost", "profit",
+                               "usd", "mmk", "total_value", "gmv", "spend")
+            _percent_hints = ("percent", "rate", "ratio", "share")
+
+            # datetime dtype OR a date-ish column name
+            if is_datetime or name in _date_names:
+                return {"kind": "date", "decimals": 0, "symbol": None}
+
+            if is_numeric:
+                # percent: name ends with _pct or contains a percent hint
+                if name.endswith("_pct") or any(h in name for h in _percent_hints):
+                    return {"kind": "percent", "decimals": 1, "symbol": None}
+                # currency: name matches a currency hint
+                if any(h in name for h in _currency_hints):
+                    return {"kind": "currency", "decimals": 0, "symbol": None}
+                if is_int:
+                    return {"kind": "integer", "decimals": 0, "symbol": None}
+                return {"kind": "decimal", "decimals": 2, "symbol": None}
+
+            # non-numeric, non-date → text: omit (stay minimal)
+            return None
+        except Exception:
+            return None
+
     def format_df_for_widget(self, df: pd.DataFrame, max_rows: Optional[int] = None) -> Dict:
         """Format a DataFrame into a widget-compatible structure.
 
@@ -1589,6 +1629,26 @@ class StreamingCodeExecutor:
                 df_to_serialize.to_json(orient='records', date_format='iso', default_handler=str)
             )
             df_info = self.get_df_info(df)
+        if flags.AUTO_FORMAT:
+            # Attach a per-column display format descriptor (fail-soft, additive).
+            try:
+                col_dtypes = df_info.get("column_info", {}) if isinstance(df_info, dict) else {}
+                for col_def in columns:
+                    try:
+                        field = col_def.get("field")
+                        dtype_str = ""
+                        info_entry = col_dtypes.get(field)
+                        if isinstance(info_entry, dict):
+                            dtype_str = str(info_entry.get("dtype", ""))
+                        fmt = self._derive_display_format(field, dtype_str)
+                        if fmt is not None:
+                            col_def["format"] = fmt
+                    except Exception:
+                        # per-column fail-soft: attach nothing for this column
+                        continue
+            except Exception:
+                # global fail-soft: leave columns untouched
+                pass
         return {
             "rows": rows,
             "columns": columns,

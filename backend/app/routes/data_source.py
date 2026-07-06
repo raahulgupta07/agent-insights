@@ -1136,6 +1136,65 @@ async def get_data_source_overview(
     return payload
 
 
+@router.post("/data_sources/{data_source_id}/regenerate-starters")
+@requires_resource_permission('data_source', 'manage')
+async def regenerate_data_source_starters(
+    data_source_id: str,
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+    current_user: User = Depends(current_user),
+):
+    """STARTER_REFRESH (flag HYBRID_STARTER_REFRESH): re-run the schema-grounded
+    conversation-starter generator on demand from the agent Overview.
+
+    Reuses the existing service generator; persists + returns the fresh starters.
+    Fail-soft — on any generator error, returns 200 with the EXISTING starters
+    unchanged (the Refresh button must never 500)."""
+    import logging
+    _log = logging.getLogger(__name__)
+
+    from app.settings.hybrid_flags import flags
+    if not flags.STARTER_REFRESH:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    # Load the data source (org-scoped, same auth as siblings).
+    ds_result = await db.execute(
+        select(DataSource).filter(
+            DataSource.id == data_source_id,
+            DataSource.organization_id == organization.id,
+        )
+    )
+    data_source = ds_result.scalar_one_or_none()
+    if data_source is None:
+        raise HTTPException(status_code=404, detail="Data source not found")
+
+    existing = list(data_source.conversation_starters or [])
+
+    try:
+        generated = await data_source_service.generate_data_source_items(
+            db=db,
+            item="conversation_starters",
+            data_source_id=data_source_id,
+            organization=organization,
+            current_user=current_user,
+        )
+        starters = (generated or {}).get("conversation_starters")
+        if starters is not None:
+            data_source.conversation_starters = starters
+            await db.commit()
+            await db.refresh(data_source)
+            return {"conversation_starters": list(data_source.conversation_starters or [])}
+    except Exception:
+        _log.exception("regenerate-starters: generation failed for %s", data_source_id)
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+
+    # Generator returned nothing usable, or failed — keep the existing starters.
+    return {"conversation_starters": existing}
+
+
 @router.get("/data_sources/{data_source_id}/headline")
 @requires_resource_permission('data_source', 'view_schema')
 async def get_data_source_headline(

@@ -110,6 +110,56 @@ export const themes: Record<string, ThemeDefinition> = {
       'echarts.line': { smooth: true }
     }
   },
+  // ---------------------------------------------------------------------------
+  // BRAND_PALETTE (flag HYBRID_BRAND_PALETTE / prop flags.BRAND_PALETTE)
+  // Mirrors the `default` theme structure EXACTLY (same token keys), only the
+  // series palette is swapped for the CityAgent brand palette led by the accent
+  // #C2541E. Axis / legend / grid stay neutral slate (identical to `default`) so
+  // it reads as a professional BI theme, legible on light and dark chart backgrounds.
+  // This is ADDITIVE — the `default` theme is unchanged, so the OFF path is
+  // byte-identical. Selection is wired by the caller (see resolveDefaultThemeName
+  // + TODO below), never by mutating `default`.
+  // ---------------------------------------------------------------------------
+  brand: {
+    tokens: {
+      // Clean hex colors - enables beautiful area chart gradients via hexToRGBA
+      // CityAgent brand palette, LED by the accent #C2541E (warm terracotta).
+      palette: [
+        '#C2541E', // terracotta (brand accent)
+        '#0F766E', // deep teal
+        '#C79A2E', // warm gold
+        '#475569', // slate
+        '#6B7A3A', // muted olive
+        '#5B7CA6', // dusty blue
+        '#7D5A76'  // plum
+      ] as any,
+      background: '#ffffff',
+      textColor: '#0f172a',
+      cardBackground: '#ffffff',
+      cardBorder: '#e5e7eb',
+      fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
+      headingFontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
+      axis: {
+        xLabelColor: '#475569', xLineColor: '#e2e8f0',
+        yLabelColor: '#475569', yLineColor: '#e2e8f0',
+        gridLineColor: '#e5e7eb',
+        gridShow: true,
+        xLabelShowAll: false, // Default to ECharts auto behavior
+        xLabelRotate: 0,
+        xLabelInterval: 'auto' as any
+      },
+      legend: { textColor: '#334155' },
+      grid: { top: '10%', bottom: '12%', left: '6%', right: '4%' },
+      tooltip: { backgroundColor: 'rgba(15, 23, 42, 0.9)', borderColor: 'transparent', textStyle: { color: '#e2e8f0' } },
+      animation: { duration: 500, easing: 'cubicOut' }
+    },
+    componentOverrides: {
+      'echarts.pie': { legend: { show: true } },
+      'echarts.line': { smooth: true },
+      'echarts.bar': { series: [{ itemStyle: { borderRadius: [4, 4, 0, 0] } }] }
+    }
+  },
+
   research: {
     tokens: {
       // Clean academic vibe
@@ -142,5 +192,31 @@ export const themes: Record<string, ThemeDefinition> = {
     }
   }
 };
+
+/**
+ * Resolve which theme name should be the OUT-OF-BOX default for charts.
+ *
+ * Returns the `brand` theme (CityAgent brand palette, accent #C2541E) when the
+ * BRAND_PALETTE hybrid flag is enabled, otherwise the unchanged `DEFAULT_THEME_NAME`
+ * ('default', the generic blue-led palette). Per-report theme overrides are
+ * unaffected — this only decides the fallback when a report has NOT picked a theme.
+ *
+ * Flag OFF (brandEnabled=false) is byte-identical to today: returns DEFAULT_THEME_NAME.
+ *
+ * TODO(caller wiring — ONE line, NOT done here):
+ *   The flag comes from the hybrid-flags composable (key HYBRID_BRAND_PALETTE,
+ *   exposed as `flags.BRAND_PALETTE` from `/api/organization/hybrid-flags`). In
+ *   `frontend/components/dashboard/composables/useDashboardTheme.ts`, where the
+ *   default theme name is currently chosen (i.e. where `DEFAULT_THEME_NAME` /
+ *   `themes['default']` is used as the fallback for a report with no explicit
+ *   theme), replace that fallback with:
+ *       resolveDefaultThemeName(flags.BRAND_PALETTE)
+ *   (import both `resolveDefaultThemeName` and this module's `themes` from here,
+ *   and pull `flags` from the hybrid-flags composable). Do NOT change the
+ *   per-report override branch — only the no-theme fallback.
+ */
+export function resolveDefaultThemeName(brandEnabled: boolean): string {
+  return brandEnabled ? 'brand' : DEFAULT_THEME_NAME;
+}
 
 

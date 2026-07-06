@@ -378,6 +378,16 @@
                                 >→</button>
                             </div>
                             <!-- starter chips -->
+                            <div v-if="starterRefreshEnabled && starterList.length" class="flex items-center justify-end mb-2">
+                                <button
+                                    :disabled="regeneratingStarters"
+                                    @click="regenerateStarters"
+                                    class="inline-flex items-center gap-1 text-[11px] font-medium text-[#C2541E] hover:underline disabled:opacity-50 disabled:no-underline"
+                                >
+                                    <UIcon name="heroicons-arrow-path" class="w-3.5 h-3.5" :class="{ 'animate-spin': regeneratingStarters }" />
+                                    {{ regeneratingStarters ? 'Refreshing…' : 'Refresh' }}
+                                </button>
+                            </div>
                             <div v-if="starterList.length" class="flex flex-col gap-2">
                                 <button
                                     v-for="(starter, idx) in starterList"
@@ -735,6 +745,37 @@ function starterPrompt(starter: string) {
     return prompt || (parts[0] || '').trim()
 }
 
+// --- STARTER_REFRESH: on-demand regenerate of the conversation starters ------
+// Flag read mirrors the reports page pattern (/organization/hybrid-flags .effective).
+const starterRefreshEnabled = ref(false)
+const regeneratingStarters = ref(false)
+async function loadStarterRefreshFlag() {
+    try {
+        const { data } = await useMyFetch<any[]>('/organization/hybrid-flags')
+        const rows = (data.value as any[]) || []
+        const row = rows.find(r => r?.env_name === 'HYBRID_STARTER_REFRESH')
+        starterRefreshEnabled.value = !!row?.effective
+    } catch {
+        starterRefreshEnabled.value = false  // fail-soft: no button
+    }
+}
+async function regenerateStarters() {
+    if (regeneratingStarters.value) return
+    regeneratingStarters.value = true
+    try {
+        const id = route.params.id as string
+        const { data, error } = await useMyFetch<any>(`/data_sources/${id}/regenerate-starters`, { method: 'POST' })
+        if (!error?.value && data.value?.conversation_starters && dataSource.value) {
+            // Silent in-place update — do NOT touch any page/layout loading flag or refetch the overview.
+            dataSource.value.conversation_starters = data.value.conversation_starters
+        }
+    } catch {
+        // fail-soft: leave the existing starters as-is
+    } finally {
+        regeneratingStarters.value = false
+    }
+}
+
 async function launchReport(text: string) {
     const t = (text || '').trim()
     if (launching.value || !t || !dataSource.value?.id) return
@@ -761,6 +802,7 @@ onMounted(() => {
     // paint last-known values instantly, then revalidate live in the background
     loadCachedOverview(id); loadCachedHeadline(id)
     fetchOverview(); fetchHeadline()
+    loadStarterRefreshFlag()
 })
 watch(() => route.params.id, (id) => {
     _headlinePolls = 0

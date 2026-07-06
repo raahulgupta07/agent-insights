@@ -103,6 +103,49 @@ const isLoading = computed(() => {
 const columnDefs = ref([]);
 const rowData = ref([]);
 
+// AUTO_FORMAT: format a raw cell value according to the backend `col.format` descriptor.
+// Fail-soft: any error / unknown kind returns the raw value unchanged.
+const formatCellValue = (value, format, columnInfo) => {
+    try {
+        if (value === null || value === undefined || value === '') return value;
+        const kind = format?.kind;
+        const decimals = Number.isInteger(format?.decimals) ? format.decimals : 0;
+
+        if (kind === 'integer' || kind === 'decimal' || kind === 'currency') {
+            const num = Number(value);
+            if (!isFinite(num)) return value;
+            const dp = kind === 'integer' ? 0 : decimals;
+            const formatted = new Intl.NumberFormat(undefined, {
+                minimumFractionDigits: dp,
+                maximumFractionDigits: dp,
+                useGrouping: true,
+            }).format(num);
+            if (kind === 'currency' && format?.symbol) return `${format.symbol}${formatted}`;
+            return formatted;
+        }
+
+        if (kind === 'percent') {
+            const num = Number(value);
+            if (!isFinite(num)) return value;
+            // Conservative: treat as ratio (×100) only if the column max <= 1; else show as-is.
+            const colMax = Number(columnInfo?.max);
+            const isRatio = isFinite(colMax) && colMax <= 1;
+            const shown = isRatio ? num * 100 : num;
+            return `${shown.toFixed(decimals)}%`;
+        }
+
+        if (kind === 'date') {
+            const d = new Date(value);
+            if (isNaN(d.getTime())) return value;
+            return d.toLocaleDateString();
+        }
+
+        return value;
+    } catch (e) {
+        return value;
+    }
+};
+
 // Initial setup
 const updateData = () => {
     if (step.value?.data?.columns) {
@@ -118,7 +161,7 @@ const updateData = () => {
                 }
             }
 
-            return {
+            const colDef = {
                 field: col.field,
                 headerName: col.headerName,
                 sortable: true,
@@ -133,6 +176,14 @@ const updateData = () => {
                     return params.data[col.field];
                 }
             };
+
+            // AUTO_FORMAT (backend ON): apply a display formatter only when a descriptor exists.
+            // No descriptor → colDef is identical to before (OFF-path byte-identical).
+            if (col.format) {
+                colDef.valueFormatter = (params) => formatCellValue(params.value, col.format, columnInfo);
+            }
+
+            return colDef;
         });
     }
     
