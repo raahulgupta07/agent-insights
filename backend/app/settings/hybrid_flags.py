@@ -230,6 +230,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_BRAND_PALETTE": {"label": "Brand Chart Palette", "role": "user", "category": "Intelligence", "status": "experimental", "note": "Default chart theme uses the CityAgent brand palette (accent #C2541E-led) instead of generic blue. Per-report theme overrides still win. Frontend-only. Default OFF."},
     "HYBRID_PARAM_TEMPLATES": {"label": "Parameterized Report Templates", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "Saved prompts with {{name}} parameters gain a fill-in UI + a substitution/run engine that creates a report from the filled template, plus a reusable-template gallery. Builds on the existing Prompt.parameters model. API always mounted; flag shows the UI. Default OFF."},
     "HYBRID_STARTER_REFRESH": {"label": "Regenerate Starters", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "A Refresh button on the agent Overview re-runs the schema-grounded conversation-starter generator on demand. OFF = starters only made at onboarding/train. Default OFF."},
+    "HYBRID_BI_MODEL_INTROSPECT": {"label": "BI Model Introspection (measures + relationships)", "role": "agent", "category": "Intelligence", "status": "experimental", "note": "At connector sync, pull the BI semantic model's own measures + relationships (Power BI INFO.VIEW.*) and inject them into the DAX system prompt on every query, so the agent uses tested existing measures + the real join graph instead of inventing DAX. Fail-soft per dataset. The biggest DAX-error reducer for Power BI / Fabric. Default OFF."},
     "HYBRID_RESULT_NARRATIVE": {"label": "Per-Result Interpretation", "role": "user", "category": "Intelligence", "status": "experimental", "note": "A short inline narrative attached to each individual result (reuses compute_insights + build_sense_making), rendered beside that result's table — finer than the existing turn-level DecisionCard. Fail-soft. Default OFF."},
     "HYBRID_CROSS_SOURCE_UNIFY": {"label": "Cross-Source Unify", "role": "agent", "category": "Intelligence", "status": "experimental", "note": "At ingest, detect same-shape sibling tables (e.g. 6 monthly files with identical columns) and register a unified UNION ALL view (+ a _period column) so the agent queries across them in one shot. Records a union group + emits an instruction. Fail-soft, no migration. Default ON."},
     "HYBRID_DATA_QUALITY": {"label": "Data Quality Scan", "role": "user", "category": "Intelligence", "status": "experimental", "note": "At ingest, scan columns for quality issues (high null %, type-coercion risk, outliers, near-constant) and emit a data_quality guardrail instruction the agent reads. Pure pandas, fail-soft, no migration. Default OFF."},
@@ -641,6 +642,17 @@ class HybridFlags:
         # the agent Overview. OFF = starters only generated at onboarding/train.
         # Default OFF.
         return _bool("HYBRID_STARTER_REFRESH", False)
+
+    @property
+    def BI_MODEL_INTROSPECT(self) -> bool:
+        # At connector sync, pull the BI semantic model's own measures +
+        # relationships (Power BI: EVALUATE INFO.VIEW.MEASURES()/RELATIONSHIPS())
+        # and persist them, then re-install on every client build so the DAX
+        # system prompt carries the real tested measures + join graph. The agent
+        # uses existing measures instead of inventing DAX -> the biggest DAX-error
+        # reducer. Fail-soft per dataset (a dataset that rejects INFO.VIEW is
+        # skipped). Default OFF = today's name+type-only grounding.
+        return _bool("HYBRID_BI_MODEL_INTROSPECT", False)
 
     @property
     def RESULT_NARRATIVE(self) -> bool:
@@ -1969,6 +1981,7 @@ class HybridFlags:
             "BRAND_PALETTE": self.BRAND_PALETTE,
             "PARAM_TEMPLATES": self.PARAM_TEMPLATES,
             "STARTER_REFRESH": self.STARTER_REFRESH,
+            "BI_MODEL_INTROSPECT": self.BI_MODEL_INTROSPECT,
             "RESULT_NARRATIVE": self.RESULT_NARRATIVE,
             "CROSS_SOURCE_UNIFY": self.CROSS_SOURCE_UNIFY,
             "DATA_QUALITY": self.DATA_QUALITY,

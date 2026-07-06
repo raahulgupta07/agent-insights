@@ -1456,6 +1456,101 @@ async def sync_clone_bg(clone_id: str, org_id: str, user_id: str,
                 except Exception:
                     pass
 
+            # 5c. BI MODEL INTROSPECT (gated, fail-soft). Pull the Power BI semantic
+            # model's own measures + relationships (INFO.VIEW.*) so the agent's DAX
+            # prompt carries the real tested measures + join graph instead of
+            # inventing DAX — the #1 DAX-error reducer. Persist onto the PBI
+            # connection's config (the `data_sources` table has NO config column;
+            # the model lives per-connection, and construct_clients reads conn.config
+            # to install it). SEPARATE gate from the BI_SNAPSHOT block above. Wrapped
+            # whole in try/except — must NEVER break sync.
+            try:
+                from app.settings.hybrid_flags import flags as _mif
+                if _mif.BI_MODEL_INTROSPECT:
+                    from sqlalchemy import select as _mselect
+                    from app.models.datasource_table import DataSourceTable as _MDST
+                    from app.models.user import User as _MUser
+                    _intro_ds = (
+                        await db.execute(
+                            _mselect(DataSource)
+                            .where(DataSource.id == clone_id)
+                            .options(selectinload(DataSource.connections))
+                        )
+                    ).scalar_one_or_none()
+                    if _intro_ds is not None and _intro_ds.connections:
+                        _intro_user = await db.get(_MUser, user_id)
+                        _mclients = await DataSourceService().construct_clients(
+                            db, _intro_ds, _intro_user, prefer_live=True
+                        )
+                        _mclient = next(iter(_mclients.values()), None)
+                        if _mclient is not None and type(_mclient).__name__ in (
+                            "PowerBIClient", "PowerBIUserClient"
+                        ):
+                            # (b) distinct dataset ids from the synced tables'
+                            #     metadata_json['powerbi']['datasetId'].
+                            _mrows = (await db.execute(
+                                _mselect(_MDST.metadata_json).where(
+                                    _MDST.datasource_id == clone_id,
+                                    _MDST.is_active.is_(True),
+                                )
+                            )).all()
+                            _mdsids = []
+                            for (_mm,) in _mrows:
+                                try:
+                                    _mpbi = (_mm.get("powerbi") or {}) if isinstance(_mm, dict) else {}
+                                except Exception:
+                                    _mpbi = {}
+                                _mdid = _mpbi.get("datasetId")
+                                if _mdid and _mdid not in _mdsids:
+                                    _mdsids.append(_mdid)
+                            # PBI connection ids to persist onto (attached objects).
+                            _mconn_ids = [
+                                str(_c.id) for _c in _intro_ds.connections
+                                if str(getattr(_c, "type", "")).lower() in (
+                                    "powerbi", "powerbi_user", "pbi"
+                                )
+                            ]
+                            if _mdsids and _mconn_ids:
+                                # (c) SYNC network I/O offloaded to a thread.
+                                meta = await asyncio.to_thread(
+                                    _mclient.fetch_model_metadata, _mdsids
+                                )
+                                if isinstance(meta, dict) and (
+                                    meta.get("measures") or meta.get("relationships")
+                                ):
+                                    # (d) persist onto the PBI connection config in a
+                                    #     fresh greenlet-safe session; reassign the whole
+                                    #     dict so SQLAlchemy flags the JSON column dirty.
+                                    async with async_session_maker() as _mpdb:
+                                        for _cid in _mconn_ids:
+                                            _c = await _mpdb.get(Connection, _cid)
+                                            if _c is None:
+                                                continue
+                                            _ccfg = _c.config
+                                            if isinstance(_ccfg, str):
+                                                _ccfg = json.loads(_ccfg) if _ccfg else {}
+                                            _c.config = {
+                                                **(_ccfg or {}),
+                                                "pbi_model_meta": meta,
+                                            }
+                                        await _mpdb.commit()
+                                    # (e)
+                                    logger.info(
+                                        "bi_model_introspect: %d measures, %d relationships for ds=%s",
+                                        len(meta.get("measures", [])),
+                                        len(meta.get("relationships", [])),
+                                        clone_id,
+                                    )
+            except Exception as _mie:
+                logger.warning(
+                    "per_user_connector.sync_clone_bg: bi_model_introspect skipped for %s: %s",
+                    clone_id, _mie,
+                )
+                try:
+                    await db.rollback()
+                except Exception:
+                    pass
+
             # 6. Done.
             await connector_sync.finish_run(db, clone_id, phase="done")
             await connector_sync.log_step(

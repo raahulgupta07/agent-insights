@@ -2128,6 +2128,22 @@ class DataSourceService:
             except Exception:
                 pass
 
+            # BI MODEL INTROSPECT (gated, fail-soft). Install the Power BI semantic
+            # model's measures + relationships (persisted onto THIS connection's
+            # config at sync time by per_user_connector.sync_clone_bg) onto the
+            # freshly-built PBI client, so its DAX system_prompt() → _model_meta_prompt()
+            # carries the real tested measures + join graph on every query — the #1
+            # DAX-error reducer. `config` above is this connection's parsed config
+            # dict. OFF → byte-identical; any error keeps the live client untouched.
+            try:
+                from app.settings.hybrid_flags import flags as _mif
+                if _mif.BI_MODEL_INTROSPECT and type(client).__name__ in ("PowerBIClient", "PowerBIUserClient"):
+                    _mmeta = (config or {}).get("pbi_model_meta")
+                    if _mmeta:
+                        client.set_model_meta(_mmeta)
+            except Exception:
+                pass
+
             # BI SNAPSHOT ROUTER (gated, fail-soft). For a BI-lane source (Power
             # BI / Fabric) in snapshot mode, swap the live DAX-over-HTTP client for
             # a local DuckDB SnapshotClient (SQL) — but ONLY when a fresh snapshot
