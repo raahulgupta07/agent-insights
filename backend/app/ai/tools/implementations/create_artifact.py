@@ -1824,6 +1824,25 @@ GROUNDING (non-negotiable): cite only numbers / sites / periods / ratios present
 never invent; fewer true statements beat more guessed ones; one line each; plain business language.
 """
 
+        # RESPONSIVE LAYOUT (upstream #545) — the SAME code renders in a ~360px chat side-panel,
+        # a ~900px report view and a full-screen view; the one-word "Responsive." rule was too weak
+        # (grids with no breakpoints / fixed-pixel widths leaked through). Concrete, always-on. Plain
+        # (non-f) string — single braces are literal, but this text has none, so it's substitution-safe.
+        responsive_block = """
+═══════════════════════════════════════════════════════════════════════════════
+RESPONSIVE LAYOUT (REQUIRED — always applies, even when the user specified a theme/style)
+═══════════════════════════════════════════════════════════════════════════════
+The dashboard is embedded in an iframe whose width is NOT fixed — the SAME code renders in a narrow chat side-panel (~360–480px), a normal report view (~900px), and a full-screen / published view (up to ~1920px). It MUST reflow gracefully at every width with NO horizontal page scroll and NO clipped or squished content. Build it fluid and mobile-first; only deviate if the user EXPLICITLY asked for a fixed width.
+- Outer container: fluid width, never a fixed pixel width. Use `w-full min-h-full` (add `max-w-screen-2xl mx-auto` only to cap width on huge screens). Responsive padding: `p-4 md:p-6 lg:p-8`. NEVER `w-[1200px]`, `min-w-[...]`, or any fixed-pixel width on layout containers.
+- KPI / stat rows: a responsive grid that collapses on narrow screens, e.g. `grid grid-cols-2 md:grid-cols-4 gap-4` (2-up on mobile → 4-up on desktop). NOT a flex row of fixed-width cards that overflows.
+- Chart grids: start single-column, add columns at breakpoints, e.g. `grid grid-cols-1 lg:grid-cols-2 gap-6`. A feature chart may stay full-width (`col-span-full`). Never lock a multi-column grid with no single-column fallback.
+- Charts: give each `<EChart>` a `w-full` container and a fixed `height` (px) — it auto-resizes to its container via ResizeObserver. Do not set a pixel width on charts.
+- Tables & wide content: wrap in `<div className="overflow-x-auto">` (use `min-w-full` on the `<table>`, not a fixed width) so a wide table scrolls inside its card instead of blowing out the page.
+- Filter bars: `flex flex-wrap gap-3` so filters wrap on narrow widths instead of overflowing.
+- Text & numbers: allow large KPI numbers to scale (`text-2xl md:text-3xl`), use `truncate`/`break-words` on long labels so nothing overflows its card.
+- Sanity check: before finishing, mentally render at ~380px wide — every row wraps to 1–2 columns, no element wider than the viewport, no horizontal scrollbar on the body.
+"""
+
         # Note: Previous artifact code is now available via observation context (from create_artifact/read_artifact)
         # The planner can call read_artifact if needed to load previous code into context
 
@@ -2033,6 +2052,7 @@ CHART SELECTION:
 
 The goal: it should look like a designer built it for this specific dataset, not like a template was filled in.
 {explainability_block}
+{responsive_block}
 ═══════════════════════════════════════════════════════════════════════════════
 OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════════════════════════
@@ -2051,7 +2071,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App />);
 
 Structure: all code should be inside `function App() {{ ... }}` with `ReactDOM.createRoot(document.getElementById('root')).render(<App />);` at the end. Do not put return statements outside a function.
 
-Rules: `<script type="text/babel">` wrapper. `useArtifactData()` for data. `<EChart option={{...}} />` for charts. Pass `viz={{viz[N]}}` to every KPICard/SectionCard so the built-in info popover shows the data behind it. If the EXPLAINABILITY section above is present, render the Decision callout + Key Insights first and a collapsible "Explain" block on every KPI/chart card (grounded only in real data). Responsive. Handle zero rows. No hardcoded data. No UUIDs/branding/emoji. Guard nullish values before string methods (use `(val || '')` or `String(val ?? '')`).
+Rules: `<script type="text/babel">` wrapper. `useArtifactData()` for data. `<EChart option={{...}} />` for charts. Pass `viz={{viz[N]}}` to every KPICard/SectionCard so the built-in info popover shows the data behind it. If the EXPLAINABILITY section above is present, render the Decision callout + Key Insights first and a collapsible "Explain" block on every KPI/chart card (grounded only in real data). RESPONSIVE — fluid width, mobile-first responsive grids (`grid-cols-2 md:grid-cols-4`, `grid-cols-1 lg:grid-cols-2`), no fixed-pixel widths, no horizontal page scroll at any width (see RESPONSIVE LAYOUT section above); required unless the user asked for a fixed width. Handle zero rows. No hardcoded data. No UUIDs/branding/emoji. Guard nullish values before string methods (use `(val || '')` or `String(val ?? '')`).
 
 **Code size:** Write compact code — no unnecessary variables, comments, or verbose JSX. Omit default props. Don't repeat theme styling the 'dash' theme already provides. Prefer inline expressions over separate variables when used once. For simple dashboards target under 8K characters. For detailed/specific user requests, use as much space as needed to faithfully implement their design — fidelity to the user's request is more important than brevity.
 {decision_banner_block}

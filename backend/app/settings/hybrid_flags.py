@@ -199,6 +199,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_CONNECTOR_AS_AGENT": {"label": "Connector → Data Agent (auto)", "role": "admin", "category": "Connectors", "status": "experimental", "note": "When an admin connects a data source, auto-create an org-shared agent (Studio) bound to it, so every member can chat it immediately. For user_required connectors (e.g. Power BI user sign-in) each member signs in with their own account. Default OFF."},
     "HYBRID_CONNECTOR_ROBUSTNESS": {"label": "Connector query robustness", "role": "agent", "category": "Connectors", "status": "experimental", "note": "Hardens the create_data → connector query path so agents answer reliably against live connectors (Power BI, Fabric): (P1) auto-fill target tables from the report's data sources when the model omits them — no wasted 'no tables matched' retry; (P2) honor rate-limit Retry-After with backoff on the DAX/query path instead of hard-failing; (P4) thread dataset/workspace IDs into generated code. Off = byte-identical to today. Default OFF."},
     "HYBRID_SCOPED_INSTRUCTIONS": {"label": "Scoped instructions (per-agent isolation)", "role": "agent", "category": "Connectors", "status": "experimental", "note": "Stops one agent's instructions bleeding into another agent in the SAME org. When ON, an instruction with NO data-source link applies ONLY to its own source(s) instead of being treated as org-global — so old CRM/crypto 'definitions' can't leak into a Power BI agent's context. Also scopes the agent's search_reports/search_data tools to the report's own data sources. An instruction can still be org-wide by setting an explicit global_status. Off = legacy (unscoped = global). Default OFF."},
+    "HYBRID_PROMPT_SCOPE": {"label": "Scoped prompt visibility (per-agent membership)", "role": "agent", "category": "Governance", "status": "stable", "note": "Saved-prompt READ visibility mirrors the /agents list: an 'agent'-scoped prompt is visible only to explicit members of ALL its mentioned agents (public agents count), 'private' → owner only, 'global' → everyone; the owner always sees their own. Closes the leak where every org member saw every prompt regardless of scope. Write/manage authority unchanged. Default ON."},
     "HYBRID_CONNECTOR_JOURNEY_V2": {"label": "Connector journey v2 (confirm → consent → sync)", "role": "agent", "category": "Connectors", "status": "experimental", "note": "Revamped Power BI per-user connect flow: (1) capture the real Microsoft account email/tenant from the id_token on sign-in; (2) do NOT auto-sync — show 'Connected as <ms email>' + a consent gate + explicit 'Sync my data' button; (3) discover datasets via REPORTS + APPS (not just the datasets list) so shared-report users get their queryable data; (4) honest status — queryable vs view-only (no Build), never a hallucinated overview on 0 tables. Off = current auto-sync flow (byte-identical). Default OFF."},
     "HYBRID_PER_USER_CONNECTOR": {"label": "Per-User Connector (self-register)", "role": "admin", "category": "Connectors", "status": "experimental", "note": "Admin configures a connector template once (tenant/client, no creds). Each member registers with their own email+password → gets a PRIVATE copy with their own synced tables (not shared org-wide). Each builds their own analysis. Microsoft/source access control enforced per user. Default OFF."},
     "HYBRID_ADAPTIVE_CONNECT": {"label": "Adaptive connector sign-in (email+password, auto device-code on MFA)", "role": "admin", "category": "Connectors", "status": "experimental", "note": "One sign-in flow for per-user connectors: a member enters email+password and the backend tries ROPC (password grant) first. No MFA → connects immediately; MFA / conditional access / legacy-auth blocked → auto-falls-back to device-code sign-in. Both paths build the same private per-user clone. Default OFF."},
@@ -488,6 +489,16 @@ class HybridFlags:
         # Per-agent external channels (Telegram bot bound to one Studio,
         # with member-only audience + verification). Default OFF.
         return _bool("HYBRID_AGENT_CHANNELS", True)
+
+    @property
+    def PROMPT_SCOPE(self) -> bool:
+        # Scope saved-prompt READ visibility to agent membership (mirrors the
+        # /agents list). ON: an 'agent'-scoped prompt is visible only to explicit
+        # members of ALL its mentioned agents (public agents count); 'private' →
+        # owner only; 'global' → everyone; the owner always sees their own. OFF =
+        # legacy (every org member sees every prompt — the pre-existing leak).
+        # Write/manage authority is unchanged. Default ON (closes the leak).
+        return _bool("HYBRID_PROMPT_SCOPE", True)
 
     @property
     def AGENT_REPORTS(self) -> bool:
@@ -1951,6 +1962,7 @@ class HybridFlags:
             "CONNECTOR_AS_AGENT": self.CONNECTOR_AS_AGENT,
             "CONNECTOR_ROBUSTNESS": self.CONNECTOR_ROBUSTNESS,
             "SCOPED_INSTRUCTIONS": self.SCOPED_INSTRUCTIONS,
+            "PROMPT_SCOPE": self.PROMPT_SCOPE,
             "CONNECTOR_JOURNEY_V2": self.CONNECTOR_JOURNEY_V2,
             "PER_USER_CONNECTOR": self.PER_USER_CONNECTOR,
             "ADAPTIVE_CONNECT": self.ADAPTIVE_CONNECT,

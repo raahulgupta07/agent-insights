@@ -42,7 +42,8 @@ async def read_prompt(
     db: AsyncSession = Depends(get_async_db),
     organization: Organization = Depends(get_current_organization)
 ):
-    prompt = await prompt_service.get_prompt(db, prompt_id, current_user, organization)
+    # #555: READ visibility scoped to agent membership (get_prompt_visible).
+    prompt = await prompt_service.get_prompt_visible(db, prompt_id, current_user, organization)
     if prompt is None:
         raise HTTPException(status_code=404, detail="Prompt not found")
     return prompt

@@ -3,6 +3,13 @@
 Hybrid feature changelog (our additions on top of the bagofwords/Dash base). Newest first.
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` then bullets.
 
+## v1.147.0 — Dashboards that reflow + prompts you're allowed to see  (2026-07-06)
+- **Generated dashboards now reflow cleanly** from the narrow chat side-panel to full screen — no clipped labels, no sideways scroll. (upstream #545)
+- **Saved prompts are now private to the right people** — you only see prompts for agents you're a member of; your own and global prompts always show. Closes a gap where every member could see every prompt.
+  - #545 (BE, prompt): `create_artifact.py::_build_page_prompt` gains an always-on **RESPONSIVE LAYOUT (REQUIRED)** section (fluid container, mobile-first KPI grid `grid-cols-2 md:grid-cols-4`, chart grids `grid-cols-1 lg:grid-cols-2`, `overflow-x-auto` wide tables, `flex-wrap` filters, ~380px sanity check) + the closing one-word "Responsive." upgraded to a concrete rule. Explainability block untouched.
+  - #555 (BE, security): new flag **`HYBRID_PROMPT_SCOPE`** (3-place, Governance, default **ON**). `prompt_service.get_prompts` + new `get_prompt_visible` filter agent-scoped prompts to explicit membership via `get_member_data_source_ids` (public agents count), private→owner-only, global→all, owner always sees own; GET `/prompts/{id}` uses `get_prompt_visible`. Our fork's `get_prompts` previously returned ALL org prompts unfiltered → the leak. Write/manage authority unchanged (routes keep the admin bypass). Flag OFF = legacy. Fail-soft.
+  - Deferred from this wave: **#550 org row-limit on refresh** — our `format_df_for_widget` doesn't read `limit_row_count` at all, so it's a new feature (org-setting + read logic + FE toggle), not a thread-through fix. Own phase.
+
 ## v1.146.0 — Production runs with debug OFF by default  (2026-07-06)
 - Any deploy that sets `ENVIRONMENT=production` (all the shipped compose stacks — build, nginx, NPM) now runs with debug mode **off** by default. No env change needed on the server.
   - `app/settings/production.py`: `Production` now sets `DEBUG = False` (was inheriting the base `True` from `config.py`). `development.py` still sets `DEBUG = True`, so the dev lane is unchanged. Still overridable via the `DEBUG` env var for a one-off prod investigation. Fixes the `debug_mode: TRUE` seen in a production deploy log.
