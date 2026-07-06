@@ -567,19 +567,40 @@ async function refreshDashboard() {
   isLoading.value = true;
 
   try {
-    // Rerun the report (re-execute queries)
-    const { error } = await useMyFetch(`/api/reports/${props.reportId}/rerun`, { method: 'POST' });
+    // Rerun the queries behind the dashboard being viewed (#556 — pass the
+    // artifact so its own query default steps run; without it the backend was
+    // a silent no-op for artifact dashboards and they went blank).
+    const artifactParam = selectedArtifactId.value ? `?artifact_id=${selectedArtifactId.value}` : '';
+    const { data, error } = await useMyFetch(`/api/reports/${props.reportId}/rerun${artifactParam}`, { method: 'POST' });
     if (error.value) throw error.value;
 
     // Refresh artifact data
     await refreshAll();
 
-    toast.add({ title: 'Dashboard refreshed', color: 'green' });
+    // Be honest about what actually ran — an all-failed / no-op rerun must not
+    // read as a successful refresh.
+    const run: any = data.value || {};
+    const total = run.steps_total ?? 0;
+    const ok = run.steps_succeeded ?? 0;
+    const failed = run.steps_failed ?? 0;
+    const summary = `${ok} of ${total} queries refreshed`;
+    if (!total) {
+      toast.add({ title: 'Nothing to refresh', description: 'This dashboard has no queries to rerun.', color: 'orange' });
+    } else if (failed > 0) {
+      toast.add({
+        title: ok > 0 ? 'Dashboard partially refreshed' : 'Refresh failed',
+        description: summary,
+        color: ok > 0 ? 'orange' : 'red',
+      });
+    } else {
+      toast.add({ title: 'Dashboard refreshed', description: summary, color: 'green' });
+    }
   } catch (error: any) {
     console.error('Failed to refresh dashboard:', error);
     toast.add({ title: 'Error', description: `Failed to refresh dashboard. ${error.message || ''}`, color: 'red' });
   } finally {
     isRefreshing.value = false;
+    isLoading.value = false;
   }
 }
 

@@ -71,6 +71,8 @@ async def purge_step_payloads_for_organization(
         s.status,
         rep.conversation_share_enabled,
         rep.status AS rep_status,
+        rep.artifact_visibility AS rep_artifact_visibility,
+        rep.conversation_visibility AS rep_conversation_visibility,
         ROW_NUMBER() OVER (
           PARTITION BY s.query_id
           ORDER BY s.updated_at DESC
@@ -92,6 +94,11 @@ async def purge_step_payloads_for_organization(
       AND ({nonnull_predicate})
       AND (r.conversation_share_enabled IS NOT TRUE)
       AND (r.rep_status IS DISTINCT FROM 'published')
+      -- #556: never purge a report shared in ANY mode (visibility source of
+      -- truth), independent of the legacy published/conversation_share sync —
+      -- else a shared dashboard's steps get nulled and it goes blank.
+      AND (r.rep_artifact_visibility IS NULL OR r.rep_artifact_visibility = 'none')
+      AND (r.rep_conversation_visibility IS NULL OR r.rep_conversation_visibility = 'none')
     """)
 
     async with async_session_maker() as session:

@@ -143,3 +143,12 @@ class PaginationMeta(BaseModel):
 class ReportListResponse(BaseModel):
     reports: List[ReportSchema]
     meta: PaginationMeta
+
+class ReportRerunResultSchema(BaseModel):
+    """Outcome of POST /reports/{id}/rerun — what actually ran, so clients can
+    tell a refreshed dashboard from a silent no-op or a failed run (#556)."""
+    message: str
+    steps_total: int
+    steps_succeeded: int
+    steps_failed: int
+    last_run_at: Optional[datetime] = None

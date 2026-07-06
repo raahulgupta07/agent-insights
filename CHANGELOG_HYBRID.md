@@ -3,6 +3,15 @@
 Hybrid feature changelog (our additions on top of the bagofwords/Dash base). Newest first.
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` then bullets.
 
+## v1.148.0 — Dashboard "Refresh" actually refreshes (and tells you the truth)  (2026-07-07)
+- **Refreshing a dashboard now re-runs its data** instead of silently doing nothing — artifact dashboards used to show a green "refreshed" toast while staying blank.
+- The refresh toast now reports the real outcome: "N of M queries refreshed" (green all-ok, orange partial, red failed, "nothing to refresh" when there's nothing to run).
+- **Shared dashboards no longer go blank** after 14 days — the data-retention cleanup now skips any report shared in any mode. (upstream #556)
+  - BE `report_service.rerun_report_steps`: resolves visualization ids from the artifact being viewed (`?artifact_id=`) or the report's latest non-deleted artifact (`artifact.content['visualization_ids']`) and re-executes each query's DEFAULT step — the path artifact dashboards actually render (they have no dashboard-layout blocks, which is why rerun was a no-op). Dashboard-layout blocks still contribute; ids deduped; unrunnable queries counted as failed. Falls back to the legacy published-widget path only when zero viz ids resolve. Thumbnail regen + subscriber notify now gated on `steps_succeeded > 0`.
+  - BE returns new `ReportRerunResultSchema {message, steps_total, steps_succeeded, steps_failed, last_run_at}`; route `POST /reports/{id}/rerun` gains `?artifact_id=` + this response model (was `ReportSchema`). Scheduled-rerun caller ignores the return → unaffected.
+  - BE `maintenance_service.purge_step_payloads_for_organization`: purge SQL now also excludes reports with `artifact_visibility`/`conversation_visibility != 'none'` (the visibility source of truth), on top of the legacy `conversation_share_enabled`/`status='published'` guards.
+  - FE `components/dashboard/ArtifactFrame.vue`: refresh sends `?artifact_id=`, reads the outcome, and shows honest green/orange/red toasts with "N of M queries refreshed"; clears the loading overlay in `finally`.
+
 ## v1.147.0 — Dashboards that reflow + prompts you're allowed to see  (2026-07-06)
 - **Generated dashboards now reflow cleanly** from the narrow chat side-panel to full screen — no clipped labels, no sideways scroll. (upstream #545)
 - **Saved prompts are now private to the right people** — you only see prompts for agents you're a member of; your own and global prompts always show. Closes a gap where every member could see every prompt.
