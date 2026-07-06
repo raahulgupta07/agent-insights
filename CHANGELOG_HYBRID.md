@@ -3,6 +3,10 @@
 Hybrid feature changelog (our additions on top of the bagofwords/Dash base). Newest first.
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` then bullets.
 
+## v1.146.0 — Production runs with debug OFF by default  (2026-07-06)
+- Any deploy that sets `ENVIRONMENT=production` (all the shipped compose stacks — build, nginx, NPM) now runs with debug mode **off** by default. No env change needed on the server.
+  - `app/settings/production.py`: `Production` now sets `DEBUG = False` (was inheriting the base `True` from `config.py`). `development.py` still sets `DEBUG = True`, so the dev lane is unchanged. Still overridable via the `DEBUG` env var for a one-off prod investigation. Fixes the `debug_mode: TRUE` seen in a production deploy log.
+
 ## v1.145.0 — Train your Data Agent from the header + watch it learn, live  (2026-07-06)
 - New **Train** button and **Auto-train** toggle in the Data Agent header — train on demand or let it train itself.
 - Auto-train is ON by default: when a connection finishes syncing, the agent trains itself automatically.
