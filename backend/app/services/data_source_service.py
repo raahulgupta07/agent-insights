@@ -2012,9 +2012,13 @@ class DataSourceService:
                 skipped.append(getattr(ds, "name", str(getattr(ds, "id", "?"))))
         return usable, skipped
 
-    async def construct_clients(self, db: AsyncSession, data_source: DataSource, current_user: User | None) -> Dict[str, Any]:
+    async def construct_clients(self, db: AsyncSession, data_source: DataSource, current_user: User | None, *, prefer_live: bool = False) -> Dict[str, Any]:
         """
         Construct clients for ALL connections in the domain.
+
+        ``prefer_live`` skips the BI-snapshot router (returns the live connector
+        client even when a local snapshot exists) — used by the sync/refresh path
+        that must pull fresh data FROM the source to build the snapshot.
 
         Returns:
             Dict keyed by "{domain_name}:{connection_name}" -> client
@@ -2041,6 +2045,33 @@ class DataSourceService:
                     status_code=403,
                     detail=f"You do not have access to data source '{data_source.name}'",
                 )
+
+        # WARM SESSION CACHE (perf, fail-soft, flag-gated). Sits STRICTLY AFTER
+        # the access guard above — the guard has already run and passed for this
+        # (user, data_source) on this very call, so a cache hit can never serve a
+        # client to an unauthorized user. Only engages when BOTH flags are ON;
+        # flag-off leaves the build path byte-identical to before. Any cache
+        # error falls through to the normal build below.
+        _warm = False
+        try:
+            from app.settings.hybrid_flags import flags as _hflags
+            _warm = bool(getattr(_hflags, "FAST_LANE", False)) and bool(
+                getattr(_hflags, "WARM_SESSION", False)
+            )
+        except Exception:
+            _warm = False
+
+        if _warm:
+            try:
+                from app.services.speed import session_cache as _session_cache
+                _cached = _session_cache.get_cached_clients(
+                    data_source.id,
+                    current_user.id if current_user is not None else "system",
+                )
+                if _cached is not None:
+                    return _cached
+            except Exception:
+                pass
 
         if not data_source.connections:
             raise HTTPException(status_code=400, detail="Data source has no associated connections")
@@ -2096,6 +2127,28 @@ class DataSourceService:
                 setattr(client, "_bow_user_id", str(current_user.id) if current_user is not None else "")
             except Exception:
                 pass
+
+            # BI SNAPSHOT ROUTER (gated, fail-soft). For a BI-lane source (Power
+            # BI / Fabric) in snapshot mode, swap the live DAX-over-HTTP client for
+            # a local DuckDB SnapshotClient (SQL) — but ONLY when a fresh snapshot
+            # actually exists AND the agent isn't pinned to Live mode AND we're not
+            # in the sync/refresh path (prefer_live). Any doubt → keep live client.
+            try:
+                from app.settings.hybrid_flags import flags as _hf
+                if not prefer_live and _hf.FAST_LANE and _hf.BI_SNAPSHOT:
+                    from app.services.speed.source_lane import classify_connection_type, LANE_BI
+                    if classify_connection_type(getattr(conn, "type", None)) == LANE_BI \
+                       and not self._bi_live_mode(data_source):
+                        from app.services.speed import bi_snapshot as _bisnap
+                        _meta = _bisnap.snapshot_meta(str(data_source.id))
+                        if _meta and _meta.get("count"):
+                            from app.services.speed.snapshot_client import SnapshotClient
+                            _snap = SnapshotClient(str(data_source.id), data_source.name)
+                            setattr(_snap, "_bow_user_id", getattr(client, "_bow_user_id", ""))
+                            client = _snap
+            except Exception:
+                pass  # never let the speed router break client construction
+
             clients[key] = client
 
         # Backward compatibility: add legacy key aliases for single-connection domains
@@ -2104,7 +2157,37 @@ class DataSourceService:
             first_client = clients[first_key]
             clients[data_source.name] = first_client
 
+        # WARM SESSION CACHE write (perf, fail-soft, flag-gated). Store the
+        # freshly built clients keyed by (data_source, user) so the next turn in
+        # this session skips the rebuild + cred re-resolve. Never raises.
+        if _warm:
+            try:
+                from app.services.speed import session_cache as _session_cache
+                _session_cache.put_cached_clients(
+                    data_source.id,
+                    current_user.id if current_user is not None else "system",
+                    clients,
+                )
+            except Exception:
+                pass
+
         return clients
+
+    def _bi_live_mode(self, data_source) -> bool:
+        """Per-agent Fast/Live toggle for BI snapshot. Live mode = query the
+        source live (skip the snapshot). Default = Fast (snapshot). Reads
+        ``data_source.config['bi_mode'] == 'live'`` (JSON or dict). Fail-soft →
+        Fast (not live)."""
+        try:
+            cfg = getattr(data_source, "config", None)
+            if isinstance(cfg, str):
+                import json as _json
+                cfg = _json.loads(cfg) if cfg else {}
+            if isinstance(cfg, dict):
+                return str(cfg.get("bi_mode", "")).lower() == "live"
+        except Exception:
+            pass
+        return False
 
     def _apply_agent_readonly(self, client) -> None:
         """Open the AGENT query path's connection in DB-level read-only mode when
@@ -3641,6 +3724,15 @@ class DataSourceService:
 
         if not data_source:
             raise HTTPException(status_code=404, detail="Data source not found")
+
+        # Warm-session cache: a schema refresh may change what a constructed
+        # client sees, so drop any cached clients for this source (all users).
+        # Fail-soft; no-op when the cache is empty / flags off.
+        try:
+            from app.services.speed import session_cache as _session_cache
+            _session_cache.invalidate(data_source_id)
+        except Exception:
+            pass
 
         # First, refresh ConnectionTable from the database (for all linked connections).
         # If a background indexing job is currently in flight for any connection,

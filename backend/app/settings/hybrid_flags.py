@@ -219,6 +219,10 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_ONECLICK_ARTIFACTS": {"label": "One-click Dashboard / Slides / Excel", "role": "user", "category": "Agents & Access", "status": "beta", "note": "On a report's right panel, turns the empty Dashboard/Slides/Excel states into one-click builders: 'Generate dashboard' (real page artifact), 'Generate slide deck' (python-pptx deck + previews + .pptx) from the report's existing charts, and an auto-filled Excel workbook. Reuses the chat create_artifact pipeline."},
     "HYBRID_OUTPUT_CUSTOMIZE": {"label": "Output Customize Dialogs (NotebookLM-style)", "role": "user", "category": "Agents & Access", "status": "beta", "note": "Tap a report output tile (Dashboard/Report/Slides/Excel) -> a customize modal (Format/Length/Depth/Focus/Model/Language) -> Generate passes those options into the build. OFF = tiles keep instant-generate. Default ON."},
     "HYBRID_AUTO_ARTIFACT": {"label": "Auto-build Dashboard from chat", "role": "user", "category": "Agents & Access", "status": "legacy", "superseded_by": ["HYBRID_ONECLICK_ARTIFACTS"], "note": "LEGACY — default OFF. Auto-built a dashboard in the background after any data turn with no artifact. Retired because it generated dashboards nobody asked for (token + time cost on trivial questions). Dashboards are now user-initiated only: ask in chat, or use the 'Build a dashboard' modal (HYBRID_ONECLICK_ARTIFACTS)."},
+    "HYBRID_FAST_LANE": {"label": "Fast Lane (adaptive speed)", "role": "agent", "category": "Performance", "status": "experimental", "note": "Master switch for the adaptive speed layer: classify each source into a speed lane (local uploads / SQL warehouse / BI semantic) and enable the fast paths (warm session, planner collapse, BI snapshot). Default OFF = today's per-turn live behavior, byte-identical."},
+    "HYBRID_WARM_SESSION": {"label": "Warm Session Cache", "role": "agent", "category": "Performance", "status": "experimental", "note": "Cache the constructed data-source client + schema per report/session so they are not rebuilt and creds re-resolved and schema re-loaded on every turn. Fail-soft (cache miss builds fresh). Needs FAST_LANE. Default OFF."},
+    "HYBRID_PLANNER_COLLAPSE": {"label": "Planner Turn Collapse", "role": "agent", "category": "Performance", "status": "experimental", "note": "When the bound sources' schema is already known, skip the redundant read_resources/describe_tables turns and go straight to codegen, cutting 2-3 LLM hops. Fail-soft to the full loop. Needs FAST_LANE. Default OFF."},
+    "HYBRID_BI_SNAPSHOT": {"label": "BI Snapshot (Power BI/Fabric local cache)", "role": "agent", "category": "Performance", "status": "experimental", "note": "Snapshot Power BI / Fabric tables into a local store (DuckDB) on sync and query the local copy (ms) instead of live DAX over HTTP (slow + throttled). Per-agent 'Live mode' bypasses to the source. Needs FAST_LANE. Default OFF."},
     "HYBRID_CROSS_SOURCE_UNIFY": {"label": "Cross-Source Unify", "role": "agent", "category": "Intelligence", "status": "experimental", "note": "At ingest, detect same-shape sibling tables (e.g. 6 monthly files with identical columns) and register a unified UNION ALL view (+ a _period column) so the agent queries across them in one shot. Records a union group + emits an instruction. Fail-soft, no migration. Default ON."},
     "HYBRID_DATA_QUALITY": {"label": "Data Quality Scan", "role": "user", "category": "Intelligence", "status": "experimental", "note": "At ingest, scan columns for quality issues (high null %, type-coercion risk, outliers, near-constant) and emit a data_quality guardrail instruction the agent reads. Pure pandas, fail-soft, no migration. Default OFF."},
     "HYBRID_VALUE_NORMALIZE": {"label": "Value Normalization (canonical)", "role": "agent", "category": "Intelligence", "status": "experimental", "note": "Resolve a canonical value for near-duplicate labels (e.g. 'daily_used__l' vs 'daily_used__l_') and record a value→canonical map so GROUP BY doesn't scatter one category across spellings. Detection only, no data rewrite. Default OFF."},
@@ -534,6 +538,38 @@ class HybridFlags:
         # are user-initiated only (chat ask or the "Build a dashboard" modal),
         # never auto-generated. Superseded by HYBRID_ONECLICK_ARTIFACTS.
         return _bool("HYBRID_AUTO_ARTIFACT", False)
+
+    @property
+    def FAST_LANE(self) -> bool:
+        # Master switch for the adaptive speed layer. When ON, sources are
+        # classified into speed lanes (local / warehouse / bi) and the fast
+        # paths below (warm session, planner collapse, BI snapshot) may engage.
+        # Default OFF = byte-identical to today's per-turn live behavior.
+        return _bool("HYBRID_FAST_LANE", False)
+
+    @property
+    def WARM_SESSION(self) -> bool:
+        # Cache the constructed data-source client + schema per report/session so
+        # they are not rebuilt (and creds re-resolved / schema re-loaded) on every
+        # turn. Fail-soft (cache miss → build fresh, exactly as today). Gated by
+        # FAST_LANE too. Default OFF.
+        return _bool("HYBRID_WARM_SESSION", False)
+
+    @property
+    def PLANNER_COLLAPSE(self) -> bool:
+        # When the bound sources' schema is already known/cached, let the planner
+        # skip the redundant read_resources/describe_tables turns and go straight
+        # to codegen — cutting 2-3 LLM hops. Fail-soft: any doubt → run the full
+        # loop. Gated by FAST_LANE. Default OFF.
+        return _bool("HYBRID_PLANNER_COLLAPSE", False)
+
+    @property
+    def BI_SNAPSHOT(self) -> bool:
+        # Snapshot Power BI / Fabric tables into a local store on sync and query
+        # the local copy (ms) instead of live DAX over HTTP (slow + throttled). A
+        # per-agent "Live mode" bypasses to the source. Gated by FAST_LANE.
+        # Default OFF.
+        return _bool("HYBRID_BI_SNAPSHOT", False)
 
     @property
     def CROSS_SOURCE_UNIFY(self) -> bool:
@@ -1843,6 +1879,10 @@ class HybridFlags:
             "ONECLICK_ARTIFACTS": self.ONECLICK_ARTIFACTS,
             "OUTPUT_CUSTOMIZE": self.OUTPUT_CUSTOMIZE,
             "AUTO_ARTIFACT": self.AUTO_ARTIFACT,
+            "FAST_LANE": self.FAST_LANE,
+            "WARM_SESSION": self.WARM_SESSION,
+            "PLANNER_COLLAPSE": self.PLANNER_COLLAPSE,
+            "BI_SNAPSHOT": self.BI_SNAPSHOT,
             "CROSS_SOURCE_UNIFY": self.CROSS_SOURCE_UNIFY,
             "DATA_QUALITY": self.DATA_QUALITY,
             "VALUE_NORMALIZE": self.VALUE_NORMALIZE,

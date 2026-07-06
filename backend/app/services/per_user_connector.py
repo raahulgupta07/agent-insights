@@ -1374,6 +1374,85 @@ async def sync_clone_bg(clone_id: str, org_id: str, user_id: str,
                     clone_id, e,
                 )
 
+            # 5b. BI SNAPSHOT (gated, fail-soft). For a BI-lane source (Power BI /
+            # Fabric), pull its tables into a local DuckDB snapshot so the agent
+            # queries local SQL (ms) instead of live DAX over HTTP. Uses a LIVE
+            # client (prefer_live) to read from the source. Never breaks sync.
+            try:
+                from app.settings.hybrid_flags import flags as _hf
+                if _hf.FAST_LANE and _hf.BI_SNAPSHOT:
+                    from app.services.speed.source_lane import classify_data_source, LANE_BI
+                    from sqlalchemy.orm import selectinload
+                    from sqlalchemy import select as _select
+                    _snap_ds = (
+                        await db.execute(
+                            _select(DataSource)
+                            .where(DataSource.id == clone_id)
+                            .options(selectinload(DataSource.connections))
+                        )
+                    ).scalar_one_or_none()
+                    if _snap_ds is not None and classify_data_source(_snap_ds) == LANE_BI:
+                        from app.models.user import User as _User
+                        from app.services.data_source_service import DataSourceService as _DSS
+                        from app.services.speed import bi_snapshot as _bisnap
+                        _snap_user = await db.get(_User, user_id)
+                        _live = await _DSS().construct_clients(
+                            db, _snap_ds, _snap_user, prefer_live=True
+                        )
+                        _live_client = next(iter(_live.values()), None)
+                        if _live_client is not None:
+                            # Build per-table SPECS from datasource_tables — each
+                            # carries its exact Power BI datasetId/workspaceId +
+                            # bare DAX name + queryable flag in metadata_json, so the
+                            # snapshot pull passes explicit IDs (no offline-index
+                            # lookup → no brute-name probe) and skips non-queryable
+                            # / empty datasets. (The ORM .tables rel is lazy → query.)
+                            from app.models.datasource_table import DataSourceTable as _DST
+                            _trows = (await db.execute(
+                                _select(_DST.name, _DST.metadata_json).where(
+                                    _DST.datasource_id == clone_id,
+                                    _DST.is_active.is_(True),
+                                )
+                            )).all()
+                            _specs = []
+                            for _tn, _meta in _trows:
+                                if not _tn:
+                                    continue
+                                _pbi = {}
+                                try:
+                                    _m = _meta if isinstance(_meta, dict) else {}
+                                    _pbi = _m.get("powerbi") or {}
+                                except Exception:
+                                    _pbi = {}
+                                _specs.append({
+                                    "name": str(_tn),
+                                    "dataset_id": _pbi.get("datasetId"),
+                                    "workspace_id": _pbi.get("workspaceId"),
+                                    "dax_name": _pbi.get("tableName") or str(_tn).split("/")[-1],
+                                    "queryable": bool(_pbi.get("queryable", True)),
+                                })
+                            _qn = sum(1 for s in _specs if s.get("queryable"))
+                            await connector_sync.log_step(
+                                db, clone_id, level="info", phase="learning",
+                                msg=f"snapshotting {_qn} queryable tables to local store for fast queries",
+                            )
+                            _res = await _bisnap.snapshot_data_source(
+                                _live_client, _snap_ds, tables=_specs or None, force=True
+                            )
+                            await connector_sync.log_step(
+                                db, clone_id, level="ok", phase="learning",
+                                msg=f"snapshot ready ({_res.get('snapshotted', 0)} tables, {_res.get('rows', 0)} rows)",
+                            )
+            except Exception as _se:
+                logger.warning(
+                    "per_user_connector.sync_clone_bg: BI snapshot skipped for %s: %s",
+                    clone_id, _se,
+                )
+                try:
+                    await db.rollback()
+                except Exception:
+                    pass
+
             # 6. Done.
             await connector_sync.finish_run(db, clone_id, phase="done")
             await connector_sync.log_step(
