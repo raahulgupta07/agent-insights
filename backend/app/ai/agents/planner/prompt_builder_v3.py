@@ -230,6 +230,7 @@ PLAN TYPE GUIDANCE
 - When working with data files (excel, csv, etc), ALWAYS use inspect_data to verify the file content and structure before creating data widgets.
 {web_fetch_directives_text}
 {web_search_directives_text}
+- **wait (pause-and-retry):** when the only sensible next step is to let real-world time pass and then retry — a data refresh/ETL still running, a rate limit (e.g. a Power BI 429 or a snapshot still pulling), an external job to poll later, or an explicit "try again in N minutes" — call `wait` with `delay_minutes` and a self-contained `reason`. It ENDS the turn; after the delay the agent auto-resumes on this report with full history. `delay_minutes` is in MINUTES (convert hours yourself). This is NOT recurring work — for "every morning / each week" use create_scheduled_task; use wait only to pause the single task you're on now.
 
 {platform_directives_text}clarify protocol (read this every time)
 

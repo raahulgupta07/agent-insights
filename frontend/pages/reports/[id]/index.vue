@@ -1810,6 +1810,7 @@ import ListAgentExecutionsTool from '~/components/tools/ListAgentExecutionsTool.
 import WebFetchTool from '~/components/tools/WebFetchTool.vue'
 import WebSearchTool from '~/components/tools/WebSearchTool.vue'
 import ClarifyTool from '~/components/tools/ClarifyTool.vue'
+import WaitTool from '~/components/tools/WaitTool.vue'
 import SearchInstructionsTool from '~/components/tools/SearchInstructionsTool.vue'
 import SearchEvalsTool from '~/components/tools/SearchEvalsTool.vue'
 import CreateEvalTool from '~/components/tools/CreateEvalTool.vue'
@@ -3108,6 +3109,8 @@ function getToolComponent(toolName: string) {
 			return WebSearchTool
 		case 'clarify':
 			return ClarifyTool
+		case 'wait':
+			return WaitTool
 		default:
 			return null
 	}

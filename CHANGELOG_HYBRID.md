@@ -3,6 +3,14 @@
 Hybrid feature changelog (our additions on top of the bagofwords/Dash base). Newest first.
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` then bullets.
 
+## v1.149.0 — The agent can wait for your data, then pick back up  (2026-07-07)
+- When the right next step is to **let time pass and retry** — a data refresh still running, a rate limit, "try again in 30 minutes" — the agent now **pauses and auto-resumes** instead of failing or asking you. A live countdown pill shows when it'll continue; cancel anytime.
+- Wired to our Power BI reality: a 429 rate-limit or a snapshot that's still pulling is exactly when it waits. (upstream #554)
+  - BE NEW `ai/tools/schemas/wait.py` (WaitInput/WaitOutput, 1–1440 min bounds) + `ai/tools/implementations/wait.py` (WaitTool, category=action, auto-registered; ends the turn via the same terminal observation path as clarify — `analysis_complete=True` + `final_answer`). NEW `services/wait_service.py`: arms a one-shot APScheduler `date` job on the shared scheduler (`app.core.scheduler`), module-level `run_wait_wake` callable (survives SQLAlchemyJobStore serialization), cross-worker `claim_scheduled_run` dedup; on fire creates a fresh completion on the report with the pause `reason` as the prompt (full history reloads). `cancel_wait` removes the pending job.
+  - BE `completion_service.cancel_wait` (initiator/owner guard, reads `job_id` from the tool execution's `result_json`, flips status → cancelled, idempotent) + route `POST /api/completions/{cid}/tool_executions/{teid}/cancel_wait`. Planner (`prompt_builder_v3`) gains one guidance line routing pause-and-retry → `wait`, recurring → `create_scheduled_task`.
+  - FE NEW `components/tools/WaitTool.vue`: countdown pill (live tick to `wake_at`, clock → spinner on elapsed → "Resuming…"), X to cancel (optimistic), shows the resume instruction. Wired into `getToolComponent` (`case 'wait'`) in `reports/[id]/index.vue` (explicit import). English strings inline (English-only deploys).
+  - One-shot + ephemeral: no ScheduledPrompt row, self-deletes after firing once. Distinct from create_scheduled_task (recurring).
+
 ## v1.148.0 — Dashboard "Refresh" actually refreshes (and tells you the truth)  (2026-07-07)
 - **Refreshing a dashboard now re-runs its data** instead of silently doing nothing — artifact dashboards used to show a green "refreshed" toast while staying blank.
 - The refresh toast now reports the real outcome: "N of M queries refreshed" (green all-ok, orange partial, red failed, "nothing to refresh" when there's nothing to run).
