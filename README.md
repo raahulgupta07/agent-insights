@@ -14,6 +14,28 @@ An **Agent Studio** wraps a set of pinned data sources (file uploads or warehous
 
 ---
 
+## Infrastructure sizing (500 users, 50% concurrent)
+
+Full sizing guide — including **data upload** and **connector** paths — in **[`docs/INFRA_SIZING.md`](docs/INFRA_SIZING.md)**.
+
+**Key fact:** the LLM runs on **OpenRouter (external)** → **no GPU needed**. Your infra orchestrates, runs SQL, ingests files, and streams tokens; OpenRouter tokens are the main *variable cost*, not servers.
+
+For **500 registered users at 50% concurrency** (~250 active, **~100–130 concurrent in-flight queries** at peak):
+
+| Component | Recommended | Role |
+|---|---|---|
+| **App tier** | 4 × (4 vCPU / 16 GB), 16 uvicorn workers, autoscale 3–6 | Orchestration + sandboxed `pandas`/`duckdb` + artifact render (Chromium/LibreOffice bundled). Scale **horizontally** (`start.sh` caps 4 workers/container). |
+| **PostgreSQL 18 + pgvector** | 8 vCPU / 32 GB, **500 GB–1 TB** SSD @ 6–12k IOPS | Metadata + embeddings **+ uploaded-data warehouse** (uploads land here → main storage driver). |
+| **PgBouncer** | 2 vCPU / 2 GB | Transaction pooling — required at multi-container × multi-worker fan-out. |
+| **Redis** | 2 vCPU / 4–8 GB | Multi-worker state + answer/result caches. Required once workers > 1. |
+| **Object storage** | S3 / MinIO, 200 GB–1 TB+ | Raw uploads + Parquet result offload + federation snapshots. |
+| **Load balancer** | ALB / nginx, **SSE + WebSocket**, idle ≥ 300s, HTTPS | Long streaming completions + PWA. |
+| **LLM** | **OpenRouter** (external, no GPU) | Ensure the tier supports 100+ concurrent streams. |
+
+**Rough total (excl. OpenRouter):** ~26 vCPU / ~110 GB RAM + ~1 TB SSD. **Data uploads** push Postgres first (cap concurrent ingests, DuckDB is single-writer); **connectors** query the customer's external systems (heavy compute is *there*) — locally they cost egress + ODBC + paced sync. See the full doc for scaling levers (`HYBRID_QUOTAS`, caches, render/ingest caps).
+
+---
+
 ## Two ways to install
 
 | Way | Effort | When |
