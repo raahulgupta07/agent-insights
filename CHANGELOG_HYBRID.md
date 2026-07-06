@@ -3,6 +3,13 @@
 Hybrid feature changelog (our additions on top of the bagofwords/Dash base). Newest first.
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` then bullets.
 
+## v1.145.0 — Train your Data Agent from the header + watch it learn, live  (2026-07-06)
+- New **Train** button and **Auto-train** toggle in the Data Agent header — train on demand or let it train itself.
+- Auto-train is ON by default: when a connection finishes syncing, the agent trains itself automatically.
+- A **Training process** flow now sits on the agent Overview — 9 stages (discover → introspect → profile → values → meanings → metrics → queries → rules → ready) light up as it learns, with a live log terminal and a "what got learned" summary (tables, definitions, metrics, values, rules).
+  - BE: `services/connector_auto_train.py` (NEW — `run_autotrain_and_log`/`train_bg`/`_approve_proposed`, model via `default_data_train_model_id`); per-agent config in `organization_settings.config['connector_auto_train'][ds_id]` `{enabled,cadence,auto_approve}` (data_sources has no config column). `per_user_connector.sync_clone_bg` runs auto-train after sync (cadence on_sync). Endpoints `GET/PUT /data_sources/{id}/auto-train` + `POST /data_sources/{id}/train` (busy-guarded). `connector_sync.log_step` gained `stage`; `get_run` returns `stages{}` + `learned{}` derived from the run log.
+  - FE: header Train + Auto-train in `layouts/data.vue`; NEW `components/agents/AgentTrainingFlow.vue` (always-visible 9-node strip, equal-flex FIT — no L-R scroll — + live stage-tagged CLI terminal + result lanes), mounted on `pages/agents/[id]/index.vue` Overview; `AgentRobotDock` click scrolls to the flow.
+
 ## v1.144.0 — Pick the training model for Data Agents and Studios separately  (2026-07-06)
 - Settings → LLM now has two training-model pickers: one for Data Agents, one for Studio Agents — set them the same or different.
 - Both default to Gemini 3.5 Flash — fast and cheap for training, while live analysis keeps using Claude Sonnet.

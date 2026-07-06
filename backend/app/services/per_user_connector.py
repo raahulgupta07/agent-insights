@@ -1051,7 +1051,7 @@ async def sync_clone_bg(clone_id: str, org_id: str, user_id: str,
 
             # 3. Discover tables under the user's own credentials.
             await connector_sync.log_step(
-                db, clone_id, level="step", phase="syncing",
+                db, clone_id, level="step", phase="syncing", stage="discover",
                 msg="discovering tables…",
             )
             from app.services.connection_service import ConnectionService
@@ -1083,7 +1083,7 @@ async def sync_clone_bg(clone_id: str, org_id: str, user_id: str,
                 db, clone_id, tables_total=tables_total
             )
             await connector_sync.log_step(
-                db, clone_id, level="step", phase="syncing",
+                db, clone_id, level="step", phase="syncing", stage="discover",
                 msg=f"discovering complete — {tables_total} tables found",
             )
 
@@ -1113,11 +1113,11 @@ async def sync_clone_bg(clone_id: str, org_id: str, user_id: str,
                     # report row counts → show as "catalog").
                     _rows = int(ct.no_rows or 0)
                     await connector_sync.log_step(
-                        db, clone_id, level="active", table=ct.name,
+                        db, clone_id, level="active", table=ct.name, stage="discover",
                         msg=f"{ct.name}", status="syncing",
                     )
                     await connector_sync.log_step(
-                        db, clone_id, level="ok", table=ct.name,
+                        db, clone_id, level="ok", table=ct.name, stage="discover",
                         msg=f"{ct.name}", status="done", rows=_rows,
                         inc_tables=True, add_rows=_rows,
                     )
@@ -1228,7 +1228,7 @@ async def sync_clone_bg(clone_id: str, org_id: str, user_id: str,
                         )
                         if _n:
                             await connector_sync.log_step(
-                                db, clone_id, level="ok", phase="syncing",
+                                db, clone_id, level="ok", phase="syncing", stage="values",
                                 msg=f"learned from data: sampled real values from "
                                     f"{_n} tables",
                             )
@@ -1300,11 +1300,11 @@ async def sync_clone_bg(clone_id: str, org_id: str, user_id: str,
                         and getattr(fresh or clone, "use_llm_sync", False) and org is not None
                         and not (_journey_v2 and tables_total == 0)):
                     await connector_sync.log_step(
-                        db, clone_id, level="step", phase="learning",
+                        db, clone_id, level="step", phase="learning", stage="profile",
                         msg=f"reading {tables_total} tables + columns",
                     )
                     await connector_sync.log_step(
-                        db, clone_id, level="step", phase="learning",
+                        db, clone_id, level="step", phase="learning", stage="profile",
                         msg="analyzing joins & relationships",
                     )
                     from app.services.data_source_service import DataSourceService
@@ -1314,21 +1314,21 @@ async def sync_clone_bg(clone_id: str, org_id: str, user_id: str,
                     # Real results from llm_sync's return.
                     if learn.get("summary") or learn.get("description"):
                         await connector_sync.log_step(
-                            db, clone_id, level="ok", phase="learning",
+                            db, clone_id, level="ok", phase="learning", stage="meanings",
                             msg="wrote agent description",
                         )
                     starters = learn.get("conversation_starters") or []
                     n_starters = len(starters) if isinstance(starters, (list, tuple)) else 0
                     if n_starters:
                         await connector_sync.log_step(
-                            db, clone_id, level="ok", phase="learning",
+                            db, clone_id, level="ok", phase="learning", stage="queries",
                             msg=f"drafted {n_starters} conversation starters",
                         )
                     onboarding = learn.get("onboarding_instruction") or {}
                     instr_id = onboarding.get("id") if isinstance(onboarding, dict) else None
                     if instr_id:
                         await connector_sync.log_step(
-                            db, clone_id, level="ok", phase="learning",
+                            db, clone_id, level="ok", phase="learning", stage="rules",
                             msg="built overview instruction",
                         )
 
@@ -1356,7 +1356,7 @@ async def sync_clone_bg(clone_id: str, org_id: str, user_id: str,
                                 db.add(ds_row)
                                 await db.commit()
                                 await connector_sync.log_step(
-                                    db, clone_id, level="ok", phase="learning",
+                                    db, clone_id, level="ok", phase="learning", stage="rules",
                                     msg="published — set as primary instruction",
                                 )
                         except Exception as pe:
@@ -1535,11 +1535,17 @@ async def sync_clone_bg(clone_id: str, org_id: str, user_id: str,
                                             }
                                         await _mpdb.commit()
                                     # (e)
+                                    _nmeas = len(meta.get("measures", []))
+                                    _nrel = len(meta.get("relationships", []))
                                     logger.info(
                                         "bi_model_introspect: %d measures, %d relationships for ds=%s",
-                                        len(meta.get("measures", [])),
-                                        len(meta.get("relationships", [])),
-                                        clone_id,
+                                        _nmeas, _nrel, clone_id,
+                                    )
+                                    await connector_sync.log_step(
+                                        db, clone_id, level="ok", phase="learning",
+                                        stage="introspect",
+                                        msg=f"read model: {_nmeas} measures, "
+                                            f"{_nrel} relationships",
                                     )
             except Exception as _mie:
                 logger.warning(
@@ -1551,10 +1557,52 @@ async def sync_clone_bg(clone_id: str, org_id: str, user_id: str,
                 except Exception:
                     pass
 
+            # 5d. AUTO-TRAIN ON SYNC (gated, fail-soft). Once the catalog is seeded +
+            # learned, auto-train the Data Agent's live tables into PENDING knowledge
+            # (auto-approved by default) so a freshly-connected agent trains itself —
+            # streamed table-by-table into THIS same live sync-log run. Runs in a
+            # FRESH session (this session may be committed/expired), gated on
+            # flags.AUTOTRAIN AND the agent's auto-train config (enabled + cadence
+            # 'on_sync'; unset config = the enabled default). Never breaks sync.
+            try:
+                from app.settings.hybrid_flags import flags as _atflags
+                if _atflags.AUTOTRAIN:
+                    from app.services import connector_auto_train as _cat
+                    async with async_session_maker() as _atdb:
+                        _cfg = await _cat.get_config(_atdb, org_id, clone_id)
+                        if _cfg.get("enabled") and _cfg.get("cadence") == "on_sync":
+                            _at_ds = (
+                                await _atdb.execute(
+                                    select(DataSource)
+                                    .options(selectinload(DataSource.connections))
+                                    .where(DataSource.id == clone_id)
+                                )
+                            ).scalars().first()
+                            _at_org = (
+                                await _atdb.execute(
+                                    select(Organization).where(Organization.id == org_id)
+                                )
+                            ).scalars().first()
+                            _at_user = (
+                                await _atdb.execute(select(User).where(User.id == user_id))
+                            ).scalars().first()
+                            if _at_ds is not None and _at_org is not None:
+                                await _cat.run_autotrain_and_log(
+                                    _atdb, organization=_at_org, data_source=_at_ds,
+                                    user=_at_user,
+                                    auto_approve=bool(_cfg.get("auto_approve", True)),
+                                    phase="learning", use_counters=False,
+                                )
+            except Exception as _ate:
+                logger.warning(
+                    "per_user_connector.sync_clone_bg: auto-train on sync skipped "
+                    "for %s: %s", clone_id, _ate,
+                )
+
             # 6. Done.
             await connector_sync.finish_run(db, clone_id, phase="done")
             await connector_sync.log_step(
-                db, clone_id, level="ok", phase="done", msg="agent ready"
+                db, clone_id, level="ok", phase="done", stage="ready", msg="agent ready"
             )
             # Bust the cached agent Overview + headline so the next open reflects
             # the fresh sync (new tables / measures).

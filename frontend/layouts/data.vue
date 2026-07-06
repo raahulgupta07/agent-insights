@@ -140,6 +140,81 @@
                                 </div>
                             </div>
                             <div class="shrink-0 flex items-center gap-3">
+                                <!-- Manual Train + Auto-train (fail-soft: hidden on older
+                                     backends where the endpoints 404). Training progress also
+                                     streams to the Activity sync-log terminal (AgentSyncLog). -->
+                                <template v-if="trainFeatureSupported && useCan('update_data_source')">
+                                    <!-- ⚡ Train — idle / running(%) / done, with a confirm popover -->
+                                    <UPopover v-model:open="trainConfirmOpen" :popper="{ placement: 'bottom-end' }">
+                                        <button
+                                            type="button"
+                                            :disabled="trainState === 'running'"
+                                            class="inline-flex items-center gap-1.5 border rounded-lg px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-70"
+                                            :class="trainBtnClass"
+                                        >
+                                            <UIcon :name="trainBtnIcon" class="w-4 h-4" :class="trainState === 'running' ? 'animate-spin' : ''" />
+                                            {{ trainBtnLabel }}
+                                        </button>
+                                        <template #panel>
+                                            <div class="w-72 p-4">
+                                                <div class="text-sm font-semibold text-[#1C1917]">Train this Data Agent</div>
+                                                <p class="mt-1 text-xs text-[#78716C]">Re-learn columns, metrics &amp; rules from live data.</p>
+                                                <div class="mt-2.5 text-xs text-[#78716C]">Model: <span class="font-medium text-[#44403C]">{{ trainModelLabel || '—' }}</span></div>
+                                                <label class="mt-3 flex items-center justify-between gap-2 text-xs text-[#44403C] cursor-pointer">
+                                                    <span>Auto-approve results</span>
+                                                    <UToggle v-model="trainAutoApprove" size="sm" />
+                                                </label>
+                                                <div class="mt-4 flex justify-end gap-2">
+                                                    <button @click="trainConfirmOpen = false" class="px-2.5 py-1.5 text-xs rounded-lg border border-[#EAE8E4] text-[#44403C] hover:bg-[#F1EFEC]">Cancel</button>
+                                                    <button @click="trainNow" class="px-2.5 py-1.5 text-xs rounded-lg bg-[#C2541E] hover:bg-[#A8330F] text-white font-medium inline-flex items-center gap-1">
+                                                        <UIcon name="heroicons-bolt" class="w-3.5 h-3.5" /> Train now
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </UPopover>
+
+                                    <!-- Auto-train pill toggle + cadence caret -->
+                                    <div class="inline-flex items-center rounded-lg border border-[#EAE8E4] overflow-hidden">
+                                        <button
+                                            type="button"
+                                            :disabled="savingAutoTrain"
+                                            class="inline-flex items-center gap-2 px-2.5 py-1.5 text-sm font-medium text-[#44403C] hover:bg-[#F1EFEC] disabled:opacity-60"
+                                            :title="autoTrain.enabled ? 'Auto-train is on' : 'Auto-train is off'"
+                                            @click="saveAutoTrain({ enabled: !autoTrain.enabled })"
+                                        >
+                                            <span>Auto-train</span>
+                                            <span class="relative inline-block w-8 h-[18px] rounded-full transition-colors" :class="autoTrain.enabled ? 'bg-[#C2541E]' : 'bg-[#D6D1CA]'">
+                                                <span class="absolute top-[2px] left-[2px] w-[14px] h-[14px] rounded-full bg-white shadow transition-transform" :class="autoTrain.enabled ? 'translate-x-[14px]' : ''"></span>
+                                            </span>
+                                        </button>
+                                        <UPopover :popper="{ placement: 'bottom-end' }">
+                                            <button type="button" class="inline-flex items-center border-l border-[#EAE8E4] px-1.5 py-[9px] text-[#44403C] hover:bg-[#F1EFEC]">
+                                                <UIcon name="heroicons-chevron-down" class="w-4 h-4" />
+                                            </button>
+                                            <template #panel>
+                                                <div class="w-56 p-3">
+                                                    <div class="text-[11px] font-semibold uppercase tracking-wide text-[#A8A29E] px-1 pb-1.5">Cadence</div>
+                                                    <button
+                                                        v-for="opt in cadenceOptions"
+                                                        :key="opt.value"
+                                                        class="w-full flex items-center gap-2 text-left px-2 py-1.5 rounded-md text-sm text-[#44403C] hover:bg-[#F1EFEC]"
+                                                        @click="saveAutoTrain({ cadence: opt.value })"
+                                                    >
+                                                        <span class="w-4 text-center" :class="autoTrain.cadence === opt.value ? 'text-[#C2541E]' : 'text-[#C9C4BC]'">{{ autoTrain.cadence === opt.value ? '◉' : '○' }}</span>
+                                                        {{ opt.label }}
+                                                    </button>
+                                                    <div class="border-t border-[#F1EFEC] mt-2 pt-2">
+                                                        <label class="flex items-center justify-between gap-2 px-2 py-1 text-sm text-[#44403C] cursor-pointer">
+                                                            <span>Auto-approve</span>
+                                                            <UToggle :model-value="autoTrain.auto_approve" size="sm" @update:model-value="(v) => saveAutoTrain({ auto_approve: v })" />
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                        </UPopover>
+                                    </div>
+                                </template>
                                 <PublishStatusControl
                                     :data-source-id="id"
                                     :status="integration?.publish_status || 'published'"
@@ -493,6 +568,174 @@ function onPublishStatusUpdated(value: string) {
     fetchIntegration()
 }
 
+// --- Manual Train + Auto-train ------------------------------------------------
+// Both share ONE feature gate: if the auto-train endpoint 404s (older backend) we
+// hide the whole cluster instead of erroring. The [⚡ Train] button state is driven
+// from the SAME sync-status feed AgentSyncLog polls (backend writes train lines there).
+const trainFeatureSupported = ref(true)
+const trainState = ref<'idle' | 'running' | 'done'>('idle')
+const trainPct = ref(0)
+const trainConfirmOpen = ref(false)
+const trainAutoApprove = ref(false)          // confirm-popover toggle
+const trainModelLabel = ref('')
+const autoTrain = ref<{ enabled: boolean; cadence: string; auto_approve: boolean }>({
+    enabled: true, cadence: 'on_sync', auto_approve: false,
+})
+const savingAutoTrain = ref(false)
+// Cross-component nudge: incremented when a manual train starts so the Overview's
+// AgentSyncLog terminal (a descendant via the page slot) shows + restarts polling.
+const trainKick = ref(0)
+provide('trainKick', trainKick)
+const cadenceOptions = [
+    { value: 'on_sync', label: 'On new data' },
+    { value: 'daily', label: 'Daily' },
+    { value: 'weekly', label: 'Weekly' },
+]
+
+const trainBtnLabel = computed(() => {
+    if (trainState.value === 'running') return `Training… ${trainPct.value}%`
+    if (trainState.value === 'done') return 'Trained · just now'
+    return 'Train'
+})
+const trainBtnIcon = computed(() => {
+    if (trainState.value === 'running') return 'heroicons-arrow-path'
+    if (trainState.value === 'done') return 'heroicons-check'
+    return 'heroicons-bolt'
+})
+const trainBtnClass = computed(() =>
+    trainState.value === 'done'
+        ? 'border-[#CDE9D6] bg-[#E7F5EC] text-[#15803D]'
+        : 'border-[#EAE8E4] text-[#44403C] hover:bg-[#F1EFEC]',
+)
+
+// Resolve the Data-Agent training model name for the confirm popover (defaults →
+// data_train key → model label). Fail-soft (blank label if either call fails).
+async function loadTrainModel() {
+    try {
+        const { data: defaults } = await useMyFetch<any>('/llm/defaults', { method: 'GET' })
+        const d = (defaults.value as any) || {}
+        const key = d.data_train ?? d.train ?? null
+        if (!key) return
+        const { data: models } = await useMyFetch<any[]>('/llm/models', { method: 'GET' })
+        const list = (models.value as any[]) || []
+        const m = list.find((x: any) => (x.model_id || x.id) === key)
+        trainModelLabel.value = m?.name || String(key)
+    } catch { /* fail-soft */ }
+}
+
+async function loadAutoTrain() {
+    if (!id.value) return
+    try {
+        const { data, error } = await useMyFetch<any>(`/data_sources/${id.value}/auto-train`, { method: 'GET' })
+        if (error?.value) { trainFeatureSupported.value = false; return }
+        const r = data.value as any
+        if (r && typeof r === 'object') {
+            autoTrain.value = {
+                enabled: r.enabled ?? true,
+                cadence: r.cadence || 'on_sync',
+                auto_approve: r.auto_approve ?? false,
+            }
+        }
+    } catch { trainFeatureSupported.value = false }
+}
+
+async function saveAutoTrain(patch: Partial<{ enabled: boolean; cadence: string; auto_approve: boolean }>) {
+    const next = { ...autoTrain.value, ...patch }
+    autoTrain.value = next          // optimistic
+    savingAutoTrain.value = true
+    try {
+        const { error } = await useMyFetch(`/data_sources/${id.value}/auto-train`, { method: 'PUT', body: next })
+        if (error?.value) throw error.value
+    } catch (e: any) {
+        toast?.add?.({ title: 'Could not update auto-train', color: 'red' })
+    } finally {
+        savingAutoTrain.value = false
+    }
+}
+
+async function trainNow() {
+    trainConfirmOpen.value = false
+    try {
+        const { data, error } = await useMyFetch<any>(`/data_sources/${id.value}/train`, {
+            method: 'POST', body: { auto_approve: trainAutoApprove.value },
+        })
+        if (error?.value) {
+            const st = (error.value as any)?.statusCode || (error.value as any)?.status
+            if (st === 404) trainFeatureSupported.value = false
+            throw error.value
+        }
+        const r = (data.value as any) || {}
+        if (r.started === false) {
+            toast?.add?.({ title: r.reason === 'busy' ? 'Already training…' : 'Training not started', description: r.reason === 'busy' ? '' : (r.reason || '') })
+            return
+        }
+        trainState.value = 'running'
+        trainPct.value = 0
+        startTrainPoll()
+        trainKick.value++          // nudge AgentSyncLog (Overview) to show + poll this run
+    } catch (e: any) {
+        toast?.add?.({ title: 'Train failed', description: e?.data?.detail || e?.message || '', color: 'red' })
+    }
+}
+
+// Drive the button %/state from the sync-status feed (same endpoint AgentSyncLog uses).
+let trainPollTimer: ReturnType<typeof setInterval> | null = null
+function stopTrainPoll() { if (trainPollTimer) { clearInterval(trainPollTimer); trainPollTimer = null } }
+function startTrainPoll() { stopTrainPoll(); pollTrainStatus(); trainPollTimer = setInterval(pollTrainStatus, 1500) }
+
+async function pollTrainStatus() {
+    if (!id.value) return
+    try {
+        const { data } = await useMyFetch<any>(`/data_sources/${id.value}/sync-status`, { method: 'GET' })
+        const s = (data.value as any) || {}
+        if (!s || !s.phase) return
+        const total = s.tables_total || 0
+        const done = s.tables_done || 0
+        if (total > 0) trainPct.value = Math.min(100, Math.round((done / total) * 100))
+        if (s.phase === 'done') {
+            onTrainDone()
+        } else if (s.phase === 'error') {
+            stopTrainPoll()
+            if (trainState.value === 'running') {
+                trainState.value = 'idle'
+                toast?.add?.({ title: 'Training failed', description: s.error || '', color: 'red' })
+            }
+        } else {
+            trainState.value = 'running'
+        }
+    } catch { /* transient — keep polling */ }
+}
+
+function onTrainDone() {
+    stopTrainPoll()
+    trainPct.value = 100
+    trainState.value = 'done'
+    // revert the button to idle after ~10s
+    setTimeout(() => { if (trainState.value === 'done') trainState.value = 'idle' }, 10000)
+    // SILENT refetch so learned changes show — NEVER toggle isLoading (unmount/remount loop landmine)
+    fetchIntegration(true)
+}
+
+// On open, reflect an already-running train/sync so the button isn't stale.
+async function probeActiveRun() {
+    if (!id.value) return
+    try {
+        const { data } = await useMyFetch<any>(`/data_sources/${id.value}/sync-status`, { method: 'GET' })
+        const s = (data.value as any) || {}
+        if (s && s.phase && !['done', 'error', 'idle'].includes(s.phase)) {
+            trainState.value = 'running'
+            startTrainPoll()
+        }
+    } catch { /* fail-soft */ }
+}
+
+async function initTrainFeature() {
+    await loadAutoTrain()          // also the feature gate (404 → hide)
+    if (!trainFeatureSupported.value) return
+    loadTrainModel()
+    probeActiveRun()
+}
+
 async function startChat() {
     if (startingChat.value || !integration.value?.id) return
     startingChat.value = true
@@ -608,15 +851,21 @@ function startLoad() {
 
 watch(id, () => {
     stopPolling()
+    stopTrainPoll()
+    trainState.value = 'idle'
+    trainFeatureSupported.value = true
     startLoad()
+    initTrainFeature()
 })
 
 onMounted(() => {
     startLoad()
+    initTrainFeature()
 })
 
 onBeforeUnmount(() => {
     stopPolling()
+    stopTrainPoll()
 })
 </script>
 

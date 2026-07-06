@@ -54,7 +54,7 @@
         </transition>
 
         <!-- the always-visible robot button -->
-        <button class="car-fab" :class="{ live: anyActive }" @click="open = !open" :aria-label="open ? 'Hide agent log' : 'Show agent log'">
+        <button class="car-fab" :class="{ live: anyActive }" @click="onFabClick" :aria-label="open ? 'Hide agent log' : 'Show agent log'">
             <svg viewBox="0 0 64 52" fill="none" aria-hidden="true">
                 <rect x="6" y="21" width="8" height="8" rx="2.5" fill="#C2683F" />
                 <rect x="50" y="21" width="8" height="8" rx="2.5" fill="#C2683F" />
@@ -120,6 +120,14 @@ const lines = computed(() => {
 })
 
 function glyph(level: string) { return ({ ok: '✓', step: '▸', warn: '!', error: '✕' } as any)[level] || '▸' }
+
+// Click: if the always-visible training-flow strip is on the page, scroll to it;
+// then toggle the live CLI log panel (keep the existing behavior). No-op scroll
+// where the strip isn't rendered (e.g. the /agents list page).
+function onFabClick() {
+    try { document.getElementById('agent-training-flow')?.scrollIntoView({ behavior: 'smooth', block: 'center' }) } catch { /* */ }
+    open.value = !open.value
+}
 
 async function pollOnce() {
     if (stopped) return

@@ -453,6 +453,30 @@ async function retrySync() {
     }
 }
 
+// A manual/auto train started elsewhere (layout header "⚡ Train"). If our poll loop
+// had already stopped after a previous done/error run, restart it fresh so this new
+// run streams here + the terminal un-hides. If a run is still active we're already
+// polling — do nothing.
+const trainKick = inject('trainKick', ref(0))
+watch(trainKick, () => {
+    hasRun.value = true
+    dismissed.value = false
+    if (phase.value === 'done' || phase.value === 'error') {
+        phase.value = 'connecting'
+        error.value = ''
+        log.value = []
+        tablesDone.value = 0
+        elapsed.value = 0
+        firedDone = false
+        notifiedDone = false
+        confetti.value = []
+        alive = true
+        if (!clockTimer) clockTimer = setInterval(() => { elapsed.value += 1 }, 1000)
+        emit('phase', phase.value)
+        poll()
+    }
+})
+
 onMounted(() => {
     clockTimer = setInterval(() => { elapsed.value += 1 }, 1000)
     poll()

@@ -831,6 +831,79 @@ async def set_connector_auto_sync(
     )
 
 
+@router.get("/data_sources/{data_source_id}/auto-train", response_model=dict)
+async def get_auto_train_config(
+    data_source_id: str,
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Per-agent auto-train config: {enabled, cadence, auto_approve}. Defaults
+    applied when unset (enabled + on_sync + auto_approve — a freshly-connected agent
+    trains itself). Owner/admin-gated; fail-soft (returns defaults on any error)."""
+    from app.services import connector_auto_train as _cat
+    try:
+        await _assert_connector_owner(db, data_source_id, organization, current_user)
+    except HTTPException:
+        raise
+    except Exception:
+        return _cat._defaults()
+    return await _cat.get_config(db, str(organization.id), data_source_id)
+
+
+@router.put("/data_sources/{data_source_id}/auto-train", response_model=dict)
+async def set_auto_train_config(
+    data_source_id: str,
+    payload: dict = Body(...),
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Update the per-agent auto-train config (partial). Owner/admin-gated."""
+    await _assert_connector_owner(db, data_source_id, organization, current_user)
+    from app.services import connector_auto_train as _cat
+    return await _cat.set_config(
+        db, str(organization.id), data_source_id,
+        enabled=payload.get("enabled"),
+        cadence=payload.get("cadence"),
+        auto_approve=payload.get("auto_approve"),
+    )
+
+
+@router.post("/data_sources/{data_source_id}/train", response_model=dict)
+async def train_data_source_now(
+    data_source_id: str,
+    background_tasks: BackgroundTasks,
+    payload: dict = Body(default={}),
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Manual "Train now": auto-train this agent's live tables in the BACKGROUND,
+    streaming a live pass into a NEW connector_sync run (poll GET
+    /data_sources/{id}/sync-status). Returns immediately. Owner/admin-gated,
+    flag-gated (AUTOTRAIN). If a sync/train run is already active -> {started:false,
+    reason:'busy'}. Body optional {auto_approve?} overrides the saved config."""
+    from app.settings.hybrid_flags import flags
+    if not flags.AUTOTRAIN:
+        return {"started": False, "reason": "autotrain disabled"}
+    await _assert_connector_owner(db, data_source_id, organization, current_user)
+    # Busy guard: a live sync/train run in a non-terminal phase.
+    run = await connector_sync.get_run(db, data_source_id)
+    if run and str(run.get("phase")) not in ("done", "error", ""):
+        return {"started": False, "reason": "busy"}
+    from app.services import connector_auto_train as _cat
+    _auto_approve = payload.get("auto_approve") if isinstance(payload, dict) else None
+    background_tasks.add_task(
+        _cat.train_bg,
+        str(data_source_id),
+        str(organization.id),
+        str(current_user.id),
+        _auto_approve,
+    )
+    return {"started": True, "data_source_id": str(data_source_id)}
+
+
 @router.delete("/data_sources/{data_source_id}")
 @requires_resource_permission('data_source', 'manage')
 async def delete_data_source(

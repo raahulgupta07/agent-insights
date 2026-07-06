@@ -100,6 +100,16 @@
                 <!-- CENTER column (main knowledge) -->
                 <div class="flex-1 min-w-0 w-full flex flex-col gap-4">
 
+                    <!-- Always-visible training process-flow strip — animates live while training,
+                         shows ✓ when a past run completed, neutral when never trained. -->
+                    <div class="order-0 bg-white border border-[#EAE8E4] rounded-xl shadow-[0_1px_2px_rgba(28,25,23,.04),0_1px_3px_rgba(28,25,23,.06)] p-4">
+                        <div class="text-[13.5px] font-semibold text-[#1C1917] flex items-center gap-2 mb-3">
+                            <UIcon name="i-heroicons-academic-cap" class="w-4 h-4 text-[#C2541E]" />
+                            Training process
+                        </div>
+                        <AgentTrainingFlow :data-source-id="(route.params.id as string)" />
+                    </div>
+
                     <!-- 0 · At a glance — headline KPIs from the model's own measures,
                          pre-computed per-user (Hot Start) so real numbers show before
                          the user types. Hidden entirely when there are none. -->
@@ -500,6 +510,7 @@ import InstructionText from '~/components/instructions/InstructionText.vue'
 import PrimaryInstructionPicker from '~/components/instructions/PrimaryInstructionPicker.vue'
 import PrimaryInstructionMenu from '~/components/instructions/PrimaryInstructionMenu.vue'
 import AgentSyncLog from '~/components/agents/AgentSyncLog.vue'
+import AgentTrainingFlow from '~/components/agents/AgentTrainingFlow.vue'
 import { useOrgSettings } from '~/composables/useOrgSettings'
 import type { Ref } from 'vue'
 
