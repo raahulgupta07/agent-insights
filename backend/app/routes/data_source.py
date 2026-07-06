@@ -567,6 +567,45 @@ async def test_connector_template(
         return {"ok": False, "reason": f"Could not validate: {str(e)[:120]}"}
 
 
+# --- Connector Reports (admin) ---------------------------------------------
+# Per connector-template usage rollup for Settings › Connectors › Reports.
+# Admin-gated (full_admin / manage_connections), org-scoped, read-only.
+async def _require_connector_admin(db, current_user, organization) -> None:
+    from app.core.permission_resolver import resolve_permissions, FULL_ADMIN
+    r = await resolve_permissions(db, str(current_user.id), str(organization.id))
+    if not (FULL_ADMIN in r.org_permissions or r.has_org_permission("manage_connections")):
+        raise HTTPException(status_code=403, detail="not allowed")
+
+
+@router.get("/connectors/report", response_model=list)
+async def get_connector_report(
+    days: int = Query(30, ge=1, le=365),
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Per-connector usage report: every user who connected each connector
+    template, with question/token/cost/sync metrics (windowed to `days`)."""
+    await _require_connector_admin(db, current_user, organization)
+    from app.services import connector_report as _cr
+    return await _cr.connector_report(db, str(organization.id), days=days)
+
+
+@router.get("/connectors/report/{data_source_id}", response_model=dict)
+async def get_connector_user_detail(
+    data_source_id: str,
+    days: int = Query(30, ge=1, le=365),
+    current_user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_async_db),
+    organization: Organization = Depends(get_current_organization),
+):
+    """Per-user connector detail: top questions, daily question sparkline (14d),
+    token/cost/latency, sync history."""
+    await _require_connector_admin(db, current_user, organization)
+    from app.services import connector_report as _cr
+    return await _cr.connector_user_detail(db, str(organization.id), data_source_id, days=days)
+
+
 class _DeviceCodePollRequest(_BaseModel):
     device_code: str
     # Unified Microsoft sign-in (HYBRID_MS_UNIFIED_SIGNIN): also build a Fabric

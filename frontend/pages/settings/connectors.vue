@@ -6,6 +6,27 @@
         </div>
 
         <div v-else>
+            <!-- Outer tab switch: Connectors (config) vs Connector Reports (usage). -->
+            <div class="flex items-center gap-2 mb-5">
+                <button
+                    @click="activeTab = 'connectors'"
+                    class="px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C2541E]/40"
+                    :class="activeTab === 'connectors'
+                        ? 'bg-[#C2541E] text-white border-[#C2541E]'
+                        : 'bg-white text-[#6b6b6b] border-[#E9E0D3] hover:border-[#C2541E]/40 hover:text-[#1f2328]'"
+                >Connectors</button>
+                <button
+                    @click="activeTab = 'reports'"
+                    class="px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C2541E]/40"
+                    :class="activeTab === 'reports'
+                        ? 'bg-[#C2541E] text-white border-[#C2541E]'
+                        : 'bg-white text-[#6b6b6b] border-[#E9E0D3] hover:border-[#C2541E]/40 hover:text-[#1f2328]'"
+                >Connector Reports</button>
+            </div>
+
+            <ConnectorsReports v-if="activeTab === 'reports'" />
+
+            <div v-show="activeTab === 'connectors'">
             <p class="text-sm text-[#6b6b6b] leading-relaxed mb-5 max-w-2xl">
                 Configure each Microsoft connector once (tenant, SQL endpoint). Members then sign in with their
                 own account on the <NuxtLink to="/agents" class="text-[#C2541E] font-medium hover:underline">Data Agents</NuxtLink>
@@ -58,6 +79,7 @@
                     </div>
                 </div>
             </div>
+            </div>
         </div>
 
         <!-- CONFIG MODAL -->
@@ -108,6 +130,7 @@
 
 <script lang="ts" setup>
 import Spinner from '~/components/Spinner.vue'
+import ConnectorsReports from '~/components/connectors/ConnectorsReports.vue'
 import { useCan } from '~/composables/usePermissions'
 
 definePageMeta({ auth: true, layout: 'settings' })
@@ -115,6 +138,9 @@ definePageMeta({ auth: true, layout: 'settings' })
 const { t } = useI18n()
 const toast = useToast()
 const canManage = computed(() => useCan('manage_connections'))
+
+// Outer tab: 'connectors' (config) | 'reports' (usage report).
+const activeTab = ref<'connectors' | 'reports'>('connectors')
 
 const templates = ref<any[]>([])
 

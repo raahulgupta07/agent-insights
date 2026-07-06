@@ -345,6 +345,24 @@
 												<span class="ui-serif">Thought process · {{ blocksToSteps(m.completion_blocks || []).length }} step{{ blocksToSteps(m.completion_blocks || []).length === 1 ? '' : 's' }} · Done</span>
 											</template>
 										</div>
+										<!-- Phase 1 — instant "thinking" skeleton: run active but no visible
+										     content yet. Shimmer stand-in (matches the dashboard-build
+										     skeleton) so the chat never looks blank in the first-token /
+										     first-tool gap; swaps to the real block the moment content streams. -->
+										<div v-if="showChatThinkingSkeleton(m)" class="cai-think-sk" aria-hidden="true">
+											<div class="cai-think-sk-head">
+												<span class="cai-sk-dot cai-think-sk-dot"></span>
+												<span class="cai-think-sk-label">City Agent is reading your data…</span>
+											</div>
+											<div class="cai-sk-line" style="width:92%"></div>
+											<div class="cai-sk-line" style="width:78%"></div>
+											<div class="cai-sk-line" style="width:60%"></div>
+											<div class="cai-think-sk-chips">
+												<span class="cai-sk-chip" style="width:84px"></span>
+												<span class="cai-sk-chip" style="width:64px"></span>
+												<span class="cai-sk-chip" style="width:72px"></span>
+											</div>
+										</div>
 										<!-- Render each completion block - unified structure -->
 										<div v-for="(block, blockIndex) in (m.completion_blocks || []).filter(b => b.phase !== 'knowledge_harness')" :key="block.id"
 												:class="{ 'cc-step': !!block.tool_execution && block.tool_execution.tool_name !== 'clarify', 'cc-step--done': !!block.tool_execution && block.tool_execution.status === 'success', 'cc-step--err': !!block.tool_execution && block.tool_execution.status === 'error' }">
@@ -365,7 +383,31 @@
 														:ref="el => setReasoningRef(block.id, el)"
 														class="thinking-content"
 													>
-														<template v-if="block.plan_decision?.reasoning || block.reasoning">
+														<!-- Plan-tasks JSON in the reasoning → render a clean checklist card, not raw {"tasks":[...]} -->
+														<template v-if="blockPlanTasks(block, m).length">
+															<div class="plan-card">
+																<div class="plan-card-head">
+																	<span class="plan-card-title">Plan</span>
+																	<span v-if="m.status === 'in_progress'" class="plan-card-count">{{ blockPlanTasks(block, m).filter(t => t.status === 'done').length }}/{{ blockPlanTasks(block, m).length }}</span>
+																</div>
+																<ul class="plan-card-list">
+																	<li
+																		v-for="(task, i) in blockPlanTasks(block, m)"
+																		:key="'plancard-' + i"
+																		class="plan-card-row"
+																		:class="{ 'plan-card-row--run': task.status === 'running' }"
+																	>
+																		<span class="plan-glyph" :class="'plan-glyph--' + task.status">
+																			<svg v-if="task.status === 'done'" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M13 4.5 6.5 11 3 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+																			<span v-else-if="task.status === 'running'" class="plan-ring" aria-hidden="true"></span>
+																			<span v-else class="plan-dot" aria-hidden="true"></span>
+																		</span>
+																		<span class="plan-card-text">{{ task.title }}</span>
+																	</li>
+																</ul>
+															</div>
+														</template>
+														<template v-else-if="block.plan_decision?.reasoning || block.reasoning">
 															<MarkdownRender
 																:content="block.plan_decision?.reasoning || block.reasoning || ''"
 																:final="isBlockFinalized(block)"
@@ -392,7 +434,7 @@
 									:render-code-blocks-as-pre="true"
 									class="markdown-content"
 								/>
-					<span v-if="!isBlockFinalized(block)" class="stream-caret"></span>
+					<span v-if="!isBlockFinalized(block) && m.status === 'in_progress' && !showChatThinkingSkeleton(m)" class="stream-caret"></span>
 											</div>
 
 											<!-- 3. Tool execution (ALWAYS visible outside thinking) -->
@@ -496,7 +538,7 @@
 										/>
 
 										<!-- Thinking pill when system is working but no visible progress - moved to end -->
-										<div v-if="shouldShowWorkingDots(m)" class="mt-2 flex items-center gap-2.5 text-[13px] text-[#7A7066]">
+										<div v-if="shouldShowWorkingDots(m) && !showChatThinkingSkeleton(m)" class="mt-2 flex items-center gap-2.5 text-[13px] text-[#7A7066]">
 											<Icon name="heroicons-sparkles" class="w-4 h-4 flex-none animate-spin text-[#C2541E]" style="animation-duration:2.4s" aria-hidden="true" />
 											<span class="ui-serif font-medium text-[#2A2420] flex-none">Working…</span>
 											<span class="ui-serif truncate cc-shimmer text-[#7A7066]">{{ runningStageText(m) }}</span>
@@ -942,9 +984,9 @@
 
 							<!-- NOW -->
 							<div class="rounded-xl border border-[#EAD8CD] bg-[#FFF6F1] px-3 py-2 flex items-center gap-2">
-								<span class="w-1.5 h-1.5 rounded-full flex-none" :class="activityNow ? 'bg-[#C2541E] animate-pulse' : 'bg-gray-300'"></span>
+								<span class="w-1.5 h-1.5 rounded-full flex-none" :class="(activityNow || runActive) ? 'bg-[#C2541E] animate-pulse' : 'bg-gray-300'"></span>
 								<span class="text-[10px] font-extrabold tracking-wide text-[#C2541E] flex-none">NOW</span>
-								<span class="text-[12px] text-gray-700 truncate">{{ activityNow || 'Idle' }}</span>
+								<span class="text-[12px] text-gray-700 truncate">{{ activityNowLabel }}</span>
 							</div>
 
 							<!-- PROGRESS = numbered plan + live sub-steps (auto-scroll) -->
@@ -964,7 +1006,7 @@
 											<div class="flex items-start gap-2.5 py-1">
 												<span
 													class="w-5 h-5 rounded-full flex-none grid place-items-center text-[10.5px] font-bold border"
-													:class="coworkTaskNumClass(task, idx)"
+													:class="[coworkTaskNumClass(task, idx), (plansWarming && coworkTaskState(task, idx) === 'pending') ? 'cai-plan-warm' : '']"
 												>
 													<span v-if="coworkTaskState(task, idx) === 'done'">&#10003;</span>
 													<span v-else-if="coworkTaskState(task, idx) === 'run'" class="w-2 h-2 rounded-full border-2 border-[#C2541E] border-t-transparent animate-spin"></span>
@@ -1005,6 +1047,14 @@
 											<span v-else-if="step.status === 'done'" class="ms-auto text-green-500 flex-none">&#10003;</span>
 										</div>
 									</div>
+									<!-- Phase 2.2 — warm-up shimmer: run active but no plan/steps have
+									     reported yet. Reads as "warming up" instead of a static empty line. -->
+									<div v-else-if="runActive" class="space-y-1.5 py-0.5" aria-hidden="true">
+										<div v-for="n in 3" :key="'warm-' + n" class="flex items-center gap-2.5">
+											<span class="w-5 h-5 rounded-full flex-none cai-sk-dot"></span>
+											<span class="cai-sk-line flex-1" :style="{ width: (72 - n * 8) + '%' }"></span>
+										</div>
+									</div>
 									<div v-else class="text-[12px] text-gray-400 py-1">{{ (lastSystemMessage && lastSystemMessage.status === 'stopped') ? 'Run stopped — no steps ran.' : 'No steps yet for this run.' }}</div>
 								</div>
 								<div class="h-1.5 bg-[#f0eeec] rounded-full overflow-hidden mt-2.5">
@@ -1030,6 +1080,13 @@
 												class="text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-none ms-1.5"
 												:class="ds?.active === false ? 'bg-gray-100 text-gray-500' : 'bg-[#ecfdf3] text-[#15803d]'"
 											>{{ ds?.active === false ? 'ref' : 'active' }}</span>
+											<!-- Phase 4 — sources contributing 0 tables (e.g. a connector with no
+											     synced warehouse) get a muted "no tables" badge; kept visible. -->
+											<span
+												v-if="coworkDsEmpty(ds)"
+												class="text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-none ms-1 bg-gray-100 text-gray-500"
+												title="This source has no synced tables yet"
+											>no tables</span>
 										</div>
 										<div
 											v-for="(tbl, ti) in coworkDsTables(ds)"
@@ -1147,9 +1204,9 @@
 
 					<!-- NOW banner (always visible) -->
 					<div class="rounded-xl border border-[#EAD8CD] bg-[#FFF9F6] px-3 py-2 flex items-center gap-2">
-						<span class="w-1.5 h-1.5 rounded-full flex-none" :class="activityNow ? 'bg-[#C2541E] animate-pulse' : 'bg-gray-300'"></span>
+						<span class="w-1.5 h-1.5 rounded-full flex-none" :class="(activityNow || runActive) ? 'bg-[#C2541E] animate-pulse' : 'bg-gray-300'"></span>
 						<span class="text-[10px] font-bold tracking-wide text-[#C2541E] flex-none">NOW</span>
-						<span class="text-[12px] text-gray-700 truncate">{{ activityNow || 'Idle' }}</span>
+						<span class="text-[12px] text-gray-700 truncate">{{ activityNowLabel }}</span>
 					</div>
 
 					<!-- PROGRESS card (always visible) -->
@@ -2223,6 +2280,7 @@ let _armTimer: any = null
 watch(() => report.value?.data_sources, (val) => {
     if (val && currentAgents.value.length === 0) currentAgents.value = [...val]
     loadGroundingScope()
+    loadDsTableCounts()
     if (val && !agentSwitchArmed.value && !_armTimer) {
         _armTimer = setTimeout(() => { agentSwitchArmed.value = true }, 1500)
     }
@@ -2234,6 +2292,30 @@ async function loadGroundingScope() {
         const { data } = await useMyFetch(`/knowledge/context-scope?data_source_ids=${encodeURIComponent(ids.join(','))}`, { method: 'GET' })
         if (data.value) groundingScope.value = data.value as any
     } catch { /* non-fatal */ }
+}
+
+// Phase 4 — real per-source table counts for the Working Folders "no tables"
+// badge. report.data_sources[] (DataSourceReportSchema) carries NO reliable
+// count — connections[].table_count is a schema default and stays 0 in the report
+// payload — so fetch the true counts from /data_sources/active and cross-reference
+// by id. A source is flagged empty ONLY when we hold a confirmed count of 0 for it
+// (never inferred from a missing field → no fabricated "no tables").
+const dsTableCounts = ref<Record<string, number>>({})
+async function loadDsTableCounts() {
+    try {
+        const { data } = await useMyFetch<any[]>('/data_sources/active?include_unconnected=true', { method: 'GET' })
+        const rows = (data.value as any[]) || []
+        const map: Record<string, number> = {}
+        for (const r of rows) {
+            if (r?.id != null) map[String(r.id)] = Number(r.table_count ?? 0)
+        }
+        dsTableCounts.value = map
+    } catch { /* non-fatal: show no badge rather than a wrong one */ }
+}
+// True only when we hold a confirmed real count for this source AND it is 0.
+function coworkDsEmpty(ds: any): boolean {
+    const id = ds?.id != null ? String(ds.id) : ''
+    return !!id && Object.prototype.hasOwnProperty.call(dsTableCounts.value, id) && dsTableCounts.value[id] === 0
 }
 
 // True when this report already holds a real (persisted or in-flight) conversation.
@@ -2846,6 +2928,52 @@ function hasClarifyBlock(m: ChatMessage): boolean {
 	return (m.completion_blocks || []).some(b => b.tool_execution?.tool_name === 'clarify')
 }
 
+// A thinking block whose reasoning/content is the agent's up-front plan JSON
+// (`{"tasks":[{"title":"…","status":"pending"}]}`) should render as a clean
+// checklist card, NOT raw JSON text. Mirrors extractPlanTasks()'s title/status
+// mapping but reads a single block's reasoning string with tolerant embedded-JSON
+// extraction (the string may be the JSON alone, or JSON followed by prose).
+// Status reflects run progress like the Activity panel's activityPlan: run done →
+// all 'done'; still running → the first not-yet-done task is 'running', rest pending.
+// Fully fail-soft → [] when the block isn't a plan (so the markdown fallback renders).
+function blockPlanTasks(block: any, msg?: any): Array<{ title: string; status: string }> {
+	try {
+		const raw = (block?.plan_decision?.reasoning || block?.reasoning || block?.content || '')
+		if (typeof raw !== 'string' || raw.indexOf('"tasks"') === -1) return []
+		let obj: any = null
+		try { obj = JSON.parse(raw.trim()) } catch { obj = null }
+		if (!obj || !obj.tasks) {
+			const start = raw.indexOf('{')
+			const end = raw.lastIndexOf('}')
+			if (start !== -1 && end > start) {
+				try { obj = JSON.parse(raw.slice(start, end + 1)) } catch { obj = null }
+			}
+		}
+		const list = obj && (obj.tasks ?? (Array.isArray(obj) ? obj : null))
+		if (!Array.isArray(list)) return []
+		const tasks = list
+			.map((t: any) => ({
+				title: String((t && (t.title ?? t.name)) ?? t ?? '').trim(),
+				status: String((t && t.status) ?? 'pending').toLowerCase(),
+			}))
+			.filter((t: any) => !!t.title)
+		if (!tasks.length) return tasks
+		const running = msg?.status === 'in_progress'
+		if (!running) return tasks.map((t: any) => ({ ...t, status: 'done' }))
+		// Still running → advance the first not-yet-done task to 'running'.
+		let armed = false
+		return tasks.map((t: any) => {
+			const s = t.status
+			if (s === 'done' || s === 'complete' || s === 'completed') return { ...t, status: 'done' }
+			if (!armed && (s === 'running' || s === 'in_progress' || s === 'active')) { armed = true; return { ...t, status: 'running' } }
+			if (!armed) { armed = true; return { ...t, status: 'running' } }
+			return { ...t, status: 'pending' }
+		})
+	} catch {
+		return []
+	}
+}
+
 function getToolComponent(toolName: string) {
 	switch (toolName) {
     // 'create_data_model' removed
@@ -3007,6 +3135,26 @@ function shouldShowWorkingDots(message: ChatMessage): boolean {
 	// 2. No active tools/streaming AND
 	// 3. Last block has content but system continues (preparing next block)
 	return !hasActiveTools && !hasStreamingContent && (!!lastBlockHasContent && message.status === 'in_progress')
+}
+
+// Phase 1 — instant "thinking" skeleton condition. TRUE only in the pre-content
+// window: the run is active AND this turn has NOTHING visible yet — no content,
+// no plan tasks (they ride in reasoning JSON), no tool_execution, no reasoning.
+// The moment any of those arrive this flips false and the real block renders (no
+// flash, no double-render). Paints a shimmer so the chat never looks blank in the
+// multi-second first-token / first-tool gap.
+function showChatThinkingSkeleton(message: ChatMessage): boolean {
+	if (message.role !== 'system' || message.status !== 'in_progress' || message.sigkill) return false
+	const blocks = message.completion_blocks || []
+	if (!blocks.length) return true
+	return !blocks.some(b =>
+		b.content ||
+		b.plan_decision?.reasoning ||
+		b.plan_decision?.final_answer ||
+		b.plan_decision?.assistant ||
+		b.reasoning ||
+		b.tool_execution
+	)
 }
 
 function getThoughtProcessLabel(block: CompletionBlock): string {
@@ -3214,6 +3362,16 @@ const activityNow = computed<string>(() => {
 	if (!cur) return ''
 	return cur.why || cur.title || ''
 })
+// Phase 2.1 — truthful NOW label. A run can be active before the first progress
+// event lands (activeSteps still empty → activityNow ''). Show "Starting…" in
+// that warm-up window instead of the misleading "Idle"; keep "Idle" only when no
+// run is genuinely active.
+const activityNowLabel = computed<string>(() =>
+	activityNow.value || (runActive.value ? 'Starting…' : 'Idle')
+)
+// Phase 2.2 — run active but no plan step has reported progress yet → render the
+// plan/steps panel in a subtle warming-up state rather than static.
+const plansWarming = computed<boolean>(() => runActive.value && (activityDoneCount.value || 0) === 0)
 // "Next" = the planned/upcoming step. The stream only exposes steps that have
 // already started, so we can honestly surface a "next" only when there's a
 // pending step AFTER the current in-progress one (rare). Otherwise omit.
@@ -6136,6 +6294,84 @@ details[open] > summary .chev {
 	margin: 0;
 }
 
+/* In-chat PLAN checklist card — replaces the raw {"tasks":[...]} JSON in the
+   thought-process box. Warm-clay tokens to match the app. */
+.plan-card {
+	border: 1px solid #E9E0D3;
+	background: #F6F1EA;
+	border-radius: 10px;
+	padding: 8px 10px;
+	margin: 2px 0 4px;
+}
+.plan-card-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 5px;
+}
+.plan-card-title {
+	font-size: 10px !important;
+	font-weight: 700;
+	letter-spacing: .05em;
+	text-transform: uppercase;
+	color: #6b6b6b;
+}
+.plan-card-count {
+	font-size: 11px !important;
+	font-weight: 600;
+	color: #C2541E;
+	font-variant-numeric: tabular-nums;
+}
+.plan-card-list { list-style: none; margin: 0; padding: 0; }
+.plan-card-row {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 3px 0;
+}
+.plan-card-row--run {
+	border-inline-start: 2px solid #C2541E;
+	margin-inline-start: -8px;
+	padding-inline-start: 6px;
+}
+.plan-glyph {
+	flex: none;
+	width: 16px;
+	height: 16px;
+	display: grid;
+	place-items: center;
+	margin-top: 1px;
+}
+.plan-glyph--done { color: #3f9d5a; }
+.plan-dot {
+	width: 9px;
+	height: 9px;
+	border: 1.5px solid #b8ab9b;
+	border-radius: 50%;
+}
+.plan-ring {
+	width: 11px;
+	height: 11px;
+	border: 2px solid #C2541E;
+	border-top-color: transparent;
+	border-radius: 50%;
+	animation: plan-spin .7s linear infinite;
+}
+.plan-card-text {
+	flex: 1;
+	font-size: 12px !important;
+	line-height: 1.4;
+	color: #4a4a4a;
+}
+.plan-card-row--run .plan-card-text {
+	color: #211B14;
+	font-weight: 600;
+}
+@keyframes plan-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+	.plan-ring { animation: none; }
+}
+
 /* Tool execution - clear visual separation */
 .tool-execution-container {
 	margin: 8px 0;
@@ -6414,6 +6650,50 @@ details[open] > summary .chev {
 	overflow-wrap: anywhere;
 	line-height: 1.35;
 	border-radius: 14px;
+}
+
+/* Phase 1/2 — chat "thinking" + activity warm-up shimmer. Mirrors the
+   dashboard-build skeleton's warm-clay moving-gradient idiom (DashboardSkeleton's
+   .sk classes are component-scoped, so the keyframes are replicated locally here)
+   so the chat skeleton reads as native. All motion is disabled under
+   prefers-reduced-motion. */
+.cai-sk-line,
+.cai-sk-dot,
+.cai-sk-chip {
+	background: linear-gradient(90deg, #ecebe6 25%, #f4f3ee 37%, #ecebe6 63%);
+	background-size: 400% 100%;
+	animation: caiThinkSk 1.4s ease infinite;
+	border-radius: 6px;
+}
+.cai-sk-line { height: 10px; }
+.cai-sk-dot { border-radius: 9999px; }
+.cai-sk-chip { display: inline-block; height: 22px; border-radius: 9999px; }
+@keyframes caiThinkSk {
+	0% { background-position: 100% 0; }
+	100% { background-position: -100% 0; }
+}
+
+.cai-think-sk {
+	border: 1px solid #E9E0D3;
+	background: #FBFAF6;
+	border-radius: 14px;
+	padding: 12px 14px;
+	margin-bottom: 8px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+.cai-think-sk-head { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+.cai-think-sk-dot { width: 14px; height: 14px; }
+.cai-think-sk-label { font-size: 12.5px; color: #A8330F; font-weight: 500; }
+.cai-think-sk-chips { display: flex; gap: 6px; margin-top: 4px; }
+
+/* pending plan number badge gets a soft pulse while the run warms up */
+.cai-plan-warm { animation: caiPlanWarm 1.4s ease-in-out infinite; }
+@keyframes caiPlanWarm { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+	.cai-sk-line, .cai-sk-dot, .cai-sk-chip, .cai-plan-warm { animation: none !important; }
 }
 </style>
 

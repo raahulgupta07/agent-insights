@@ -2242,6 +2242,47 @@ class AgentV2:
             except Exception:
                 pass
 
+            # Hybrid follow-up fast-path (HYBRID_FOLLOWUP_FASTPATH): on a
+            # follow-up question inside a report that ALREADY researched its
+            # tables in an earlier turn, tell the planner the schema /
+            # instructions / metadata resources are already in its context so it
+            # skips the redundant "read the instructions first" research step
+            # (read_resources / describe_tables). The context it points at
+            # (schemas_excerpt + resources_combined + instructions) is rebuilt
+            # every completion, so correctness is unchanged — this only removes a
+            # wasted plan/execute/reflect cycle. Empty when flag OFF or when this
+            # report has no prior research turn. Never break the loop on error.
+            try:
+                from app.settings.hybrid_flags import flags as _fp_flags
+                if _fp_flags.FOLLOWUP_FASTPATH and (schemas_excerpt or resources_combined):
+                    _prior_research = False
+                    _report_id_fp = str(self.report.id) if self.report else None
+                    if _report_id_fp:
+                        _fp_created_at = getattr(self.system_completion, "created_at", None)
+                        _fp_stmt = (
+                            select(ToolExecution.id)
+                            .join(AgentExecution, AgentExecution.id == ToolExecution.agent_execution_id)
+                            .where(AgentExecution.report_id == _report_id_fp)
+                            .where(ToolExecution.tool_name.in_(["read_resources", "describe_tables"]))
+                        )
+                        if _fp_created_at is not None:
+                            _fp_stmt = _fp_stmt.where(
+                                (ToolExecution.started_at == None) | (ToolExecution.started_at < _fp_created_at)
+                            )
+                        _fp_stmt = _fp_stmt.limit(1)
+                        _prior_research = (await self.db.execute(_fp_stmt)).first() is not None
+                    if _prior_research:
+                        _fp_block = (
+                            "FOLLOW-UP FAST PATH: You already researched these tables earlier in this "
+                            "conversation. Their schema, instructions, and metadata resources are ALREADY "
+                            "included in your context above. Do NOT call read_resources or describe_tables "
+                            "again for the same tables — reuse the context you already have and proceed "
+                            "directly to the next real step (clarify / create_data / answer)."
+                        )
+                        instructions = (instructions + "\n\n" + _fp_block) if instructions else _fp_block
+            except Exception:
+                pass
+
             # Hybrid Phase 6 (join graph): inject mined relationship/join edges
             # primed by JoinGraphContextBuilder into the hub's static cache
             # (empty when flags.JOIN_GRAPH off). Append its block to the planner

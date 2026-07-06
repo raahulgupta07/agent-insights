@@ -23,6 +23,7 @@ export default defineNuxtConfig({
     pageTransition: false,
     layoutTransition: false,
     head: {
+      title: 'City Agent Insights',
       meta: [
         { name: 'theme-color', content: '#C2683F' },
         { name: 'apple-mobile-web-app-capable', content: 'yes' },

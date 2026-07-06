@@ -69,3 +69,8 @@ backups/full-project-*/
 # hot-cp / editor backups
 *.bak
 *.bak.*
+
+frontend/localhost-key.pem
+frontend/localhost.pem
+*.bak.*
+*.bak.followup1

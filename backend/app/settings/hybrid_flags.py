@@ -228,6 +228,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_SMART_WORKBOOK": {"label": "Smart Excel Build", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "Outputs 'Excel' tab becomes a smart builder: user types an intent ('pivot revenue by region × month'), an LLM converts it to a transform spec (select/rename/filter/aggregate/pivot/sort), and the result is applied in pure-Python over the existing grids — no SQL re-run. Flag OFF = today's raw workbook dump unchanged. Default OFF."},
     "HYBRID_SMART_SLIDES": {"label": "Smart Slide Deck Build", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "Outputs 'Generate slide deck' becomes a smart builder: auto-prefills the prompt from the chat turn, auto-uses the agent's own bound data sources (no picker), routes the model via Auto, and asks ONE clarifying chip ONLY when there's no usable signal. Reuses create_artifact + ambiguity-gate + sense-making. Default OFF."},
     "HYBRID_SMART_DASHBOARD": {"label": "Smart Dashboard Build", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "Outputs 'Generate dashboard' becomes a smart builder: auto-prefills the prompt from the chat turn, auto-uses the agent's own bound data sources (no picker), routes the model via Auto, and asks ONE clarifying chip ONLY when there's no usable signal. Reuses create_artifact + ambiguity-gate + sense-making. Default OFF."},
+    "HYBRID_FOLLOWUP_FASTPATH": {"label": "Follow-up Fast Path", "role": "agent", "category": "Agents & Access", "status": "experimental", "note": "Speeds up follow-up questions in a report. When the report already researched its tables in an earlier turn (a prior read_resources / describe_tables ran), the planner is told the schema, instructions, and metadata resources are ALREADY in its context — so it skips the redundant 'let me read the instructions first' research step and goes straight to the answer. Pure prompt nudge over context that is always rebuilt, so correctness is unchanged; only a wasted plan/execute/reflect cycle is removed. Fail-soft. Default OFF."},
     "HYBRID_QUOTAS": {"label": "Per-Org Quotas", "role": "agent", "category": "Agents & Access", "status": "stable"},
     "HYBRID_DOMAIN_PACKS": {"label": "Domain Packs (Skills)", "role": "agent", "category": "Agents & Access", "status": "stable"},
     "HYBRID_PROMPTS_LIBRARY": {"label": "Prompts Library", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "Reusable saved-prompt library (create / edit / delete prompts) surfaced as a 'Prompts' nav entry under Build. API is always mounted; this flag only shows/hides the nav link. Default OFF."},
@@ -1689,6 +1690,18 @@ class HybridFlags:
         # SQL re-run. Flag OFF = today's raw workbook dump unchanged. Default OFF.
         return _bool("HYBRID_SMART_WORKBOOK", False)
 
+    @property
+    def FOLLOWUP_FASTPATH(self) -> bool:
+        # Follow-up fast-path: when a report already researched its tables in an
+        # earlier turn (a prior read_resources / describe_tables ran), inject a
+        # planner hint that the schema / instructions / metadata resources are
+        # ALREADY in context so the model skips the redundant "read the
+        # instructions first" research step on follow-ups. Pure prompt nudge —
+        # the data it points at is always rebuilt into context, so correctness is
+        # unchanged; only removes a wasted plan/execute/reflect cycle. Fail-soft,
+        # OFF = byte-identical. Default OFF.
+        return _bool("HYBRID_FOLLOWUP_FASTPATH", False)
+
     def snapshot(self) -> dict[str, bool]:
         """All flags as a dict (for /health, debugging, tests)."""
         return {
@@ -1839,6 +1852,7 @@ class HybridFlags:
             "SMART_WORKBOOK": self.SMART_WORKBOOK,
             "SMART_SLIDES": self.SMART_SLIDES,
             "SMART_DASHBOARD": self.SMART_DASHBOARD,
+            "FOLLOWUP_FASTPATH": self.FOLLOWUP_FASTPATH,
         }
 
 
