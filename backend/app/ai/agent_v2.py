@@ -3036,6 +3036,23 @@ class AgentV2:
                         self._record_planner_token_metadata_from_decision(decision, view=view)
                         # Track whether analysis is complete
                         analysis_done = bool(getattr(decision, "analysis_complete", False))
+
+                        # Guard: a weak routed model sometimes dumps the internal
+                        # task-plan JSON ({"tasks":[...]}) into final_answer while ALSO
+                        # calling the `clarify` tool. That raw JSON would then persist +
+                        # render as the chat answer. When the selected action is clarify,
+                        # neutralize a leaked task-plan blob so the clarify tool's own
+                        # question is what the user sees. Fail-soft; never raises.
+                        try:
+                            _final_actions = list(getattr(decision, "actions", None) or [])
+                            if not _final_actions and getattr(decision, "action", None) is not None:
+                                _final_actions = [decision.action]
+                            if any(getattr(a, "name", "") == "clarify" for a in _final_actions):
+                                _fa = getattr(decision, "final_answer", None)
+                                if isinstance(_fa, str) and _fa.strip().startswith("{") and '"tasks"' in _fa:
+                                    decision.final_answer = ""
+                        except Exception:
+                            pass
                         
                         # Retry flow: invalid planner output OR underlying LLM error
                         if getattr(decision, "error", None):

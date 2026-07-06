@@ -423,10 +423,35 @@
 												</Transition>
 											</div>
 
+							<!-- 2a. Plan-tasks JSON leaked into block.content (no reasoning → thinking box hidden) → clean checklist card, not raw {"tasks":[...]} -->
+							<div v-if="blockPlanTasks(block, m).length && block.status !== 'error' && block.tool_execution?.tool_name !== 'clarify' && block.source_type !== 'plan'" class="block-content">
+								<div class="plan-card">
+									<div class="plan-card-head">
+										<span class="plan-card-title">Plan</span>
+										<span v-if="m.status === 'in_progress'" class="plan-card-count">{{ blockPlanTasks(block, m).filter(t => t.status === 'done').length }}/{{ blockPlanTasks(block, m).length }}</span>
+									</div>
+									<ul class="plan-card-list">
+										<li
+											v-for="(task, i) in blockPlanTasks(block, m)"
+											:key="'plancard-body-' + i"
+											class="plan-card-row"
+											:class="{ 'plan-card-row--run': task.status === 'running' }"
+										>
+											<span class="plan-glyph" :class="'plan-glyph--' + task.status">
+												<svg v-if="task.status === 'done'" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M13 4.5 6.5 11 3 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+												<span v-else-if="task.status === 'running'" class="plan-ring" aria-hidden="true"></span>
+												<span v-else class="plan-dot" aria-hidden="true"></span>
+											</span>
+											<span class="plan-card-text">{{ task.title }}</span>
+										</li>
+									</ul>
+								</div>
+							</div>
+
 							<!-- 2. Block content - assistant message (hybrid streaming) -->
 							<!-- Prioritize final_answer over assistant - final_answer is the actual response -->
 							<!-- Show content section when: content exists OR final_answer exists OR assistant exists -->
-							<div v-if="(block.content || block.plan_decision?.final_answer || block.plan_decision?.assistant) && block.status !== 'error' && block.tool_execution?.tool_name !== 'clarify' && block.source_type !== 'plan'" class="block-content markdown-wrapper" dir="auto">
+							<div v-if="(block.content || block.plan_decision?.final_answer || block.plan_decision?.assistant) && block.status !== 'error' && block.tool_execution?.tool_name !== 'clarify' && block.source_type !== 'plan' && !blockPlanTasks(block, m).length" class="block-content markdown-wrapper" dir="auto">
 								<MarkdownRender
 									:content="block.content || block.plan_decision?.final_answer || block.plan_decision?.assistant || ''"
 									:final="isBlockFinalized(block)"
@@ -2941,12 +2966,13 @@ function blockPlanTasks(block: any, msg?: any): Array<{ title: string; status: s
 		const raw = (block?.plan_decision?.reasoning || block?.reasoning || block?.content || '')
 		if (typeof raw !== 'string' || raw.indexOf('"tasks"') === -1) return []
 		let obj: any = null
-		try { obj = JSON.parse(raw.trim()) } catch { obj = null }
+		const norm = raw.trim().replace(/[“”]/g, '"').replace(/[‘’]/g, "'")
+		try { obj = JSON.parse(norm) } catch { obj = null }
 		if (!obj || !obj.tasks) {
-			const start = raw.indexOf('{')
-			const end = raw.lastIndexOf('}')
+			const start = norm.indexOf('{')
+			const end = norm.lastIndexOf('}')
 			if (start !== -1 && end > start) {
-				try { obj = JSON.parse(raw.slice(start, end + 1)) } catch { obj = null }
+				try { obj = JSON.parse(norm.slice(start, end + 1)) } catch { obj = null }
 			}
 		}
 		const list = obj && (obj.tasks ?? (Array.isArray(obj) ? obj : null))
@@ -3208,7 +3234,7 @@ const lastSystemMessage = computed(() =>
 // finished system message so reopening a report shows them. fetchFollowups is
 // self-guarding (skips if loading/loaded/in-progress/not success).
 watch(lastSystemMessage, (m: any) => {
-	if (m && m.status === 'success' && m.followups === undefined && !m.followups_loading) {
+	if (m && m.status === 'success' && m.followups === undefined && !m.followups_loading && !hasClarifyBlock(m)) {
 		setTimeout(() => { fetchFollowups(m) }, 0)
 	}
 }, { immediate: false })
@@ -5554,6 +5580,9 @@ async function fetchFollowups(m: any) {
 		if ((report.value as any)?.mode === 'training') return
 		// Already loaded or in-flight → skip.
 		if (Array.isArray(m.followups) || m.followups_loading) return
+		// Clarify turn = the agent asked the user a question; there is no answer to
+		// follow up on → suppress (never request follow-ups).
+		if (hasClarifyBlock(m)) { m.followups = []; return }
 		if (!report.value?.id) return
 
 		// Derive the rendered answer text: walk completion_blocks from the end,

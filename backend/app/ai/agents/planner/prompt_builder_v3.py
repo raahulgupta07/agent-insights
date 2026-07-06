@@ -345,6 +345,13 @@ Examples of good behavior:
   - Message: "Building the dashboard from the albums table."
   - Tool: create_artifact (reuses the existing viz_id)
 """
+        # HARD RULE (plain string — literal JSON braces here must NOT be inside an
+        # f-string, else Python raises "Invalid format specifier").
+        system += (
+            "\n\nNEVER output the task-plan or any raw JSON (e.g. {\"tasks\":[...]}) as your "
+            "reply text. To ask the user something, call the `clarify` tool ONLY and leave your "
+            "final answer empty. User-facing text must be plain prose, never JSON.\n"
+        )
         # TEMP debug toggle: DASH_FORCE_PARALLEL_TOOLS=true relaxes the
         # one-tool-per-turn rule so the multi-tool dispatch loop can be
         # exercised end-to-end. Default behavior unchanged.

@@ -484,12 +484,10 @@
 
                     <!-- Model selector -->
                     <UPopover :key="'model-' + (props.popoverOffset || 0)" :popper="popperLegacy">
-                        <UTooltip :text="selectedModelLabel" :popper="{ strategy: 'fixed', placement: 'top' }">
-                            <button class="text-gray-600 hover:text-gray-900 hover:bg-[#F4EEE5] rounded-md px-2 py-1 text-xs flex items-center gap-1 max-w-[180px]">
-                                <span class="font-medium truncate">{{ selectedModelLabel }}</span>
-                                <Icon name="heroicons-chevron-down" class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                            </button>
-                        </UTooltip>
+                        <button class="text-gray-600 hover:text-gray-900 hover:bg-[#F4EEE5] rounded-md px-2 py-1 text-xs flex items-center gap-1 max-w-[180px]">
+                            <span class="font-medium truncate" :title="selectedModelLabel">{{ selectedModelLabel }}</span>
+                            <Icon name="heroicons-chevron-down" class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                        </button>
                         <template #panel="{ close }">
                             <div class="p-1.5 text-xs max-h-80 overflow-y-auto w-[300px]">
                                 <!-- HYBRID_AUTO_MODEL: classifier picks the best model per question -->
@@ -562,6 +560,7 @@
                                         </div>
                                     </div>
                                 </div>
+                                <div v-if="!models.length && !autoModelEnabled && !moaEnabled" class="px-2.5 py-3 text-[11px] text-gray-400">No models available — add one in Settings → Models</div>
                             </div>
                         </template>
                     </UPopover>
@@ -1153,13 +1152,21 @@ const selectedModelLabel = computed(() => {
     }
     if (selectedModel.value === 'moa') return 'Mixture-of-Agents'
     const model = models.value.find(m => m.id === selectedModel.value)
-    return model?.name || t('prompt.selectModel')
+    if (model?.name) return model.name
+    // Stale saved model id (predates a reseed) but real models exist →
+    // never show the dead "Select Model" string; fall back to default/first.
+    if (models.value.length) {
+        const fallback = models.value.find(m => m.is_default) || models.value[0]
+        if (fallback?.name) return fallback.name
+    }
+    return t('prompt.selectModel')
 })
 
 // Legacy popper (for current Nuxt UI stable)
 // Use a small fixed skid so content hugs the left edge of the chip
-// Use absolute strategy so transforms from split-screen don't affect placement
-const popperLegacy = computed(() => ({ strategy: 'absolute' as const, placement: 'bottom-start' as const, offset: [ 0, 8 ] }))
+// Use FIXED strategy so overflow/transform ancestors (split-screen composer)
+// don't clip or hide the panel — fixed-strategy poppers escape clipping.
+const popperLegacy = computed(() => ({ strategy: 'fixed' as const, placement: 'bottom-start' as const, offset: [ 0, 8 ] }))
 
 
 async function loadModels() {
@@ -1191,6 +1198,15 @@ async function loadModels() {
                     selectedModel.value = models.value[0].id
                 }
                 }
+            }
+            // Self-heal a stale/missing saved model: if a concrete id is set but
+            // no longer exists in the reseeded list (and isn't a sentinel), re-point
+            // it to the default (or first) model so paused/old reports recover.
+            const cur = selectedModel.value
+            if (cur && cur !== 'auto' && cur !== 'moa' && models.value.length
+                && !models.value.find(m => m.id === cur)) {
+                const heal = models.value.find(m => m.is_default) || models.value[0]
+                if (heal) selectedModel.value = heal.id
             }
         }
     } catch (error) {

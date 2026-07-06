@@ -184,7 +184,9 @@ function answerOf(system: any): string {
       const b = blocks[i]
       if (String(b?.status || '').toLowerCase() === 'error') continue
       if (b?.tool_execution?.tool_name === 'clarify') continue
+      if (b?.source_type === 'plan') continue
       const text = b?.content || b?.plan_decision?.final_answer || b?.plan_decision?.assistant
+      if (/^\s*\{[\s\S]*"tasks"\s*:/.test(String(text || ''))) continue
       if (text && String(text).trim()) return String(text)
     }
     if (system?.completion?.content && String(system.completion.content).trim()) {

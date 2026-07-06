@@ -3,6 +3,23 @@
 Hybrid feature changelog (our additions on top of the bagofwords/Dash base). Newest first.
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` then bullets.
 
+## v1.131.0 — Plan checklist everywhere, working model picker, no stuck spinner  (2026-07-06)
+- **No raw JSON left anywhere in chat.** Closed the last render path — a plan blob in the main chat body now shows the clean **Plan checklist** too (v1.130 fixed the thought-process box + Answer card; this fixes the center message). Old turns self-clean on refresh.
+- **The model picker opens and shows your models again.** Clicking "Select Model" now reliably opens the dropdown, and the button shows a real model name.
+- **No more endless "Thinking of follow-ups…".** Follow-up suggestions no longer run on a turn where the agent asked *you* a question, and the spinner always clears even if the suggestion call fails.
+  - I1 FE `pages/reports/[id]/index.vue`: center-body render now routes a `{"tasks":…}` block through the existing (smart-quote-hardened) `blockPlanTasks` → `plan-card` checklist; raw `MarkdownRender` guarded with `!blockPlanTasks(...).length`.
+  - I2 FE same file: follow-up trigger + `fetchFollowups` skip when `hasClarifyBlock(m)`; `followups_loading` reset confirmed in `finally`.
+  - I3 FE `components/prompt/PromptBoxV2.vue`: `popperLegacy` `strategy:'absolute'→'fixed'` (escapes split-screen transform/overflow clipping; also fixes the mode selector which shares it); removed the `UTooltip` wrapping the `UPopover` trigger so the click reaches the panel.
+  - I4 FE same file: `selectedModelLabel` + `loadModels` self-heal a stale saved `model_id` (post-reseed) → default/first model; added an empty-state row.
+  - No migration, no flag. Rollback image `cityagent-analytics:pre-allfix`.
+
+## v1.130.0 — No raw JSON in chat: plans render as a checklist  (2026-07-06)
+- **The agent never shows you raw code again.** When it planned its work, a technical `{"tasks":[...]}` blob could leak into the "Thought process" panel and the right-hand Answer card. Now the plan always renders as a clean **Plan checklist** (done / running / pending), and when the agent needs to ask you something you see a plain-English question — never JSON.
+  - FE `blockPlanTasks()` (`pages/reports/[id]/index.vue`) normalizes typographic/smart quotes before `JSON.parse`, so the checklist card renders even when a model emits curly quotes (was falling back to a raw dump).
+  - FE `answerOf()` (`components/report/OutputsFeed.vue`) now skips `source_type='plan'` blocks and any `{"tasks":…}` payload, so an internal plan can never be surfaced as the Answer.
+  - BE root fix: planner prompt (`agents/planner/prompt_builder_v3.py`) gains a hard rule — never output the task-plan/JSON as reply text; ask only via the `clarify` tool. `agent_v2.py` also blanks a leaked plan-JSON `final_answer` on the clarify-action path. Fixes it for every model (bug seen on Claude Haiku 4.5), not just the FE symptom.
+  - No migration, no flag. Rollback image `cityagent-analytics:pre-planjson-fix`.
+
 ## v1.129.0 — No more blank wait, truthful activity, faster follow-ups  (2026-07-06)
 - **No more blank chat while it thinks.** The moment you send a question, the chat now shows a **shimmer "reading your data…" skeleton** (the same polished shimmer as the dashboard build) instead of a faint half-rendered line + a lone blinking cursor. It swaps to the real answer the instant the first words arrive.
 - **The activity panel tells the truth.** The right rail used to say **"Idle · 0/5"** while the agent was actually working; it now says **"Starting…"** with a live pulse the moment you send, and the plan steps gently shimmer until the first step reports.
