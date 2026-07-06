@@ -1484,8 +1484,32 @@ Do not use generic placeholders like "value" unless that is the actual column na
             if isinstance(base_usage_ctx, UsageLimitContext)
             else None
         )
+        # Speed Phase 3 / Track C (HYBRID_FAST_CODEGEN): route the PURE
+        # code-generation LLM call to the org's fast/small model (Gemini flash
+        # variant) so code steps run 3-5x cheaper/faster in tokens. Planning,
+        # reasoning and reflection stay on runtime_ctx["model"]; only this Coder
+        # is downshifted. Flag-gated (FAST_LANE + FAST_CODEGEN), fail-soft → any
+        # doubt keeps the normal model (byte-identical to OFF).
+        _codegen_model = runtime_ctx.get("model")
+        try:
+            from app.settings.hybrid_flags import flags as _hf
+            if _hf.FAST_LANE and _hf.FAST_CODEGEN:
+                from app.ai.knowledge.auto_model import codegen_model as _codegen_pick
+                from app.services.llm_service import LLMService
+                _cg_db = runtime_ctx.get("db")
+                _cg_org = runtime_ctx.get("organization")
+                _cg_small = None
+                if _cg_db is not None and _cg_org is not None:
+                    _cg_small = await LLMService().get_default_model(
+                        _cg_db, _cg_org, runtime_ctx.get("user"), is_small=True
+                    )
+                _codegen_model = _codegen_pick(
+                    default_model=runtime_ctx.get("model"), small_model=_cg_small
+                )
+        except Exception:
+            _codegen_model = runtime_ctx.get("model")
         coder = Coder(
-            model=runtime_ctx.get("model"),
+            model=_codegen_model,
             organization_settings=organization_settings,
             context_hub=context_hub,
             usage_session_maker=async_session_maker,

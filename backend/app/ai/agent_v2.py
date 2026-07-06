@@ -2283,6 +2283,65 @@ class AgentV2:
             except Exception:
                 pass
 
+            # Speed Phase 3 Track A — Planner Collapse (HYBRID_PLANNER_COLLAPSE,
+            # gated by HYBRID_FAST_LANE master). When the bound sources' schema
+            # is ALREADY cached (DataSourceTable rows rendered into the schema
+            # excerpt above) the planner does not need to spend an LLM turn on
+            # read_resources; and when those rows carry per-column metadata it
+            # does not need describe_tables either. We inject a directive that
+            # tells the planner the schema is already in context and to proceed
+            # straight to codegen — collapsing 1-2 wasted plan/execute/reflect
+            # cycles. Unlike FOLLOWUP_FASTPATH this fires on the FIRST turn too
+            # (no prior-research requirement) because the signal is the cached
+            # schema itself, which is re-rendered every completion => correctness
+            # is unchanged. Both flags OFF => byte-identical. Never breaks the
+            # loop on error (fail-soft => full loop runs).
+            try:
+                from app.settings.hybrid_flags import flags as _pc_flags
+                if _pc_flags.FAST_LANE and _pc_flags.PLANNER_COLLAPSE:
+                    from app.services.speed.planner_collapse import plan_collapse_directive
+                    # A1: schema already loaded into context (cached DST rows).
+                    _pc_has_schema = bool(schemas_excerpt)
+                    # A2: do the cached DataSourceTable rows carry column
+                    # metadata (metadata_json or a populated legacy columns
+                    # list)? If so we can also skip describe_tables. Cheap
+                    # indexed lookup; any doubt / error => False (no A2 claim).
+                    _pc_has_col_meta = False
+                    try:
+                        from app.models.datasource_table import DataSourceTable
+                        _pc_ds_ids = [
+                            str(d.id) for d in (self.data_sources or [])
+                            if getattr(d, "id", None) is not None
+                        ]
+                        if _pc_ds_ids and _pc_has_schema:
+                            _pc_stmt = (
+                                select(DataSourceTable.metadata_json, DataSourceTable.columns)
+                                .where(DataSourceTable.datasource_id.in_(_pc_ds_ids))
+                                .where(DataSourceTable.is_active == True)  # noqa: E712
+                                .limit(50)
+                            )
+                            _pc_rows = (await self.db.execute(_pc_stmt)).all()
+                            _pc_has_col_meta = any(
+                                (r[0] is not None) or bool(r[1]) for r in _pc_rows
+                            )
+                    except Exception:
+                        _pc_has_col_meta = False
+                    _pc_block, _pc_collapsed = plan_collapse_directive(
+                        fast_lane=True,
+                        planner_collapse=True,
+                        has_schema=_pc_has_schema,
+                        has_column_metadata=_pc_has_col_meta,
+                    )
+                    if _pc_block:
+                        instructions = (instructions + "\n\n" + _pc_block) if instructions else _pc_block
+                        try:
+                            _mlog(f"planner_collapse collapsed={_pc_collapsed} "
+                                  f"schema={_pc_has_schema} col_meta={_pc_has_col_meta}")
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
             # Hybrid Phase 6 (join graph): inject mined relationship/join edges
             # primed by JoinGraphContextBuilder into the hub's static cache
             # (empty when flags.JOIN_GRAPH off). Append its block to the planner

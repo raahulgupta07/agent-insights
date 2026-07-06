@@ -36,6 +36,18 @@ if TYPE_CHECKING:
 from app.ai.schemas.codegen import CodeGenContext, CodeGenRequest
 from app.ai.code_execution.loadables import extract_loadable_refs
 from app.settings.hybrid_flags import flags
+# Speed layer (Phase 3 Track B — warehouse result cache). Optional/fail-soft:
+# if the package can't import, caching is simply never engaged.
+try:
+    from app.services.speed import result_cache as _result_cache
+    from app.services.speed.source_lane import (
+        classify_connection_type as _classify_conn_type,
+        LANE_WAREHOUSE as _LANE_WAREHOUSE,
+    )
+except Exception:  # pragma: no cover - speed layer optional
+    _result_cache = None
+    _classify_conn_type = None
+    _LANE_WAREHOUSE = "warehouse"
 from app.core.otel import get_tracer
 from opentelemetry.trace import StatusCode
 from app.errors.app_error import AppError
@@ -613,6 +625,53 @@ class QueryCapturingClientWrapper:
             if isinstance(query_timeout_seconds, (int, float)) and query_timeout_seconds > 0
             else DEFAULT_QUERY_TIMEOUT_SECONDS
         )
+        # Speed Phase 3 (Track B): classify this client's speed lane ONCE. Only a
+        # LANE_WAREHOUSE (live SQL pushdown) client is eligible for the read-through
+        # result cache — local uploads are already fast and BI has its own snapshot
+        # lane. Derived from the concrete client class name (e.g. PostgresqlClient →
+        # "postgresql"); the SnapshotClient is a local DuckDB copy → never cached.
+        self._speed_lane = self._classify_speed_lane(original_client)
+
+    @staticmethod
+    def _classify_speed_lane(client) -> Optional[str]:
+        """Best-effort speed-lane for a concrete client. Never raises → None on any doubt."""
+        try:
+            if _classify_conn_type is None:
+                return None
+            name = type(client).__name__
+            low = name.lower()
+            if "snapshot" in low:
+                # BI snapshot is already a fast local DuckDB copy — not a warehouse hit.
+                return None
+            derived = name[:-6].lower() if name.endswith("Client") else low
+            return _classify_conn_type(derived)
+        except Exception:
+            return None
+
+    def _result_cache_eligible(self, query) -> bool:
+        """True only when the warehouse result cache should be consulted for `query`.
+        Fail-soft: any doubt → False (query runs live, exactly as today)."""
+        try:
+            if _result_cache is None or not isinstance(query, str):
+                return False
+            if self._speed_lane != _LANE_WAREHOUSE:
+                return False
+            return bool(flags.FAST_LANE and flags.WAREHOUSE_CACHE)
+        except Exception:
+            return False
+
+    @staticmethod
+    def _safe_copy(obj):
+        """Independent copy so a cache consumer can mutate its result without
+        corrupting the shared cache entry. DataFrame/Series → .copy(); else deepcopy."""
+        try:
+            copier = getattr(obj, "copy", None)
+            if callable(copier):
+                return copier()
+            import copy as _copy
+            return _copy.deepcopy(obj)
+        except Exception:
+            return obj
 
     def execute_query(self, query: str, *args, **kwargs):
         """Intercept execute_query calls to capture the query string and wall-clock duration."""
@@ -624,6 +683,24 @@ class QueryCapturingClientWrapper:
         _enforce_readonly_query(query)
         if isinstance(query, str):
             self._captured_queries.append(query)
+        # Warehouse result cache (Speed Phase 3 · Track B) — read-through, fail-soft,
+        # warehouse lane only. A repeated identical query returns instantly with zero
+        # DB round-trip. Gated FAST_LANE + WAREHOUSE_CACHE (both default OFF).
+        _cache_on = self._result_cache_eligible(query)
+        if _cache_on:
+            try:
+                _cached = _result_cache.get_cached_result(self._client_key, query)
+            except Exception:
+                _cached = None
+            if _cached is not None:
+                self._captured_timings.append({
+                    "index": len(self._captured_timings),
+                    "query_ms": 0.0,
+                    "rows": len(_cached) if hasattr(_cached, '__len__') else None,
+                    "sql": query[:500] if isinstance(query, str) else None,
+                    "cache": "hit",
+                })
+                return self._safe_copy(_cached)
         idx = len(self._captured_timings)
         _q_start = _time.monotonic()
         with _tracer.start_as_current_span("datasource.execute_query") as span:
@@ -646,6 +723,16 @@ class QueryCapturingClientWrapper:
                     "result_bytes": result_bytes,
                     "sql": query[:500] if isinstance(query, str) else None,
                 })
+                # Cache the successful warehouse read for a short TTL. Store an
+                # independent copy so the live object returned below can be mutated
+                # by generated code without corrupting the cached entry.
+                if _cache_on and result is not None:
+                    try:
+                        _result_cache.put_cached_result(
+                            self._client_key, query, self._safe_copy(result)
+                        )
+                    except Exception:
+                        pass
                 return result
             except QueryTimeoutError as e:
                 _q_ms = (_time.monotonic() - _q_start) * 1000.0

@@ -223,6 +223,8 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_WARM_SESSION": {"label": "Warm Session Cache", "role": "agent", "category": "Performance", "status": "experimental", "note": "Cache the constructed data-source client + schema per report/session so they are not rebuilt and creds re-resolved and schema re-loaded on every turn. Fail-soft (cache miss builds fresh). Needs FAST_LANE. Default OFF."},
     "HYBRID_PLANNER_COLLAPSE": {"label": "Planner Turn Collapse", "role": "agent", "category": "Performance", "status": "experimental", "note": "When the bound sources' schema is already known, skip the redundant read_resources/describe_tables turns and go straight to codegen, cutting 2-3 LLM hops. Fail-soft to the full loop. Needs FAST_LANE. Default OFF."},
     "HYBRID_BI_SNAPSHOT": {"label": "BI Snapshot (Power BI/Fabric local cache)", "role": "agent", "category": "Performance", "status": "experimental", "note": "Snapshot Power BI / Fabric tables into a local store (DuckDB) on sync and query the local copy (ms) instead of live DAX over HTTP (slow + throttled). Per-agent 'Live mode' bypasses to the source. Needs FAST_LANE. Default OFF."},
+    "HYBRID_FAST_CODEGEN": {"label": "Fast Codegen Model", "role": "agent", "category": "Performance", "status": "experimental", "note": "Route the pure code-generation step (create_data) to the org's fast/small model (a Gemini flash variant) so code steps run 3-5x cheaper/faster in tokens, while planning/reflection stay on the higher-quality model. Fail-soft to the normal model. Needs FAST_LANE. Default OFF."},
+    "HYBRID_WAREHOUSE_CACHE": {"label": "Warehouse Result Cache", "role": "agent", "category": "Performance", "status": "experimental", "note": "Cache the ROWS returned by a SQL query against a live warehouse source (postgres/snowflake/bigquery/…) per (data_source, normalized SQL) for a short TTL, so a repeated identical query returns instantly with zero DB round-trip. Warehouse lane only (local uploads are already fast; BI has its own snapshot lane). Read-only SELECT results only; fail-soft (miss runs live). Needs FAST_LANE. Default OFF."},
     "HYBRID_CROSS_SOURCE_UNIFY": {"label": "Cross-Source Unify", "role": "agent", "category": "Intelligence", "status": "experimental", "note": "At ingest, detect same-shape sibling tables (e.g. 6 monthly files with identical columns) and register a unified UNION ALL view (+ a _period column) so the agent queries across them in one shot. Records a union group + emits an instruction. Fail-soft, no migration. Default ON."},
     "HYBRID_DATA_QUALITY": {"label": "Data Quality Scan", "role": "user", "category": "Intelligence", "status": "experimental", "note": "At ingest, scan columns for quality issues (high null %, type-coercion risk, outliers, near-constant) and emit a data_quality guardrail instruction the agent reads. Pure pandas, fail-soft, no migration. Default OFF."},
     "HYBRID_VALUE_NORMALIZE": {"label": "Value Normalization (canonical)", "role": "agent", "category": "Intelligence", "status": "experimental", "note": "Resolve a canonical value for near-duplicate labels (e.g. 'daily_used__l' vs 'daily_used__l_') and record a value→canonical map so GROUP BY doesn't scatter one category across spellings. Detection only, no data rewrite. Default OFF."},
@@ -570,6 +572,25 @@ class HybridFlags:
         # per-agent "Live mode" bypasses to the source. Gated by FAST_LANE.
         # Default OFF.
         return _bool("HYBRID_BI_SNAPSHOT", False)
+
+    @property
+    def FAST_CODEGEN(self) -> bool:
+        # Route the PURE code-generation step (create_data's Coder) to the org's
+        # fast/small model (a Gemini flash variant) instead of the reasoning model,
+        # so code steps run 3-5x cheaper/faster in tokens. Planning/reflection stay
+        # on the normal model. Gated by FAST_LANE too. Fail-soft (any doubt → normal
+        # model). Default OFF = byte-identical to today.
+        return _bool("HYBRID_FAST_CODEGEN", False)
+
+    @property
+    def WAREHOUSE_CACHE(self) -> bool:
+        # Read-through cache of the ROWS returned by a warehouse SQL query, keyed
+        # by (data_source, normalized SQL) with a short TTL. A repeated identical
+        # query returns instantly with zero DB round-trip. Warehouse lane only
+        # (local uploads already fast; BI uses the snapshot lane). Read-only
+        # SELECT results only; fail-soft (miss runs live). Gated by FAST_LANE.
+        # Default OFF = byte-identical to today.
+        return _bool("HYBRID_WAREHOUSE_CACHE", False)
 
     @property
     def CROSS_SOURCE_UNIFY(self) -> bool:
@@ -1883,6 +1904,8 @@ class HybridFlags:
             "WARM_SESSION": self.WARM_SESSION,
             "PLANNER_COLLAPSE": self.PLANNER_COLLAPSE,
             "BI_SNAPSHOT": self.BI_SNAPSHOT,
+            "FAST_CODEGEN": self.FAST_CODEGEN,
+            "WAREHOUSE_CACHE": self.WAREHOUSE_CACHE,
             "CROSS_SOURCE_UNIFY": self.CROSS_SOURCE_UNIFY,
             "DATA_QUALITY": self.DATA_QUALITY,
             "VALUE_NORMALIZE": self.VALUE_NORMALIZE,

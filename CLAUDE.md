@@ -254,6 +254,18 @@ image). Standalone in-container scripts: `cd /app/backend && PYTHONPATH=/app/bac
   External connections stay read-only via Dash's existing query path.
 
 ## Landmines (learned the hard way)
+- **UNMOUNT/REMOUNT INFINITE LOOP (agent-page "blinking skeleton"):** a child component that
+  emits on mount AND sits inside a `v-if`/`v-else` gated on a loading flag whose handler toggles
+  that flag = infinite loop. Concrete: `layouts/data.vue:57` skeleton `v-if="isLoading"`, page
+  `<slot/>` is its `v-else` (:104) → toggling `isLoading` unmounts the page + `AgentSyncLog`;
+  `AgentSyncLog` re-emits `'done'` on every fresh mount → page `onSyncPhase('done')` called
+  `injectedFetchIntegration()` NON-silent → `isLoading` true→false → unmount→remount → ∞
+  (147 `/overview`+`/headline`/min, ALL 200 OK). **DIAGNOSE:** `docker logs ca-app --since 60s |
+  grep -c '/<endpoint> HTTP'` — steady 100+/min of a 200-OK endpoint = FE refetch loop, NOT a
+  backend hang/500. **FIX:** make the refetch SILENT (never touch the gating loading flag) + dedup
+  the handler (once-guard). Never fire a non-silent full-page-loading refetch from a child-emitted
+  event when that child lives inside the page's loading-gated block. Fixed in `onSyncPhase`
+  (`pages/agents/[id]/index.vue`): `injectedFetchIntegration(true)` + `_syncDoneHandled` guard.
 - Alembic has merge migrations with **tuple** `down_revision` — naive head-finding gives false
   multiple heads. True head (at fork time): `d6d9a78b7b4a`.
 - Docker Hub `registry EOF` on base pulls — pre-pull with retry (rule 2).

@@ -578,15 +578,28 @@ const syncActive = computed(
 )
 // Alias for the syncing-state page treatment (skeletons, launcher gate, hidden indexing banner).
 const isSyncing = syncActive
+// Guard: act on the 'done' transition exactly ONCE. AgentSyncLog lives inside the
+// layout's page slot, which is `v-else` of the full-page skeleton — so any toggle of
+// the layout `isLoading` unmounts+remounts AgentSyncLog, and a fresh AgentSyncLog
+// re-emits 'done'. Without this guard (and with a NON-silent integration refetch
+// below) that formed an infinite unmount/remount loop (skeleton blinked forever).
+let _syncDoneHandled = false
 function onSyncPhase(p: string) {
     syncPhase.value = p || ''
     // A finished sync changed the kept-table set → refresh the overview + headline
     // once so the strip + cards reflect the real result instead of the pre-sync snapshot.
     // Also refetch the agent detail so the auto-filled primary instruction + starters appear.
     if (p === 'done') {
+        if (_syncDoneHandled) return
+        _syncDoneHandled = true
         try { fetchOverview() } catch (_e) {}
         try { fetchHeadline() } catch (_e) {}
-        try { injectedFetchIntegration() } catch (_e) {}
+        // SILENT refetch — must NOT toggle the layout `isLoading` (that unmounts this
+        // page + AgentSyncLog and restarts the whole cycle).
+        try { injectedFetchIntegration(true) } catch (_e) {}
+    } else {
+        // A new run started (e.g. re-sync) → allow the next 'done' to be handled again.
+        _syncDoneHandled = false
     }
 }
 

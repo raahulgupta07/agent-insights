@@ -161,6 +161,34 @@ def pick_model_for_tier(tier: str, models: List[Any], *, default_model: Any) -> 
 
 
 # ---------------------------------------------------------------------------
+# Fast codegen tier (HYBRID_FAST_CODEGEN) — pure code-generation downshift
+# ---------------------------------------------------------------------------
+
+def codegen_model(*, default_model: Any, small_model: Any = None, models: Optional[List[Any]] = None) -> Any:
+    """Model to use for a PURE code-generation step (create_data's Coder).
+
+    Code generation (write SQL/pandas from a known schema) does not need the
+    reasoning model — the org's fast/small model (its ``is_small_default`` row,
+    currently a Gemini flash-lite) runs it 3-5x cheaper/faster. Reasoning,
+    planning and reflection stay on ``default_model`` at the call site; only this
+    one step is downshifted.
+
+    Prefers the caller-supplied ``small_model`` (the resolved is_small_default);
+    else reuses the existing FAST-tier picker over ``models`` (cheapest small
+    model). NEVER raises → falls back to ``default_model`` (feature OFF behaviour).
+    Reuses the FAST model already known to the org — no hardcoded model string.
+    """
+    try:
+        if small_model is not None and getattr(small_model, "model_id", None):
+            return small_model
+        chosen = pick_model_for_tier("fast", models or [], default_model=default_model)
+        return chosen or default_model
+    except Exception:
+        logger.warning("auto_model: codegen_model failed", exc_info=True)
+        return default_model
+
+
+# ---------------------------------------------------------------------------
 # Optional cheap LLM tie-break (only for the fuzzy mid-band)
 # ---------------------------------------------------------------------------
 

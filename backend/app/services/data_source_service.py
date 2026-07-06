@@ -2302,6 +2302,11 @@ class DataSourceService:
             setattr(client, "_bow_data_source_id", str(data_source.id))
             setattr(client, "_bow_data_source_name", data_source.name)
             setattr(client, "_bow_client_key", client_key)
+            # Connection type string (e.g. "postgresql", "snowflake", "powerbi")
+            # so the code-execution wrapper can classify the speed lane
+            # (speed.source_lane) without a DB hit — used by the warehouse
+            # result cache to only cache LANE_WAREHOUSE sources.
+            setattr(client, "_bow_connection_type", getattr(connection, "type", None))
             # Per-connection query timeout override (read by the code-execution
             # wrapper). Stored on the client so the wrapper does not need DB
             # access to resolve it.
@@ -3731,6 +3736,16 @@ class DataSourceService:
         try:
             from app.services.speed import session_cache as _session_cache
             _session_cache.invalidate(data_source_id)
+        except Exception:
+            pass
+        # Warehouse result cache (Speed Phase 3 · Track B): a schema/data refresh
+        # can change query results, so drop cached rows. The cache is keyed by the
+        # client_key (data-source NAME), not the UUID, so a per-id invalidate can't
+        # target it — clear ALL (cache is small, refresh is rare) to guarantee no
+        # stale rows are served post-refresh. TTL (≤300s) also self-heals.
+        try:
+            from app.services.speed import result_cache as _result_cache
+            _result_cache.invalidate()
         except Exception:
             pass
 
