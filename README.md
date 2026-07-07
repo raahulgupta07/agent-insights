@@ -8,7 +8,7 @@ Extended with a Karpathy-style 2nd-brain, a per-studio **Auto-train** pipeline, 
 
 | | |
 |---|---|
-| **Version** | `VERSION_HYBRID` — see file (currently **1.160.2**) |
+| **Version** | `VERSION_HYBRID` — see file (currently **1.160.4**) |
 | **Backend** | FastAPI (Python 3.12), async SQLAlchemy, Alembic (auto-migrate on boot) |
 | **Frontend** | Nuxt 3 SPA (`ssr:false`), baked into the image via `nuxt generate` |
 | **Data** | PostgreSQL 18 + pgvector · PgBouncer · Redis |
@@ -29,6 +29,7 @@ Extended with a Karpathy-style 2nd-brain, a per-studio **Auto-train** pipeline, 
 - [Install flow](#install-flow)
 - [Configuration (`.env`)](#configuration-env)
 - [Deploy modes](#deploy-modes)
+- [Deploy behind HTTPS — engineer flow (NPM)](#deploy-behind-https--engineer-flow-npm)
 - [Update & rollback](#update--rollback)
 - [How a question is answered](#how-a-question-is-answered)
 - [Auto-train pipeline](#auto-train-pipeline)
@@ -193,10 +194,87 @@ Pick **one** — only one runs at a time (`docker compose down` the old one befo
 | **Direct** (simplest) | `docker-compose.build.yaml` | `APP_PORT` | none | internal / behind an existing host proxy |
 | **nginx** | `docker-compose.nginx.yaml` | `HTTP_PORT` | nginx (SSE/WS/large-upload tuned) | you already run nginx |
 | **Caddy (HTTPS)** | `docker-compose.yaml` | `APP_PORT` | Caddy, auto-TLS | public domain, automatic HTTPS |
-| **NPM / AWS** | `docker-compose.npm.yaml` | via proxy | Nginx-Proxy-Manager | the live AWS box (`insights.citygpt.xyz`) |
+| **NPM / AWS** | `docker-compose.npm.yaml` | via proxy | Nginx-Proxy-Manager | the live AWS box (`insights.citygpt.xyz`) — **see engineer flow below** |
 
 The app always listens on **3000 internally** (the `http://0.0.0.0:3000` log line is normal). **Prod needs
 HTTPS** for the PWA install + service worker; `http://localhost:3007` is exempt for testing.
+
+> `docker-compose.npm.yaml` is a **drop-in superset** of `docker-compose.build.yaml` — identical `ca-app` /
+> `ca-postgres` / `ca-redis` names, `ca-network`, and `ca_*` volumes — **plus** an `nginx-proxy-manager`
+> (`ca-npm`) on the same network. Same data, plus HTTPS. Run **one or the other**, never both at once.
+
+---
+
+## Deploy behind HTTPS — engineer flow (NPM)
+
+This is the flow for the live AWS box (`insights.citygpt.xyz`). Nginx Proxy Manager (NPM) terminates
+HTTPS and reverse-proxies to the app; you add the domain + Let's Encrypt cert by **clicking in a web UI** —
+no hand-edited nginx.conf, no certbot.
+
+```mermaid
+flowchart TD
+    A["SSH to box<br/>cd /opt/agent-insights"] --> B["git pull"]
+    B --> C["edit .env<br/>ADMIN_* · DASH_ENCRYPTION_KEY · POSTGRES_PASSWORD"]
+    C --> D["docker compose -f docker-compose.npm.yaml --env-file .env up -d --build"]
+    D --> E{"3 containers healthy<br/>ca-app · ca-postgres · ca-npm"}
+    E --> F["open NPM UI<br/>http://SERVER_IP:81"]
+    F --> G["Proxy Host → Add:<br/>ca-app : 3000 · wss ON"]
+    G --> H["SSL → Let's Encrypt · Force SSL"]
+    H --> I["Advanced → proxy_buffering off (streaming)"]
+    I --> J(["https://insights.citygpt.xyz"])
+
+    style D fill:#C2541E,color:#fff
+    style G fill:#C2541E,color:#fff
+    style J fill:#2f7d4f,color:#fff
+```
+
+**1. Bring the stack up (app + db + redis + NPM, one network):**
+```bash
+ssh <box> && cd /opt/agent-insights
+git pull
+# .env must have DASH_ENCRYPTION_KEY (keep the SAME one — a new key orphans every stored secret),
+# DASH_ADMIN_*, POSTGRES_PASSWORD, and AUTOTRAIN_STAGING_ROLE_SECRET (Phase 0).
+docker compose -f docker-compose.npm.yaml --env-file .env up -d --build
+docker compose -f docker-compose.npm.yaml ps          # ca-app / ca-postgres / ca-redis / ca-npm all Up
+```
+
+**2. Open the NPM admin UI** → `http://<SERVER_IP>:81` (first login `admin@example.com` / `changeme`, it forces
+a change). **Hosts → Proxy Hosts → Add Proxy Host:**
+
+| Field | Value | Why |
+|---|---|---|
+| Domain Names | `insights.citygpt.xyz` | your DNS A record → box public IP |
+| Scheme | `http` | NPM does the TLS; app is plain http internally |
+| **Forward Hostname** | **`ca-app`** | the **container name** — NOT an IP, NOT `app`, NOT `8077` |
+| **Forward Port** | **`3000`** | the app's **internal** port (Aria was 8077 — this is 3000) |
+| Websockets Support | **ON** | chat streaming / live updates |
+| Block Common Exploits | ON | — |
+
+**3. SSL tab** → request a new **Let's Encrypt** cert · **Force SSL** · HTTP/2.
+
+**4. Advanced tab** (REQUIRED — chat streams token-by-token; without this it looks frozen):
+```nginx
+proxy_buffering off;
+proxy_cache off;
+proxy_request_buffering off;
+proxy_http_version 1.1;
+proxy_read_timeout 3600s;
+proxy_send_timeout 3600s;
+client_max_body_size 0;
+```
+
+**5. DNS + firewall:** point `insights.citygpt.xyz` → box public IP; open security-group ports **80 + 443**
+(+ **81** for the UI, ideally restricted to your IP).
+
+Then browse `https://insights.citygpt.xyz` → log in as `DASH_ADMIN_*` → **Settings → Models** (OpenRouter key) →
+**Settings → Feature Flags**.
+
+> **Why the earlier attempt showed no UI (fixed in v1.160.4):** the old `docker-compose.npm.yaml` used a
+> *different* identity (`dash-*` names / `dash-network`) than the running `ca-*` stack, so NPM couldn't resolve
+> the app → 502. **The rule:** a reverse proxy for a compose stack must be on the **same docker network** and
+> forward to the app's **container name + internal port** (`ca-app:3000`) — never a host IP or another app's
+> port. The app also now runs uvicorn with `--proxy-headers --forwarded-allow-ips='*'` so login cookies + wss
+> work behind the TLS proxy (baked in — needs the rebuild in step 1).
 
 ---
 
@@ -348,7 +426,7 @@ Intelligence** and read via `GET /api/intelligence/layer/{layer}`.
 | Verified Metrics | `HYBRID_VERIFIED_METRICS` | locked metric runs its own read-only calc, marked AUTHORITATIVE |
 | Hybrid Search + KG | `HYBRID_SEMANTIC_SEARCH` | pgvector + BM25 RRF + entity graph |
 
-**Wren/Julius optimization (v1.156–1.160.2)** adds: SQL pushdown + `sql_validate` (`HYBRID_SQL_VALIDATE`),
+**Wren/Julius optimization (v1.156–1.160.4)** adds: SQL pushdown + `sql_validate` (`HYBRID_SQL_VALIDATE`),
 coder grounding (`HYBRID_CODER_GROUNDING`), paraphrase-aware learned-query recall via embedding+RRF
 (`HYBRID_RECALL_RRF`), and Julius-quality output — analysis notebook (`HYBRID_ANALYSIS_NOTEBOOK`), data-aware
 follow-ups (`HYBRID_FOLLOWUPS_DATA_AWARE`), broadened smart-viz (`HYBRID_SMART_VIZ`), grounded starters
@@ -423,8 +501,11 @@ docker-compose.build.yaml       # THE stack file
 |---|---|
 | `/health` not `ok` | still booting — `docker logs ca-app`, re-check |
 | Chat/train 401 immediately | no OpenRouter key — paste in **Settings → Models** (encrypted per-org, not `.env`) |
-| Dashboard hangs "Starting… 0/0" on Power BI | fixed in **v1.160.2** — was a 429 throttle storm from brute table-discovery; rebuild if on older |
+| Dashboard hangs "Starting… 0/0" on Power BI | fixed in **v1.160.2** (429 throttle storm) + **v1.160.3** (real-schema discovery via `INFO.VIEW.COLUMNS` kills the brute-probe at source); rebuild if on older |
 | Stop button 500 | fixed in **v1.160.2** (sigkill returned raw ORM → recursion); rebuild if on older |
+| **Domain shows 502 / blank behind NPM** | NPM must be on the **same docker network** as the app and forward to **`ca-app:3000`** (container name + internal port, NOT a host IP, NOT `8077`). Use `docker-compose.npm.yaml` (drop-in superset of build.yaml). Fixed in **v1.160.4** — see [engineer flow](#deploy-behind-https--engineer-flow-npm). |
+| Login redirects to `http://` / cookie not set behind HTTPS | needs uvicorn `--proxy-headers` (baked in **v1.160.4**) — rebuild the image on the box |
+| Boot log: `duplicate key … pg_type_typname_nsp_index` then "startup failed" | multi-worker race creating `apscheduler_jobs` on a fresh DB — fixed in **v1.160.4** (pre-fork `CREATE TABLE IF NOT EXISTS`); self-heals on older versions after a restart |
 | `bind: address already in use` | another process owns the host port — `ss -ltnp \| grep <port>`, pick a free `APP_PORT`/`HTTP_PORT` |
 | Logs say `:3000` but you set another port | that's the container-internal port (always 3000) — normal; your host port is in `docker compose ps` |
 | FE change didn't show | you skipped the bake — `fe-sync.sh` then `docker commit` (or full rebuild) |
