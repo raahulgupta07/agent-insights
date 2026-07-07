@@ -530,6 +530,24 @@ class Coder:
             except Exception:
                 pushdown_block = ""
 
+            # ── Phase 3B: grounding contract (flag HYBRID_CODER_GROUNDING) ──
+            # Inject the parallel-agent-populated grounding context (approved semantic
+            # meanings + metric formulas + join edges, scoped to the selected tables) so
+            # the model writes SQL against the real column meanings / join keys / metric
+            # definitions instead of inventing them. Empty string (byte-identical prompt)
+            # when the flag is off or nothing was populated. Fail-soft.
+            grounding_context = context.grounding_context or ""
+            grounding_block = ""
+            try:
+                if _pdflags.CODER_GROUNDING and grounding_context.strip():
+                    grounding_block = (
+                        "\n" + grounding_context.strip() + "\n"
+                        "Use the column meanings, metric formulas, and joins above EXACTLY as given — "
+                        "do NOT invent join keys or re-derive a metric that is defined here.\n"
+                    )
+            except Exception:
+                grounding_block = ""
+
             text = f"""
             Role: data engineer and data scientist working on the user's analytics request.
 
@@ -602,6 +620,7 @@ class Coder:
                 - Bias for a master table: include additional columns that are relevant for filtering and slicing in the visualization layer, even if not explicitly requested by the user. For example, if the user asks for total sales by region, also include date and product category columns if available.
                 - The interpreted_prompt may list specific tables, target columns, and additional columns for filtering. Include all of them in your SELECT.
                 - **Data granularity:** When the interpreted_prompt says "return granular rows" or "do not pre-aggregate", do not add GROUP BY or aggregate functions (SUM/COUNT/AVG) in SQL. Return one row per record — the visualization layer handles aggregation. Only pre-aggregate when the interpreted_prompt explicitly requires SQL-level computation (window functions, rolling averages, CTEs, complex calculations).
+{grounding_block}
 {pushdown_block}
             1. **Function Signature**: Implement either:
                `def generate_df(ds_clients, excel_files):` — when no web fetching is needed.

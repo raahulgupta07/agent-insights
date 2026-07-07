@@ -145,10 +145,29 @@ async def build_codegen_context(
         except Exception:
             norm_tables_by_source = None
 
+    # Phase 3 (HYBRID_CODER_GROUNDING): compact grounding contract for the coder
+    # (approved semantic meanings + metric formulas + known join edges, scoped to
+    # the target tables). Fail-soft: any error -> "" so grounding never breaks
+    # codegen. Empty (byte-identical) when the flag is off.
+    grounding_context = ""
+    try:
+        from app.ai.agents.coder.grounding import build_grounding_context
+        _gc_db = runtime_ctx.get("db") if isinstance(runtime_ctx, dict) else None
+        _gc_org = runtime_ctx.get("organization") if isinstance(runtime_ctx, dict) else None
+        grounding_context = await build_grounding_context(
+            _gc_db,
+            organization=_gc_org,
+            tables_by_source=norm_tables_by_source,
+            question=(interpreted_prompt or user_prompt or ""),
+        )
+    except Exception:
+        grounding_context = ""
+
     return CodeGenContext(
         user_prompt=user_prompt or (interpreted_prompt or ""),
         interpreted_prompt=interpreted_prompt or None,
         schemas_excerpt=schemas_excerpt or "",
+        grounding_context=grounding_context,
         data_sources_context=data_sources_context,
         instructions_context=instructions_context,
         mentions_context=mentions_context,

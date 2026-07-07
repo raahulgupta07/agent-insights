@@ -11,6 +11,11 @@ class CodeGenContext(BaseModel):
     # New: rendered descriptions of connected data sources/clients (LLM-ready text)
     data_sources_context: str = ""
     instructions_context: str = ""
+    # Phase 3: compact grounding contract for the CODER (approved semantic meanings +
+    # metric formulas + known join edges, scoped to the selected tables). Empty when
+    # HYBRID_CODER_GROUNDING is off. Populated by build_codegen_context, rendered in
+    # generate_code so the coder uses defined joins/metrics instead of guessing.
+    grounding_context: str = ""
     mentions_context: str = "<mentions>No mentions for this turn</mentions>"
     entities_context: str = ""
     loadables_context: str = ""
