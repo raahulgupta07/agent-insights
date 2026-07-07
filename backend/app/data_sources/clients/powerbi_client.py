@@ -614,6 +614,14 @@ class PowerBIClient(DataSourceClient):
         if empty_db:
             return [], []
 
+        # Deterministic fallback: enumerate the real schema via the INFO.VIEW.COLUMNS()
+        # DMV. This resolves the datasets whose COLUMNSTATISTICS returns 0 rows without
+        # erroring — the ones that used to reach _brute_discover_tables and spray ~40
+        # guessed names into a 429 storm. One call, real names + types. (v1.160.3)
+        tables = self._get_tables_via_info_view(workspace_id, dataset_id)[0]
+        if tables:
+            return tables, []
+
         # Fallback: REST API /tables (only works for Push datasets)
         url = f"{self.BASE_URL}/groups/{workspace_id}/datasets/{dataset_id}/tables"
         resp = self._http.get(url, headers=headers, timeout=30)
@@ -622,7 +630,9 @@ class PowerBIClient(DataSourceClient):
             if rest_tables and any(t.get("columns") for t in rest_tables):
                 return rest_tables, []
 
-        # Last resort: brute-probe common table names (lakehouse/warehouse datasets)
+        # Absolute last resort: brute-probe common table names. With INFO.VIEW.COLUMNS
+        # above this is now rarely reached — kept only for the pathological dataset that
+        # rejects every DMV yet still holds queryable tables.
         tables, _ = self._brute_discover_tables(workspace_id, dataset_id)
         if tables:
             return tables, []
@@ -687,6 +697,80 @@ class PowerBIClient(DataSourceClient):
             else:
                 logging.warning(f"COLUMNSTATISTICS failed for dataset {dataset_id}: {e}")
             return [], empty_db
+
+    def _get_tables_via_info_view(self, workspace_id: str, dataset_id: str) -> tuple:
+        """Enumerate real tables + columns via the ``INFO.VIEW.COLUMNS()`` DMV.
+
+        This is the deterministic fix for the datasets that used to fall through to
+        ``_brute_discover_tables`` (40 guessed English names → mostly-miss → 429 storm).
+        Those are datasets whose ``COLUMNSTATISTICS()`` returns ZERO rows without
+        erroring (so they don't trip the empty-db short-circuit) — yet
+        ``INFO.VIEW.COLUMNS()`` returns their true schema in ONE call.
+
+        Uses the same INFO.VIEW.* DMV family already proven to work for
+        relationships/measures (``fetch_model_metadata``); unlike the bare
+        ``INFO.TABLES()``/``INFO.COLUMNS()`` (which 400 over executeQueries), the
+        ``.VIEW.`` variants resolve names and are delegated-user friendly.
+
+        Returns ``(tables_list, [])`` — real table names, real column data types,
+        system/date tables and hidden helper columns filtered out. Any failure →
+        ``([], [])`` so the caller falls through to REST / brute exactly as before
+        (fully backward-compatible; never raises).
+        """
+        try:
+            df = self._execute_dax_internal(
+                workspace_id, dataset_id, "EVALUATE INFO.VIEW.COLUMNS()"
+            )
+        except Exception as e:  # noqa: BLE001
+            logging.debug(f"INFO.VIEW.COLUMNS failed for dataset {dataset_id}: {e}")
+            return [], []
+        if df is None or df.empty:
+            return [], []
+
+        # INFO.VIEW.COLUMNS returns clean column names, but tolerate the
+        # `Name[col]` bracket wrapping that some PBI responses carry.
+        def _key(name: str) -> str:
+            if "[" in name and "]" in name:
+                return name[name.index("[") + 1:name.index("]")]
+            return name
+
+        colmap = {_key(c): c for c in df.columns}
+        name_c = colmap.get("Name")
+        table_c = colmap.get("Table")
+        dtype_c = colmap.get("DataType")
+        hidden_c = colmap.get("IsHidden")
+        if not name_c or not table_c:
+            return [], []
+
+        tables_dict: Dict[str, Dict] = {}
+        for _, row in df.iterrows():
+            table_name = str(row.get(table_c) or "").strip()
+            col_name = str(row.get(name_c) or "").strip()
+            if not table_name or not col_name:
+                continue
+            # Skip PBI's internal auto date/time tables (same filter as COLUMNSTATISTICS).
+            if table_name.startswith("DateTableTemplate") or table_name.startswith("LocalDateTable"):
+                continue
+            # Skip hidden helper columns (RowNumber-GUID, internal keys) — keep the
+            # table if it has at least one visible column.
+            if hidden_c is not None:
+                hv = row.get(hidden_c)
+                if hv is True or str(hv).strip().lower() == "true":
+                    continue
+            if table_name not in tables_dict:
+                tables_dict[table_name] = {"name": table_name, "columns": [], "measures": []}
+            data_type = str(row.get(dtype_c) or "unknown").strip() if dtype_c else "unknown"
+            tables_dict[table_name]["columns"].append(
+                {"name": col_name, "dataType": data_type or "unknown"}
+            )
+
+        tables = [t for t in tables_dict.values() if t["columns"]]
+        if tables:
+            logging.info(
+                f"INFO.VIEW.COLUMNS discovered {len(tables)} tables for dataset {dataset_id} "
+                f"(replaces brute-probe)"
+            )
+        return tables, []
 
     def _brute_discover_tables(self, workspace_id: str, dataset_id: str) -> tuple:
         """

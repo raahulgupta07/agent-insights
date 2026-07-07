@@ -3,6 +3,12 @@
 Hybrid feature changelog (our additions on top of the bagofwords/Dash base). Newest first.
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` then bullets.
 
+## v1.160.3 — Power BI table discovery: real schema instead of name-guessing (storm killed at source)  (2026-07-07)
+- Connecting a Power BI dataset that hides its table list now finds the real tables directly, instead of guessing ~40 common English names (most of which miss) and risking a rate-limit slowdown. Faster, accurate, no wasted calls.
+  - Root cause the v1.160.2 cooldown only *absorbed*: some datasets return an EMPTY `COLUMNSTATISTICS()` result **without erroring**, so they slipped past the empty-db short-circuit and fell through to `_brute_discover_tables`, which sprays ~40 guessed names as `EVALUATE TOPN(1,'name')` — almost all 404, and enough calls to trip Power BI's 120-req/min/user 429. Live-verified culprit: `EDA_Model_Toey` (COLUMNSTATISTICS → 0 rows → 40-name spray).
+  - Fix (`data_sources/clients/powerbi_client.py`): NEW `_get_tables_via_info_view` runs `EVALUATE INFO.VIEW.COLUMNS()` — the same DMV family already proven to work for relationships/measures (`fetch_model_metadata`) and delegated-user friendly (unlike bare `INFO.TABLES()`, which 400s over executeQueries). Returns real table names + real column data types in ONE call, filtering PBI's internal date tables + hidden helper columns. Wired into `get_dataset_tables` between the empty-db check and the REST/brute fallbacks; brute-probe stays only as an absolute last resort for a dataset that rejects every DMV. Fully fail-soft — any error falls through to the exact prior behavior, byte-identical when INFO.VIEW is unavailable.
+  - Live-verified on org b2bec83d (rahulgupta@cityholdings.com.mm): `get_dataset_tables(EDA_Model_Toey)` → **6 real tables in 980 ms, 0 "Cannot find table" warnings** (was ~40 guesses). Probed all 3 workspaces / 14 datasets: `INFO.VIEW.COLUMNS` succeeds on every non-empty dataset (76/151/175 cols), empty staging DBs still short-circuit, `INFO.TABLES` still 400s everywhere. Complements the v1.160.2 429 cooldown (the cooldown catches any residual throttle; this removes the thing that caused it).
+
 ## v1.160.2 — Power BI dashboards no longer stall; Stop button fixed  (2026-07-07)
 - Generating a dashboard on a Power BI connector could hang at "Starting… 0 / 0" for about a minute before continuing. Fixed — it now starts promptly.
 - The Stop button on a running generation returned an error (the run still stopped, but the UI showed a 500). Fixed.
