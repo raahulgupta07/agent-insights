@@ -3,6 +3,11 @@
 Hybrid feature changelog (our additions on top of the bagofwords/Dash base). Newest first.
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` then bullets.
 
+## v1.151.0 — Upload PDFs, Word & slides too (not just spreadsheets)  (2026-07-07)
+- The single-file **Upload** picker no longer greys out PDF, Word and PowerPoint — pick a `.pdf`, `.docx` or `.pptx` and it's accepted. Spreadsheets/CSVs still become a Data Agent; docs go to the Inbox and are routed to Knowledge when you press Train.
+- Note: the mixed-folder upload (spreadsheets + docs together) already works on the latest build — if a deployed site still drops non-spreadsheets from a folder, it's running an older build; this upgrade brings both paths current.
+  - FE `components/data/UploadSpreadsheetModal.vue`: single-file `<input accept>` widened `.xlsx,.xls,.csv` → `+.tsv,.txt,.pdf,.docx,.doc,.pptx,.md`; new `routeSingle(f)` sends a lone doc through `batchUpload([f])` (the existing type-split: data→`/data_sources/from-file`, doc→`/studios/{id}/smart-upload/inbox`) instead of the tabular `chooseFile`→`validate` reject path; `ALLOWED_EXT` += `tsv,txt` (matches the backend from-file ext gate) so lone `.txt/.tsv` pass; header/dropzone/validate copy updated. Folder input + multi-file batch were already doc-capable. Doc→Inbox needs `HYBRID_SMART_UPLOAD` (already ON org b2bec83d) + `HYBRID_DOC_KNOWLEDGE` (default ON). No backend change.
+
 ## v1.150.0 — Everyone can upload to their own space (uploads unblocked)  (2026-07-07)
 - **Any team member can now upload a file** (Excel/CSV) and get their own private Data Agent — the file lands in their own space only, no admin needed. Previously only org admins could, so most users hit "Permission denied".
 - **Super admins can upload too.** A global super admin who wasn't also given an org admin role used to be blocked from uploading (and other admin actions) inside an organization — that gap is closed.

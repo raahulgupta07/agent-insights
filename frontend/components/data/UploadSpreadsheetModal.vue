@@ -9,7 +9,7 @@
             style="font-family: 'Spectral', ui-serif, Georgia, serif"
           >Upload File / Spreadsheet</h2>
           <p class="mt-1 text-sm text-[#6b6b6b] leading-relaxed">
-            Turn a local file into a Data Agent. <span class="text-[#9a958c]">.xlsx · .xls · .csv</span>
+            Turn a local file into a Data Agent. <span class="text-[#9a958c]">.xlsx · .csv · .pdf · .docx · .pptx</span>
           </p>
         </div>
         <button
@@ -38,7 +38,7 @@
         <input
           type="file"
           ref="fileInput"
-          accept=".xlsx,.xls,.csv"
+          accept=".xlsx,.xls,.csv,.tsv,.txt,.pdf,.docx,.doc,.pptx,.md"
           multiple
           class="hidden"
           @change="onFileInput"
@@ -75,7 +75,7 @@
               {{ isDragging ? 'Drop the file here' : 'Click or drag a file to upload' }}
             </span>
             <span class="mt-1 text-xs text-[#9a958c]">
-              Spreadsheet or CSV, up to {{ MAX_SIZE_MB }} MB · drop many at once
+              Spreadsheet, CSV, PDF, Word or slides · up to {{ MAX_SIZE_MB }} MB · drop many at once
             </span>
           </div>
         </div>
@@ -272,7 +272,10 @@ const toast = useToast()
 
 const MAX_SIZE_MB = 50
 const MAX_SIZE = MAX_SIZE_MB * 1024 * 1024
-const ALLOWED_EXT = ['xlsx', 'xls', 'csv']
+// Tabular exts that go through the single-file preview + from-file path. Docs
+// (pdf/docx/pptx/md) never reach validate() — routeSingle sends them to the
+// batchUpload doc→Inbox lane. Matches the backend from-file ext gate.
+const ALLOWED_EXT = ['xlsx', 'xls', 'csv', 'tsv', 'txt']
 
 // ---- modal open/close (UModal needs a writable v-model) ----
 const isOpen = computed({
@@ -407,7 +410,7 @@ function baseName(filename: string): string {
 
 function validate(f: File): string {
   if (!ALLOWED_EXT.includes(extOf(f.name))) {
-    return 'Unsupported file type. Use .xlsx, .xls or .csv.'
+    return 'Unsupported file type. Use a spreadsheet/CSV, or a PDF/Word/slides doc.'
   }
   if (f.size > MAX_SIZE) {
     return `File is too large (max ${MAX_SIZE_MB} MB).`
@@ -422,10 +425,14 @@ function toggleSheet(s: string) {
 }
 
 // ---- file selection ----
+// A lone spreadsheet uses the rich preview/sheet-picker (chooseFile). A lone doc
+// (pdf/docx/pptx/…) has no tabular preview → send it through batchUpload, which
+// type-splits it into the doc→Inbox lane (routed to Knowledge on Train). Many
+// files always batch.
 function onFileInput(e: Event) {
   const files = Array.from((e.target as HTMLInputElement).files || [])
   if (files.length > 1) batchUpload(files)
-  else if (files[0]) chooseFile(files[0])
+  else if (files[0]) routeSingle(files[0])
   ;(e.target as HTMLInputElement).value = ''
 }
 
@@ -433,7 +440,12 @@ function onDrop(e: DragEvent) {
   isDragging.value = false
   const files = Array.from(e.dataTransfer?.files || [])
   if (files.length > 1) batchUpload(files)
-  else if (files[0]) chooseFile(files[0])
+  else if (files[0]) routeSingle(files[0])
+}
+
+function routeSingle(f: File) {
+  if (fileKind(f.name) === 'doc') batchUpload([f])
+  else chooseFile(f)
 }
 
 // ---- whole-folder upload (webkitdirectory) -------------------------------
