@@ -3,6 +3,10 @@
 Hybrid feature changelog (our additions on top of the bagofwords/Dash base). Newest first.
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` then bullets.
 
+## v1.152.0 — Fix "An error occurred" after a perfect result  (2026-07-07)
+- Asking the agent to summarize/analyze a file sometimes showed a full, correct result and then a red **"An error occurred"** — the turn was marked failed even though the answer was right. Fixed: a run that succeeds is now reported as a success.
+  - BE `ai/code_execution/code_execution.py`: the `done` payload of `generate_and_execute_stream_v2` (and its v1 sibling) emitted the accumulated per-retry corrective feedback (`code_and_error_messages`) as `errors` **even on success**. When the coder's first attempt returned `None`/empty (very common for a print-only inspection) it self-heals and the retry returns a real DataFrame — but the stale attempt-1 message stayed in `errors`, so `inspect_data`/`create_data` (which treat any non-empty `errors` as a failed turn) flagged the whole turn failed. Now `errors: [] if executed_successfully else code_and_error_messages` — a successful run reports no errors; genuine end-to-end failures still surface the full retry history. Verified: gen returns None→retry→df ⇒ `errors` empty, turn succeeds. Hit most on ad-hoc chat file uploads (no Data Agent) where inspection runs a print-heavy report then `return df`.
+
 ## v1.151.0 — Upload PDFs, Word & slides too (not just spreadsheets)  (2026-07-07)
 - The single-file **Upload** picker no longer greys out PDF, Word and PowerPoint — pick a `.pdf`, `.docx` or `.pptx` and it's accepted. Spreadsheets/CSVs still become a Data Agent; docs go to the Inbox and are routed to Knowledge when you press Train.
 - Note: the mixed-folder upload (spreadsheets + docs together) already works on the latest build — if a deployed site still drops non-spreadsheets from a folder, it's running an older build; this upgrade brings both paths current.

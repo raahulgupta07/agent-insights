@@ -1781,13 +1781,16 @@ class StreamingCodeExecutor:
                     },
                 }
             else:
-                # Emit a final done event carrying the results instead of returning values
+                # Emit a final done event carrying the results instead of returning values.
+                # A successful run reports no errors — the accumulated retry-feedback
+                # in code_and_error_messages must not leak as `errors` on success,
+                # or callers flag a clean turn as failed. (See v2 branch below.)
                 yield {
                     "type": "done",
                     "payload": {
                         "df": exec_df,
                         "code": final_code,
-                        "errors": code_and_error_messages,
+                        "errors": [] if executed_successfully else code_and_error_messages,
                         "execution_log": execution_log,
                         "executed_queries": executed_queries,
                         "query_timings": query_timings,
@@ -2021,12 +2024,20 @@ class StreamingCodeExecutor:
                     },
                 }
             else:
+                # code_and_error_messages accumulates the CORRECTIVE feedback fed
+                # to the coder across retries (see the code_generator_fn call). On
+                # a run that ultimately SUCCEEDED, those prior-attempt messages are
+                # not failures of the run — but callers (inspect_data, create_data)
+                # treat any non-empty `errors` as a failed turn ("An error
+                # occurred") even though the final attempt produced a clean result.
+                # A successful run must report no errors; only surface the retry
+                # history when the run genuinely never succeeded.
                 yield {
                     "type": "done",
                     "payload": {
                         "df": exec_df,
                         "code": final_code,
-                        "errors": code_and_error_messages,
+                        "errors": [] if executed_successfully else code_and_error_messages,
                         "execution_log": execution_log,
                         "executed_queries": executed_queries,
                         "query_timings": query_timings,
