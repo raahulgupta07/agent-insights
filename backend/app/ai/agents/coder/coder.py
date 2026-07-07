@@ -485,6 +485,7 @@ class Coder:
                             organization_id=str(_org.id),
                             data_source_ids=_ds_ids,
                             question=_q,
+                            organization=_org,
                         )
                         learned_queries_section = _ql.render_learned_queries_block(_items)
             except Exception:

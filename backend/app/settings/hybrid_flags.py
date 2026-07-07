@@ -231,6 +231,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_SANDBOX_PUSHDOWN": {"label": "SQL pushdown (memory discipline)", "role": "agent", "category": "Performance", "status": "experimental", "note": "Nudges generated code to push filters/aggregation/LIMIT to SQL and pull only needed rows, instead of loading whole tables into pandas — cuts per-run memory so more runs fit per box. Prompt-only, default OFF."},
     "HYBRID_SQL_VALIDATE": {"label": "SQL dry-plan validation", "role": "agent", "category": "Performance", "status": "experimental", "note": "Validates generated SQL before running it (read-only + shape checks via sqlglot); on a failed run, feeds a structured error back to the model to regenerate. Cuts wrong-SQL and 'An error occurred'. Fail-soft, default OFF."},
     "HYBRID_CODER_GROUNDING": {"label": "Coder grounding (semantic + metrics + joins)", "role": "agent", "category": "Accuracy", "status": "experimental", "note": "Injects approved semantic meanings, metric formulas, and known join relationships (scoped to the selected tables) into the code generator so it uses defined joins/metrics instead of guessing. Reuses approved-only knowledge; fail-soft; default OFF."},
+    "HYBRID_RECALL_RRF": {"label": "Learned-query recall (embedding + RRF)", "role": "agent", "category": "Accuracy", "status": "experimental", "note": "Re-ranks recalled learned queries by fusing lexical (Jaccard) and embedding-cosine similarity via Reciprocal Rank Fusion, so paraphrased questions still reuse the right proven SQL. Golden rows break ties. Candidate vectors computed on the fly (approved set is small), fail-soft to Jaccard; default OFF."},
     "HYBRID_SMART_VIZ": {"label": "Smart Viz Picker", "role": "user", "category": "Intelligence", "status": "experimental", "note": "Deterministic chart-type correction on top of the LLM's pick, using the data profile already computed (rows, columns, dtype, cardinality): high-cardinality category -> bar not pie, time + numeric -> line, two numerics -> scatter, too many categories -> top-N. Never widens the allowed viz set; fail-soft to the LLM answer. Default OFF."},
     "HYBRID_AUTO_FORMAT": {"label": "Result Auto-Format", "role": "user", "category": "Intelligence", "status": "experimental", "note": "Attach a per-column display format to result tables (thousands separators, currency, %, decimals, dates) derived from column dtype + name. Rendered as a valueFormatter; underlying values unchanged. Fail-soft. Default OFF = raw numeric/ISO."},
     "HYBRID_BRAND_PALETTE": {"label": "Brand Chart Palette", "role": "user", "category": "Intelligence", "status": "experimental", "note": "Default chart theme uses the CityAgent brand palette (accent #C2541E-led) instead of generic blue. Per-report theme overrides still win. Frontend-only. Default OFF."},
@@ -651,6 +652,16 @@ class HybridFlags:
         # existing approved-only builders; fail-soft; empty block when off.
         # Default OFF (byte-identical prompt when off).
         return _bool("HYBRID_CODER_GROUNDING", False)
+
+    @property
+    def RECALL_RRF(self) -> bool:
+        # Phase 3b (accuracy): re-rank recalled learned queries by fusing the
+        # lexical Jaccard rank with an embedding-cosine rank via RRF (golden rows
+        # break ties) so paraphrased questions still reuse the right proven SQL.
+        # No embedding column exists on query_library_items — candidate vectors
+        # are computed on the fly (approved set is small). Fail-soft to the pure
+        # Jaccard path; default OFF (byte-identical recall when off).
+        return _bool("HYBRID_RECALL_RRF", False)
 
     @property
     def SQL_VALIDATE(self) -> bool:
@@ -2044,6 +2055,7 @@ class HybridFlags:
             "SANDBOX_PUSHDOWN": self.SANDBOX_PUSHDOWN,
             "SQL_VALIDATE": self.SQL_VALIDATE,
             "CODER_GROUNDING": self.CODER_GROUNDING,
+            "RECALL_RRF": self.RECALL_RRF,
             "SMART_VIZ": self.SMART_VIZ,
             "AUTO_FORMAT": self.AUTO_FORMAT,
             "BRAND_PALETTE": self.BRAND_PALETTE,

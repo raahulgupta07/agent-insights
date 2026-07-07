@@ -57,6 +57,75 @@ def _jaccard(a: str, b: str) -> float:
     return inter / union if union else 0.0
 
 
+# --- Phase 3b: embedding + RRF re-rank of learned-query recall (flag RECALL_RRF) ---
+# Jaccard alone misses paraphrases ("revenue by month" vs "monthly sales total").
+# When the flag is ON we fuse the lexical (Jaccard) rank with an embedding-cosine
+# rank via Reciprocal Rank Fusion (same k=60 idiom as hybrid_search), golden rows
+# breaking ties. No embedding column exists on query_library_items, so candidate
+# vectors are computed on the fly (approved set is small, one batched call) and
+# the whole path is fail-soft — any miss returns None and the caller keeps the
+# original Jaccard ranking, so the flag-off behaviour is byte-identical.
+_RRF_K = 60
+_RRF_COS_FLOOR = 0.35
+
+
+def _cosine(a: List[float], b: List[float]) -> float:
+    if not a or not b or len(a) != len(b):
+        return -1.0
+    dot = sum(x * y for x, y in zip(a, b))
+    na = sum(x * x for x in a) ** 0.5
+    nb = sum(y * y for y in b) ** 0.5
+    if na == 0.0 or nb == 0.0:
+        return -1.0
+    return dot / (na * nb)
+
+
+def _rank_map(scores: List[float]) -> Dict[int, int]:
+    """index -> 1-based rank, highest score = rank 1."""
+    order = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
+    return {idx: pos + 1 for pos, idx in enumerate(order)}
+
+
+async def _rrf_rerank(db, organization, question: str, rows: list) -> Optional[list]:
+    """Fuse Jaccard + embedding-cosine ranks over the candidate rows via RRF.
+
+    Returns the re-ranked rows (noise-filtered), or None on any failure so the
+    caller falls back to the pure-Jaccard path.
+    """
+    try:
+        from app.ai.knowledge.embeddings import embed_texts
+
+        texts = [((r.description or "") + " " + (r.name or "")).strip() for r in rows]
+        vecs = await embed_texts(db, organization, [question] + texts)
+        if not vecs or len(vecs) != len(rows) + 1 or not vecs[0]:
+            return None
+        qv, cvs = vecs[0], vecs[1:]
+        if not any(cvs):
+            return None
+
+        jac = [
+            max(_jaccard(question, r.description or ""), _jaccard(question, r.name or ""))
+            for r in rows
+        ]
+        cos = [_cosine(qv, cv) if cv else -1.0 for cv in cvs]
+        jr, er = _rank_map(jac), _rank_map(cos)
+
+        fused = []
+        for i, r in enumerate(rows):
+            # drop rows with neither lexical nor semantic signal (no noise inject)
+            if jac[i] <= 0.0 and cos[i] < _RRF_COS_FLOOR:
+                continue
+            score = 1.0 / (_RRF_K + jr[i]) + 1.0 / (_RRF_K + er[i])
+            fused.append((score, bool(getattr(r, "is_golden", False)), r))
+        if not fused:
+            return None
+        fused.sort(key=lambda t: (t[0], t[1]), reverse=True)
+        return [r for _, _, r in fused]
+    except Exception:
+        logger.debug("query_learning._rrf_rerank failed", exc_info=True)
+        return None
+
+
 def _short(text: str, n: int = 60) -> str:
     t = (text or "").strip().replace("\n", " ")
     return t[:n]
@@ -288,6 +357,7 @@ async def recall_learned_queries(
     data_source_ids: List[str],
     question: str,
     limit: int = _MAX_RECALL,
+    organization: Optional[Any] = None,
 ) -> List[Dict[str, str]]:
     """Return the closest APPROVED learned queries for reuse in the codegen prompt.
 
@@ -313,6 +383,27 @@ async def recall_learned_queries(
         ).scalars().all()
         if not rows:
             return []
+
+        # Phase 3b: embedding + RRF re-rank when RECALL_RRF is ON (needs the org
+        # object for the embeddings provider). Fail-soft — None falls through to
+        # the pure-Jaccard path below, so flag-off is byte-identical.
+        try:
+            from app.settings.hybrid_flags import flags as _rrflags
+            _use_rrf = bool(_rrflags.RECALL_RRF) and organization is not None and len(rows) > 1
+        except Exception:
+            _use_rrf = False
+        if _use_rrf:
+            reranked = await _rrf_rerank(db, organization, question, list(rows))
+            if reranked:
+                out: List[Dict[str, str]] = []
+                for r in reranked[: max(0, int(limit))]:
+                    out.append({
+                        "name": r.name or "",
+                        "description": r.description or "",
+                        "sql": r.sql_text or "",
+                    })
+                return out
+
         scored = []
         for r in rows:
             score = max(
