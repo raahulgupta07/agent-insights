@@ -454,6 +454,38 @@ async def get_report_workbook(
 
 
 # --------------------------------------------------------------------------- #
+# Analysis Notebook (Phase 4a) — Julius-style show-your-work, READ-ONLY.
+# GET /api/reports/{id}/notebook → step-by-step narrative of the run.
+# Flag HYBRID_ANALYSIS_NOTEBOOK (default OFF) → {"enabled": False, "steps": []}.
+# NOT gated by _ensure_enabled (that guards the one-click artifact flag); the
+# notebook builder self-gates on its own flag and returns None when off.
+# --------------------------------------------------------------------------- #
+
+
+@router.get("/reports/{report_id}/notebook")
+async def get_report_notebook(
+    report_id: str,
+    completion_id: Optional[str] = None,
+    current_user: User = Depends(current_user),
+    organization: Organization = Depends(get_current_organization),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """Return the analysis notebook for a report run. Read-only, fail-soft.
+
+    When ``HYBRID_ANALYSIS_NOTEBOOK`` is off the builder returns None → this
+    responds ``{"enabled": False, "steps": []}`` (feature invisible)."""
+    report = await _load_report(db, report_id, organization)
+    from app.ai.knowledge.notebook import build_analysis_notebook
+
+    result = await build_analysis_notebook(
+        db, report_id=str(report.id), completion_id=completion_id
+    )
+    if result is None:
+        return {"enabled": False, "steps": []}
+    return result
+
+
+# --------------------------------------------------------------------------- #
 # Session Summary — one cached cheap-LLM roll-up across ALL turns of a report.
 # Gated by the org setting ``session_summary`` (default ON), NOT a hybrid flag.
 # GET  /api/reports/{id}/session-summary → {summary, stale}  (NO rebuild)

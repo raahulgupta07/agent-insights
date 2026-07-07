@@ -233,6 +233,9 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_CODER_GROUNDING": {"label": "Coder grounding (semantic + metrics + joins)", "role": "agent", "category": "Accuracy", "status": "experimental", "note": "Injects approved semantic meanings, metric formulas, and known join relationships (scoped to the selected tables) into the code generator so it uses defined joins/metrics instead of guessing. Reuses approved-only knowledge; fail-soft; default OFF."},
     "HYBRID_RECALL_RRF": {"label": "Learned-query recall (embedding + RRF)", "role": "agent", "category": "Accuracy", "status": "experimental", "note": "Re-ranks recalled learned queries by fusing lexical (Jaccard) and embedding-cosine similarity via Reciprocal Rank Fusion, so paraphrased questions still reuse the right proven SQL. Golden rows break ties. Candidate vectors computed on the fly (approved set is small), fail-soft to Jaccard; default OFF."},
     "HYBRID_SMART_VIZ": {"label": "Smart Viz Picker", "role": "user", "category": "Intelligence", "status": "experimental", "note": "Deterministic chart-type correction on top of the LLM's pick, using the data profile already computed (rows, columns, dtype, cardinality): high-cardinality category -> bar not pie, time + numeric -> line, two numerics -> scatter, too many categories -> top-N. Never widens the allowed viz set; fail-soft to the LLM answer. Default OFF."},
+    "HYBRID_ANALYSIS_NOTEBOOK": {"label": "Analysis Notebook (show your work)", "role": "user", "category": "Intelligence", "status": "experimental", "note": "Assembles a step-by-step notebook narrative from the analysis Steps (what each step did + its result), Julius-style. Read-only, built on demand from persisted steps; fail-soft. Default OFF."},
+    "HYBRID_FOLLOWUPS_DATA_AWARE": {"label": "Data-aware Follow-ups", "role": "user", "category": "Intelligence", "status": "experimental", "note": "Feeds the follow-up-question generator the real result columns + a few sampled values so suggested next questions reference actual fields, not just the answer text. Augments the FOLLOWUPS prompt; fail-soft. Default OFF (needs Follow-ups on)."},
+    "HYBRID_STARTERS_DATA_GROUNDED": {"label": "Data-grounded Starters", "role": "user", "category": "Intelligence", "status": "experimental", "note": "Grounds generated conversation starters in real sampled column values (from the table profile), not just column names — so starters name concrete segments/periods the data actually has. Fail-soft. Default OFF."},
     "HYBRID_AUTO_FORMAT": {"label": "Result Auto-Format", "role": "user", "category": "Intelligence", "status": "experimental", "note": "Attach a per-column display format to result tables (thousands separators, currency, %, decimals, dates) derived from column dtype + name. Rendered as a valueFormatter; underlying values unchanged. Fail-soft. Default OFF = raw numeric/ISO."},
     "HYBRID_BRAND_PALETTE": {"label": "Brand Chart Palette", "role": "user", "category": "Intelligence", "status": "experimental", "note": "Default chart theme uses the CityAgent brand palette (accent #C2541E-led) instead of generic blue. Per-report theme overrides still win. Frontend-only. Default OFF."},
     "HYBRID_PARAM_TEMPLATES": {"label": "Parameterized Report Templates", "role": "user", "category": "Agents & Access", "status": "experimental", "note": "Saved prompts with {{name}} parameters gain a fill-in UI + a substitution/run engine that creates a report from the filled template, plus a reusable-template gallery. Builds on the existing Prompt.parameters model. API always mounted; flag shows the UI. Default OFF."},
@@ -682,6 +685,32 @@ class HybridFlags:
         # categories -> top-N bar/table. Never widens the allowed set; fail-soft to
         # the LLM answer. Default OFF = today's LLM-only choice.
         return _bool("HYBRID_SMART_VIZ", False)
+
+    @property
+    def ANALYSIS_NOTEBOOK(self) -> bool:
+        # Phase 4b: assemble a step-by-step "show your work" notebook narrative
+        # from the run's create_data Steps (title + what-it-did + result summary
+        # per step) — the Julius-style analysis trail. Read-only, built on demand
+        # from persisted Step rows; fail-soft (empty when off / nothing to show).
+        # Default OFF.
+        return _bool("HYBRID_ANALYSIS_NOTEBOOK", False)
+
+    @property
+    def FOLLOWUPS_DATA_AWARE(self) -> bool:
+        # Phase 4c: feed the followup-question generator the actual result columns
+        # (+ a few sampled values from the table profile) so the suggested next
+        # questions reference real fields instead of paraphrasing the answer text.
+        # Only augments the FOLLOWUPS prompt; fail-soft to the text-only path.
+        # Default OFF.
+        return _bool("HYBRID_FOLLOWUPS_DATA_AWARE", False)
+
+    @property
+    def STARTERS_DATA_GROUNDED(self) -> bool:
+        # Phase 4d: ground generated conversation starters in real sampled column
+        # VALUES (from DataSourceTable.columns[].metadata profile), not just table
+        # + column names — so starters name concrete segments/periods the data has.
+        # Augments the existing starter generator; fail-soft. Default OFF.
+        return _bool("HYBRID_STARTERS_DATA_GROUNDED", False)
 
     @property
     def AUTO_FORMAT(self) -> bool:
@@ -2057,6 +2086,9 @@ class HybridFlags:
             "CODER_GROUNDING": self.CODER_GROUNDING,
             "RECALL_RRF": self.RECALL_RRF,
             "SMART_VIZ": self.SMART_VIZ,
+            "ANALYSIS_NOTEBOOK": self.ANALYSIS_NOTEBOOK,
+            "FOLLOWUPS_DATA_AWARE": self.FOLLOWUPS_DATA_AWARE,
+            "STARTERS_DATA_GROUNDED": self.STARTERS_DATA_GROUNDED,
             "AUTO_FORMAT": self.AUTO_FORMAT,
             "BRAND_PALETTE": self.BRAND_PALETTE,
             "PARAM_TEMPLATES": self.PARAM_TEMPLATES,

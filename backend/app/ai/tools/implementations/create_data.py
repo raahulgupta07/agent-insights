@@ -96,18 +96,48 @@ def _smart_viz_override(chosen_type: str, profile: Dict[str, Any]) -> str:
             except Exception:
                 cat_card = None
 
+        # Row count (fail-soft int parse).
+        row_count: Optional[int] = None
+        try:
+            _rc = profile.get("row_count")
+            row_count = int(_rc) if _rc is not None else None
+        except Exception:
+            row_count = None
+
+        # (d) Nothing to chart -> table.
+        if row_count == 0:
+            return "table"
+        # (a) A single scalar value (1 row, or one numeric measure and no category)
+        # -> a single-value KPI viz IF one is allowed. Skip if already scalar/table.
+        if chosen_type not in ("count", "metric_card", "table"):
+            _is_scalar = row_count == 1 or (len(numeric_cols) == 1 and len(categorical_cols) == 0)
+            if _is_scalar:
+                for _kpi in ("metric_card", "count"):
+                    if _kpi in ALLOWED_VIZ_TYPES:
+                        return _kpi
         # Too many bars/slices to read -> table (checked first so >50 wins over >8).
         if chosen_type in ("bar_chart", "pie_chart") and cat_card is not None and cat_card > 50:
             return "table"
         # Pie unreadable with many slices -> bar_chart.
         if chosen_type == "pie_chart" and cat_card is not None and cat_card > 8:
             return "bar_chart"
-        # Time series: a datetime column + >=1 numeric, chosen bar/table -> line_chart.
-        if chosen_type in ("bar_chart", "table") and datetime_cols and len(numeric_cols) >= 1:
+        # (b) Time series: a datetime column + >=1 numeric, chosen bar/area/table -> line_chart.
+        if chosen_type in ("bar_chart", "area_chart", "table") and datetime_cols and len(numeric_cols) >= 1:
             return "line_chart"
         # Exactly 2 numeric, 0 categorical, chosen bar -> scatter_plot.
         if chosen_type == "bar_chart" and len(numeric_cols) == 2 and len(categorical_cols) == 0:
             return "scatter_plot"
+        # (c) Exactly 2 categorical dims + 1 numeric measure -> heatmap (a 2-dim
+        # single-value grid), only when chosen is a 1-dimension chart and heatmap
+        # is allowed. Else leave unchanged.
+        if (
+            len(categorical_cols) == 2
+            and len(numeric_cols) == 1
+            and not datetime_cols
+            and chosen_type in ("pie_chart", "line_chart", "area_chart", "scatter_plot")
+            and "heatmap" in ALLOWED_VIZ_TYPES
+        ):
+            return "heatmap"
         return chosen_type
     except Exception:
         return chosen_type

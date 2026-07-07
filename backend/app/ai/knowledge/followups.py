@@ -108,7 +108,56 @@ def _parse_followup_list(text: str) -> List[str]:
     return out
 
 
-def _build_prompt(question: str, answer: str, table_names: str) -> str:
+# Cap on how many result columns / sample values get inlined into the
+# data-aware block (keeps the small-model inference fast).
+_MAX_RESULT_COLS = 12
+_MAX_COL_SAMPLES = 4
+
+
+def _render_result_columns_block(result_columns: Optional[List[dict]]) -> List[str]:
+    """Render a compact `name · dtype · e.g. samples` block from result columns.
+
+    Returns the extra prompt lines (a header + one line per column), or ``[]`` if
+    there's nothing usable. Fail-soft: any malformed input yields ``[]`` so the
+    caller silently falls back to the text-only prompt (never breaks followups).
+    """
+    try:
+        cols = [c for c in (result_columns or []) if isinstance(c, dict)]
+        lines: List[str] = []
+        for c in cols[:_MAX_RESULT_COLS]:
+            name = _clean(c.get("name"))
+            if not name:
+                continue
+            dtype = _clean(c.get("dtype"))
+            samples = c.get("samples") or []
+            if isinstance(samples, (list, tuple)):
+                sample_vals = [_clean(s) for s in samples if _clean(s)][:_MAX_COL_SAMPLES]
+            else:
+                sample_vals = []
+            row = f"- {name}"
+            if dtype:
+                row += f" · {dtype}"
+            if sample_vals:
+                row += f" · e.g. {', '.join(sample_vals)}"
+            lines.append(row)
+        if not lines:
+            return []
+        return [
+            "",
+            "Result columns (the answer's actual data — reference these real "
+            "field names and example values in the follow-ups):",
+            *lines,
+        ]
+    except Exception:  # noqa: BLE001 — never break the prompt build
+        return []
+
+
+def _build_prompt(
+    question: str,
+    answer: str,
+    table_names: str,
+    result_columns: Optional[List[dict]] = None,
+) -> str:
     """Lean one-shot prompt asking for EXACTLY 3 short follow-up questions.
 
     Deliberately tiny: a follow-up suggestion only needs the user's question,
@@ -116,6 +165,11 @@ def _build_prompt(question: str, answer: str, table_names: str) -> str:
     Heavier context (full schema, column values, voice, instructions, policy)
     is intentionally omitted to keep the small-model inference fast, and the
     "EXACTLY 3, <= ~90 chars each" instruction caps the output length.
+
+    When ``flags.FOLLOWUPS_DATA_AWARE`` is ON and ``result_columns`` is provided,
+    a compact block listing the answer's real columns (name · dtype · sample
+    values) is added so the follow-ups reference actual fields. With the flag OFF
+    or no columns, the prompt is byte-identical to the text-only version.
     """
     parts: List[str] = [
         "A user just received an answer in a chat about their data. Propose the "
@@ -132,6 +186,14 @@ def _build_prompt(question: str, answer: str, table_names: str) -> str:
             "",
             f"Tables available (ground on these; do NOT invent others): {table_names}",
         ]
+    if getattr(flags, "FOLLOWUPS_DATA_AWARE", False) and result_columns:
+        data_block = _render_result_columns_block(result_columns)
+        if data_block:
+            parts += data_block
+            parts += [
+                "",
+                "Make the 3 follow-ups reference these real columns / values.",
+            ]
     parts += [
         "",
         f"Question:\n{question or '(not provided)'}",
@@ -215,6 +277,50 @@ async def _seed_followups_from_sense_making(
         return existing
 
 
+async def _recent_result_columns(
+    db: AsyncSession, report_id: str, *, max_cols: int = 12, max_samples: int = 4
+) -> List[dict]:
+    """Best-effort result columns (name/dtype/samples) from the report's most
+    recent tabular step — powers data-aware follow-ups (flag FOLLOWUPS_DATA_AWARE).
+
+    Steps link to a report via ``Widget.report_id`` (Step -> Widget), same join the
+    analysis notebook uses. Reconstructs a DataFrame from the step's data and reads
+    column names + dtype + a few distinct sample values. NEVER raises -> []."""
+    try:
+        from app.models.step import Step
+        from app.models.widget import Widget
+        from app.ai.knowledge.sense_maker import _df_from_step_data
+
+        res = await db.execute(
+            select(Step)
+            .join(Widget, Step.widget_id == Widget.id)
+            .where(Widget.report_id == report_id, Step.deleted_at.is_(None))
+            .order_by(Step.created_at.desc())
+            .limit(6)
+        )
+        for step in res.scalars().all():
+            try:
+                df = _df_from_step_data(getattr(step, "data", None))
+            except Exception:
+                df = None
+            if df is None or getattr(df, "empty", True):
+                continue
+            cols: List[dict] = []
+            for name in list(df.columns)[:max_cols]:
+                try:
+                    ser = df[name]
+                    dtype = str(ser.dtype)
+                    samples = [str(v) for v in list(ser.dropna().unique())[:max_samples]]
+                except Exception:
+                    dtype, samples = "", []
+                cols.append({"name": str(name), "dtype": dtype, "samples": samples})
+            if cols:
+                return cols
+        return []
+    except Exception:  # noqa: BLE001 — never break followups
+        return []
+
+
 async def generate_followups(
     db: AsyncSession,
     *,
@@ -225,6 +331,7 @@ async def generate_followups(
     question_text: str = "",
     model=None,
     max_n: int = 4,
+    result_columns: Optional[List[dict]] = None,
 ) -> dict:
     """Generate 3 grounded follow-up questions for a report's last answer.
 
@@ -354,10 +461,21 @@ async def generate_followups(
         if model is None:
             return {"ok": False, "error": "no default model", "followups": []}
 
+        # 5b. Data-aware follow-ups: when FOLLOWUPS_DATA_AWARE is ON and the caller
+        #     didn't supply columns, pull the latest result's columns so suggestions
+        #     reference real fields. Fail-soft; OFF/none -> text-only prompt below.
+        if getattr(flags, "FOLLOWUPS_DATA_AWARE", False) and not result_columns:
+            try:
+                result_columns = await _recent_result_columns(db, report_id)
+            except Exception:  # noqa: BLE001
+                result_columns = None
+
         # 6. ONE small-model inference (SYNC -> worker thread).
         infer = _default_infer(model)
         try:
-            prompt = _build_prompt(question, answer, table_names_text)
+            prompt = _build_prompt(
+                question, answer, table_names_text, result_columns=result_columns
+            )
             raw = await asyncio.to_thread(infer, prompt)
         except Exception as e:  # noqa: BLE001
             logger.warning("followups inference failed for %s: %s", report_id, e)

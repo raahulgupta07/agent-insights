@@ -48,6 +48,56 @@ def _table_allowlist(schema: str) -> list[str]:
     return out[:80]
 
 
+def _example_values_block(schema: str) -> str:
+    """Best-effort compact "example values" block from the rendered schema.
+
+    The learn-from-data sampler writes real sampled values to
+    ``DataSourceTable.columns[].metadata['values']`` and the schema renderer
+    surfaces them as a ``values="a, b, c"`` attribute on each ``<column .../>``.
+    Pull up to ~4 values for a handful of low-cardinality/categorical columns so
+    conversation starters can name concrete segments/periods. Fail-soft: any
+    error (or no values present) → returns "" and the caller keeps the
+    schema-only prompt byte-identical.
+    """
+    try:
+        def _unescape(s: str) -> str:
+            return (
+                s.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+                 .replace("&quot;", '"').replace("&#39;", "'")
+            )
+
+        lines: list[str] = []
+        for m in re.finditer(r'<column\b([^>]*?)/?>', schema or ""):
+            if len(lines) >= 8:
+                break
+            attrs = m.group(1)
+            nm = re.search(r'\bname="([^"]*)"', attrs)
+            vals = re.search(r'\bvalues="([^"]*)"', attrs)
+            if not nm or not vals:
+                continue
+            # Skip obviously numeric columns — their values aren't "segments".
+            dt = re.search(r'\bdtype="([^"]*)"', attrs)
+            dtype = (dt.group(1).lower() if dt else "")
+            if any(k in dtype for k in ("int", "float", "double", "decimal", "numeric", "number")):
+                continue
+            name = _unescape(nm.group(1)).strip()
+            raw = _unescape(vals.group(1))
+            parts = [p.strip() for p in raw.split(",") if p.strip() and not p.strip().startswith("…")]
+            parts = parts[:4]
+            if name and parts:
+                lines.append(f"- {name}: {', '.join(parts)}")
+        if not lines:
+            return ""
+        return (
+            "\nExample real values from the data (reference these concrete "
+            "segments/periods in the starters where relevant):\n"
+            + "\n".join(lines)
+            + "\n"
+        )
+    except Exception:
+        return ""
+
+
 def _grounding_block(clean_name: str, schema: str) -> str:
     """Hard grounding preamble prepended to every onboarding generator prompt."""
     tables = _table_allowlist(schema)
@@ -88,13 +138,24 @@ Rules:
         return response
 
     def generate_conversation_starters(self):
+        # STARTERS_DATA_GROUNDED (flag-gated): also surface real sampled values so
+        # starters can name concrete segments/periods. OFF or no values → "" →
+        # prompt is byte-identical to the schema-only version.
+        example_values = ""
+        try:
+            from app.settings.hybrid_flags import flags as _sg_flags
+            if getattr(_sg_flags, "STARTERS_DATA_GROUNDED", False):
+                example_values = _example_values_block(self.schema or "")
+        except Exception:
+            example_values = ""
+
         prompt = f"""{self.grounding}
 Given this data source:
 {self.clean_name}
 
 And this schema
 {self.schema}
-
+{example_values}
 Please generate 4 conversation starters grounded in the ACTUAL tables and columns above (never about concepts not present in the schema). Return them in a strict JSON array format.
 
 The response should be an array of strings, where each string contains a title and detailed prompt separated by a newline character.
