@@ -182,6 +182,28 @@ def _resolve_mem_cap_mb() -> int:
     return DEFAULT_SANDBOX_MEM_LIMIT_MB
 
 
+def _resolve_subprocess_mem_cap_mb() -> int:
+    """Address-space cap (MB) for the ONE-SHOT SUBPROCESS child. <= 0 = no cap.
+
+    IMPORTANT — why this differs from _resolve_mem_cap_mb: RLIMIT_AS caps
+    *virtual* address space, and DuckDB / pyarrow / numpy reserve large virtual
+    arenas up front even for tiny data — a 2 GB RLIMIT_AS false-trips them as
+    "Out of Memory" on a 28k-row GROUP BY (measured). The child's REAL memory
+    protection is the container cgroup `mem_limit` (deploy compose) + the
+    one-shot lifecycle (100% reclaimed on exit) + the wall-clock timeout +
+    the concurrency semaphore — none of which false-trip. So the child defaults
+    to NO RLIMIT_AS (0) and relies on those. Set an explicit hard virtual
+    ceiling only if you want one, via `SANDBOX_SUBPROCESS_MEM_MB` (give DuckDB
+    generous headroom, e.g. >=4096) — otherwise leave it unset."""
+    raw = os.environ.get("SANDBOX_SUBPROCESS_MEM_MB")
+    if raw and raw.strip():
+        try:
+            return int(raw.strip())
+        except (TypeError, ValueError):
+            pass
+    return 0  # no RLIMIT_AS — cgroup + one-shot reclaim + timeout are the real caps
+
+
 def _maybe_apply_memory_cap(logger=None) -> None:
     """Best-effort, ON-by-default address-space cap for code exec.
 
@@ -1240,12 +1262,15 @@ class StreamingCodeExecutor:
                     # fall through in-process rather than send a half-run.
                     if all(fr["path"] for fr in file_refs):
                         from app.ai.code_execution.subprocess_pool import run_local_code
-                        _mem = _resolve_mem_cap_mb()
+                        # Child cap: default 0 (NO RLIMIT_AS) — DuckDB/pyarrow/numpy
+                        # false-trip a low virtual cap. Real protection = container
+                        # cgroup mem_limit + one-shot reclaim + timeout + semaphore.
+                        # Opt in to a hard virtual ceiling via SANDBOX_SUBPROCESS_MEM_MB.
                         res = run_local_code(
                             code=code,
                             file_refs=file_refs,
                             allowed_builtin_names=list(_fresh_safe_builtins().keys()),
-                            mem_mb=_mem if _mem and _mem > 0 else DEFAULT_SANDBOX_MEM_LIMIT_MB,
+                            mem_mb=_resolve_subprocess_mem_cap_mb(),
                             timeout_s=_resolve_subprocess_timeout_s(),
                             spill_dir=None,
                             client_specs=(_offload_plan or None),  # {} → None (upload path)
