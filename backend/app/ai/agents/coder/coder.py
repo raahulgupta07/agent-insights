@@ -490,6 +490,32 @@ class Coder:
             except Exception:
                 learned_queries_section = ""
 
+            # ── Phase 5: SQL pushdown / memory discipline (flag HYBRID_SANDBOX_PUSHDOWN) ──
+            # Empty string (byte-identical prompt) when off. When on, tells the model
+            # to let the database do the heavy lifting and only materialize the rows it
+            # needs — the single biggest lever on per-run memory. Explicitly defers to
+            # the "return granular rows" rule above so it never fights that directive.
+            pushdown_block = ""
+            try:
+                from app.settings.hybrid_flags import flags as _pdflags
+                if _pdflags.SANDBOX_PUSHDOWN:
+                    pushdown_block = (
+                        "\n            0a. **Memory discipline — push work to the source (IMPORTANT)**:\n"
+                        "                - Let the DATABASE filter and aggregate. Put WHERE / GROUP BY / and the\n"
+                        "                  aggregate (SUM/COUNT/AVG/…) in the SQL you pass to execute_query — do NOT\n"
+                        "                  `SELECT *` and then filter or group in pandas. Pull only the columns and\n"
+                        "                  rows the answer needs.\n"
+                        "                - For a summary/aggregate answer, return the already-aggregated result, not\n"
+                        "                  the raw table. Add a LIMIT when the task only needs a sample or top-N.\n"
+                        "                - For a large uploaded file, read + aggregate it with DuckDB SQL\n"
+                        "                  (`duckdb.query(\"SELECT ... FROM read_csv_auto('<path>') WHERE ... GROUP BY ...\")`)\n"
+                        "                  rather than loading the whole file with `pd.read_csv` and filtering after.\n"
+                        "                - EXCEPTION: when the interpreted_prompt says \"return granular rows\" / \"do not\n"
+                        "                  pre-aggregate\", follow that rule above instead — return one row per record.\n"
+                    )
+            except Exception:
+                pushdown_block = ""
+
             text = f"""
             Role: data engineer and data scientist working on the user's analytics request.
 
@@ -562,7 +588,7 @@ class Coder:
                 - Bias for a master table: include additional columns that are relevant for filtering and slicing in the visualization layer, even if not explicitly requested by the user. For example, if the user asks for total sales by region, also include date and product category columns if available.
                 - The interpreted_prompt may list specific tables, target columns, and additional columns for filtering. Include all of them in your SELECT.
                 - **Data granularity:** When the interpreted_prompt says "return granular rows" or "do not pre-aggregate", do not add GROUP BY or aggregate functions (SUM/COUNT/AVG) in SQL. Return one row per record — the visualization layer handles aggregation. Only pre-aggregate when the interpreted_prompt explicitly requires SQL-level computation (window functions, rolling averages, CTEs, complex calculations).
-
+{pushdown_block}
             1. **Function Signature**: Implement either:
                `def generate_df(ds_clients, excel_files):` — when no web fetching is needed.
                `def generate_df(ds_clients, excel_files, http):` — when fetching URLs (see HTTP section below).
