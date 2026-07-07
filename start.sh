@@ -172,6 +172,13 @@ for i in {1..3}; do
     sleep $((4 * i))
 done
 
+# Pre-create the APScheduler jobstore table ONCE, before uvicorn forks its workers.
+# Every worker calls scheduler.start() (non-leaders persist user jobs too); on a
+# fresh DB that races create_all across N workers → duplicate-key on pg_type →
+# "Application startup failed. Exiting." Doing it single-process here removes the
+# race. Idempotent + fail-soft (always exits 0 — never blocks boot).
+python -m app.core.scheduler || echo "⚠️  jobstore table pre-create skipped (continuing)"
+
 # Bootstrap the first super-admin from env (idempotent, fail-soft).
 # Runs ONCE here, before uvicorn forks its workers (a FastAPI startup_event
 # would run per-worker and race N workers). cwd is /app/backend (set above for
@@ -190,4 +197,6 @@ exec uvicorn main:app \
     --log-level info \
     --workers "$WORKERS" \
     --loop uvloop \
-    --http httptools
+    --http httptools \
+    --proxy-headers \
+    --forwarded-allow-ips='*'

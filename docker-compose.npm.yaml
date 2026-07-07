@@ -1,26 +1,40 @@
 # =============================================================================
-# CityAgent Analytics — Nginx Proxy Manager (NPM) stack
+# CityAgent Analytics — ALL-IN-ONE STACK + Nginx Proxy Manager (HTTPS via GUI)
 # =============================================================================
-# Public HTTPS via the NPM web UI (add domain + Let's Encrypt cert with clicks —
-# no hand-edited nginx.conf, no certbot commands). NPM fronts the app; the app is
-# NOT published directly — NPM reaches it over the internal network at app:3000.
+# This is docker-compose.build.yaml + an nginx-proxy-manager (NPM) container in
+# front. It uses the SAME identity as the build stack — container names ca-app /
+# ca-postgres / ca-redis, network ca-network, volumes ca_postgres_data / ca_* —
+# so it shares the SAME database and NPM can resolve the app by container name.
 #
-# Quick start:
-#   1. cp .env.example .env    # set DASH_ENCRYPTION_KEY, DASH_ADMIN_*, POSTGRES_PASSWORD
-#   2. docker compose -f docker-compose.npm.yaml up -d --build
-#   3. Open the NPM admin UI:  http://<SERVER_IP>:81
-#        default login:  admin@example.com  /  changeme   (it forces a change on first login)
-#   4. NPM → Hosts → Proxy Hosts → Add Proxy Host:
-#        Domain Names:      your-domain.com
-#        Scheme:            http
-#        Forward Hostname:  app            ← the container name, NOT the server IP
-#        Forward Port:      3000           ← the app's INTERNAL port
+#   internet ─80/443─▶ nginx-proxy-manager (admin GUI :81) ──▶ ca-app:3000
+#                                                              ca-postgres, ca-redis
+#
+# ⚠ WHY the earlier NPM attempt showed no UI: NPM must be on the SAME docker
+#   network as the app. A separate NPM (its own compose / own network) cannot
+#   resolve `ca-app` → every request 502s. This file puts NPM on `ca-network`, so
+#   `Forward Hostname = ca-app` works. Also: the app listens on port 3000 (NOT
+#   8077 like Aria) — forward to 3000.
+#
+# The app is NOT published to a host port here — NPM reaches it internally as
+# http://ca-app:3000. (This file is a drop-in replacement for build.yaml in prod;
+# do not run both at once — they share container names + volumes.)
+#
+# START (prod, on the AWS box):
+#   docker compose -f docker-compose.npm.yaml --env-file .env up -d --build
+#
+# THEN open the NPM admin UI:  http://<SERVER_IP>:81
+#   first login: admin@example.com / changeme   (forces a change on first login)
+#   → Hosts → Proxy Hosts → Add Proxy Host:
+#        Domain Names        = insights.citygpt.xyz
+#        Scheme              = http
+#        Forward Hostname    = ca-app        ← container name, NOT an IP, NOT "app", NOT 8077
+#        Forward Port        = 3000          ← the app's INTERNAL port
 #        [x] Block Common Exploits   [x] Websockets Support
-#        SSL tab → request a new Let's Encrypt cert, [x] Force SSL, [x] HTTP/2
-#        ADVANCED tab → paste the streaming block below (REQUIRED — see note).
+#        SSL tab   → request a new Let's Encrypt cert, [x] Force SSL, [x] HTTP/2
+#        ADVANCED  → paste the streaming block below (REQUIRED).
 #
 #   ⚠ STREAMING (REQUIRED): CityAgent streams chat token-by-token (SSE). NPM buffers
-#     by default → the chat looks frozen until the whole answer lands. In the proxy
+#     by default → chat looks frozen until the whole answer lands. In the proxy
 #     host's ADVANCED tab, paste:
 #         proxy_buffering off;
 #         proxy_cache off;
@@ -30,21 +44,21 @@
 #         proxy_send_timeout 3600s;
 #         client_max_body_size 0;
 #
-#   DNS: point your-domain.com → SERVER_IP first, and open 80 + 443 (+ 81 for the UI,
-#        ideally restricted to your IP) in the cloud security group.
+#   DNS: point insights.citygpt.xyz → SERVER public IP first; open 80 + 443 (+ 81
+#        for the UI, ideally restricted to your IP) in the cloud security group.
 # =============================================================================
 
 services:
   postgres:
-    image: pgvector/pgvector:pg18
-    container_name: dash-postgres
+    image: pgvector/pgvector:pg18   # PG18 + pgvector preinstalled
+    container_name: ca-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-dash}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dashpassword}
       POSTGRES_DB: ${POSTGRES_DB:-dash}
     volumes:
-      - postgres_data:/var/lib/postgresql   # PG18+: mount parent, not /data
+      - ca_postgres_data:/var/lib/postgresql   # PG18+: mount the parent, NOT /data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dash} -d ${POSTGRES_DB:-dash}"]
       interval: 10s
@@ -52,57 +66,58 @@ services:
       retries: 5
       start_period: 10s
     networks:
-      - dash-network
+      - ca-network
 
   redis:
     image: redis:7-alpine
-    container_name: dash-redis
+    container_name: ca-redis
     restart: unless-stopped
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
-      timeout: 5s
+      timeout: 3s
       retries: 5
       start_period: 5s
     networks:
-      - dash-network
+      - ca-network
 
   app:
     build:
       context: .
       dockerfile: Dockerfile
     image: cityagent-analytics:dev
-    container_name: dash-app
+    container_name: ca-app
     restart: unless-stopped
     # Hard container memory cap (cgroup real cap) so the app OOMs cleanly instead of
-    # thrashing the whole host. Single-host `docker compose` (this file, no top-level
-    # `version:` key = Compose Spec) HONORS `mem_limit`. If you ever run this under
-    # Swarm (`docker stack deploy`), `mem_limit` is ignored there — the equivalent is:
-    #   deploy:
-    #     resources:
-    #       limits:
-    #         memory: 12g
-    mem_limit: 12g   # ~70% of box RAM — engineer: set to 0.7 * total RAM
-    # No host port — NPM fronts the app and reaches it at app:3000 internally.
+    # thrashing the host. Single-host `docker compose` HONORS mem_limit. Engineer:
+    # set to ~0.7 * total box RAM.
+    mem_limit: ${APP_MEM_LIMIT:-12g}
+    # NOT published to a host port — NPM proxies to it internally as ca-app:3000.
+    # (Add `ports: ["${APP_PORT:-3007}:3000"]` only if you also want direct access.)
     expose:
       - "3000"
     environment:
       - ENVIRONMENT=production
       - DASH_DATABASE_URL=postgresql://${POSTGRES_USER:-dash}:${POSTGRES_PASSWORD:-dashpassword}@postgres:5432/${POSTGRES_DB:-dash}
       - DASH_ENCRYPTION_KEY=${DASH_ENCRYPTION_KEY:-}
-      - AUTOTRAIN_STAGING_ROLE_SECRET=${AUTOTRAIN_STAGING_ROLE_SECRET:-}
       - DASH_LICENSE_KEY=${DASH_LICENSE_KEY:-}
+      - DASH_CONFIG_PATH=/app/dash-config.yaml
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - SANDBOX_MEM_LIMIT_MB=${SANDBOX_MEM_LIMIT_MB:-0}
       - DASH_ADMIN_EMAIL=${DASH_ADMIN_EMAIL:-}
       - DASH_ADMIN_PASSWORD=${DASH_ADMIN_PASSWORD:-}
       - DASH_ADMIN_NAME=${DASH_ADMIN_NAME:-Admin}
-      - DASH_CONFIG_PATH=/app/dash-config.yaml
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - AUTOTRAIN_STAGING_DB_USER=${AUTOTRAIN_STAGING_DB_USER:-}
+      - AUTOTRAIN_STAGING_DB_PASSWORD=${AUTOTRAIN_STAGING_DB_PASSWORD:-}
+      - AUTOTRAIN_STAGING_DB_HOST=${AUTOTRAIN_STAGING_DB_HOST:-}
+      - AUTOTRAIN_STAGING_DB_PORT=${AUTOTRAIN_STAGING_DB_PORT:-}
+      - AUTOTRAIN_STAGING_ROLE_SECRET=${AUTOTRAIN_STAGING_ROLE_SECRET:-}
     volumes:
       - ./dash-config.yaml:/app/dash-config.yaml:ro
-      - uploads_data:/app/backend/uploads
-      - branding_data:/app/backend/branding_uploads
-      - logs_data:/app/backend/logs
+      - ca_uploads:/app/backend/uploads
+      - ca_branding:/app/backend/branding_uploads
+      - ca_logs:/app/backend/logs
     depends_on:
       postgres:
         condition: service_healthy
@@ -115,16 +130,16 @@ services:
       retries: 3
       start_period: 90s
     networks:
-      - dash-network
+      - ca-network
 
-  # Nginx Proxy Manager — GUI reverse proxy + Let's Encrypt. Add the domain + HTTPS
-  # in its web UI (http://SERVER_IP:81). Reaches the app at app:3000 on dash-network.
+  # Nginx Proxy Manager — GUI reverse proxy + Let's Encrypt. On ca-network so
+  # `Forward Hostname = ca-app` resolves. Add the domain + HTTPS in its web UI.
   nginx-proxy-manager:
     image: jc21/nginx-proxy-manager:latest
-    container_name: dash-npm
+    container_name: ca-npm
     restart: unless-stopped
     ports:
-      - "80:80"      # HTTP + ACME challenge
+      - "80:80"      # HTTP + ACME (Let's Encrypt) challenge
       - "443:443"    # HTTPS
       - "81:81"      # admin web UI (http://SERVER_IP:81) — restrict to your IP in the SG
     volumes:
@@ -133,16 +148,16 @@ services:
     depends_on:
       - app
     networks:
-      - dash-network
+      - ca-network
 
 volumes:
-  postgres_data:
-  uploads_data:
-  branding_data:
-  logs_data:
+  ca_postgres_data:
+  ca_uploads:
+  ca_branding:
+  ca_logs:
   npm_data:
   npm_letsencrypt:
 
 networks:
-  dash-network:
+  ca-network:
     driver: bridge

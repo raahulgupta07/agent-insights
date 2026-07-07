@@ -26,6 +26,49 @@ scheduler = AsyncIOScheduler(
 )
 
 
+def ensure_jobstore_table() -> bool:
+    """Create the ``apscheduler_jobs`` table ONCE, before uvicorn forks its workers.
+
+    ``scheduler.start()`` runs in EVERY worker (non-leaders still persist user-
+    scheduled jobs to the shared store — see main.py). On a fresh database all N
+    workers race SQLAlchemyJobStore's ``create_all`` and collide on the Postgres
+    type catalog → ``duplicate key value violates unique constraint
+    "pg_type_typname_nsp_index"`` → ``Application startup failed. Exiting.`` (the
+    boot crash seen in the AWS logs; it self-heals on restart but 502s meanwhile).
+
+    Pre-creating the table single-process from start.sh removes the concurrency, so
+    every worker's later ``create_all`` is a no-op. ``IF NOT EXISTS`` keeps it
+    idempotent; schema matches APScheduler's own DDL. Fail-soft — any error just
+    falls back to the old per-worker create (never blocks boot).
+    """
+    ddl = (
+        "CREATE TABLE IF NOT EXISTS apscheduler_jobs ("
+        "  id VARCHAR(191) NOT NULL,"
+        "  next_run_time DOUBLE PRECISION,"
+        "  job_state BYTEA NOT NULL,"
+        "  CONSTRAINT apscheduler_jobs_pkey PRIMARY KEY (id)"
+        ")"
+    )
+    idx = (
+        "CREATE INDEX IF NOT EXISTS ix_apscheduler_jobs_next_run_time "
+        "ON apscheduler_jobs (next_run_time)"
+    )
+    try:
+        with _engine.begin() as conn:
+            conn.execute(text(ddl))
+            conn.execute(text(idx))
+        logger.info("apscheduler_jobs table ensured (pre-fork, no worker race)")
+        return True
+    except Exception as e:  # noqa: BLE001 — never block boot
+        logger.warning(f"ensure_jobstore_table skipped: {e}")
+        return False
+
+
+if __name__ == "__main__":
+    # Invoked once from start.sh before uvicorn forks (python -m app.core.scheduler).
+    ensure_jobstore_table()
+
+
 _CRON_DOW_NUM_TO_NAME = {
     '0': 'sun', '1': 'mon', '2': 'tue', '3': 'wed',
     '4': 'thu', '5': 'fri', '6': 'sat', '7': 'sun',
