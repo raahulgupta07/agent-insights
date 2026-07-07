@@ -1309,6 +1309,11 @@ class PowerBIClient(DataSourceClient):
             wait = self._parse_retry_after(resp)
             if wait is None:
                 wait = backoff[min(attempt, len(backoff) - 1)]
+            # Stamp a client-wide cooldown so concurrent/subsequent DAX calls
+            # (esp. brute table-discovery) back off immediately rather than each
+            # re-hitting the throttled endpoint.
+            if resp.status_code == 429:
+                self._dax_cooldown_until = time.time() + max(wait, 5.0)
             logger.warning(
                 "powerbi.dax.rate_limited status=%s attempt=%d/%d wait=%.1fs",
                 resp.status_code, attempt + 1, max_retries, wait,
@@ -1316,6 +1321,8 @@ class PowerBIClient(DataSourceClient):
             time.sleep(wait)
 
         wait = self._parse_retry_after(last_resp) if last_resp is not None else None
+        if last_resp is not None and last_resp.status_code == 429:
+            self._dax_cooldown_until = time.time() + max(wait or 60.0, 5.0)
         raise PowerBIRateLimitError(
             "Power BI is rate-limiting requests (HTTP 429). Please retry in a "
             f"{'few' if not wait else int(wait)} seconds.",
@@ -1355,6 +1362,25 @@ class PowerBIClient(DataSourceClient):
         else:
             url = f"{self.BASE_URL}/datasets/{dataset_id}/executeQueries"
         headers = self._build_headers()
+
+        # Persistent 429 cooldown: once Power BI throttles this client (120
+        # req/min/user cap), short-circuit further DAX for the cooldown window
+        # instead of firing more doomed requests. A brute table-discovery spray
+        # (~40 generic names per dataset) would otherwise SUSTAIN the 429 storm
+        # and stall real queries behind it. Message keeps "429" so the
+        # brute-probe abort-Event still trips. Gated on CONNECTOR_ROBUSTNESS.
+        _cd = getattr(self, "_dax_cooldown_until", 0.0)
+        if _cd and time.time() < _cd:
+            try:
+                from app.settings.hybrid_flags import flags as _hflags
+                _robust = bool(_hflags.CONNECTOR_ROBUSTNESS)
+            except Exception:
+                _robust = False
+            if _robust:
+                raise PowerBIRateLimitError(
+                    "Power BI is rate-limiting requests (HTTP 429). Please retry shortly.",
+                    retry_after=int(_cd - time.time()),
+                )
 
         body = {
             "queries": [{"query": dax}],

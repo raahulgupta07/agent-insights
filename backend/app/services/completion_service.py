@@ -3092,4 +3092,12 @@ class CompletionService:
             except Exception:
                 pass
 
-        return completion
+        # Return a plain dict, NOT the raw ORM Completion: FastAPI would try to
+        # serialize the loaded relationship graph (completion→report→completions→…)
+        # and blow the recursion limit → 500 RecursionError on the Stop button.
+        return {
+            "ok": True,
+            "id": str(completion.id),
+            "status": completion.status,
+            "sigkill": completion.sigkill.isoformat() if completion.sigkill else None,
+        }

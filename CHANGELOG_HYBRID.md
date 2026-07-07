@@ -3,6 +3,12 @@
 Hybrid feature changelog (our additions on top of the bagofwords/Dash base). Newest first.
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` then bullets.
 
+## v1.160.2 — Power BI dashboards no longer stall; Stop button fixed  (2026-07-07)
+- Generating a dashboard on a Power BI connector could hang at "Starting… 0 / 0" for about a minute before continuing. Fixed — it now starts promptly.
+- The Stop button on a running generation returned an error (the run still stopped, but the UI showed a 500). Fixed.
+  - Root cause of the stall: `_brute_discover_tables` sprayed ~40 generic table-name guesses at every dataset that rejects COLUMNSTATISTICS (174 doomed probes in 15 min) → tripped Power BI's 120-req/min/user cap (429) → the real query was throttled ~60 s. Fix (`data_sources/clients/powerbi_client.py`, gated on `CONNECTOR_ROBUSTNESS`): a persistent client-wide 429 cooldown — the first throttle stamps `_dax_cooldown_until` and subsequent DAX short-circuits with a `429`-tagged `PowerBIRateLimitError` (so the brute-probe abort-Event still trips) instead of re-hammering the endpoint. Brute-spray can't sustain the storm; real queries no longer queue behind it.
+  - Stop button: `completion_service.update_completion_sigkill` returned the raw ORM `Completion`; FastAPI tried to serialize its relationship graph (completion→report→completions→…) → `RecursionError` → 500. Fix: return a plain dict `{ok,id,status,sigkill}`. Kill stamp already landed; now the response is clean too.
+
 ## v1.160.1 — Analysis Notebook UI panel (Phase 4 follow-up)  (2026-07-07)
 - The Analysis Notebook now has a screen: the report's Outputs panel shows the step-by-step "how this was worked out" trail when the feature is on. Invisible when off or when there's nothing to show.
   - NEW `frontend/components/report/ReportAnalysisNotebook.vue` (fetches `/reports/{id}/notebook` via `useMyFetch`, warm-themed numbered steps with chart chips, single `v-if` → renders nothing when `enabled:false` / 0 steps / any fetch error). Mounted in `pages/reports/[id]/index.vue` under `<ChatSummary/>` in the Summary/Outputs view (explicit import to dodge the Nuxt auto-import-prefix landmine). One import + one tag, additive. `nuxt generate` clean.

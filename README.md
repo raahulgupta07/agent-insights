@@ -1,567 +1,419 @@
 # CityAgent Analytics
 
-Hybrid agentic-analytics platform — a fork of **bagofwords** (rebranded **Dash**), merged with dual-schema patterns, a Karpathy-style 2nd-brain, lightweight Domain-Pack "Skills", and a per-studio **Auto-train pipeline**.
+> **Agentic analytics platform.** Wrap your data (file uploads or 46 warehouse connectors) into a grounded,
+> shareable **Agent** that answers questions, builds dashboards + slide decks, and trains itself — no per-dataset code.
 
-An **Agent Studio** wraps a set of pinned data sources (file uploads or warehouse connectors) into a grounded, shareable analytics agent that answers questions over your data, builds dashboards + slide decks, and trains itself — no per-dataset code.
+Extended with a Karpathy-style 2nd-brain, a per-studio **Auto-train** pipeline, lightweight Domain-Pack
+"Skills", and an 8-layer Intelligence grounding stack.
 
-- **Backend** — FastAPI (Python 3.11), async SQLAlchemy, Alembic migrations.
-- **Frontend** — Nuxt 3 SPA (baked into the image via `nuxt generate`).
-- **Data** — PostgreSQL 18 + pgvector, pgbouncer pool, Redis.
-- **LLM** — **OpenRouter only** (Dash `custom` provider, per-org Fernet-encrypted key).
-- **Image** — single `cityagent-analytics:dev`, served on `:3007`.
+| | |
+|---|---|
+| **Version** | `VERSION_HYBRID` — see file (currently **1.160.2**) |
+| **Backend** | FastAPI (Python 3.12), async SQLAlchemy, Alembic (auto-migrate on boot) |
+| **Frontend** | Nuxt 3 SPA (`ssr:false`), baked into the image via `nuxt generate` |
+| **Data** | PostgreSQL 18 + pgvector · PgBouncer · Redis |
+| **LLM** | **OpenRouter only** (per-org, Fernet-encrypted key — **no GPU needed**) |
+| **Image** | single `cityagent-analytics:dev`, served on `:3007` |
+| **Stack file** | **`docker-compose.build.yaml` only** |
 
-> Full engineering guide + landmines: **`CLAUDE.md`** (read it before touching anything). Dated per-feature changelog: **`DEVLOG.md`**. Architecture: `docs/ARCHITECTURE.html` · Plans: `docs/PLAN_*.md`.
-
----
-
-## Infrastructure sizing (500 users, 50% concurrent)
-
-Full sizing guide — including **data upload** and **connector** paths — in **[`docs/INFRA_SIZING.md`](docs/INFRA_SIZING.md)**.
-
-**Key fact:** the LLM runs on **OpenRouter (external)** → **no GPU needed**. Your infra orchestrates, runs SQL, ingests files, and streams tokens; OpenRouter tokens are the main *variable cost*, not servers.
-
-For **500 registered users at 50% concurrency** (~250 active, **~100–130 concurrent in-flight queries** at peak):
-
-| Component | Recommended | Role |
-|---|---|---|
-| **App tier** | 4 × (4 vCPU / 16 GB), 16 uvicorn workers, autoscale 3–6 | Orchestration + sandboxed `pandas`/`duckdb` + artifact render (Chromium/LibreOffice bundled). Scale **horizontally** (`start.sh` caps 4 workers/container). |
-| **PostgreSQL 18 + pgvector** | 8 vCPU / 32 GB, **500 GB–1 TB** SSD @ 6–12k IOPS | Metadata + embeddings **+ uploaded-data warehouse** (uploads land here → main storage driver). |
-| **PgBouncer** | 2 vCPU / 2 GB | Transaction pooling — required at multi-container × multi-worker fan-out. |
-| **Redis** | 2 vCPU / 4–8 GB | Multi-worker state + answer/result caches. Required once workers > 1. |
-| **Object storage** | S3 / MinIO, 200 GB–1 TB+ | Raw uploads + Parquet result offload + federation snapshots. |
-| **Load balancer** | ALB / nginx, **SSE + WebSocket**, idle ≥ 300s, HTTPS | Long streaming completions + PWA. |
-| **LLM** | **OpenRouter** (external, no GPU) | Ensure the tier supports 100+ concurrent streams. |
-
-**Rough total (excl. OpenRouter):** ~26 vCPU / ~110 GB RAM + ~1 TB SSD. **Data uploads** push Postgres first (cap concurrent ingests, DuckDB is single-writer); **connectors** query the customer's external systems (heavy compute is *there*) — locally they cost egress + ODBC + paced sync. See the full doc for scaling levers (`HYBRID_QUOTAS`, caches, render/ingest caps).
+> Deep engineering guide + landmines → **`CLAUDE.md`** · Codebase map → **`docs/CODEBASE_MAP.md`** ·
+> Dated history → **`DEVLOG.md`** · Full pipeline → **`NEWPIPE.md`**.
 
 ---
 
-## Two ways to install
+## Contents
 
-| Way | Effort | When |
-|---|---|---|
-| **A. `docker pull` from GHCR** (no build) | ~5 min | normal install — pull a prebuilt image. See **`DEPLOY-GHCR.md`**. |
-| **B. Build from source** (this section) | ~15–25 min first build | you want to build/modify it yourself, or no GHCR access. |
-
-> **Quick path for most installs is A (`docker pull`)** — `DEPLOY-GHCR.md` is the OpenWebUI-style guide.
-> Build-from-source (B) is below.
+- [What it is](#what-it-is)
+- [Architecture](#architecture)
+- [Quick start](#quick-start)
+- [Install flow](#install-flow)
+- [Configuration (`.env`)](#configuration-env)
+- [Deploy modes](#deploy-modes)
+- [Update & rollback](#update--rollback)
+- [How a question is answered](#how-a-question-is-answered)
+- [Auto-train pipeline](#auto-train-pipeline)
+- [Connector model](#connector-model)
+- [Intelligence Layer](#intelligence-layer)
+- [Feature flags](#feature-flags)
+- [Key endpoints](#key-endpoints)
+- [Repo layout](#repo-layout)
+- [Troubleshooting](#troubleshooting)
+- [Contributor rules](#contributor-rules)
 
 ---
 
-## B. Engineer quick start — build from source
+## What it is
 
-**Prereqs:** Docker + Docker Compose, **≥10 GB RAM** given to Docker (the frontend `nuxt generate`
-needs a 6 GB Node heap — less = OOM/exit-134), ~15 GB free disk, ports `3007`/`5439`/`6399` free.
+An **Agent** (internally a Studio / DataSource) pins a set of data sources and becomes a grounded analyst:
+
+1. **Add data** — upload `.csv`/`.xlsx`, or pin a connector (Postgres, Power BI, Fabric, Snowflake… 46 types).
+2. **Auto-train** — one click profiles columns, mines joins, extracts knowledge from docs, writes example
+   queries + eval goldens, and generates artifacts. Readiness climbs 0→100 in the background.
+3. **Ask** — the agent answers grounded on *your* data, builds interactive dashboards (React + ECharts) and
+   slide decks (python-pptx), and shows its work.
+
+Everything new is **flag-gated** (default OFF) and everything learned is **review-gated** (pending → approve).
+
+---
+
+## Architecture
+
+```mermaid
+graph TB
+    subgraph client["Client"]
+        B["Browser · Nuxt 3 PWA<br/>(SSE + WebSocket)"]
+        FS["Folder-Sync desktop agent<br/>(optional)"]
+    end
+
+    subgraph host["Docker host — docker-compose.build.yaml"]
+        subgraph app["ca-app  (image: cityagent-analytics:dev)"]
+            API["FastAPI · uvicorn ×4 workers<br/>:3000 internal → :3007 host"]
+            AV2["AgentV2 loop<br/>plan → execute → reflect"]
+            TOOLS["Tools: create_data · create_artifact<br/>sandboxed pandas / duckdb"]
+            TRAIN["Auto-train orchestrator"]
+            STATIC["Baked Nuxt bundle (/frontend/dist)"]
+        end
+        PG[("PostgreSQL 18 + pgvector<br/>ca-postgres :5439<br/>metadata + embeddings + uploaded data")]
+        PGB["PgBouncer :6432"]
+        RDS[("Redis :6399<br/>multi-worker state + caches")]
+    end
+
+    OR["OpenRouter API<br/>(external LLM — no GPU)"]
+    CONN["Customer systems<br/>Power BI · Fabric · Snowflake · Postgres…"]
+
+    B <-->|"HTTPS / WSS"| API
+    FS -->|"POST /api/sync/file"| API
+    API --> AV2 --> TOOLS
+    API --> TRAIN
+    API --> STATIC
+    TOOLS --> PGB --> PG
+    AV2 --> RDS
+    TOOLS -->|"read-only queries"| CONN
+    AV2 -->|"token stream"| OR
+```
+
+**Key fact:** the LLM is external (OpenRouter) → **no GPU**. Your infra orchestrates, runs SQL, ingests files,
+and streams tokens. Uploaded data lands in **Postgres** (its main storage driver). Full sizing (500 users /
+50% concurrent ≈ 26 vCPU / 110 GB / 1 TB SSD) → **`docs/INFRA_SIZING.md`**.
+
+---
+
+## Quick start
+
+**Prereqs:** Docker + Docker Compose v2 · give Docker **≥10 GB RAM** (the `nuxt generate` step forces a 6 GB
+Node heap; less = OOM/exit-134) · ~15 GB free disk · free host ports `3007` / `5439` / `6399`.
 
 ```bash
-# 1. clone
+# 1. Clone
 git clone git@github.com:raahulgupta07/rahulai-dash.git
-cd rahulai-dash
+cd rahulai-dash        # (or:  cd "CityAgent Analytics")
 
-# 2. config
+# 2. Config
 cp .env.example .env
-#    Edit .env and set AT LEAST:
-#      DASH_ENCRYPTION_KEY  -> generate ONCE, keep stable forever (decrypts saved keys):
-#         python3 -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())"
-#      DASH_ADMIN_EMAIL / DASH_ADMIN_PASSWORD / DASH_ADMIN_NAME  -> first-boot admin
-#      APP_PORT=3007  (or any free host port) + DASH_BASE_URL=http://<host>:3007
+#    Edit .env — set at minimum:
+#      DASH_ADMIN_EMAIL / DASH_ADMIN_PASSWORD / DASH_ADMIN_NAME   (first-boot super-admin)
+#      APP_PORT=3007  +  DASH_BASE_URL=http://<host>:3007         (must match)
+#      DASH_ENCRYPTION_KEY  -> leave EMPTY (auto-generated + persisted on first boot)
 
-# 3. build + run (self-contained Dockerfile; first build ~15–25 min)
-bash scripts/build.sh                                   # pre-pulls bases (retry) + builds the image
+# 3. Build (first cold build ~15–25 min; code-change rebuilds are seconds–2 min)
+bash scripts/build.sh                                    # pre-pulls bases w/ retry, builds cityagent-analytics:dev
+
+# 4. Run (Postgres + Redis + app; runs `alembic upgrade head` on boot)
 docker compose -f docker-compose.build.yaml up -d
-#    (or in one shot:  docker compose -f docker-compose.build.yaml up -d --build)
 
-# 4. verify
-curl http://localhost:3007/health                       # {"status":"ok"}
+# 5. Verify
+curl http://localhost:3007/health                        # -> {"status":"ok"}
+docker compose -f docker-compose.build.yaml logs -f app   # watch migrations + "Loaded N hybrid flag override(s)"
 ```
 
-Open `http://<host>:3007`, log in with the admin you set, then **Settings → Models** and paste the
-**OpenRouter API key** (it is never baked into the image).
+**Then, in the browser** (`http://<host>:3007`):
 
-**Rebuild after a code change:** `bash scripts/build.sh && docker compose -f docker-compose.build.yaml up -d --force-recreate app`
-(code-change rebuilds are seconds–2 min thanks to the cached base + BuildKit cache mounts).
+1. Log in with the `DASH_ADMIN_*` you set (or fill the **Create super-admin** form on a zero-user install).
+2. **Settings → Models** → paste your **OpenRouter API key** (required — nothing AI works without it; stored
+   encrypted per-org, never in the repo/`.env`).
+3. **Settings → Feature Flags** → enable the features you want (all default OFF).
+4. Open an Agent → **Auto-pilot → Upload file** (or pin a connector) → **Auto-train everything** → ask a question.
 
-> Notes: the app listens on **3000 inside** the container — the `http://0.0.0.0:3000` log line is normal;
-> you reach it on the host `APP_PORT`. Data persists in the `ca_postgres_data` / `ca_uploads` volumes
-> (survives rebuilds). **Never** `docker compose down -v` — that wipes the DB. Stack runs ONLY on
-> `docker-compose.build.yaml` (a plain `docker-compose.yaml` is a different project = empty DB).
+> **Two rules — never break:**
+> 1. Always pass `-f docker-compose.build.yaml` (a plain `docker compose up` = different project = empty DB).
+> 2. **Never** `docker compose down -v` — `-v` deletes the database volume (all data gone).
 
 ---
 
-## C. Step-by-step install (hand-edited `.env`, no scripted seds)
+## Install flow
 
-For an operator who edits `.env` in a text editor and runs Docker by hand.
+```mermaid
+flowchart TD
+    A["git clone"] --> B["cp .env.example .env"]
+    B --> C["edit .env<br/>ADMIN_* · APP_PORT · BASE_URL"]
+    C --> D["bash scripts/build.sh<br/>(builds cityagent-analytics:dev)"]
+    D --> E["docker compose -f docker-compose.build.yaml up -d"]
+    E --> F{"alembic upgrade head<br/>(auto, on boot)"}
+    F --> G["curl :3007/health → ok"]
+    G --> H["Login as DASH_ADMIN_*"]
+    H --> I["Settings → Models:<br/>paste OpenRouter key"]
+    I --> J["Enable feature flags"]
+    J --> K["Add data → Auto-train → Ask"]
 
-### 1. Clone
-```bash
-git clone git@github.com:raahulgupta07/rahulai-dash.git
-cd rahulai-dash
+    style D fill:#C2541E,color:#fff
+    style I fill:#C2541E,color:#fff
+    style K fill:#2f7d4f,color:#fff
 ```
-
-### 2. Create your `.env`
-```bash
-cp .env.example .env
-nano .env        # or: vi .env
-```
-
-### 3. Edit only these lines in `.env` (leave everything else as-is)
-
-| Line / key | Default | Set it to |
-|---|---|---|
-| `ENVIRONMENT` | `development` | `production` |
-| `APP_PORT` | `3007` | the host port for the web app (any free port) |
-| `POSTGRES_PORT` | `5439` | host port for the database (change only if 5439 is busy) |
-| `REDIS_PORT` | `6399` | host port for the cache (change only if 6399 is busy) |
-| `DASH_BASE_URL` | `http://localhost:3007` | `http://YOUR_SERVER_IP:<APP_PORT>` — **must match APP_PORT** |
-| `DASH_ENCRYPTION_KEY` | *(empty)* | **leave empty** — auto-generated + persisted on first boot |
-| `DASH_ADMIN_EMAIL` | *(commented)* | remove the `#`, set e.g. `admin@cityagent.io` |
-| `DASH_ADMIN_PASSWORD` | *(commented)* | remove the `#`, set a strong password |
-| `DASH_ADMIN_NAME` | *(commented)* | remove the `#`, set e.g. `Administrator` |
-
-**Ports:** only change the host (left) number — the container's internal ports (`3000` app, `5432` db, `6379` redis) are fixed and must NOT change. If you change `APP_PORT`, change `DASH_BASE_URL` to match.
-**Commented lines:** a leading `#` means the line is ignored — delete the `#` to activate `DASH_ADMIN_*`.
-**Encryption key:** leaving it empty is safe now — the app generates one on first boot and stores it on the durable `ca_uploads` volume, so it survives restarts/rebuilds. (For a critical prod box you may still paste a fixed key here; an explicit key always wins.)
-
-Save in nano: `Ctrl+O`, `Enter`, `Ctrl+X`.
-
-### 4. Pre-pull one image (prevents a build-time network flake)
-```bash
-docker pull docker/dockerfile:1.7
-# if it errors, just run it again until it succeeds
-```
-
-### 5. Build (first time ~15–25 min)
-```bash
-bash scripts/build.sh
-```
-
-### 6. Start
-```bash
-docker compose -f docker-compose.build.yaml up -d
-```
-
-### 7. Verify
-```bash
-sleep 45
-curl http://localhost:<APP_PORT>/health      # expect: {"status":"ok"}
-```
-
-### 8. Log in + finish in the browser
-1. Open `http://YOUR_SERVER_IP:<APP_PORT>`, log in with the `DASH_ADMIN_*` you set.
-2. **Settings → Models** → paste the **OpenRouter API key** (required; nothing AI works without it).
-3. **Settings → Feature Flags** → enable `HYBRID_USER_GROUPS`, `HYBRID_GROUP_ACCESS`, `HYBRID_STUDIOS` (+ any Intelligence flags).
-
-### Everyday commands
-```bash
-docker compose -f docker-compose.build.yaml ps              # status
-docker compose -f docker-compose.build.yaml logs -f app     # logs
-docker compose -f docker-compose.build.yaml stop            # stop (keeps data)
-docker compose -f docker-compose.build.yaml up -d           # start
-
-# update to newer code later:
-git pull && bash scripts/build.sh
-docker compose -f docker-compose.build.yaml up -d --force-recreate app
-```
-
-### Two rules — never break
-1. Always pass `-f docker-compose.build.yaml` on every command (a plain `docker compose up` = different project = empty DB).
-2. **Never** `docker compose down -v` — the `-v` deletes the database volume (all data gone).
-
----
-
-## Deploy
-
-Clean machine, no pre-step, no external image — the runtime base is folded into
-the `Dockerfile`, so the build is fully self-contained.
-
-### Choose ONE deploy mode
-
-| Mode | Compose file | Port var | Proxy | Use when |
-|---|---|---|---|---|
-| **Direct** (simplest) | `docker-compose.build.yaml` | `APP_PORT` | none — app published straight to host | internal / behind an existing host proxy |
-| **nginx** | `docker-compose.nginx.yaml` | `HTTP_PORT` | nginx fronts the app (SSE/websocket/large-upload tuned) | you already run nginx, want a clean reverse proxy |
-| **Caddy (HTTPS)** | `docker-compose.yaml` | `APP_PORT` | Caddy, auto-TLS | public domain, want automatic HTTPS |
-
-> Pick the var that matches the mode. **Direct/Caddy use `APP_PORT`; nginx uses `HTTP_PORT`.** Setting the wrong one does nothing. Only ONE mode runs at a time — `docker compose down` the old one before switching (never `-v`, that wipes the DB).
-
-### Direct (no proxy)
-
-```bash
-cp .env.example .env                 # then edit .env (see below)
-# set APP_PORT to any FREE host port (e.g. 8001) + DASH_BASE_URL=http://<host>:8001
-docker compose -f docker-compose.build.yaml up -d --build
-docker compose -f docker-compose.build.yaml ps      # APP shows 0.0.0.0:<APP_PORT>->3000
-curl http://localhost:<APP_PORT>/health
-```
-
-### nginx (reverse proxy)
-
-```bash
-cp .env.example .env
-# set HTTP_PORT to a FREE host port (e.g. 8001) + DASH_BASE_URL=http://<host>:8001
-docker compose -f docker-compose.nginx.yaml up -d --build
-docker compose -f docker-compose.nginx.yaml ps      # dash-nginx shows 0.0.0.0:<HTTP_PORT>->80
-curl http://localhost:<HTTP_PORT>/health
-```
-
-The app container always listens on **3000 internally** (the `http://0.0.0.0:3000`
-line in the logs is normal — ignore it). The host port you reach it on is whatever
-`APP_PORT`/`HTTP_PORT` you set. **"port already in use"** = another process owns that
-port — pick a different free one (`ss -ltnp | grep <port>` to check).
-
-That's the whole deploy. The first build takes ~5–20 min; rebuilds are fast.
-
-**Optional convenience:** `bash deploy.sh` runs `docker compose up -d --build`
-(Caddy mode), but first verifies Docker is up, creates `.env` from the template on
-first run (and stops so you can fill it in), and warns if `DASH_ENCRYPTION_KEY` is
-empty. Use it or skip it — same result.
-
-Edit these in `.env` before deploying:
-
-- `DASH_ENCRYPTION_KEY` — Fernet key (44 chars). Generate:
-  `python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
-- `DASH_ADMIN_EMAIL` / `DASH_ADMIN_PASSWORD` — these create the **first owner
-  account automatically** on first boot.
-
-After it's up, set your **OpenRouter API key** in Settings → Models (it is never
-stored in the repo or `.env`).
-
-> First build can take ~5–20 min (runtime base apt layer + Nuxt `generate`
-> compile). Subsequent rebuilds are seconds-to-minutes thanks to cached
-> BuildKit stages + vendored deps.
-
----
-
-## Prerequisites
-
-- **Docker** + Docker Compose v2 (Desktop or engine). All services run in containers.
-- **~8 GB RAM** free for the build (the Nuxt generate step needs headroom).
-- An **OpenRouter API key** (https://openrouter.ai) — the only LLM provider.
-- A free host port for the app (`APP_PORT`/`HTTP_PORT`, default `3007`/`8001` — change if taken). Plus `5439` (Postgres), `6399` (Redis) for the build stack.
-- For local frontend iteration only: **Node 20+** and `npm`.
-
----
-
-## Install / quick start
-
-The build is **self-contained** — no separate base-image step. On a clean machine:
-
-```bash
-# 1. clone, then from the repo root:
-cd "CityAgent Analytics"
-
-# 2. create your .env from the template, then edit it (see Configuration below)
-cp .env.example .env
-#    set at least: DASH_ENCRYPTION_KEY, DASH_ADMIN_EMAIL, DASH_ADMIN_PASSWORD
-
-# 3. build + run everything (first cold build ~5–20 min; rebuilds are fast)
-bash deploy.sh
-#    or directly:  docker compose up -d --build
-
-# 4. verify
-curl localhost:3007/health        # -> {"status":"ok"}
-```
-
-Open **http://localhost:3007**.
-
-**First user / admin:** set `DASH_ADMIN_EMAIL` + `DASH_ADMIN_PASSWORD` in `.env` *before* the first boot — the container auto-creates the owner/admin account (idempotent: ignored once any user exists). No sign-up link is shown in the UI. Fallback if you didn't set the env vars: `POST /api/auth/register` with `{email, password, name}` (the first user always becomes org owner).
-
-**LLM:** nothing to seed. A new org is auto-provisioned with an editable **OpenRouter** provider + the current model set. Just paste your OpenRouter key once in **Settings → Models** (it is stored encrypted per-org in the DB — never in the repo or `.env`).
-
-**Ports:** app `:3007` (internal 3000) · Postgres `:5439` · pgbouncer `:6432` · Redis `:6399`.
-
-> Optional scale overlay (extra Redis + pgbouncer tuning): `docker compose -f docker-compose.yaml -f docker-compose.scale.yaml up -d`.
 
 ---
 
 ## Configuration (`.env`)
 
-Copy `.env.example` → `.env`. The keys that matter most:
+Copy `.env.example` → `.env`. Only the host (left) port numbers change; container-internal ports
+(`3000` app, `5432` db, `6379` redis) are fixed.
 
 | Var | What | Notes |
 |---|---|---|
-| `DASH_ENCRYPTION_KEY` | Fernet key encrypting per-org secrets (LLM/SMTP) | **required**; generate once, keep stable (rotating it makes stored secrets undecryptable). `python -c "import base64,secrets;print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"` |
-| `DASH_ADMIN_EMAIL` / `DASH_ADMIN_PASSWORD` | bootstrap the first owner/admin | set once for a fresh deploy; idempotent — ignored if any user exists |
-| `APP_PORT` | host port for **direct / Caddy** modes | maps `<APP_PORT>` → container 3000; pick a free port. Ignored by nginx mode. |
-| `HTTP_PORT` | host port for **nginx** mode | nginx publishes this → proxies to app:3000. Ignored by direct/Caddy modes. |
-| `DASH_DATABASE_URL` | Postgres DSN | defaults wired for the bundled `ca-postgres`; override for an external DB |
-| `DASH_BASE_URL` | external base URL | needed for embed/SDK + CORS + channel webhooks in prod; **set to match your published port/domain** |
+| `DASH_ADMIN_EMAIL` / `DASH_ADMIN_PASSWORD` / `DASH_ADMIN_NAME` | first owner/admin, seeded on boot | idempotent — ignored once any user exists |
+| `DASH_ENCRYPTION_KEY` | Fernet key encrypting per-org secrets (LLM/SMTP) | **leave empty** → auto-generated + persisted to the `ca_uploads` volume. Set explicitly only for multi-host or DB-restore. **Never change it** — a new key orphans every stored secret. |
+| `APP_PORT` | host port for **direct / Caddy** modes | maps `<APP_PORT>` → container 3000 |
+| `HTTP_PORT` | host port for **nginx** mode | ignored by direct/Caddy |
+| `POSTGRES_PORT` / `REDIS_PORT` | host DB / cache ports | default `5439` / `6399` — change only if busy |
+| `DASH_BASE_URL` | external base URL | **must match** your published port/domain (CORS, embed, webhooks) |
 | `ENVIRONMENT` | `development` \| `production` | compose sets `production` |
+| `OPENROUTER_API_KEY` | *(optional)* auto-lights seeded models | else paste in **Settings → Models** later |
 
-The **OpenRouter LLM key is NOT an env var** — it is entered from the UI (Settings → Models) and stored encrypted per-org.
-
-> **Landmine:** a compose `${VAR:-default}` beats the in-app registry default. If a setting won't take, check the compose env first.
+> **Landmine:** a compose `${VAR:-default}` beats the in-app registry default. If a setting won't take, check
+> the compose env first. The **OpenRouter key is NOT an env var** by design — it's entered in the UI, stored
+> encrypted per-org.
 
 ---
 
-## Install & update
+## Deploy modes
 
-The stack is **one image** built from this repo — `cityagent-analytics:dev` — run via **`docker-compose.build.yaml`** (the only supported compose file; the plain `docker-compose.yaml` is a different project = empty DB). Schema migrations + the compiled front-end bundle are baked into the image and applied on boot.
+Pick **one** — only one runs at a time (`docker compose down` the old one before switching; never `-v`).
 
-### Fresh installation (from zero)
+| Mode | Compose file | Port var | Proxy | Use when |
+|---|---|---|---|---|
+| **Direct** (simplest) | `docker-compose.build.yaml` | `APP_PORT` | none | internal / behind an existing host proxy |
+| **nginx** | `docker-compose.nginx.yaml` | `HTTP_PORT` | nginx (SSE/WS/large-upload tuned) | you already run nginx |
+| **Caddy (HTTPS)** | `docker-compose.yaml` | `APP_PORT` | Caddy, auto-TLS | public domain, automatic HTTPS |
+| **NPM / AWS** | `docker-compose.npm.yaml` | via proxy | Nginx-Proxy-Manager | the live AWS box (`insights.citygpt.xyz`) |
 
-**Prerequisites:** Docker + Docker Compose; give Docker **≥10 GB RAM** for the first build (the `nuxt generate` front-end stage forces a 6 GB Node heap); git. First-ever build (base image + app) is ~20 min; later code-change rebuilds are seconds–2 min (BuildKit cache + vendored deps).
+The app always listens on **3000 internally** (the `http://0.0.0.0:3000` log line is normal). **Prod needs
+HTTPS** for the PWA install + service worker; `http://localhost:3007` is exempt for testing.
 
-```bash
-# 1. Get the code
-git clone <repo> && cd "CityAgent Analytics"
+---
 
-# 2. Create .env from the template
-cp .env.example .env
+## Update & rollback
 
-# 3. (OPTIONAL) Fernet encryption key — encrypts every stored OpenRouter/SMTP secret.
-#   You can SKIP this: if DASH_ENCRYPTION_KEY is empty, start.sh auto-generates one on first
-#   boot and persists it to the durable ca_uploads volume (/app/backend/uploads/.dash_encryption.key),
-#   so it stays stable across restarts/rebuilds. Set it explicitly ONLY if you need a known key
-#   (multi-host, or restoring a DB dump taken on another box):
-python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-#   -> paste into .env as:  DASH_ENCRYPTION_KEY=<that value>   (KEEP IT FOREVER — changing it orphans all secrets)
-#   ⚠ Don't `docker compose down -v` — that drops the volume holding the auto-generated key.
-
-# 4. (optional) edit .env:
-#    APP_PORT=3007 / POSTGRES_PORT=5439 / REDIS_PORT=6399   (host ports)
-#    DASH_BASE_URL=http://localhost:3007                    (MUST match your published port/domain)
-#    DASH_ADMIN_EMAIL / DASH_ADMIN_PASSWORD / DASH_ADMIN_NAME  (headless super-admin seed)
-#    OPENROUTER_API_KEY=sk-or-...                           (auto-lights the seeded models; else set it in the UI later)
-
-# 5. Build the image (pre-pulls base images with retry, builds cityagent-analytics:dev)
-bash scripts/build.sh
-
-# 6. Start the stack (Postgres 18 + Redis + app; runs `alembic upgrade head` on boot)
-docker compose -f docker-compose.build.yaml up -d
-
-# 7. Verify
-curl localhost:3007/health                               # -> {"status":"ok"}
-docker compose -f docker-compose.build.yaml logs -f ca-app   # watch: migrations + "Loaded N hybrid flag override(s)"
+```mermaid
+flowchart LR
+    subgraph prod["A · Full rebuild (production)"]
+        P1["git pull"] --> P2["bash scripts/build.sh"] --> P3["up -d --force-recreate app<br/>(alembic upgrade head on boot)"]
+    end
+    subgraph dev["B · Hot-cp (fast dev)"]
+        H1["docker cp file → ca-app"] --> H2["py_compile"] --> H3["docker restart ca-app"] --> H4["docker commit → bake<br/>(else force-recreate reverts)"]
+    end
 ```
 
-**First sign-in** — open **http://localhost:3007**:
-- If you set `DASH_ADMIN_*` in `.env`, that super-admin is seeded on boot — just log in.
-- Otherwise the sign-in page shows a **"Create super-admin"** form (zero-user install); the first user created becomes the global super-admin + org owner. Sign-up then locks.
-
-**Make the agent answer** — set the LLM key (OpenRouter only):
-- If you put `OPENROUTER_API_KEY` in `.env`, the 5 seeded models light up automatically.
-- Otherwise go to **Settings → Models**, paste your OpenRouter key into the seeded provider, and the preset models enable.
-
-**Add data to try it** — open a Studio → **Auto-pilot → Upload file** (`.csv`/`.xlsx`) or pin a connector; or load the built-in Chinook demo (`POST /api/data_sources/demos/chinook`). Then ask a question in chat.
-
-### Update to a new version
-
-Two lanes — pick by what changed.
-
-**A · Full rebuild (clean, durable — production):**
 ```bash
+# A · Full rebuild — clean, durable
 git pull
-bash scripts/build.sh                                              # rebuild image (BuildKit cache; secs–2min if only code changed)
-docker compose -f docker-compose.build.yaml up -d --force-recreate # recreate; `alembic upgrade head` runs on boot
-docker compose -f docker-compose.build.yaml logs -f ca-app         # watch: migrations + "Loaded N hybrid flag override(s)"
+bash scripts/build.sh
+docker compose -f docker-compose.build.yaml up -d --force-recreate app
 ```
-🔴 **Never `--force-recreate` onto a stale/un-rebuilt image** — DB ahead of image migrations = broken app. Rebuild first, or use lane B.
+🔴 **Never `--force-recreate` onto a stale/un-rebuilt image** — DB ahead of image migrations = broken app.
+Verify the new image contains your code first.
 
-**B · Hot update + bake (fast dev iteration, no full rebuild):**
 ```bash
-# front-end change:
-bash scripts/fe-sync.sh                                            # nuxt generate + docker cp -> ca-app:/app/frontend/dist (live, no restart)
-
-# back-end change (.py):
+# B · Hot backend (.py) — seconds, ephemeral until baked
 docker cp <file> ca-app:/app/backend/app/...
-docker exec ca-app /opt/venv/bin/python -m py_compile /app/backend/app/...   # verify
-docker restart ca-app                                             # restart KEEPS cp'd files (force-recreate REVERTS to image)
-
-# make it durable (so a force-recreate keeps it):
-docker cp VERSION_HYBRID        ca-app:/app/VERSION_HYBRID         # version files are read per-request (What's-new bell)
-docker cp CHANGELOG_HYBRID.md   ca-app:/app/CHANGELOG_HYBRID.md
-docker commit ca-app cityagent-analytics:dev                      # bake the running container into the image
-docker tag    cityagent-analytics:dev cityagent-analytics:v1.59.0 # version tag = rollback point
+docker exec ca-app /opt/venv/bin/python -m py_compile /app/backend/app/...
+docker restart ca-app                                     # restart KEEPS cp'd files; force-recreate REVERTS
+# Hot frontend:
+bash scripts/fe-sync.sh                                    # nuxt generate + docker cp → ca-app:/app/frontend/dist
 ```
 
-### Notes
-- **Migrations run automatically** in `start.sh` (`alembic upgrade head`, retried) before uvicorn — no manual step. Current head: **`connvis1`**.
-- **Every shipped change bumps `VERSION_HYBRID`** + prepends a `CHANGELOG_HYBRID.md` entry (surfaced as the 🔔 What's-new bell). These two files are read from the container per-request — `fe-sync.sh` does **not** copy them, so `docker cp` both on every version bump (lane B) or rebuild (lane A bakes them).
-- **Back up Postgres first** on a real deploy: `docker exec ca-postgres pg_dump -U dash dash > backup_$(date +%F).sql`. **Never `docker compose down -v`** (drops the volume).
-- **Keep `DASH_ENCRYPTION_KEY` unchanged** across updates — a new key orphans every stored OpenRouter/SMTP secret (Fernet).
-- **New feature flags default OFF.** Enable per-org from **Settings → Feature Flags** (writes `organization_settings.config.hybrid_overrides`), then **`docker restart ca-app`** — the app runs `--workers 4`, so one restart is needed to converge a flag change across all workers.
-- **Roll back:** `docker tag cityagent-analytics:v<prev> cityagent-analytics:dev && docker compose -f docker-compose.build.yaml up -d --force-recreate ca-app` (versioned image tags are your rollback points). Alembic downgrades are not guaranteed — restore the DB dump if a migration must be reversed.
+**Rollback:** every bake tags a rollback image — `docker tag cityagent-analytics:pre-v<prev> cityagent-analytics:dev`
+then `up -d --force-recreate app`. Alembic downgrades aren't guaranteed — restore a DB dump if a migration must reverse.
+
+- **Back up first on real deploys:** `docker exec ca-postgres pg_dump -U dash dash > backup_$(date +%F).sql`.
+- **Every ship** bumps `VERSION_HYBRID` + prepends a `CHANGELOG_HYBRID.md` entry (🔔 What's-new bell). Both files
+  are read per-request — `docker cp` both on a hot bake.
+- **New flags default OFF.** Enable per-org in **Settings → Feature Flags**, then `docker restart ca-app`
+  (workers=4 → one restart converges the change).
 
 ---
 
-## How it works
+## How a question is answered
 
-1. **New Studio** — name + sharing (avatar/voice/summary auto-written).
-2. **Add data** — open a Studio → **Auto-pilot** tab → **Add a source** (pin an org connection or create a new one across 46 connector types) **or** **Upload file** (`.csv`/`.xlsx`, multi-select supported). A connector with N tables trains every table.
-3. **Auto-train everything** — one button: profile columns → extract knowledge from docs → mine joins → write example queries + eval goldens → generate 6 artifacts. Readiness climbs 0→100 in the background.
-4. **Ask** — the agent answers grounded on your data, builds dashboards (React + ECharts) and slide decks (python-pptx).
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant API as FastAPI
+    participant AG as AgentV2
+    participant CTX as Context Hub<br/>(schema · semantic · joins · metrics)
+    participant OR as OpenRouter
+    participant EX as Sandbox<br/>(pandas / duckdb)
+    participant DS as Data source
 
-A guided wizard also lives at **`/studios/new-agent`** (Name → Data → Train → Ready).
+    U->>API: POST /reports/{id}/completions
+    API->>AG: start stream
+    AG->>CTX: prime grounding (approved-only)
+    AG->>OR: plan (question + grounded context)
+    OR-->>AG: plan / SQL
+    loop per step
+        AG->>EX: create_data (SQL → viz)
+        EX->>DS: read-only query / pushdown GROUP BY
+        DS-->>EX: rows
+        EX-->>AG: Step (data + Visualization)
+    end
+    AG->>OR: reflect / write answer
+    AG->>API: create_artifact (dashboard / slides)
+    API-->>U: SSE stream → charts + answer
+```
 
-### Auto-pilot tab (the studio home)
-
-A 3-step flow on `studios/[id]` (`activeTab='autopilot'`):
-
-1. **Add** — two tiles. **Add a source** opens a popup picker of your **org connection library** (connections listed by name + host; Pin / ✓Pinned; search; **+ New connection** opens the shared 46-type connector modal → creates in the org → auto-pins). **Upload file** takes one or many spreadsheets off your machine (each becomes its own source and auto-pins).
-2. **Route** — four lanes (**Data · Knowledge · Skill · Rule/Instruction**) show what the agent is made of, drawn from the studio's real sources / docs / instructions / examples. Pasted methods or rules go through **Teach**, which classifies them into a lane with a confidence score (re-route if wrong).
-3. **Train** — one **Auto-train everything** button, disabled until ≥1 source is added.
-
-### Connector model — owned connections with 3-level visibility
-
-**Every connection has an owner (its creator) and a visibility; an agent only references (pins) connections.** The **Connectors** page (`Manage → Connectors`) is open to **all members** and lists, as a table, the connections you created + ones shared to you + org-wide ones.
-
-- **Create** a connection (any of 46 types) → it lands in the org with `owner_user_id = you` and **visibility `private`** by default (credentials stored once, Fernet-encrypted). The shared modal is reachable from **Manage → Connectors** and a Studio's **+ New connection**.
-- **Share** from the table — a per-row badge (🔒 Private / 👥 Shared / 🌐 Org-wide) opens a sharing panel:
-  - **Private** — only you (the owner) and super admins.
-  - **Shared** — you + specific users/groups you grant (writes `resource_grants`).
-  - **Org-wide** — every member of the org. Self-service, no admin approval (audit-logged).
-- **Manage** (edit / test / rotate creds / delete) → the **owner** of a connection, or any **super admin** (full override, incl. others' private connections). Credentials are never returned to the browser. Authz is enforced by a single `guard_owned_connection` dependency on every connector mutate route.
-- **Use** in an agent → pin a connection you can see; pinning scopes it (and a table subset) to that agent. Queries run under the connection's `auth_policy` (e.g. `system_only`) so a member can query a shared connection's data without ever seeing its credentials. No agent stores credentials.
-- **N of one type** is fine: connector *type* is a template, each connection is a **named instance**. Ten Postgres = ten named rows. Blank names auto-derive `Postgres · host/db` so they stay distinct.
+Two execution lanes keep it fast + memory-safe:
+- **Wren lane** — text-to-SQL pushes aggregation to the DB / DuckDB-over-file (`GROUP BY` in SQL, not pandas).
+- **Julius lane** — heavy Python runs in an **isolated one-shot subprocess** (memory reclaimed on exit; no
+  in-process OOM accumulation). Real cap = container cgroup RSS + timeout + semaphore (**never** `RLIMIT_AS`).
 
 ---
 
-## Auto-train pipeline (per pinned source)
+## Auto-train pipeline
 
-| Stage | What | Module |
+```mermaid
+flowchart LR
+    S["Pinned source<br/>(file or connector)"] --> P["Profile<br/>columns · roles · samples · null%"]
+    P --> K["Knowledge<br/>extract defs from docs"]
+    K --> Q["Queries<br/>LLM example SQL (verified read-only)"]
+    Q --> E["Evals<br/>golden Q→expected from real aggregates"]
+    E --> J["Joins<br/>value-overlap + proven-SQL mining"]
+    J --> SM["Semantic + Metrics<br/>(if flags ON, auto-approved)"]
+    SM --> A["Artifacts<br/>Summary · FAQ · Briefing · KPI pack · Dictionary"]
+    A --> R(["Readiness 0→100"])
+
+    style R fill:#2f7d4f,color:#fff
+```
+
+Async: `POST /studios/{id}/train`, poll `GET .../train/status` (per-table progress, 600 s/source timeout,
+fail-soft). Re-trains skip unchanged tables (row-count watermark) and surface schema drift. Auto-train
+**auto-approves** its own output, so the Review queue is empty after a run.
+
+| Stage | Module | Notes |
 |---|---|---|
-| Profile | every column → role · distinct · sample values · null % (all tables) | `column_intel` |
-| Knowledge | extract definitions from uploaded `.xlsx`/`.pptx`, applied live | auto-configure |
-| Queries | LLM example SQL, **verified read-only** before saving | `auto_queries` |
-| Evals | golden Q→expected from real aggregates | `auto_evals` |
-| Joins | value-overlap mining (works day 1) + proven-SQL mining | `join_miner` |
-| Artifacts | Summary · FAQ · Briefing · Notes · KPI pack · Data dictionary | `studio_artifacts` |
-
-Training is **async** (`POST /studios/{id}/train`, poll `GET .../train/status`). Profiling reports **per-table progress** (the status bar moves table-by-table) and per-source has a 600 s timeout so a hung remote query fails soft instead of freezing the run. Re-trains skip unchanged tables (row-count watermark) and surface schema drift.
-
-> When `HYBRID_SEMANTIC_LAYER` / `HYBRID_METRICS_CATALOG` are ON, **Auto-train everything** now also fills the **Semantic** + **Metrics** tabs (a `semantic_metrics` stage proposes table meanings + KPI definitions from each source schema and auto-approves them — no separate AI-suggest click needed). With the flags OFF, those tabs stay empty (opt-in). **Assets** is still opt-in. The Review queue is empty after a train because Auto-train auto-approves.
+| Profile | `column_intel` | every column, all tables |
+| Knowledge | auto-configure | applied live from `.xlsx`/`.pptx` |
+| Queries | `auto_queries` | read-only-verified before saving |
+| Evals | `auto_evals` | golden Q→expected |
+| Joins | `join_miner` | works day 1 (no history needed) |
+| Semantic/Metrics | `semantic_metrics` | only when `HYBRID_SEMANTIC_LAYER` / `HYBRID_METRICS_CATALOG` ON |
+| Artifacts | `studio_artifacts` | 6 generated docs |
 
 ---
 
-## Domain Packs — lightweight "Skills"
+## Connector model
 
-A **Domain Pack** is a declarative `.yaml` recipe in `backend/app/ai/packs/library/` (method + required inputs + output spec). It is **never executed** — the router injects its `[METHOD] + [BINDING]` into the AgentV2 planner so the stable `create_data`/`create_artifact` loop follows it.
+**Every connection has an owner + a visibility; an agent only *references* (pins) connections — it never
+stores credentials.** 46 connector types; each *type* is a template, each connection a **named instance**
+(ten Postgres = ten rows; blank names auto-derive `Postgres · host/db`).
 
-- **3-layer gate** prevents wrong-skill firing: (1) bind gate (required inputs must map to the agent's real columns), (2) trigger gate (question must match the domain), (3) score + learned win-rate.
-- **48 packs ship** — Finance (ebitda + Tier A/B/C) ported from the Anthropic financial-services method, and 33 general-analytics packs ported from the data-analytics-skills library. Packs whose columns are missing bind **dormant** until the column appears (re-checked on schema drift).
-- **Teach Box** (Studio → Teach) — paste an analysis → one LLM call classifies it into `SKILL`/`INSTRUCTION`/`DATA_RULE`/`KNOWLEDGE`, each born **pending** behind the review gate.
-- **Review UI** — Studio → **Skills** tab (approve/reject/promote, binding + win-rate + dormant hints); org-wide **Settings → Pack Analytics**.
+```mermaid
+flowchart TD
+    C["Create connection<br/>(46 types, creds Fernet-encrypted)"] --> V{"Visibility"}
+    V -->|"🔒 Private"| P["owner + super-admins only"]
+    V -->|"👥 Shared"| S["owner + granted users/groups<br/>(resource_grants)"]
+    V -->|"🌐 Org-wide"| O["every org member<br/>(self-service, audit-logged)"]
+    P --> U["Pin into an Agent"]
+    S --> U
+    O --> U
+    U --> Q["Queries run under the<br/>connection's auth_policy<br/>(member never sees creds)"]
+```
 
-Plan: `docs/PLAN_TEACH_SKILLS_ENGINE.md`.
+Manage (edit / test / rotate / delete) = the connection **owner** or any **super-admin**. Authz enforced by a
+single `guard_owned_connection` dependency on every connector mutate route. Credentials are never returned to
+the browser.
 
 ---
 
-## Intelligence Layer (dash-parity grounding)
+## Intelligence Layer
 
-Eight capabilities that close the prompt-context gap vs the `reference/dash` blueprint. All flag-gated (default OFF) and additive. Each surfaces per-agent in **Studio → Intelligence** (8 tabs), with live data + an org-wide toggle, read via `GET /api/intelligence/layer/{layer}`.
+Eight additive, flag-gated grounding capabilities (default OFF), each surfaced per-agent in **Studio →
+Intelligence** and read via `GET /api/intelligence/layer/{layer}`.
 
 | Layer | Flag | What |
 |---|---|---|
-| Deep Profiler | `HYBRID_PROFILE_V2` | per-column role catalog (DIMENSION/STATE/MEASURE/IDENTIFIER/TEMPORAL) + top-3 values + variant warnings |
-| Lazy Profile / Drift | `HYBRID_PROFILE_V2` | cache-miss → inline-profiles a table added after training, at query time |
-| Proactive Insights | `HYBRID_PROACTIVE_INSIGHTS` | z-score + IQR + spike scan on every result → chips (no LLM, fail-soft) |
-| Forecasting | `HYBRID_FORECAST` | Prophet `forecast_df` tool (lazy-import; needs an image rebuild to bake prophet) |
-| Golden Queries | `HYBRID_GOLDEN_QUERIES` | promote proven SQL (👍 or verified ≥2) → injected first for reuse |
-| Code Enrich | `HYBRID_CODE_ENRICH` | LLM extracts grain / formulas / population from DDL+SQL → `pipeline_logic` |
-| Verified Metrics | `HYBRID_VERIFIED_METRICS` | a locked metric runs its own read-only `sql_calc`, marked AUTHORITATIVE, drift-tracked |
-| Hybrid Search + KG | `HYBRID_SEMANTIC_SEARCH` | pgvector + BM25 RRF + entity graph (scaffold — no prompt injection yet) |
+| Deep Profiler | `HYBRID_PROFILE_V2` | per-column role catalog + top-3 values + variant warnings |
+| Lazy Profile / Drift | `HYBRID_PROFILE_V2` | inline-profiles a table added after training, at query time |
+| Proactive Insights | `HYBRID_PROACTIVE_INSIGHTS` | z-score + IQR + spike scan → chips (no LLM) |
+| Forecasting | `HYBRID_FORECAST` | Prophet `forecast_df` tool (needs prophet baked) |
+| Golden Queries | `HYBRID_GOLDEN_QUERIES` | promote proven SQL (👍 or verified ≥2) → injected first |
+| Code Enrich | `HYBRID_CODE_ENRICH` | LLM extracts grain / formulas / population → `pipeline_logic` |
+| Verified Metrics | `HYBRID_VERIFIED_METRICS` | locked metric runs its own read-only calc, marked AUTHORITATIVE |
+| Hybrid Search + KG | `HYBRID_SEMANTIC_SEARCH` | pgvector + BM25 RRF + entity graph |
 
-Migration chain: `resultcache1 → goldenq1 → verifmetric1 → hybridsearch1`. Each flag needs **both** a `@property` and an `UPGRADE_FLAGS` entry (else per-org overrides are silently ignored). The five safe layers (Profiler, Lazy, Verified Metrics, Golden, Insights) are enabled by default for the dev org; Code Enrich (per-table LLM cost), Forecast (needs prophet bake) and Hybrid Search (scaffold) stay OFF.
-
-> Next: ingest-storage upgrade (Parquet canonical store) + LLM merge-judge for semantic same-schema detection — plan in `docs/PLAN_INGEST_STORAGE.md`.
-
----
-
-## Deploy / iterate
-
-The **frontend is baked** (`nuxt generate`) into the image. The **backend** can be hot-iterated.
-
-```bash
-# --- frontend change (.vue / nuxt config) ---
-cd frontend
-NODE_OPTIONS=--max-old-space-size=6144 npm run generate     # outputs to .output/public
-docker cp .output/public/. ca-app:/app/frontend/dist        # no restart needed
-docker commit ca-app cityagent-analytics:dev                # bake so it survives recreate
-
-# --- backend change (.py) ---
-docker cp backend/app/<file>.py ca-app:/app/backend/app/<file>.py
-docker exec ca-app python -m py_compile /app/backend/app/<file>.py
-docker restart ca-app
-docker commit ca-app cityagent-analytics:dev
-```
-
-> **Hard rules:**
-> - **Never** `docker compose ... --force-recreate` — it re-bakes from the image and wipes hot-copied files.
-> - **Never** rebuild the image from disk after a hot-copy without re-baking — `docker commit` is what persists.
-> - **Never** pull `bagofwords/bagofwords:latest` — always build `cityagent-analytics:dev` from this repo.
-> - On macOS, `/usr/bin/ls` may be absent — use `/bin/ls`.
-
-Per-org feature flags can be flipped live: `PUT /api/organization/hybrid-flags/{env}` body `{"enabled": true|false}` (or **Settings → Feature Flags**).
-
-### Share an agent as a Template
-
-A smart agent can be exported as a **Template** — its data-agnostic know-how (rules, metric formulas, example patterns, skills, persona), with data/credentials/column-names stripped. Others browse the **Templates** gallery (Studios → Templates), pick one, **bind** its required column-roles to their own columns in a wizard, and get their own agent — imported rules/metrics land *pending* for review. Export from a studio header (**Export as Template**). Versioned (`VERSION_HYBRID`-style semver), org or global scope. Flag `HYBRID_AGENT_TEMPLATES`. Reuses the Domain-Pack bind-gate + review gate. See `docs/PLAN_AGENT_TEMPLATES.md`.
-
-### Install as an app (PWA)
-
-The frontend is an installable PWA. In Chrome/Edge, open the app and click **Install app** in the top bar (left of the 🔔 bell) or the ⊕ in the address bar — it installs to the dock/start menu as a standalone window with an offline shell. The service worker precaches the app shell but **never caches `/api` or `/ws`** (always live data/auth). Built automatically by `@vite-pwa/nuxt` during `nuxt generate` (`sw.js` + `manifest.webmanifest`).
-
-> **Prod requires HTTPS** for install + the service worker (set `base_url` in `dash-config.yaml` to an https origin behind TLS); `http://localhost:3007` is exempt for testing. iOS uses Share → Add to Home Screen (no programmatic prompt).
-
-### Folder Sync — auto-ingest a local folder ("like Claude Code")
-
-Point a small desktop app at a folder; new and changed **Excel/CSV** files become data agents automatically — no clicks. A browser can't watch the local filesystem, so this is a tiny background helper (`folder-sync-agent/`) that pairs with a one-time **sync key** and pushes only deltas.
-
-- **Pairing** — Settings → **Folder Sync** (or any studio's **Add data → Sync a folder ⟳**) generates a `bow_` API key. Paste it + the server URL into the desktop app.
-- **Per-agent binding** — a folder syncs into a specific agent; the tray app picks which one (or “new agent from folder”).
-- **Smart deltas** — a local `sha256` ledger means byte-identical files are skipped without a network call; an edited file with the same schema **replaces the same agent** (no duplicates, via the existing content-hash dedup + same-schema merge); deletes are ignored.
-- **Server** — `POST /api/sync/file` (multipart + `X-API-Key`), plus `/api/sync/status`, `/api/sync/agents`, `/api/sync/key`. Auth reuses `mcp_auth` (JWT or API key) so the agent runs headless. State lives in `folder_sync_states` (path → last hash → resolved DataSource/Studio); no file bytes are stored there.
-- **Desktop app** — `folder-sync-agent/sync_agent.py` (stdlib + `requests` + `watchdog`; `setup`/`run`/`status`/`agents` CLI; config + state in `~/.cityagent-sync/`) plus an optional `pystray` tray (`tray.py`). The modal's **macOS / Windows / Linux** buttons download it as a zip via `GET /api/sync/download/{os}` (the agent source + a per-OS `INSTALL.txt`); then `pip install -r requirements.txt && python sync_agent.py setup && python sync_agent.py run`. Signed native installers are Phase 6. **Note:** the agent source must be baked into the image at `/app/folder-sync-agent` (a fresh `docker build` needs a Dockerfile `COPY`, else the download returns 503).
-
-Flag `HYBRID_FOLDER_SYNC` (default OFF).
-
-### Scheduled Reports — agent emails a clean result on a cadence
-
-Any studio can email a **structured result** (not the raw agent chat) on a cron schedule. Studio → **Manage → Reports**: create/edit/pause/delete a scheduled prompt, set cadence + subscribers + a **format** (`auto · table · dashboard · artifact · workflow`), and **Send test now**. On each run the agent executes against a hidden per-studio container report, the result is rendered **clean** (zebra table / Playwright dashboard PNG+PDF / artifact preview / workflow timeline), and is delivered via the **agent's own SMTP identity** (per-studio → AI-mailbox → org → global).
-
-- **Engine** — `backend/app/services/report_delivery/` (frozen `contract.py` + auto-discovered `renderers/<mode>.py`; sanitizer strips planning/fences/recap noise). Per-agent SMTP via `email_client_resolver.resolve_outbound(...)`. Routes `routes/studio_reports.py`; UI `components/studio/StudioReports.vue`.
-- **Flags** — `HYBRID_AGENT_REPORTS` (Reports tab) + `HYBRID_RICH_REPORT_EMAIL` (rich-render engine; OFF = legacy raw path). Both default OFF.
-- **Note** — dashboard/artifact rendering needs the image's headless chromium (Playwright) + `soffice`/`pdftoppm`; transient Docker-DNS SMTP failures are retried ×3.
-
-### One-click artifacts — Dashboard / Slides / Excel from a report's charts
-
-When a report already has charts, its right-panel **Dashboard**, **Slides** and **Excel** views turn their empty states into one-click builders (no chatting):
-
-- **Generate dashboard** — builds a real interactive **page** artifact (KPI cards + responsive chart grid); rendered by `ArtifactFrame`.
-- **Generate slide deck** — builds a real **slides** artifact: a python-pptx deck with native charts + page previews, **exportable to `.pptx`** (replaces the lightweight client-side placeholder deck).
-- **Excel auto-fills** — one sheet per chart, populated with the real query grids.
-
-Each builder reuses the chat `create_artifact` pipeline over the report's existing visualizations (no new analysis), so the output is identical to one the agent would make in chat.
-
-- **Backend** — `routes/report_slides.py`: `POST /api/reports/{id}/dashboard/generate` (mode=`page`) + `…/slides/generate` (mode=`slides`) share `_generate_artifact(mode)`; read-only `GET /api/reports/{id}/workbook` returns the Excel sheets from each query's latest success step (`steps.data`, parquet-hydrated, capped 5000 rows × 50 sheets). Slides need headless `soffice`/`pdftoppm` for previews.
-- **Flag** — `HYBRID_ONECLICK_ARTIFACTS` (default OFF). Flag OFF = legacy empty states / client `SlidesPanel`.
-
-### Releasing a feature (changelog)
-
-Shipped features are versioned in `VERSION_HYBRID` (hybrid semver, e.g. `1.2.0`) with a matching entry in `CHANGELOG_HYBRID.md` (`## v<semver> — <title>  (<YYYY-MM-DD>)` + `-` bullets, newest first). The app exposes this at `GET /api/changelog` and surfaces it as a **🔔 What's new** popover in the top bar (bell before the user profile) with an unseen badge per user. Bump `VERSION_HYBRID` and prepend a `CHANGELOG_HYBRID.md` entry whenever you ship — the bell updates automatically. Full feed at `/changelog`.
+**Wren/Julius optimization (v1.156–1.160.2)** adds: SQL pushdown + `sql_validate` (`HYBRID_SQL_VALIDATE`),
+coder grounding (`HYBRID_CODER_GROUNDING`), paraphrase-aware learned-query recall via embedding+RRF
+(`HYBRID_RECALL_RRF`), and Julius-quality output — analysis notebook (`HYBRID_ANALYSIS_NOTEBOOK`), data-aware
+follow-ups (`HYBRID_FOLLOWUPS_DATA_AWARE`), broadened smart-viz (`HYBRID_SMART_VIZ`), grounded starters
+(`HYBRID_STARTERS_DATA_GROUNDED`). Detail → `CLAUDE.md` "Current state".
 
 ---
 
 ## Feature flags
 
-New features are flag-gated (`backend/app/settings/hybrid_flags.py`, env `HYBRID_*`, default OFF; dev `.env` turns them on). Per-org live overrides via **Settings → Feature Flags**.
+All new features live in `backend/app/settings/hybrid_flags.py` (env `HYBRID_*`, default OFF). Flip per-org
+live via **Settings → Feature Flags** (writes `organization_settings.config.hybrid_overrides`, loaded at boot →
+`docker restart ca-app` to converge across workers). A flag needs **3 places** or it's invisible: a `@property`,
+an `UPGRADE_FLAGS` entry, and a `snapshot()` entry.
 
-Key flags: `COLUMN_INTEL · AUTO_QUERIES · AUTO_EVALS · JOIN_GRAPH · DOC_KNOWLEDGE · STUDIOS · SEMANTIC_LAYER · METRICS_CATALOG · DOMAIN_PACKS · PACK_ROUTER · PACK_AUTOBIND · TEACH_BOX · SCOPE_GATE · FOLLOWUPS · AGENT_TEMPLATES · FOLDER_SYNC · AGENT_REPORTS · RICH_REPORT_EMAIL · ONECLICK_ARTIFACTS · GROUP_ACCESS · USER_GROUPS`. Intelligence Layer: `PROFILE_V2 · PROACTIVE_INSIGHTS · FORECAST · GOLDEN_QUERIES · CODE_ENRICH · VERIFIED_METRICS · SEMANTIC_SEARCH`. Env knob: `STUDIO_LEARN_DAEMON_ENABLED`.
+Common flags: `STUDIOS · COLUMN_INTEL · AUTO_QUERIES · AUTO_EVALS · JOIN_GRAPH · DOC_KNOWLEDGE · SEMANTIC_LAYER ·
+METRICS_CATALOG · DOMAIN_PACKS · TEACH_BOX · SCOPE_GATE · FOLLOWUPS · AGENT_TEMPLATES · FOLDER_SYNC ·
+AGENT_REPORTS · RICH_REPORT_EMAIL · ONECLICK_ARTIFACTS · GROUP_ACCESS · USER_GROUPS`.
 
-For stability, **Skills (heavy sandbox exec) / sub-agents / MCP are OFF by default**; the lightweight Domain-Pack path is the supported "skills" mechanism.
+> For stability, heavy sandbox Skills / sub-agents / MCP are OFF by default; the lightweight Domain-Pack path is
+> the supported "skills" mechanism.
 
 ---
 
-## Architecture rules (for contributors)
+## Key endpoints
 
-1. **OpenRouter only** for LLM (Dash `custom` provider, per-org encrypted key).
-2. Touch Dash core **minimally** — prefer new files + hook points (fast-moving OSS fork).
-3. Everything new is **flag-gated** (default OFF); everything learned is **review-gated** (pending → approve).
-4. New routes registered in `backend/main.py`; migrations chain off the single true head; no `from __future__ import annotations` on body+permission routes.
-5. **UI/UX = `DESIGN_SYSTEM.md`** (clay brand tokens, serif H1, exactly 3 button variants, 3 card types, no `gray-*`). New/edited `.vue` must conform.
-6. **Agents are scoped to their data** — a scope guardrail (`HYBRID_SCOPE_GATE`, default ON) refuses off-topic questions; a studio report is locked to the studio's pinned sources.
-7. **Generated slides + dashboards must stay readable** — the `create_artifact` prompts enforce a contrast contract (all text/axes/legends must contrast the chosen light/dark theme).
+Org-scoped calls need header `X-Organization-Id`. Login: `POST /api/auth/jwt/login` (form `username`/`password`).
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /health` | liveness (`{"status":"ok"}`) |
+| `POST /api/auth/jwt/login` · `POST /api/auth/register` | auth (first registrant = org owner) |
+| `POST /api/reports/{id}/completions` · `GET .../completions` | run / poll a chat completion |
+| `POST /api/completions/{id}/sigkill` | stop a running generation |
+| `POST /api/studios/{id}/train` · `GET .../train/status` | auto-train + progress |
+| `POST /api/data_sources/demos/chinook` | load the built-in demo DB |
+| `GET /api/reports/{id}/notebook` | analysis "show-your-work" trail (flag) |
+| `POST /api/reports/{id}/dashboard/generate` · `.../slides/generate` · `GET .../workbook` | one-click artifacts |
+| `GET /api/organization/hybrid-flags/{env}` · `PUT` | read / flip feature flags |
+| `POST /api/sync/file` · `GET /api/sync/{status,agents,key}` | Folder-Sync desktop agent |
+| `GET /api/changelog` | 🔔 What's-new feed |
+
+---
+
+## Repo layout
+
+```
+backend/
+  main.py                       # app factory; ALL router includes; load_overrides_from_db on boot
+  app/
+    ai/
+      agent_v2.py               # planner/execute/reflect loop (CORE)
+      context/ · context_hub.py # grounding builders (schema/semantic/joins/metrics)
+      agents/coder/             # code-gen + grounding + pushdown
+      knowledge/                # train_orchestrator · notebook · followups · query_learning
+      tools/implementations/    # drop a file = auto-registered tool
+    data_sources/clients/       # <type>_client.py per connector (BaseClient)
+    routes/ · services/         # FastAPI routers + business logic
+    settings/hybrid_flags.py    # HYBRID_* flags (3-place: property + UPGRADE_FLAGS + snapshot)
+    alembic/                    # migrations (chain off single true head — now: biuplift1)
+frontend/
+  pages/ · components/          # Nuxt 3 SPA (useMyFetch → BARE paths, prepends /api)
+folder-sync-agent/             # standalone desktop ingest agent (baked at /app/folder-sync-agent)
+scripts/build.sh · fe-sync.sh   # build image · hot FE sync
+docker-compose.build.yaml       # THE stack file
+```
 
 ---
 
@@ -569,17 +421,30 @@ For stability, **Skills (heavy sandbox exec) / sub-agents / MCP are OFF by defau
 
 | Symptom | Cause / fix |
 |---|---|
-| `{"status":"ok"}` not returned | container still booting; `docker logs ca-app` and re-check `/health` |
-| Chat/training errors immediately (401) | no OpenRouter key yet — paste it in **Settings → Models** (the provider is auto-seeded; the key is stored encrypted per-org, not in `.env`) |
-| `cityagent-base:dev pull access denied` on build | old/stale build invocation — the base is now folded into the Dockerfile; just `docker compose up -d --build` (or `bash deploy.sh`) |
-| `bind: address already in use` / `port is already allocated` | another process owns that host port — `ss -ltnp \| grep <port>` to find it, then set a free `APP_PORT` (direct/Caddy) or `HTTP_PORT` (nginx) in `.env`. The app needs only ONE free host port; its other app can keep theirs. |
-| Logs say `http://0.0.0.0:3000` but you set another port | that line is the **container-internal** port (always 3000) — normal. Your real port is the `0.0.0.0:<port>->...` in `docker compose ps`. |
-| `port already in use` only when switching proxy modes | the old stack is still running — `docker compose -f <old-file> down` (no `-v`) before `up` on the new compose file. |
-| Hot-copy to `ca-app:/app/frontend/dist` → Permission denied | `dist` is root-owned — use `docker exec -u 0 ca-app` for the `rm`/`mkdir`, copy, then `chown -R app:app /app/frontend/dist` |
-| Auto-train bar "stuck" early | profiling a large connector takes minutes; the bar now moves per table — watch `docker logs -f ca-app 2>&1 \| grep "\[profile\]"` |
-| FE change didn't show | you skipped the bake — `docker cp .output/public/. ca-app:/app/frontend/dist` then `docker commit` |
-| FE change vanished after restart | a `--force-recreate` wiped the hot-copy; rebuild + re-bake |
-| Setting won't take effect | a compose `${VAR:-default}` is overriding the registry default |
-| Semantic/Metrics tabs empty | enable `HYBRID_SEMANTIC_LAYER` / `HYBRID_METRICS_CATALOG` then re-run **Auto-train everything** (fills + auto-approves them); flags OFF = empty by design. Assets still opt-in (AI-suggest). |
+| `/health` not `ok` | still booting — `docker logs ca-app`, re-check |
+| Chat/train 401 immediately | no OpenRouter key — paste in **Settings → Models** (encrypted per-org, not `.env`) |
+| Dashboard hangs "Starting… 0/0" on Power BI | fixed in **v1.160.2** — was a 429 throttle storm from brute table-discovery; rebuild if on older |
+| Stop button 500 | fixed in **v1.160.2** (sigkill returned raw ORM → recursion); rebuild if on older |
+| `bind: address already in use` | another process owns the host port — `ss -ltnp \| grep <port>`, pick a free `APP_PORT`/`HTTP_PORT` |
+| Logs say `:3000` but you set another port | that's the container-internal port (always 3000) — normal; your host port is in `docker compose ps` |
+| FE change didn't show | you skipped the bake — `fe-sync.sh` then `docker commit` (or full rebuild) |
+| FE/BE change vanished after recreate | `--force-recreate` reverts to the image — bake first (`docker commit` / rebuild) |
+| Setting won't take | a compose `${VAR:-default}` is overriding the registry default |
+| Semantic/Metrics tabs empty | enable `HYBRID_SEMANTIC_LAYER` / `HYBRID_METRICS_CATALOG`, re-run Auto-train |
+| Empty DB after `up` | you ran a plain `docker compose up` — always pass `-f docker-compose.build.yaml` |
+| Data gone | someone ran `docker compose down -v` — the `-v` drops the DB volume. Never use it. |
 
-See `CLAUDE.md` for the complete codebase map + every landmine, and `DEVLOG.md` for the per-feature changelog.
+---
+
+## Contributor rules
+
+1. **OpenRouter only** for LLM (Dash `custom` provider, per-org encrypted key).
+2. Touch core **minimally** — prefer new files + hook points.
+3. Everything new is **flag-gated** (default OFF); everything learned is **review-gated** (pending → approve).
+4. New routes registered in `backend/main.py`; migrations chain off the **single true head** (mind tuple
+   `down_revision` in merges); flags need no migration, new tables do.
+5. **Never return a raw ORM object with loaded relationships from a route** — serialization recurses → 500
+   (return a schema or plain dict).
+6. **UI/UX = `DESIGN_SYSTEM.md`** (clay brand tokens, serif H1, 3 button variants, no `gray-*`).
+7. **Agents are scoped to their data** — `HYBRID_SCOPE_GATE` (default ON) refuses off-topic questions.
+8. Bump `VERSION_HYBRID` + prepend `CHANGELOG_HYBRID.md` on every ship (🔔 bell auto-updates).
