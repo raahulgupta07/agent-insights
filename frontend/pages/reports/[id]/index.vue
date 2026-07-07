@@ -1398,6 +1398,9 @@
 						@openArtifact="handleOpenArtifact"
 						@scrollToMessage="scrollToMessage"
 					/>
+					<div class="px-3">
+						<ReportAnalysisNotebook :report-id="report_id" />
+					</div>
 				</div>
 			</div>
 
@@ -1825,6 +1828,7 @@ import { useRunSound } from '~/composables/useRunSound'
 const runSound = useRunSound()
 import ReportAgentPanel from '~/components/report/ReportAgentPanel.vue'
 import ChatSummary from '~/components/report/ChatSummary.vue'
+import ReportAnalysisNotebook from '~/components/report/ReportAnalysisNotebook.vue'
 import DecisionCard from '~/components/DecisionCard.vue'
 import SlidesPanel from '~/components/report/SlidesPanel.vue'
 import ExcelPanel from '~/components/report/ExcelPanel.vue'

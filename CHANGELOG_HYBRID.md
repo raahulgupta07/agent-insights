@@ -3,6 +3,10 @@
 Hybrid feature changelog (our additions on top of the bagofwords/Dash base). Newest first.
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` then bullets.
 
+## v1.160.1 — Analysis Notebook UI panel (Phase 4 follow-up)  (2026-07-07)
+- The Analysis Notebook now has a screen: the report's Outputs panel shows the step-by-step "how this was worked out" trail when the feature is on. Invisible when off or when there's nothing to show.
+  - NEW `frontend/components/report/ReportAnalysisNotebook.vue` (fetches `/reports/{id}/notebook` via `useMyFetch`, warm-themed numbered steps with chart chips, single `v-if` → renders nothing when `enabled:false` / 0 steps / any fetch error). Mounted in `pages/reports/[id]/index.vue` under `<ChatSummary/>` in the Summary/Outputs view (explicit import to dodge the Nuxt auto-import-prefix landmine). One import + one tag, additive. `nuxt generate` clean.
+
 ## v1.160.0 — Julius-quality output: show-your-work notebook, data-aware follow-ups, smarter charts & starters (Phase 4)  (2026-07-07)
 - **Analysis notebook** — a step-by-step "show your work" trail of how an answer was reached (what each step did + its result), like Julius. Read-only, built from the analysis steps already saved. Turn on **Settings → Features → Analysis Notebook**.
 - **Data-aware follow-ups** — suggested next questions now reference the real columns and example values from your result, not just re-word the answer. Turn on **Data-aware Follow-ups** (needs Follow-ups on).
