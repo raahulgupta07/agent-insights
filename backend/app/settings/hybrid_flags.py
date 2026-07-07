@@ -226,6 +226,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_BI_SNAPSHOT": {"label": "BI Snapshot (Power BI/Fabric local cache)", "role": "agent", "category": "Performance", "status": "experimental", "note": "Snapshot Power BI / Fabric tables into a local store (DuckDB) on sync and query the local copy (ms) instead of live DAX over HTTP (slow + throttled). Per-agent 'Live mode' bypasses to the source. Needs FAST_LANE. Default OFF."},
     "HYBRID_FAST_CODEGEN": {"label": "Fast Codegen Model", "role": "agent", "category": "Performance", "status": "experimental", "note": "Route the pure code-generation step (create_data) to the org's fast/small model (a Gemini flash variant) so code steps run 3-5x cheaper/faster in tokens, while planning/reflection stay on the higher-quality model. Fail-soft to the normal model. Needs FAST_LANE. Default OFF."},
     "HYBRID_WAREHOUSE_CACHE": {"label": "Warehouse Result Cache", "role": "agent", "category": "Performance", "status": "experimental", "note": "Cache the ROWS returned by a SQL query against a live warehouse source (postgres/snowflake/bigquery/…) per (data_source, normalized SQL) for a short TTL, so a repeated identical query returns instantly with zero DB round-trip. Warehouse lane only (local uploads are already fast; BI has its own snapshot lane). Read-only SELECT results only; fail-soft (miss runs live). Needs FAST_LANE. Default OFF."},
+    "HYBRID_SUBPROCESS_SANDBOX": {"label": "Subprocess sandbox (isolated code exec)", "role": "agent", "category": "Performance", "status": "experimental", "note": "Runs uploaded-file analysis code in a fresh isolated process so memory is freed after every run; prevents the shared worker heap from filling. Default OFF."},
     "HYBRID_SMART_VIZ": {"label": "Smart Viz Picker", "role": "user", "category": "Intelligence", "status": "experimental", "note": "Deterministic chart-type correction on top of the LLM's pick, using the data profile already computed (rows, columns, dtype, cardinality): high-cardinality category -> bar not pie, time + numeric -> line, two numerics -> scatter, too many categories -> top-N. Never widens the allowed viz set; fail-soft to the LLM answer. Default OFF."},
     "HYBRID_AUTO_FORMAT": {"label": "Result Auto-Format", "role": "user", "category": "Intelligence", "status": "experimental", "note": "Attach a per-column display format to result tables (thousands separators, currency, %, decimals, dates) derived from column dtype + name. Rendered as a valueFormatter; underlying values unchanged. Fail-soft. Default OFF = raw numeric/ISO."},
     "HYBRID_BRAND_PALETTE": {"label": "Brand Chart Palette", "role": "user", "category": "Intelligence", "status": "experimental", "note": "Default chart theme uses the CityAgent brand palette (accent #C2541E-led) instead of generic blue. Per-report theme overrides still win. Frontend-only. Default OFF."},
@@ -609,6 +610,14 @@ class HybridFlags:
         # SELECT results only; fail-soft (miss runs live). Gated by FAST_LANE.
         # Default OFF = byte-identical to today.
         return _bool("HYBRID_WAREHOUSE_CACHE", False)
+
+    @property
+    def SUBPROCESS_SANDBOX(self) -> bool:
+        # Runs ad-hoc uploaded-file analysis code in a fresh isolated one-shot
+        # child process instead of in-process, so its memory is freed after
+        # every run instead of accumulating in the shared worker heap.
+        # Fail-soft (any doubt → in-process, today's behavior). Default OFF.
+        return _bool("HYBRID_SUBPROCESS_SANDBOX", False)
 
     # --- Phase 4 (Julius-quality polish) — all default OFF ---
     @property
@@ -1988,6 +1997,7 @@ class HybridFlags:
             "BI_SNAPSHOT": self.BI_SNAPSHOT,
             "FAST_CODEGEN": self.FAST_CODEGEN,
             "WAREHOUSE_CACHE": self.WAREHOUSE_CACHE,
+            "SUBPROCESS_SANDBOX": self.SUBPROCESS_SANDBOX,
             "SMART_VIZ": self.SMART_VIZ,
             "AUTO_FORMAT": self.AUTO_FORMAT,
             "BRAND_PALETTE": self.BRAND_PALETTE,

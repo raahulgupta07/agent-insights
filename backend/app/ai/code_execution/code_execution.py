@@ -76,6 +76,53 @@ _CODE_EXEC_POOL = ThreadPoolExecutor(
 DEFAULT_SANDBOX_MEM_LIMIT_MB = 2048
 
 
+# Wall-clock cap (seconds) for a run offloaded to the subprocess sandbox
+# (HYBRID_SUBPROCESS_SANDBOX). Past this the child is SIGKILLed and the run
+# fails cleanly (retryable), instead of hanging the shared worker. Overridable
+# via env CODE_EXEC_SUBPROCESS_TIMEOUT_S.
+def _resolve_subprocess_timeout_s() -> float:
+    raw = os.environ.get("CODE_EXEC_SUBPROCESS_TIMEOUT_S")
+    if raw and raw.strip():
+        try:
+            return float(raw.strip())
+        except (TypeError, ValueError):
+            pass
+    return 120.0
+
+
+# Tokens whose presence in generated code means the run needs an in-process
+# injectable (live DB client / loadable closure / http / federate / passthrough
+# frame) that the isolated subprocess path does NOT provide. Conservative: any
+# hit → run in-process (today's behavior), never silently wrong.
+_INPROCESS_ONLY_TOKENS = (
+    "db_clients", "load_step", "load_entity", "federate", "http", "input_df",
+)
+
+
+def _can_offload_to_subprocess(
+    code: str, ds_clients, excel_files, loadables, input_df,
+) -> bool:
+    """True when a run is safe to execute in the isolated subprocess sandbox.
+
+    Only ad-hoc uploaded-file runs qualify (Phase 1): a file to read, NO live
+    DB clients, no loadables, no passthrough frame, and code that references
+    none of the in-process-only injectables. Everything else falls through to
+    the existing in-process path unchanged. Flag-gated (default OFF)."""
+    if not flags.SUBPROCESS_SANDBOX:
+        return False
+    if not excel_files:
+        return False
+    if ds_clients and len(ds_clients) > 0:
+        return False
+    if loadables:
+        return False
+    if input_df is not None:
+        return False
+    if any(tok in code for tok in _INPROCESS_ONLY_TOKENS):
+        return False
+    return True
+
+
 def _resolve_mem_cap_mb() -> int:
     """Resolve the address-space cap in MB. <= 0 means disabled.
 
@@ -1094,6 +1141,62 @@ class StreamingCodeExecutor:
 
             # Security: Validate Python code and SQL strings before execution
             validate_python_code(code)
+
+            # ── Isolated subprocess sandbox (HYBRID_SUBPROCESS_SANDBOX) ──────────
+            # For ad-hoc uploaded-file runs (no live clients/loadables/http), run
+            # the ALREADY-AST-VETTED code in a fresh one-shot child process so its
+            # memory is freed on exit instead of accumulating in the shared worker
+            # heap, with a per-process rlimit + hard timeout kill. Fail-soft: on
+            # ANY offload error we fall through to the in-process path below, so a
+            # subprocess-pool problem can never break a run. OFF → skipped entirely.
+            if _can_offload_to_subprocess(code, ds_clients, excel_files, loadables, input_df):
+                res = None
+                try:
+                    file_refs = [
+                        {"path": getattr(f, "path", None),
+                         "filename": getattr(f, "filename", None) or getattr(f, "name", None)}
+                        for f in (excel_files or [])
+                    ]
+                    if all(fr["path"] for fr in file_refs):
+                        from app.ai.code_execution.subprocess_pool import run_local_code
+                        _mem = _resolve_mem_cap_mb()
+                        res = run_local_code(
+                            code=code,
+                            file_refs=file_refs,
+                            allowed_builtin_names=list(_fresh_safe_builtins().keys()),
+                            mem_mb=_mem if _mem and _mem > 0 else DEFAULT_SANDBOX_MEM_LIMIT_MB,
+                            timeout_s=_resolve_subprocess_timeout_s(),
+                            spill_dir=None,
+                        )
+                except Exception:
+                    # PLUMBING failure (import/pickle/build) — never break a run;
+                    # fall through to the in-process path below (fail-soft).
+                    if self.logger:
+                        self.logger.warning(
+                            "Subprocess sandbox offload failed; falling back to in-process",
+                            exc_info=True,
+                        )
+                    res = None
+                if res is not None:
+                    span.set_attribute("code_execution.sandbox", "subprocess")
+                    span.set_attribute("code_execution.sandbox_ms", res.duration_ms)
+                    if res.error:
+                        # GENUINE run error (code bug / timeout / OOM) — raise so the
+                        # caller's retry/error path handles it exactly like in-process.
+                        raise Exception(res.error)
+                    if res.df_parquet is not None:
+                        df = pd.read_parquet(io.BytesIO(res.df_parquet))
+                    elif res.df_path:
+                        df = pd.read_parquet(res.df_path)
+                        try:
+                            os.remove(res.df_path)
+                        except OSError:
+                            pass
+                    else:
+                        df = pd.DataFrame()
+                    # Upload-only runs issue no SQL → executed_queries stays empty.
+                    return df, res.stdout, (captured_queries if captured_queries is not None else [])
+                # res is None → fall through to the in-process path unchanged.
 
             output_log = ""
             executed_queries: List[str] = captured_queries if captured_queries is not None else []
