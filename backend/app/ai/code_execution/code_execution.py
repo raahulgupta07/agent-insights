@@ -91,36 +91,73 @@ def _resolve_subprocess_timeout_s() -> float:
 
 
 # Tokens whose presence in generated code means the run needs an in-process
-# injectable (live DB client / loadable closure / http / federate / passthrough
-# frame) that the isolated subprocess path does NOT provide. Conservative: any
-# hit → run in-process (today's behavior), never silently wrong.
+# injectable the subprocess path does NOT provide. `db_clients` is NOT here —
+# the live path (Phase 4) rebuilds clients in the child; it is blocked only on
+# the upload path. Any hit → run in-process (today's behavior), never wrong.
 _INPROCESS_ONLY_TOKENS = (
-    "db_clients", "load_step", "load_entity", "federate", "http", "input_df",
+    "load_step", "load_entity", "federate", "http", "input_df",
 )
 
+# Plain-SQL connector types the child can rebuild from a serialized spec (Phase
+# 4). OAuth / BI / file-source connectors (powerbi_user, ms_fabric, onedrive,
+# sharepoint, google_drive, …) are intentionally EXCLUDED — they need token /
+# offline-index rebuild and stay in-process. An unknown type simply isn't
+# offloaded (safe: falls through to in-process).
+_SUBPROCESS_LIVE_TYPES = frozenset({
+    "postgresql", "postgres", "mysql", "mariadb", "mssql", "sqlserver",
+    "snowflake", "bigquery", "redshift", "aws_redshift", "oracle",
+    "clickhouse", "trino", "presto", "databricks_sql", "vertica",
+    "duckdb", "sqlite",
+})
 
-def _can_offload_to_subprocess(
-    code: str, ds_clients, excel_files, loadables, input_df,
-) -> bool:
-    """True when a run is safe to execute in the isolated subprocess sandbox.
 
-    Only ad-hoc uploaded-file runs qualify (Phase 1): a file to read, NO live
-    DB clients, no loadables, no passthrough frame, and code that references
-    none of the in-process-only injectables. Everything else falls through to
-    the existing in-process path unchanged. Flag-gated (default OFF)."""
+def _offloadable_client_specs(ds_clients):
+    """Return {key: _build_spec} iff EVERY live client is a rebuildable
+    allowlisted SQL connector (stamped with `_build_spec` at construct time),
+    else None → don't offload, run in-process."""
+    if not ds_clients:
+        return None
+    try:
+        items = list(ds_clients.items())
+    except Exception:
+        return None
+    specs = {}
+    for key, client in items:
+        spec = getattr(client, "_build_spec", None)
+        if not spec or spec.get("type") not in _SUBPROCESS_LIVE_TYPES:
+            return None
+        specs[key] = spec
+    return specs or None
+
+
+def _subprocess_offload_plan(code, ds_clients, excel_files, loadables, input_df):
+    """Decide whether a run may go to the isolated subprocess sandbox.
+
+    Returns:
+      - None → run in-process (today's behavior).
+      - {}   → offload, UPLOAD-only run (no live clients).
+      - {key: spec, …} → offload, LIVE-client run (Phase 4).
+
+    Conservative + flag-gated: uploads need HYBRID_SUBPROCESS_SANDBOX; live runs
+    additionally need HYBRID_SUBPROCESS_SANDBOX_LIVE and an all-allowlisted set
+    of rebuildable clients. Loadables / http / federate / passthrough frame →
+    always in-process."""
     if not flags.SUBPROCESS_SANDBOX:
-        return False
-    if not excel_files:
-        return False
-    if ds_clients and len(ds_clients) > 0:
-        return False
-    if loadables:
-        return False
-    if input_df is not None:
-        return False
+        return None
+    if loadables or input_df is not None:
+        return None
     if any(tok in code for tok in _INPROCESS_ONLY_TOKENS):
-        return False
-    return True
+        return None
+    has_clients = bool(ds_clients and len(ds_clients) > 0)
+    if not has_clients:
+        # Upload-only (Phase 1): a file to read, and no db_clients reference.
+        if not excel_files or "db_clients" in code:
+            return None
+        return {}
+    # Live-client run (Phase 4): behind its own sub-flag + the allowlist.
+    if not flags.SUBPROCESS_SANDBOX_LIVE:
+        return None
+    return _offloadable_client_specs(ds_clients)
 
 
 def _resolve_mem_cap_mb() -> int:
@@ -1149,7 +1186,10 @@ class StreamingCodeExecutor:
             # heap, with a per-process rlimit + hard timeout kill. Fail-soft: on
             # ANY offload error we fall through to the in-process path below, so a
             # subprocess-pool problem can never break a run. OFF → skipped entirely.
-            if _can_offload_to_subprocess(code, ds_clients, excel_files, loadables, input_df):
+            _offload_plan = _subprocess_offload_plan(
+                code, ds_clients, excel_files, loadables, input_df
+            )
+            if _offload_plan is not None:
                 res = None
                 try:
                     file_refs = [
@@ -1157,6 +1197,8 @@ class StreamingCodeExecutor:
                          "filename": getattr(f, "filename", None) or getattr(f, "name", None)}
                         for f in (excel_files or [])
                     ]
+                    # Any attached file missing a path → can't read it in the child;
+                    # fall through in-process rather than send a half-run.
                     if all(fr["path"] for fr in file_refs):
                         from app.ai.code_execution.subprocess_pool import run_local_code
                         _mem = _resolve_mem_cap_mb()
@@ -1167,6 +1209,7 @@ class StreamingCodeExecutor:
                             mem_mb=_mem if _mem and _mem > 0 else DEFAULT_SANDBOX_MEM_LIMIT_MB,
                             timeout_s=_resolve_subprocess_timeout_s(),
                             spill_dir=None,
+                            client_specs=(_offload_plan or None),  # {} → None (upload path)
                         )
                 except Exception:
                     # PLUMBING failure (import/pickle/build) — never break a run;
@@ -1175,6 +1218,14 @@ class StreamingCodeExecutor:
                         self.logger.warning(
                             "Subprocess sandbox offload failed; falling back to in-process",
                             exc_info=True,
+                        )
+                    res = None
+                # A live-client rebuild miss is NOT a run failure — fall through.
+                if res is not None and getattr(res, "rebuild_failed", False):
+                    if self.logger:
+                        self.logger.warning(
+                            "Subprocess sandbox client rebuild failed; falling back to in-process: %s",
+                            res.error,
                         )
                     res = None
                 if res is not None:
@@ -1194,7 +1245,8 @@ class StreamingCodeExecutor:
                             pass
                     else:
                         df = pd.DataFrame()
-                    # Upload-only runs issue no SQL → executed_queries stays empty.
+                    # SQL executed inside the child isn't captured here (executed_queries
+                    # stays empty) — the DataFrame/answer is unaffected.
                     return df, res.stdout, (captured_queries if captured_queries is not None else [])
                 # res is None → fall through to the in-process path unchanged.
 

@@ -1918,6 +1918,10 @@ class DataSourceService:
         except Exception:
             allowed = params
         client = ClientClass(**allowed)
+        try:
+            client._build_spec = {"type": conn.type, "params": dict(allowed)}
+        except Exception:
+            pass
         await self._install_pbi_offline_index(db, client, conn)
         return client
 
@@ -2118,6 +2122,16 @@ class DataSourceService:
                 allowed = params
 
             client = ClientClass(**allowed)
+            # Serializable rebuild spec (HYBRID_SUBPROCESS_SANDBOX_LIVE): lets the
+            # isolated subprocess sandbox reconstruct this client with no DB via
+            # resolve_client_class(type)(**params). `allowed` is already the exact
+            # ctor kwargs (decrypted creds included). Only plain-SQL connectors are
+            # ever offloaded (the gate allowlists types); this attr is harmless
+            # otherwise. Fail-soft — never block client construction.
+            try:
+                client._build_spec = {"type": conn.type, "params": dict(allowed)}
+            except Exception:
+                pass
             await self._install_pbi_offline_index(db, client, conn)
             self._apply_agent_readonly(client)
             self._attach_client_quota_metadata(client, data_source, conn, key)
