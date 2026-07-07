@@ -75,6 +75,15 @@ services:
     image: cityagent-analytics:dev
     container_name: dash-app
     restart: unless-stopped
+    # Hard container memory cap (cgroup real cap) so the app OOMs cleanly instead of
+    # thrashing the whole host. Single-host `docker compose` (this file, no top-level
+    # `version:` key = Compose Spec) HONORS `mem_limit`. If you ever run this under
+    # Swarm (`docker stack deploy`), `mem_limit` is ignored there — the equivalent is:
+    #   deploy:
+    #     resources:
+    #       limits:
+    #         memory: 12g
+    mem_limit: 12g   # ~70% of box RAM — engineer: set to 0.7 * total RAM
     # No host port — NPM fronts the app and reaches it at app:3000 internally.
     expose:
       - "3000"
@@ -82,6 +91,7 @@ services:
       - ENVIRONMENT=production
       - DASH_DATABASE_URL=postgresql://${POSTGRES_USER:-dash}:${POSTGRES_PASSWORD:-dashpassword}@postgres:5432/${POSTGRES_DB:-dash}
       - DASH_ENCRYPTION_KEY=${DASH_ENCRYPTION_KEY:-}
+      - AUTOTRAIN_STAGING_ROLE_SECRET=${AUTOTRAIN_STAGING_ROLE_SECRET:-}
       - DASH_LICENSE_KEY=${DASH_LICENSE_KEY:-}
       - DASH_ADMIN_EMAIL=${DASH_ADMIN_EMAIL:-}
       - DASH_ADMIN_PASSWORD=${DASH_ADMIN_PASSWORD:-}

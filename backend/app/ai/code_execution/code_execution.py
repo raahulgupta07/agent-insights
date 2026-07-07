@@ -36,6 +36,10 @@ if TYPE_CHECKING:
 from app.ai.schemas.codegen import CodeGenContext, CodeGenRequest
 from app.ai.code_execution.loadables import extract_loadable_refs
 from app.settings.hybrid_flags import flags
+# Wren-style SQL dry-plan validation (flags.SQL_VALIDATE, default OFF). Fail-soft +
+# self-degrading (no-op if sqlglot is unavailable), so this import can never break
+# code execution and adds nothing to the OFF path.
+from app.ai.code_execution.sql_validate import build_sql_error_feedback as _build_sql_error_feedback
 # Speed layer (Phase 3 Track B — warehouse result cache). Optional/fail-soft:
 # if the package can't import, caching is simply never engaged.
 try:
@@ -1141,6 +1145,41 @@ class StreamingCodeExecutor:
         self.context_hub = context_hub
         self.usage_context = usage_context
 
+    def _replay_subprocess_quota(self, child_timings: List[dict]) -> None:
+        """Phase 1: replay quota metering for queries the child process ran.
+
+        The sandbox child has no DB/usage_context, so it only records
+        {connection_id, sql, rows, result_bytes} per query. Here in the parent
+        we re-consume the same query + data-bytes quota the in-process
+        QueryCapturingClientWrapper would have (see _consume_query_quota /
+        _consume_data_bytes_quota). Fail-soft: quotas disabled (no usage_context)
+        or any error → no-op. Orgs without QUOTAS are unaffected (early return)."""
+        context = getattr(self, "usage_context", None)
+        if context is None or getattr(context, "session_maker", None) is None:
+            return
+        for t in (child_timings or []):
+            try:
+                conn_id = t.get("connection_id")
+                if not conn_id:
+                    continue
+                query = t.get("sql") or ""
+                metadata = {"sql": query[:500], "source": "subprocess_sandbox", "rows": t.get("rows")}
+                context.run_blocking(
+                    usage_policy_service.consume_data_query_with_context(
+                        context, connection_id=str(conn_id), metadata=metadata,
+                    )
+                )
+                rbytes = int(t.get("result_bytes") or 0)
+                if rbytes > 0:
+                    context.run_blocking(
+                        usage_policy_service.consume_data_bytes_with_context(
+                            context, connection_id=str(conn_id), amount=rbytes,
+                            metadata={**metadata, "result_bytes": rbytes},
+                        )
+                    )
+            except Exception:
+                continue
+
     def execute_code(self, *, code: str, ds_clients: Dict, excel_files: List,
                      captured_timings: Optional[List[dict]] = None,
                      captured_queries: Optional[List[str]] = None,
@@ -1245,9 +1284,20 @@ class StreamingCodeExecutor:
                             pass
                     else:
                         df = pd.DataFrame()
-                    # SQL executed inside the child isn't captured here (executed_queries
-                    # stays empty) — the DataFrame/answer is unaffected.
-                    return df, res.stdout, (captured_queries if captured_queries is not None else [])
+                    # Phase 1: the child recorded any live SQL it ran (string guard
+                    # already enforced in-child). Merge those queries + timings back
+                    # into the caller's lists (were empty before) and replay quota
+                    # metering here in the PARENT, which owns the DB/usage_context.
+                    _child_q = getattr(res, "captured_queries", None) or []
+                    _child_t = getattr(res, "captured_timings", None) or []
+                    _out_queries = captured_queries if captured_queries is not None else []
+                    if _child_q:
+                        _out_queries.extend(q for q in _child_q if isinstance(q, str))
+                    if captured_timings is not None and _child_t:
+                        captured_timings.extend(_child_t)
+                    if _child_t:
+                        self._replay_subprocess_quota(_child_t)
+                    return df, res.stdout, _out_queries
                 # res is None → fall through to the in-process path unchanged.
 
             output_log = ""
@@ -1895,6 +1945,19 @@ class StreamingCodeExecutor:
                 break
             except Exception as e:
                 msg = f"Execution error: {str(e)}"
+                # Wren dry-plan feedback (flags.SQL_VALIDATE, default OFF → byte-identical).
+                # Surface the SQL this attempt actually ran and append a structured
+                # diagnosis so the NEXT regeneration fixes the SQL, not just re-tries.
+                # Fail-soft: any error here is swallowed and the raw msg stands.
+                if flags.SQL_VALIDATE:
+                    try:
+                        _sqls = [t.get("sql") for t in query_timings if isinstance(t, dict) and t.get("sql")]
+                        if _sqls:
+                            _sql_hint = _build_sql_error_feedback(_sqls[-1], msg)
+                            if _sql_hint:
+                                msg = msg + "\n" + _sql_hint
+                    except Exception:
+                        pass
                 code_and_error_messages.append((final_code, msg))
                 yield {"type": "stdout", "payload": msg}
                 retries += 1
@@ -2141,6 +2204,21 @@ class StreamingCodeExecutor:
                 break
             except Exception as e:
                 msg = f"Execution error: {str(e)}"
+                # Wren dry-plan feedback (flags.SQL_VALIDATE, default OFF → byte-identical).
+                # `executed_queries` is captured BEFORE each execute_query call, so it holds
+                # the exact SQL of the failing attempt; fall back to query_timings' sql. Append
+                # a structured diagnosis so the next regeneration fixes the SQL. Fail-soft.
+                if flags.SQL_VALIDATE:
+                    try:
+                        _sqls = [q for q in executed_queries if isinstance(q, str) and q.strip()]
+                        if not _sqls:
+                            _sqls = [t.get("sql") for t in query_timings if isinstance(t, dict) and t.get("sql")]
+                        if _sqls:
+                            _sql_hint = _build_sql_error_feedback(_sqls[-1], msg)
+                            if _sql_hint:
+                                msg = msg + "\n" + _sql_hint
+                    except Exception:
+                        pass
                 code_and_error_messages.append((final_code, msg))
                 yield {"type": "stdout", "payload": msg}
                 retries += 1

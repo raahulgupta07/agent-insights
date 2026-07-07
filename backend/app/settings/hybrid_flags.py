@@ -229,6 +229,7 @@ UPGRADE_FLAGS: dict[str, dict[str, str]] = {
     "HYBRID_SUBPROCESS_SANDBOX": {"label": "Subprocess sandbox (isolated code exec)", "role": "agent", "category": "Performance", "status": "experimental", "note": "Runs uploaded-file analysis code in a fresh isolated process so memory is freed after every run; prevents the shared worker heap from filling. Default OFF."},
     "HYBRID_SUBPROCESS_SANDBOX_LIVE": {"label": "Subprocess sandbox — live DB clients", "role": "agent", "category": "Performance", "status": "experimental", "note": "Extends the subprocess sandbox to runs that query a live SQL database (rebuilds a plain-SQL client in the child; OAuth/BI connectors stay in-process). Requires the Subprocess sandbox flag. Default OFF."},
     "HYBRID_SANDBOX_PUSHDOWN": {"label": "SQL pushdown (memory discipline)", "role": "agent", "category": "Performance", "status": "experimental", "note": "Nudges generated code to push filters/aggregation/LIMIT to SQL and pull only needed rows, instead of loading whole tables into pandas — cuts per-run memory so more runs fit per box. Prompt-only, default OFF."},
+    "HYBRID_SQL_VALIDATE": {"label": "SQL dry-plan validation", "role": "agent", "category": "Performance", "status": "experimental", "note": "Validates generated SQL before running it (read-only + shape checks via sqlglot); on a failed run, feeds a structured error back to the model to regenerate. Cuts wrong-SQL and 'An error occurred'. Fail-soft, default OFF."},
     "HYBRID_SMART_VIZ": {"label": "Smart Viz Picker", "role": "user", "category": "Intelligence", "status": "experimental", "note": "Deterministic chart-type correction on top of the LLM's pick, using the data profile already computed (rows, columns, dtype, cardinality): high-cardinality category -> bar not pie, time + numeric -> line, two numerics -> scatter, too many categories -> top-N. Never widens the allowed viz set; fail-soft to the LLM answer. Default OFF."},
     "HYBRID_AUTO_FORMAT": {"label": "Result Auto-Format", "role": "user", "category": "Intelligence", "status": "experimental", "note": "Attach a per-column display format to result tables (thousands separators, currency, %, decimals, dates) derived from column dtype + name. Rendered as a valueFormatter; underlying values unchanged. Fail-soft. Default OFF = raw numeric/ISO."},
     "HYBRID_BRAND_PALETTE": {"label": "Brand Chart Palette", "role": "user", "category": "Intelligence", "status": "experimental", "note": "Default chart theme uses the CityAgent brand palette (accent #C2541E-led) instead of generic blue. Per-report theme overrides still win. Frontend-only. Default OFF."},
@@ -638,6 +639,15 @@ class HybridFlags:
         # per box. Prompt-only, respects the "return granular rows" exception.
         # Default OFF (byte-identical prompt when off).
         return _bool("HYBRID_SANDBOX_PUSHDOWN", False)
+
+    @property
+    def SQL_VALIDATE(self) -> bool:
+        # Phase 2 (Wren dry-plan loop): parse/validate generated SQL BEFORE it runs
+        # (sqlglot read-only + shape checks) and, on the retry loop, feed a
+        # structured error back to the coder instead of executing bad SQL. Cuts
+        # "An error occurred" + wrong-SQL. Fail-soft (parser missing/uncertain →
+        # allow). Default OFF (byte-identical when off).
+        return _bool("HYBRID_SQL_VALIDATE", False)
 
     # --- Phase 4 (Julius-quality polish) — all default OFF ---
     @property
@@ -2020,6 +2030,7 @@ class HybridFlags:
             "SUBPROCESS_SANDBOX": self.SUBPROCESS_SANDBOX,
             "SUBPROCESS_SANDBOX_LIVE": self.SUBPROCESS_SANDBOX_LIVE,
             "SANDBOX_PUSHDOWN": self.SANDBOX_PUSHDOWN,
+            "SQL_VALIDATE": self.SQL_VALIDATE,
             "SMART_VIZ": self.SMART_VIZ,
             "AUTO_FORMAT": self.AUTO_FORMAT,
             "BRAND_PALETTE": self.BRAND_PALETTE,
