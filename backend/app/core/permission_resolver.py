@@ -12,6 +12,7 @@ from sqlalchemy import select, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
 
+from app.models.user import User
 from app.models.role import Role
 from app.models.role_assignment import RoleAssignment
 from app.models.resource_grant import ResourceGrant
@@ -143,6 +144,21 @@ async def _resolve_permissions_inner(
     db: AsyncSession, user_id: str, org_id: str
 ) -> ResolvedPermissions:
     """Inner implementation of permission resolution."""
+    # 0. Global superuser bypass — is_superuser is a GLOBAL flag (set on the
+    # `users` row), SEPARATE from the org-level `full_admin_access` role. A
+    # superuser may hold no org RoleAssignment/Membership.role, which would
+    # otherwise leave org_permissions empty → every requires_permission() gate
+    # (e.g. create_data_source on file upload) returns 403. Grant FULL_ADMIN so
+    # a global superuser bypasses org-level permission checks everywhere.
+    su_row = await db.execute(
+        select(User.is_superuser).where(User.id == user_id)
+    )
+    if su_row.scalar_one_or_none():
+        return ResolvedPermissions(
+            org_permissions={FULL_ADMIN},
+            role_names=["superuser"],
+        )
+
     # 1. Get user's group IDs in this org
     group_stmt = (
         select(GroupMembership.group_id)

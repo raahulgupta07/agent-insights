@@ -460,8 +460,14 @@ async def _route_glossary_sheets(db, *, organization, data_source, file, abs_pat
     return routed
 
 
+# File uploads are inherently a PERSONAL action: this route always forces
+# owner_user_id=current_user.id + is_public=False (see below), so a member can
+# only ever create a source in their OWN private space. `manage_files` is a
+# baseline member permission, so ANY-of {create_data_source, manage_files} lets
+# every org member upload to their own space while keeping the broader
+# `create_data_source`-only gate on the git / warehouse-connector routes.
 @router.post("/data_sources/from-file")
-@requires_permission('create_data_source')
+@requires_permission(['create_data_source', 'manage_files'])
 async def create_data_source_from_file(
     payload: DataSourceFromFileRequest,
     current_user: User = Depends(current_user),

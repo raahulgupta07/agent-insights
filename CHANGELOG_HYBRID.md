@@ -3,6 +3,12 @@
 Hybrid feature changelog (our additions on top of the bagofwords/Dash base). Newest first.
 Format per entry: `## v<semver> — <title>  (<YYYY-MM-DD>)` then bullets.
 
+## v1.150.0 — Everyone can upload to their own space (uploads unblocked)  (2026-07-07)
+- **Any team member can now upload a file** (Excel/CSV) and get their own private Data Agent — the file lands in their own space only, no admin needed. Previously only org admins could, so most users hit "Permission denied".
+- **Super admins can upload too.** A global super admin who wasn't also given an org admin role used to be blocked from uploading (and other admin actions) inside an organization — that gap is closed.
+  - BE `core/permission_resolver.py`: `_resolve_permissions_inner` now short-circuits for a **global superuser** (`users.is_superuser`) → grants `full_admin_access` in the resolved org permissions. Roots the fix: `is_superuser` is a GLOBAL flag, separate from the org-level `full_admin_access` role, and this fork's resolver builds org perms only from RoleAssignment/Membership (no dual-read fallback) → a superuser with no org admin role got empty org perms → every `requires_permission()` gate returned 403. Retroactive — no DB change, works the moment the image ships.
+  - BE `routes/data_source_from_file.py`: the `POST /data_sources/from-file` gate widened from `create_data_source` to ANY-of `['create_data_source', 'manage_files']`. `manage_files` is a baseline member permission (already seeded on every existing member role → retroactive, no migration/backfill), and this route always forces `owner_user_id=current_user.id` + `is_public=False`, so a member can only ever create in their OWN private space. The broader `create_data_source`-only gate stays on the git / warehouse-connector / demo routes.
+
 ## v1.149.0 — The agent can wait for your data, then pick back up  (2026-07-07)
 - When the right next step is to **let time pass and retry** — a data refresh still running, a rate limit, "try again in 30 minutes" — the agent now **pauses and auto-resumes** instead of failing or asking you. A live countdown pill shows when it'll continue; cancel anytime.
 - Wired to our Power BI reality: a 429 rate-limit or a snapshot that's still pulling is exactly when it waits. (upstream #554)
